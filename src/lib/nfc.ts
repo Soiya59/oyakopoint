@@ -1,3 +1,6 @@
+import { Platform } from "react-native";
+import { buildWebAppUrl } from "./authRedirect";
+
 /**
  * NFCタグ書き込み・読み取りのインターフェース定義。
  *
@@ -6,32 +9,30 @@
  * - 設計部/成果物/API仕様.md 4a章「NFCタグでのクイック完了（子どもがタグを読み取って実行報告、C13→C14）」
  * - 企画部/成果物/要件定義書.md 07-2章「技術的な制約（開発部への申し送り事項）」
  *
- * [重要・環境制約] この開発環境には実機のNFCハードウェアが無く、NFC読み取り自体を
- * 動作確認することはできない（実装メモ.md 9章参照）。またNFC読み取り/書き込みには
- * `react-native-nfc-manager` 等の追加ネイティブモジュールとEAS Buildによる
- * カスタムビルド（Expo Goでは動作しない）が必要になる見込みであることが
- * 要件定義書07-2章で申し送りされている。
+ * [2026-08-18実装・本部長] 当初はネイティブアプリ化（react-native-nfc-manager +
+ * EAS Build）を前提にモック実装のみとしていたが（実装メモ.md 9章）、その後の方針転換で
+ * 本アプリはWeb版（GitHub Pages / LAN内配信）での運用に切り替わった（実装メモ.md 29〜33章）。
+ * ネイティブアプリ化を前提にせず、ブラウザの **Web NFC API**（`NDEFReader`、Android Chrome限定・
+ * HTTPS必須）で物理タグに書き込めるようにした。
  *
- * そのため本ファイルは、
- *   (a) 実際にNFCライブラリを使う場合と同じ関数シグネチャ・返り値の形（API仕様.md
- *       3a章・4a章の手順に対応）だけを定義し、
- *   (b) 中身は実機なしで検証できる「常に成功を返すモック実装」にとどめる。
- * 呼び出し側（P11拡張モーダル、C13画面）はこのインターフェースだけに依存させ、
- * 将来react-native-nfc-manager等の実装に差し替える際にUI側のコード変更を
- * 最小限にする狙い。
+ * 書き込む内容も方針転換した。当初は「トークン文字列（テキストレコード）」を書き込み、
+ * 読み取り側もネイティブNFCライブラリでの読み取りを前提にしていたが、Web版では
+ * 「chore報告画面へのURL（URIレコード）」を書き込む方式に変更した。この方式だと、
+ * **子ども側の読み取りにはWeb NFC API自体が不要**になる（Android OS標準のNFCタグ
+ * ディスパッチ機能が、URLが書き込まれたタグをタップした際に自動的にそのURLを
+ * ブラウザで開いてくれるため）。書き込み（NDEFReader.write）はAndroid Chromeが必要だが、
+ * 読み取り（子どもがタグにスマホをかざす）はどの機種でも動く。
  *
- * 実機実装イメージ（未実装・コメントのみ）:
- *   import NfcManager, { Ndef, NfcTech } from 'react-native-nfc-manager';
- *   await NfcManager.requestTechnology(NfcTech.Ndef);
- *   const bytes = Ndef.encodeMessage([Ndef.textRecord(tagValue)]);
- *   await NfcManager.ndefHandler.writeNdefMessage(bytes);
- *   await NfcManager.cancelTechnologyRequest();
+ * [対応不可な環境] Web NFC APIはiOS Safari・PC・LAN内配信（httpの非セキュアコンテキスト）
+ * では使えない。この場合は`writeNfcTag()`が`errorReason: "unsupported_tag_type"`相当の
+ * 失敗を返す代わりに、P11拡張モーダル側で非対応である旨を案内する（呼び出し元
+ * app/parent/chore-edit.tsxで`isWebNfcSupported()`を見て導線自体を出し分ける）。
  */
 
 export interface NfcWriteResult {
   ok: boolean;
   tagValue?: string;
-  errorReason?: "write_failed" | "unsupported_tag_type";
+  errorReason?: "write_failed" | "unsupported_tag_type" | "cancelled";
 }
 
 export interface NfcReadResult {
@@ -40,12 +41,14 @@ export interface NfcReadResult {
   errorReason?: "read_failed";
 }
 
+/** この端末・ブラウザでWeb NFC APIによる書き込みが使えるか。 */
+export function isWebNfcSupported(): boolean {
+  return Platform.OS === "web" && typeof window !== "undefined" && "NDEFReader" in window;
+}
+
 /**
  * 新しいトークンを生成する。
- * API仕様.md 3a章手順1「クライアント側で暗号論的に安全なランダムトークンを生成
- * （例: Expoなら expo-crypto の Crypto.randomUUID()）」に対応。
- * 実機のCrypto.randomUUID()相当のインターフェースを保ちつつ、
- * 本アプリはexpo-cryptoに依存しない環境でも動く簡易UUID風文字列を返す。
+ * API仕様.md 3a章手順1「クライアント側で暗号論的に安全なランダムトークンを生成」に対応。
  */
 export function generateNfcTagToken(): string {
   const hex = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
@@ -53,33 +56,42 @@ export function generateNfcTagToken(): string {
 }
 
 /**
- * 物理NFCタグへトークンを書き込む（保護者操作、P11拡張モーダル）。
- * API仕様.md 3a章手順2「react-native-nfc-manager等でトークンをNDEFレコードとして
- * 物理タグへ書き込む」に対応するインターフェース。
- *
- * [モック実装] 実機NFCハードウェアが無いため、実際の書き込みは行わず、
- * 短い遅延の後に常に成功を返す。書き込み失敗状態（ワイヤーフレーム7.1「書き込み失敗」）
- * はP11側のUIで別途、検証用に強制トグルできるようにしている。
+ * 物理NFCタグへ、このchoreの報告画面を開くURLを書き込む（保護者操作、P11拡張モーダル）。
+ * Web NFC API非対応の端末（iOS・PC・LAN内http配信）では書き込めないため、
+ * 呼び出し前に`isWebNfcSupported()`で確認すること。
  */
 export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  return { ok: true, tagValue };
+  if (!isWebNfcSupported()) {
+    return { ok: false, errorReason: "unsupported_tag_type" };
+  }
+  try {
+    const url = buildWebAppUrl("/child/nfc-scan", { tagValue });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ndef = new (window as any).NDEFReader();
+    await ndef.write({ records: [{ recordType: "url", data: url }] });
+    return { ok: true, tagValue };
+  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const name = (e as any)?.name;
+    if (name === "NotAllowedError" || name === "AbortError") {
+      return { ok: false, errorReason: "cancelled" };
+    }
+    return { ok: false, errorReason: "write_failed" };
+  }
 }
 
 /**
- * 物理NFCタグを読み取り、書き込まれているトークンを取得する（子ども操作、C13）。
- * API仕様.md 4a章手順1「react-native-nfc-manager等でNDEFレコードを読み取り、
- * 3aで書き込んだトークン文字列（tagValue）を得る」に対応するインターフェース。
+ * 物理NFCタグを読み取る。
  *
- * [未実装・実機ハードウェア無し] この関数は呼び出し側（C13画面）からは使用しない。
- * 実機のNFCタップを再現できないため、検証用の「NFCタグを読み取る（シミュレート）」
- * 導線ではtagValueをnavigationパラメータとして直接渡す方式にしている
- * （src/data/store.tsx の findChoreByTag、app/child/nfc-scan.tsx 参照）。
- * 実機対応時はこの関数の中身をreact-native-nfc-manager呼び出しに置き換え、
- * C13画面からこの関数を呼ぶ形に変更する想定。
+ * [未使用] 子ども側の読み取りはAndroid OS標準のNFCタグディスパッチ（URIレコードを
+ * タップした際にブラウザでそのURLを自動的に開く機能）に任せているため、アプリ側で
+ * 明示的にこの関数を呼ぶ必要が無い（app/child/nfc-scan.tsx はURLの`tagValue`
+ * クエリパラメータをそのまま使う）。検証用（本物のタグが無い場合）の
+ * 「NFCタグを読み取る（シミュレート）」導線も同様にnavigationパラメータで代用する
+ * （src/data/store.tsx の findChoreByTag 参照）。
  */
 export async function readNfcTag(): Promise<NfcReadResult> {
   throw new Error(
-    "readNfcTag は実機NFCハードウェアが無い検証環境のため未実装です。C13画面の検証用シミュレーション導線（tagValueパラメータ）を使用してください。"
+    "readNfcTag は使用しません。子ども側の読み取りはAndroid OS標準のNFCタグディスパッチ（URL自動起動）に委ねています。"
   );
 }

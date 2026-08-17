@@ -8,7 +8,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createChore, updateChore } from "@/data/api";
-import { generateNfcTagToken, writeNfcTag } from "@/lib/nfc";
+import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
 
 /**
  * P11 お手伝い登録・編集
@@ -28,7 +28,7 @@ import { generateNfcTagToken, writeNfcTag } from "@/lib/nfc";
  * P15 app/parent/child-profile.tsx のTextInput+バリデーション表示）と統一感のあるUIを
  * 独自に採用した。
  */
-type NfcModalState = "writing" | "success" | "failed";
+type NfcModalState = "writing" | "success" | "failed" | "unsupported";
 
 // [変更] 2026-08-15改訂: 「承認要否（requires_approval）」項目を削除した。
 // 要件定義書.md v0.5で承認フローが全面廃止され、chores.requires_approval列自体が
@@ -62,17 +62,24 @@ export default function ChoreEditScreen() {
 
   const startWrite = async () => {
     if (!chore) return; // 新規作成モードでは呼ばれない（ボタン自体を非表示にしている）
+    if (!isWebNfcSupported()) {
+      setNfcState("unsupported");
+      setModalVisible(true);
+      return;
+    }
     setNfcState("writing");
     setModalVisible(true);
     // API仕様.md 3a章手順1「クライアント側で暗号論的に安全なランダムトークンを生成」
     const newToken = generateNfcTagToken();
-    // API仕様.md 3a章手順2。実機NFCハードウェアが無い検証環境のため、
-    // src/lib/nfc.ts の writeNfcTag() はモック実装（常に成功を返す）。
+    // [2026-08-18実装] Web NFC API（Android Chrome限定）で実際に物理タグへ書き込む。
+    // src/lib/nfc.ts参照。ここでのawaitは実際にタグをタップするまで待機し続ける。
     const result = await writeNfcTag(newToken);
     if (result.ok && result.tagValue) {
       // API仕様.md 3a章手順3「書き込み成功後、choreに紐づけ」相当。
       const dispatchResult = await dispatch({ type: "SET_CHORE_NFC_TAG", choreId: chore.id, tagValue: result.tagValue });
       setNfcState(dispatchResult.ok ? "success" : "failed");
+    } else if (result.errorReason === "cancelled") {
+      setModalVisible(false);
     } else {
       setNfcState("failed");
     }
@@ -297,6 +304,21 @@ export default function ChoreEditScreen() {
         <View style={styles.modalBackdrop}>
           <Card style={styles.modalCard}>
             <Text style={theme.typography.parentTitle}>NFCタグを登録</Text>
+
+            {nfcState === "unsupported" && (
+              <>
+                <Text style={{ marginTop: theme.spacing.s3 }}>
+                  この端末・ブラウザではNFCタグへの書き込みに対応していません。{"\n"}
+                  Android版Chromeでこのページを開いて（GitHub Pages版のURLが必要です）お試しください。
+                </Text>
+                <AppButton
+                  label="閉じる"
+                  variant="secondary"
+                  style={{ marginTop: theme.spacing.s6 }}
+                  onPress={() => setModalVisible(false)}
+                />
+              </>
+            )}
 
             {nfcState === "writing" && (
               <>
