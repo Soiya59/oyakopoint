@@ -4,9 +4,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
-import * as Linking from "expo-linking";
 import { useSession } from "@/lib/session";
 import { signInWithEmail } from "@/data/api";
+import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 
 /**
  * P3 メール送信完了
@@ -40,7 +40,7 @@ export default function EmailSentScreen() {
     setResendMessage(null);
     // [2026-08-16修正・本部長] app/onboarding/email.tsxと同じ理由でintentを
     // redirectToへ明示的に埋め込む（再送時もjoin/createの区別を引き継ぐ必要があるため）。
-    const redirectTo = Linking.createURL("auth-callback", { queryParams: { intent: intent ?? "create" } });
+    const redirectTo = buildAuthRedirectUrl(intent ?? "create");
     const res = await signInWithEmail(email, redirectTo);
     setResending(false);
     setResendMessage(res.ok ? "再送しました" : res.error.message);

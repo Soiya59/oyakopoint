@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Linking from "expo-linking";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { signInWithEmail } from "@/data/api";
+import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 
 /**
  * P2 メールアドレス入力
@@ -36,7 +36,7 @@ export default function EmailInputScreen() {
     if (!email.trim()) return;
     setSending(true);
     setErrorMessage(null);
-    const redirectTo = Linking.createURL("auth-callback", { queryParams: { intent: intent ?? "create" } });
+    const redirectTo = buildAuthRedirectUrl(intent ?? "create");
     const res = await signInWithEmail(email.trim(), redirectTo);
     setSending(false);
     if (!res.ok) {
