@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
+import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
@@ -18,6 +19,15 @@ import { inviteLookup, InviteLookupChild } from "@/data/api";
  * 省くため、ログイン中の子どもセッションが保持している inviteCode
  * （src/lib/childSession.ts）を再利用してinvite-lookupを呼び直し、
  * 最新のプロフィール一覧を取得する。
+ *
+ * [2026-08-18追加・本部長] 子どもセッションから完全にログアウトしてトップ画面
+ * （保護者ログイン等）へ戻る導線がこの画面にしか無いにもかかわらず、
+ * 従来は「別の子どもへの切替」のみで「保護者に戻る」選択肢が無かった。
+ * 共有端末（PC等）で子どもセッションが有効なまま保護者としてメール登録しようとすると、
+ * src/lib/session.tsxのonAuthStateChangeが「子どもセッションが有効な間は
+ * 保護者側のAuth状態変化を無視する」設計になっているため、保護者ログインが
+ * 静かに無視され、子どもアカウントから一切抜け出せなくなる不具合をユーザーが
+ * 実機で発見した。ここに明示的な「ログアウトする」導線を追加した。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -51,6 +61,11 @@ export default function ProfileSwitchScreen() {
       pathname: "/child-auth/pin-input",
       params: { inviteCode: childSession?.inviteCode, memberId: c.member_id, displayName: c.display_name },
     });
+  };
+
+  const logout = async () => {
+    await logoutChild();
+    router.replace("/");
   };
 
   return (
@@ -93,6 +108,13 @@ export default function ProfileSwitchScreen() {
           ))}
         </View>
       )}
+
+      <AppButton
+        label="ログアウトする（保護者ログイン等はトップから）"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s8 }}
+        onPress={logout}
+      />
     </Screen>
   );
 }
