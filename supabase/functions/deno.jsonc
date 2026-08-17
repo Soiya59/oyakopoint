@@ -1,0 +1,20 @@
+{
+  // このファイルはSupabase Edge Functions（Deno runtime）配下専用のDeno設定。
+  // 本体のExpoアプリ（Node/TypeScript, tsconfig.json）とはランタイムも
+  // モジュール解決も別物のため、tsconfig.json側は "supabase/**" を
+  // excludeし、npx tsc --noEmit の対象から外している
+  // （開発部/成果物/実装メモ.md 8章参照）。
+  //
+  // [未検証の注記] この環境にはDeno CLIが無いため、`deno check`
+  // `deno lint` 等をこのdeno.jsonc経由で実際に実行して検証することは
+  // できていない。エディタのDeno拡張機能やデプロイ時のSupabase CLIが
+  // このファイルを参照する想定で置いている。
+  "compilerOptions": {
+    "strict": true
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}
