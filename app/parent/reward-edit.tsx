@@ -1,23 +1,144 @@
-import React from "react";
-import { useLocalSearchParams } from "expo-router";
-import StubScreen from "@/components/StubScreen";
+import React, { useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import Screen from "@/components/Screen";
+import AppButton from "@/components/AppButton";
+import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useSession } from "@/lib/session";
+import { createReward, updateReward } from "@/data/api";
 
 /**
- * P13 ごほうび登録・編集（スタブ）
+ * P13 ごほうび登録・編集
  * 参照: 画面一覧・遷移図.md P13、API仕様.md 7章
+ *
+ * [2026-08-18実装・本部長] StubScreenのまま放置されており、ユーザーが実機で
+ * 「ご褒美の追加ができない」と発見した。P11（app/parent/chore-edit.tsx、
+ * 実装メモ.md 21章）と同じ構成で、実際に保存できるフォームに差し替えた。
+ * chore-edit.tsxと同様、emojiは入力項目に含めない（NULL許容・表示側フォールバックの
+ * 設計方針、実装メモ.md 6.1章）。カテゴリー・担当・繰り返し設定・NFC等、choreに
+ * 存在する項目はrewardsテーブルには無いため対象外。
  */
 export default function RewardEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { state } = useAppData();
-  const reward = state.rewards.find((r) => r.id === id);
+  const { state, refresh } = useAppData();
+  const { client } = useSession();
+  const isEditMode = !!id;
+  const reward = isEditMode ? state.rewards.find((r) => r.id === id) : undefined;
+
+  const [name, setName] = useState(reward?.name ?? "");
+  const [costText, setCostText] = useState(reward ? String(reward.cost) : "");
+  const [description, setDescription] = useState(reward?.description ?? "");
+
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const validate = (): string | null => {
+    if (!name.trim()) return "名前を入力してください";
+    if (name.trim().length > 100) return "名前は100文字以内で入力してください";
+    const costNum = Number(costText);
+    if (!Number.isInteger(costNum) || costNum < 1) return "コストは1以上の整数で入力してください";
+    return null;
+  };
+
+  const save = async () => {
+    const validationError = validate();
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+    setErrorMessage(null);
+    setSaving(true);
+
+    const input = {
+      name: name.trim(),
+      cost: Number(costText),
+      description: description.trim() ? description.trim() : null,
+    };
+
+    const res = reward
+      ? await updateReward(client, reward.id, input)
+      : await createReward(client, state.family.id, input);
+
+    setSaving(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    await refresh();
+    router.replace("/parent/rewards");
+  };
+
+  if (isEditMode && !reward) {
+    return (
+      <Screen tone="parent">
+        <Text style={theme.typography.parentBody}>ごほうびが見つかりませんでした</Text>
+        <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s4 }} onPress={() => router.back()} />
+      </Screen>
+    );
+  }
 
   return (
-    <StubScreen
-      screenCode="P13"
-      title={reward ? `${reward.emoji} ${reward.name} を編集` : "ごほうびを新規登録"}
-      purpose="reward作成・編集"
-      elements={["名前", "コスト（cost）", "説明（description）"]}
-    />
+    <Screen tone="parent">
+      <Text style={theme.typography.parentTitle}>
+        {reward ? `${reward.emoji ?? "🎁"} ごほうびを編集` : "ごほうびを新規登録"}
+      </Text>
+      <Text style={[theme.typography.parentBody, styles.purpose]}>reward作成・編集</Text>
+
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>名前（必須）</Text>
+      <TextInput
+        value={name}
+        onChangeText={setName}
+        placeholder="例：おかし1つ"
+        maxLength={100}
+        style={styles.input}
+      />
+
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>コスト（1以上の整数）</Text>
+      <TextInput
+        value={costText}
+        onChangeText={(t) => setCostText(t.replace(/[^0-9]/g, ""))}
+        keyboardType="number-pad"
+        placeholder="例：10"
+        style={styles.input}
+      />
+
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>説明（任意）</Text>
+      <TextInput
+        value={description}
+        onChangeText={setDescription}
+        placeholder="例：好きなおかしを1つえらべる"
+        multiline
+        style={[styles.input, styles.textArea]}
+      />
+
+      {errorMessage && (
+        <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
+      )}
+
+      <AppButton
+        label={saving ? "保存中…" : "保存する"}
+        loading={saving}
+        disabled={saving}
+        style={{ marginTop: theme.spacing.s6 }}
+        onPress={save}
+      />
+
+      <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
+    </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+  fieldLabel: { marginTop: theme.spacing.s4 },
+  input: {
+    marginTop: theme.spacing.s2,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentMd,
+    padding: theme.spacing.s3,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  textArea: { minHeight: 80, textAlignVertical: "top" },
+});

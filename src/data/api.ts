@@ -502,6 +502,57 @@ export async function updateChore(
   return { ok: true, data: data as Chore };
 }
 
+/**
+ * [2026-08-18実装・本部長] P13（ごほうび登録・編集）が長らくStubScreenのままで
+ * 「ごほうびの追加ができない」とユーザーが実機で発見した。P11（chore-edit、実装メモ.md
+ * 21章）と同じ構成で、rewards用のフォーム入力型・作成/更新APIを新設する。
+ * emojiはchoresと同様NULL許容・クライアント側フォールバック方針（実装メモ.md 6.1章）の
+ * ため、フォーム自体には含めない（ChoreFormInputと同じ設計判断）。
+ */
+export interface RewardFormInput {
+  name: string;
+  cost: number;
+  description: string | null;
+}
+
+export async function createReward(
+  client: SupabaseClient,
+  familyId: string,
+  input: RewardFormInput
+): Promise<ApiResult<Reward>> {
+  const { data, error } = await client
+    .from("rewards")
+    .insert({
+      family_id: familyId,
+      name: input.name,
+      cost: input.cost,
+      description: input.description,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Reward };
+}
+
+export async function updateReward(
+  client: SupabaseClient,
+  rewardId: string,
+  input: RewardFormInput
+): Promise<ApiResult<Reward>> {
+  const { data, error } = await client
+    .from("rewards")
+    .update({
+      name: input.name,
+      cost: input.cost,
+      description: input.description,
+    })
+    .eq("id", rewardId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Reward };
+}
+
 // ============================================================
 // 感謝ポイント（API仕様.md 7a章、スキーマ設計.sql 13〜14章）
 // [2026-08-16新設] 要件定義書.md v0.6 07-5章対応。全メンバー間（保護者⇄保護者、
