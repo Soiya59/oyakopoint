@@ -86,6 +86,24 @@ export default function ParentHistoryScreen() {
     [state.completions, selectedDate, selectedMemberId]
   );
 
+  // [2026-08-18追加・本部長] 「きろく」はchore_completion_daily_summary相当
+  // （お手伝い実施）専用のデータソースだったため、ごほうび交換が一切反映されて
+  // いなかった。ユーザーの依頼により、日別実績リストにのみごほうび交換も追加する
+  // （週間バー・月間カレンダーのドット・ポイント合計は「お手伝いをがんばった記録」の
+  // 意味合いを保つため、意図的にお手伝い実施のままにしている）。emoji等の
+  // フォールバック方針はsrc/data/store.tsxのspendLedger()と同一にする。
+  const dailyRedemptions = useMemo(
+    () =>
+      state.redemptions
+        .filter(
+          (r) =>
+            toJstDateString(r.created_at) === selectedDate &&
+            (selectedMemberId ? r.member_id === selectedMemberId : true)
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [state.redemptions, selectedDate, selectedMemberId]
+  );
+
   const isWeekEmpty = weekRows.length === 0;
 
   return (
@@ -174,7 +192,7 @@ export default function ParentHistoryScreen() {
           <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
             {formatDateJp(selectedDate)}の実績
           </Text>
-          {dailyCompletions.length === 0 ? (
+          {dailyCompletions.length === 0 && dailyRedemptions.length === 0 ? (
             <Text style={[theme.typography.parentCaption, styles.emptyDayText]}>この日の実績はありません</Text>
           ) : (
             <View style={{ marginTop: theme.spacing.s2 }}>
@@ -194,6 +212,22 @@ export default function ParentHistoryScreen() {
                       {isRoutine ? "(ルーチン)" : ""}
                     </Text>
                     <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                  </View>
+                );
+              })}
+              {dailyRedemptions.map((r) => {
+                const member = state.members.find((m) => m.id === r.member_id);
+                const emoji = state.rewards.find((rw) => rw.id === r.reward_id)?.emoji ?? "🎁";
+                return (
+                  <View key={r.id} style={styles.row}>
+                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
+                    <Text style={[theme.typography.parentBody, { marginLeft: theme.spacing.s2 }]}>
+                      {member?.display_name}
+                    </Text>
+                    <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
+                      {emoji} {r.reward_name}
+                    </Text>
+                    <Text style={theme.typography.parentBodyMedium}>-{r.cost}pt</Text>
                   </View>
                 );
               })}

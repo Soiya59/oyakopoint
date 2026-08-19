@@ -72,6 +72,17 @@ export default function ChildHistoryScreen() {
     [state.completions, me.id, selectedDate]
   );
 
+  // [2026-08-18追加・本部長] 保護者ビュー（app/parent/history.tsx）と同じ理由で、
+  // 日別実績リストにごほうび交換も追加する（週間バー・月間カレンダーは
+  // お手伝い実施のままにする方針も同じ）。
+  const dailyRedemptions = useMemo(
+    () =>
+      state.redemptions
+        .filter((r) => r.member_id === me.id && toJstDateString(r.created_at) === selectedDate)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [state.redemptions, me.id, selectedDate]
+  );
+
   const isWeekEmpty = weekByDate.size === 0;
 
   return (
@@ -122,7 +133,7 @@ export default function ChildHistoryScreen() {
           <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>
             {formatDateChildJp(selectedDate)}の きろく
           </Text>
-          {dailyCompletions.length === 0 ? (
+          {dailyCompletions.length === 0 && dailyRedemptions.length === 0 ? (
             <Text style={[theme.typography.parentCaption, styles.emptyDayText]}>この日の実績はありません</Text>
           ) : (
             <View style={{ marginTop: theme.spacing.s2 }}>
@@ -140,6 +151,18 @@ export default function ChildHistoryScreen() {
                     <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
                       +{c.points}pt
                     </Text>
+                  </View>
+                );
+              })}
+              {dailyRedemptions.map((r) => {
+                const emoji = state.rewards.find((rw) => rw.id === r.reward_id)?.emoji ?? "🎁";
+                return (
+                  <View key={r.id} style={styles.row}>
+                    <Text style={theme.typography.childBody}>
+                      {emoji} {r.reward_name}
+                    </Text>
+                    <Text style={{ flex: 1 }} />
+                    <Text style={theme.typography.childBody}>-{r.cost}pt</Text>
                   </View>
                 );
               })}
