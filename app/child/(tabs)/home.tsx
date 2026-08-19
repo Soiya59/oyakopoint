@@ -57,6 +57,14 @@ export default function ChildHomeScreen() {
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>
       </View>
 
+      {/* [2026-08-20追加] 双方向リアクション（子→親）への導線。
+          app/child/family-activity.tsx参照。 */}
+      <Pressable onPress={() => router.push("/child/family-activity")}>
+        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>
+          👨‍👩‍👧‍👦 かぞくのがんばりを見る →
+        </Text>
+      </Pressable>
+
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>やることリスト</Text>
 
       <View style={{ flex: 1, marginTop: theme.spacing.s2 }}>
@@ -129,6 +137,11 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   notifBadge: { fontSize: 16, fontWeight: "700" },
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
+  familyActivityLink: {
+    textAlign: "center",
+    marginTop: theme.spacing.s2,
+    color: theme.colors.brandPrimaryStrong,
+  },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
   card: {
     width: "47%",
