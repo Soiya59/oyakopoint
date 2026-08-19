@@ -37,6 +37,10 @@ export default function ParentHomeScreen() {
     // [2026-08-16追加] 画面一覧・遷移図.md P7行「『じぶんのお手伝い』（→P19）・
     // 『感謝ポイント』（→P21）のショートカットを追加」に対応。
     { emoji: "🧹", label: "じぶんのお手伝い", path: "/parent/my-chores" },
+    // [2026-08-18追加] ユーザーの指摘「親のコマンドでもご褒美ができるようにしたい」
+    // 対応。app/parent/rewards.tsx（P12）はごほうびの管理のみのため、じぶんの
+    // ポイントで交換するための別画面（app/parent/my-rewards.tsx）への導線を追加した。
+    { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
     { emoji: "👨‍👩‍👧‍👦", label: "家族", path: "/parent/family" },
     { emoji: "⚙️", label: "設定", path: "/parent/settings" },
