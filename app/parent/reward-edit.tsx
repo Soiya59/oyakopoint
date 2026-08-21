@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
@@ -7,7 +7,6 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createReward, updateReward } from "@/data/api";
-import { REWARD_EMOJI_OPTIONS } from "@/lib/emojiOptions";
 
 /**
  * P13 ごほうび登録・編集
@@ -20,7 +19,9 @@ import { REWARD_EMOJI_OPTIONS } from "@/lib/emojiOptions";
  * 無いため対象外。
  *
  * [2026-08-20追加] 当初emojiは入力項目に含めていなかったが、絵文字が一切表示されず
- * 見にくいとユーザーが実機で発見したため、chore-edit.tsxと同じ絵文字ピッカーを追加した。
+ * 見にくいとユーザーが実機で発見したため追加した。候補から選ぶチップ形式を一度試したが、
+ * ユーザーから「自分で決めたい、選択ではなく」との要望があり、自由入力（TextInput、
+ * OS標準の絵文字キーボードを使う想定）に変更した。
  */
 export default function RewardEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -99,17 +100,17 @@ export default function RewardEditScreen() {
         style={styles.input}
       />
 
-      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（未選択でも登録できます）</Text>
-      <View style={styles.chipRow}>
-        <Pressable onPress={() => setEmoji(null)} style={[styles.chip, emoji === null && styles.chipSelected]}>
-          <Text>未選択</Text>
-        </Pressable>
-        {REWARD_EMOJI_OPTIONS.map((e) => (
-          <Pressable key={e} onPress={() => setEmoji(e)} style={[styles.chip, emoji === e && styles.chipSelected]}>
-            <Text style={{ fontSize: 18 }}>{e}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（任意）</Text>
+      <TextInput
+        value={emoji ?? ""}
+        onChangeText={(t) => setEmoji(t || null)}
+        placeholder="例：🎁（絵文字キーボードから入力）"
+        maxLength={8}
+        style={[styles.input, styles.emojiInput]}
+      />
+      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
+      </Text>
 
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>コスト（1以上の整数）</Text>
       <TextInput
@@ -157,17 +158,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s3,
     backgroundColor: theme.colors.neutralSurface,
   },
+  emojiInput: { width: 96, fontSize: 20, textAlign: "center" },
   textArea: { minHeight: 80, textAlignVertical: "top" },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: theme.spacing.s3,
-    paddingVertical: theme.spacing.s2,
-    borderRadius: theme.radius.parentMd,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-    backgroundColor: theme.colors.neutralSurface,
-  },
-  chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
 });

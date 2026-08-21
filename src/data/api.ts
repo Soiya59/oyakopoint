@@ -430,8 +430,8 @@ export async function createChildProfile(
  * が行き止まりになっていた不具合の対応で新設した（開発部/成果物/実装メモ.md参照）。
  *
  * [2026-08-20追加] 当初`emoji`はフォーム対象外だったが、絵文字が一切表示されず
- * 一覧が見にくいとユーザーが実機で発見したため、`src/lib/emojiOptions.ts`の候補から
- * 選ぶ形でフォームに追加した（43章のレイアウト改善に続く見やすさ改善）。
+ * 一覧が見にくいとユーザーが実機で発見したため、自由入力（OS標準の絵文字キーボードを
+ * 使う想定のTextInput）でフォームに追加した（43章のレイアウト改善に続く見やすさ改善）。
  */
 export interface ChoreFormInput {
   category_id: string | null;

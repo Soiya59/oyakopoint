@@ -9,7 +9,6 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createChore, updateChore } from "@/data/api";
 import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
-import { CHORE_EMOJI_OPTIONS } from "@/lib/emojiOptions";
 
 /**
  * P11 お手伝い登録・編集
@@ -172,18 +171,18 @@ export default function ChoreEditScreen() {
         style={styles.input}
       />
 
-      {/* 絵文字（任意） */}
-      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（未選択でも登録できます）</Text>
-      <View style={styles.chipRow}>
-        <Pressable onPress={() => setEmoji(null)} style={[styles.chip, emoji === null && styles.chipSelected]}>
-          <Text>未選択</Text>
-        </Pressable>
-        {CHORE_EMOJI_OPTIONS.map((e) => (
-          <Pressable key={e} onPress={() => setEmoji(e)} style={[styles.chip, emoji === e && styles.chipSelected]}>
-            <Text style={{ fontSize: 18 }}>{e}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* 絵文字（任意・自由入力） */}
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（任意）</Text>
+      <TextInput
+        value={emoji ?? ""}
+        onChangeText={(t) => setEmoji(t || null)}
+        placeholder="例：🧹（絵文字キーボードから入力）"
+        maxLength={8}
+        style={[styles.input, styles.emojiInput]}
+      />
+      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
+      </Text>
 
       {/* ポイント */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>ポイント（1以上の整数）</Text>
@@ -403,6 +402,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s3,
     backgroundColor: theme.colors.neutralSurface,
   },
+  emojiInput: { width: 96, fontSize: 20, textAlign: "center" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
   chip: {
     flexDirection: "row",
