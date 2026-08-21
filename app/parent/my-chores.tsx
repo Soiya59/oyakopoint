@@ -87,36 +87,58 @@ export default function ParentMyChoresScreen() {
         </View>
       )}
 
-      {loadState === "ready" && myChores.length > 0 && (
-        <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
-          {myChores.map((c) => {
-            const done = me ? isChoreLimitReached(c, me.id) : false;
-            const highlighted = snackbar?.choreId === c.id;
-            return (
-              <Pressable
-                key={c.id}
-                disabled={done || !me}
-                onPress={() => router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } })}
-              >
-                <Card style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
-                  <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
-                  <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
-                    {c.title}
-                  </Text>
-                  {done ? (
-                    <Text style={styles.doneLabel}>きろくずみ</Text>
-                  ) : (
-                    <>
-                      <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
-                      <Text style={styles.chevron}>›</Text>
-                    </>
-                  )}
-                </Card>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+      {/* [2026-08-20修正・本部長] 未実施・きろくずみが入り混じって表示され見分けにくいと
+          ユーザーが実機で発見したため、見出しで2群に分けた（並び順自体は変更していない）。 */}
+      {loadState === "ready" && myChores.length > 0 && (() => {
+        const withDone = myChores.map((c) => ({ chore: c, done: me ? isChoreLimitReached(c, me.id) : false }));
+        const todo = withDone.filter((x) => !x.done);
+        const done = withDone.filter((x) => x.done);
+        const renderRow = ({ chore: c, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => {
+          const highlighted = snackbar?.choreId === c.id;
+          return (
+            <Pressable
+              key={c.id}
+              disabled={done || !me}
+              onPress={() => router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } })}
+            >
+              <Card style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
+                <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
+                <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
+                  {c.title}
+                </Text>
+                {done ? (
+                  <Text style={styles.doneLabel}>きろくずみ</Text>
+                ) : (
+                  <>
+                    <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </>
+                )}
+              </Card>
+            </Pressable>
+          );
+        };
+        return (
+          <>
+            {todo.length > 0 && (
+              <View style={{ marginTop: theme.spacing.s4 }}>
+                <Text style={styles.sectionHeading}>まだのお手伝い</Text>
+                <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+                  {todo.map(renderRow)}
+                </View>
+              </View>
+            )}
+            {done.length > 0 && (
+              <View style={{ marginTop: theme.spacing.s4 }}>
+                <Text style={styles.sectionHeading}>きろくずみ</Text>
+                <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+                  {done.map(renderRow)}
+                </View>
+              </View>
+            )}
+          </>
+        );
+      })()}
 
       {/* [2026-08-16修正・本部長] ユーザーが実際に操作した際、ホームへ戻る手段が
           この画面に無いことを発見した。既存のP10（app/parent/chores.tsx）と同じ
@@ -129,6 +151,7 @@ export default function ParentMyChoresScreen() {
 }
 
 const styles = StyleSheet.create({
+  sectionHeading: { color: theme.colors.neutralTextSecondary, fontWeight: "700" },
   row: { flexDirection: "row", alignItems: "center" },
   rowHighlighted: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
   doneLabel: { color: theme.colors.neutralTextSecondary },
