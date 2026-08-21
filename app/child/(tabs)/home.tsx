@@ -79,31 +79,50 @@ export default function ChildHomeScreen() {
         {loadState === "ready" && chores.length === 0 && (
           <EmptyState tone="child" emoji="🌱" title="まだやることがないよ。おうちの人にきいてみてね" />
         )}
-        {loadState === "ready" && chores.length > 0 && (
-          <View style={styles.grid}>
-            {chores.map((chore) => {
-              const limitReached = isChoreLimitReached(chore, me.id);
-              return (
-                <Pressable
-                  key={chore.id}
-                  disabled={limitReached}
-                  onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
-                  style={[styles.card, limitReached && styles.cardDone]}
-                >
-                  <Text style={{ fontSize: 32 }}>{chore.emoji}</Text>
-                  <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{chore.title}</Text>
-                  {limitReached ? (
-                    <Text style={styles.doneLabel}>✅ きょうは{"\n"}がんばったね</Text>
-                  ) : (
-                    <Text style={styles.pointLabel}>+{chore.points}pt</Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+        {/* [2026-08-20修正・本部長] まだ・きろくずみが1つのグリッドに混在し見分けにくいと
+            ユーザーが実機で発見したため、app/parent/my-chores.tsx（46章）と同じ考え方で
+            2グループに分けた。 */}
+        {loadState === "ready" && chores.length > 0 && (() => {
+          const withDone = chores.map((chore) => ({ chore, done: isChoreLimitReached(chore, me.id) }));
+          const todo = withDone.filter((x) => !x.done);
+          const done = withDone.filter((x) => x.done);
+          const renderCard = ({ chore, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => (
+            <Pressable
+              key={chore.id}
+              disabled={done}
+              onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
+              style={[styles.card, done && styles.cardDone]}
+            >
+              <Text style={{ fontSize: 32 }}>{chore.emoji}</Text>
+              <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{chore.title}</Text>
+              {done ? (
+                // 「1回だけ」設定（is_repeatable=false）のchoreは実施済みなら日付を問わず
+                // 永久にlimitReached=trueになる（src/data/store.tsxのisChoreLimitReachedFor
+                // 参照）。「きょうは」固定の文言だと、実際は別の日に完了報告した場合でも
+                // 「今日やった」ように見えてしまうとユーザーが実機で発見したため、
+                // is_repeatableで文言を出し分けた（「くり返す」設定は本当にその日の
+                // 上限到達なので従来どおり）。
+                <Text style={styles.doneLabel}>
+                  {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ やっておわり"}
+                </Text>
+              ) : (
+                <Text style={styles.pointLabel}>+{chore.points}pt</Text>
+              )}
+            </Pressable>
+          );
+          return (
+            <>
+              {todo.length > 0 && <View style={styles.grid}>{todo.map(renderCard)}</View>}
+              {done.length > 0 && (
+                <>
+                  <Text style={[theme.typography.childBody, styles.sectionHeading]}>きろくずみ</Text>
+                  <View style={styles.grid}>{done.map(renderCard)}</View>
+                </>
+              )}
+            </>
+          );
+        })()}
       </View>
-
     </Screen>
   );
 }
@@ -118,6 +137,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.s2,
     color: theme.colors.brandPrimaryStrong,
   },
+  sectionHeading: { marginTop: theme.spacing.s4, marginBottom: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
   card: {
     width: "47%",
