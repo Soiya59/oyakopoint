@@ -30,6 +30,10 @@ export default function FamilyActivityScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp } = useAppData();
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+  // [2026-08-20修正・本部長] app/parent/approvals.tsxと同じ理由・同じ修正。
+  // dispatch()の戻り値を確認していなかったため、失敗時に無反応に見えていた。
+  const [reactionError, setReactionError] = useState<string | null>(null);
 
   const myId = state.activeChildMemberId;
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
@@ -42,11 +46,14 @@ export default function FamilyActivityScreen() {
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
     if (hasReactedWithStamp(completionId, myId, stampKey)) return;
-    await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myId, kind: "stamp", stampKey });
+    setReactionError(null);
+    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myId, kind: "stamp", stampKey });
+    if (!result.ok) setReactionError("おくれなかったよ。もういちどためしてね");
   };
 
   const openDetail = (c: ChoreCompletion) => {
     setCommentDraft("");
+    setReactionError(null);
     setDetailTarget(c);
   };
 
@@ -54,8 +61,16 @@ export default function FamilyActivityScreen() {
     if (!detailTarget) return;
     const body = commentDraft.trim();
     if (!body) return;
-    await dispatch({ type: "ADD_REACTION", completionId: detailTarget.id, reactedBy: myId, kind: "comment", commentBody: body });
+    setReactionError(null);
+    setSendingComment(true);
+    const result = await dispatch({ type: "ADD_REACTION", completionId: detailTarget.id, reactedBy: myId, kind: "comment", commentBody: body });
+    setSendingComment(false);
+    if (!result.ok) {
+      setReactionError("おくれなかったよ。もういちどためしてね");
+      return;
+    }
     setCommentDraft("");
+    setDetailTarget(null);
   };
 
   return (
@@ -181,12 +196,19 @@ export default function FamilyActivityScreen() {
                       style={styles.textArea}
                     />
                     <AppButton
-                      label="おくる"
+                      label={sendingComment ? "おくっています…" : "おくる"}
                       tone="child"
+                      loading={sendingComment}
                       style={{ marginTop: theme.spacing.s2 }}
                       onPress={sendComment}
-                      disabled={!commentDraft.trim()}
+                      disabled={!commentDraft.trim() || sendingComment}
                     />
+
+                    {reactionError && (
+                      <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>
+                        {reactionError}
+                      </Text>
+                    )}
 
                     <AppButton
                       label="もどる"

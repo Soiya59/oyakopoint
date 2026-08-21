@@ -33,6 +33,15 @@ export default function ApprovalsScreen() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+  // [2026-08-20修正・本部長] sendStamp/sendCommentがdispatch()の戻り値を確認せず、
+  // 失敗時に何もフィードバックが無いままだった（ユーザーが「文字を入力しないと
+  // リアクションおくれない？？」と誤解した一因と考えられる。実際はAPI直接検証で
+  // スタンプ送信自体は正常に動くことを確認済みのため、たまたま失敗した際に
+  // 気づけない設計だったことが問題）。また送信成功後もモーダルが閉じず
+  // 「そのUIが消えない」との指摘もあったため、送信失敗時のエラー表示と、
+  // コメント送信成功時にモーダルを閉じる処理を追加した。
+  const [reactionError, setReactionError] = useState<string | null>(null);
 
   // 自分（いま操作している保護者）のfamily_member_id。実接続時は
   // current_family_member_id()相当（session.parentMember.id）がstate.activeParentMemberIdに
@@ -58,11 +67,14 @@ export default function ApprovalsScreen() {
     // uq_chore_reactions_stamp_dedup（スキーマ設計.sql 5b章）をボタン無効化で未然に防ぐ
     // （主要画面ワイヤーフレーム.md 6章「送信済みのstamp_keyのボタンをあらかじめ無効化」）。
     if (hasReactedWithStamp(completionId, myParentId, stampKey)) return;
-    await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myParentId, kind: "stamp", stampKey });
+    setReactionError(null);
+    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myParentId, kind: "stamp", stampKey });
+    if (!result.ok) setReactionError("スタンプを送信できませんでした。もう一度お試しください");
   };
 
   const openDetail = (c: ChoreCompletion) => {
     setCommentDraft("");
+    setReactionError(null);
     setDetailTarget(c);
   };
 
@@ -70,14 +82,22 @@ export default function ApprovalsScreen() {
     if (!detailTarget) return;
     const body = commentDraft.trim();
     if (!body) return;
-    await dispatch({
+    setReactionError(null);
+    setSendingComment(true);
+    const result = await dispatch({
       type: "ADD_REACTION",
       completionId: detailTarget.id,
       reactedBy: myParentId,
       kind: "comment",
       commentBody: body,
     });
+    setSendingComment(false);
+    if (!result.ok) {
+      setReactionError("コメントを送信できませんでした。もう一度お試しください");
+      return;
+    }
     setCommentDraft("");
+    setDetailTarget(null);
   };
 
   return (
@@ -261,12 +281,19 @@ export default function ApprovalsScreen() {
                           style={styles.textArea}
                         />
                         <AppButton
-                          label="おくる"
+                          label={sendingComment ? "送信中…" : "おくる"}
+                          loading={sendingComment}
                           style={{ marginTop: theme.spacing.s2 }}
                           onPress={sendComment}
-                          disabled={!commentDraft.trim()}
+                          disabled={!commentDraft.trim() || sendingComment}
                         />
                       </>
+                    )}
+
+                    {reactionError && (
+                      <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>
+                        {reactionError}
+                      </Text>
                     )}
 
                     <AppButton

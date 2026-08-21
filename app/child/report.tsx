@@ -66,7 +66,14 @@ export default function ChildReportScreen() {
    * `{family_id}/{member_id}-{timestamp}.jpg` を使い、先にStorageへアップロードしてから
    * そのパスをphoto_urlとしてINSERTペイロードに含める順序にした。
    * Storageバケット `chore-photos` が未作成、またはアップロードに失敗した場合でも、
-   * 写真無しで完了報告そのものは継続できるようにしている（実装メモ.md参照・未検証事項）。
+   * 写真無しで完了報告そのものは継続できるようにしている。
+   *
+   * [2026-08-20判明・本部長] この「失敗時は静かに写真無しで続行する」設計により、
+   * 実際にStorageアップロードが常に失敗していた不具合（子ども用JWTがPostgRESTの
+   * 検証は通るがStorageは別の鍵でしか検証しない、Supabase側の既知の制約）が
+   * 画面上に一切表れず、ユーザーが「写真を添付しても反映されない」と気づくまで
+   * 発見が遅れた。原因はsupabase/functions/_shared/env.tsのchildJwtSigningSecret
+   * コメント参照・対応済み。当時「未検証事項」としていたこの部分は今回の調査で解消した。
    */
   const send = async () => {
     if (isChoreLimitReached(chore, me.id)) {

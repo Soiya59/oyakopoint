@@ -42,7 +42,28 @@ export const env = {
   get serviceRoleKey(): string {
     return requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   },
+  /** 保護者のSupabase Auth標準JWT（現在のJWT署名鍵で署名）を検証する用途専用。 */
   get jwtSecret(): string {
     return requireEnv("APP_JWT_SECRET");
+  },
+  /**
+   * [2026-08-20追加・本部長] 子ども用カスタムJWTの署名専用シークレット。
+   *
+   * 実機で「写真を添付しても完了報告に反映されない」不具合を調査したところ、
+   * Supabase Storageへのアップロードが（画面上はエラー表示無しで）静かに失敗して
+   * いることが判明した。直接APIを叩いて検証した結果、child-loginが発行する
+   * JWT（APP_JWT_SECRET、＝26章で作成した現在のJWT署名鍵と同じ値で署名）は
+   * PostgRESTの検証は通るが、**Storageは別の鍵（Legacy JWT Secret）でしか
+   * 検証しない**ことが分かった（PostgRESTとStorageで検証に使う鍵が食い違っている、
+   * Supabase側の既知の制約と考えられる）。
+   *
+   * JWT Signing Keysのダッシュボード操作は26章で大きなトラブルの原因になった
+   * 経緯があり（「今後不用意に行わないこと」と申し送り済み）、再度キーローテー
+   * ションを行う対応は避けた。代わりに、子ども用JWTの**署名にのみ**Legacy JWT
+   * Secretの値を使う専用シークレットを新設し、影響範囲を子どもの認証経路だけに
+   * 限定した。APP_JWT_SECRET（保護者トークンの検証用）は変更していない。
+   */
+  get childJwtSigningSecret(): string {
+    return requireEnv("CHILD_JWT_SIGNING_SECRET");
   },
 };

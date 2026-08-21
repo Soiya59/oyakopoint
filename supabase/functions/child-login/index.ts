@@ -200,7 +200,11 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "internal_error" }, 500);
   }
 
-  const { token, expiresAt } = await signChildToken(env.jwtSecret, {
+  // [2026-08-20修正・本部長] _shared/env.tsのchildJwtSigningSecretコメント参照。
+  // Storageアップロードが検証する鍵とPostgRESTが検証する鍵の食い違いに対応するため、
+  // 子ども用JWTの署名にはenv.jwtSecret（保護者トークン検証専用）ではなく
+  // 専用のchildJwtSigningSecretを使う。
+  const { token, expiresAt } = await signChildToken(env.childJwtSigningSecret, {
     familyId: member.family_id,
     familyMemberId: member.id,
     displayName: member.display_name,
