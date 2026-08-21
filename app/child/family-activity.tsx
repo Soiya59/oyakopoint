@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
+import { formatDateChildJp, toJstDateString } from "@/lib/calendarDates";
 
 /**
  * かぞくのがんばり（子ども向け、双方向リアクション・子→親方向）
@@ -81,6 +82,11 @@ export default function FamilyActivityScreen() {
                   {c.chore_emoji} {c.chore_title}
                 </Text>
               </View>
+              <Text style={styles.dateLabel}>
+                {formatDateChildJp(toJstDateString(c.reported_at))}
+                {" "}
+                {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+              </Text>
               <View style={styles.stampRow}>
                 {theme.stampDefinitions.map((s) => {
                   const sent = hasReactedWithStamp(c.id, myId, s.key as StampKey);
@@ -119,6 +125,11 @@ export default function FamilyActivityScreen() {
                       {detailTarget.chore_emoji} {detailTarget.chore_title}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>{member?.display_name}が きろくしたよ</Text>
+                    <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
+                      {formatDateChildJp(toJstDateString(detailTarget.reported_at))}
+                      {" "}
+                      {new Date(detailTarget.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                    </Text>
 
                     <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>とどいたリアクション</Text>
                     {reactions.length === 0 ? (
@@ -196,6 +207,7 @@ export default function FamilyActivityScreen() {
 const styles = StyleSheet.create({
   card: { marginTop: theme.spacing.s3 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  dateLabel: { marginTop: theme.spacing.s1, fontSize: 12, color: theme.colors.neutralTextSecondary },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
   stampBtn: {
     width: theme.tapTarget.child,

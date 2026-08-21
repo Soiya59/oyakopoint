@@ -103,7 +103,7 @@ export default function ChildHomeScreen() {
                 // is_repeatableで文言を出し分けた（「くり返す」設定は本当にその日の
                 // 上限到達なので従来どおり）。
                 <Text style={styles.doneLabel}>
-                  {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ やっておわり"}
+                  {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ おわったよ"}
                 </Text>
               ) : (
                 <Text style={styles.pointLabel}>+{chore.points}pt</Text>
