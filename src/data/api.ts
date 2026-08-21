@@ -290,6 +290,46 @@ export async function fetchCompletions(
   return { ok: true, data: (data ?? []) as ChoreCompletion[] };
 }
 
+/**
+ * 「まいにち」個人設定（chore_daily_flags、2026-08-22追加）。
+ * 家族の他メンバーには見せない個人設定のため、familyIdではなくmemberIdで絞り込む
+ * （RLSも本人の行のみ許可する設計。実装メモ.md参照）。
+ */
+export async function fetchMyDailyFlaggedChoreIds(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<string[]>> {
+  const { data, error } = await client
+    .from("chore_daily_flags")
+    .select("chore_id")
+    .eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []).map((row) => row.chore_id as string) };
+}
+
+export async function setChoreDailyFlag(
+  client: SupabaseClient,
+  familyId: string,
+  memberId: string,
+  choreId: string,
+  flagged: boolean
+): Promise<ApiResult<null>> {
+  if (flagged) {
+    const { error } = await client
+      .from("chore_daily_flags")
+      .upsert({ family_id: familyId, member_id: memberId, chore_id: choreId }, { onConflict: "member_id,chore_id" });
+    if (error) return { ok: false, error: fromPostgrestError(error) };
+    return { ok: true, data: null };
+  }
+  const { error } = await client
+    .from("chore_daily_flags")
+    .delete()
+    .eq("member_id", memberId)
+    .eq("chore_id", choreId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
 /** API仕様.md 5章「あるファミリーのリアクション一覧」相当。通帳・完了報告一覧で使う。 */
 export async function fetchReactions(client: SupabaseClient, familyId: string): Promise<ApiResult<ChoreReaction[]>> {
   const { data, error } = await client

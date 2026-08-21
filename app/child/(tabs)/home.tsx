@@ -16,7 +16,7 @@ import MemberAvatar from "@/components/MemberAvatar";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ChildHomeScreen() {
-  const { state, memberPoints, isChoreLimitReached } = useAppData();
+  const { state, memberPoints, isChoreLimitReached, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
 
   useEffect(() => {
@@ -40,6 +40,16 @@ export default function ChildHomeScreen() {
   const chores = state.chores.filter(
     (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me.id)
   );
+
+  // [2026-08-22追加] 「まいにち」個人設定（chore_daily_flags）。ユーザーから
+  // 「やることリストに毎日タスクを入れたい、区分けしたい」との依頼があったが、
+  // 既存のis_repeatable（くり返す設定）とは「毎日やる」という意味が異なる
+  // （繰り返し可能≠毎日）ため、chore全体の設定ではなく子ども・保護者それぞれが
+  // 個人的に設定できるようにした（同じchoreでも人によってON/OFFを変えられる）。
+  // 対になるラベル（「とくべつ」等）は作らず、「まいにち」の印だけを付ける方針。
+  const toggleDaily = (choreId: string, flagged: boolean) => {
+    void dispatch({ type: "SET_DAILY_FLAG", memberId: me.id, choreId, flagged });
+  };
 
   return (
     <Screen tone="child" scroll={false}>
@@ -86,30 +96,39 @@ export default function ChildHomeScreen() {
           const withDone = chores.map((chore) => ({ chore, done: isChoreLimitReached(chore, me.id) }));
           const todo = withDone.filter((x) => !x.done);
           const done = withDone.filter((x) => x.done);
-          const renderCard = ({ chore, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => (
-            <Pressable
-              key={chore.id}
-              disabled={done}
-              onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
-              style={[styles.card, done && styles.cardDone]}
-            >
-              <Text style={{ fontSize: 32 }}>{chore.emoji}</Text>
-              <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{chore.title}</Text>
-              {done ? (
-                // 「1回だけ」設定（is_repeatable=false）のchoreは実施済みなら日付を問わず
-                // 永久にlimitReached=trueになる（src/data/store.tsxのisChoreLimitReachedFor
-                // 参照）。「きょうは」固定の文言だと、実際は別の日に完了報告した場合でも
-                // 「今日やった」ように見えてしまうとユーザーが実機で発見したため、
-                // is_repeatableで文言を出し分けた（「くり返す」設定は本当にその日の
-                // 上限到達なので従来どおり）。
-                <Text style={styles.doneLabel}>
-                  {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ おわったよ"}
-                </Text>
-              ) : (
-                <Text style={styles.pointLabel}>+{chore.points}pt</Text>
-              )}
-            </Pressable>
-          );
+          const renderCard = ({ chore, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => {
+            const isDaily = state.dailyFlaggedChoreIds.includes(chore.id);
+            return (
+              <View key={chore.id} style={[styles.card, done && styles.cardDone]}>
+                <Pressable
+                  disabled={done}
+                  onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
+                  style={styles.cardMain}
+                >
+                  <Text style={{ fontSize: 32 }}>{chore.emoji}</Text>
+                  <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{chore.title}</Text>
+                  {done ? (
+                    // 「1回だけ」設定（is_repeatable=false）のchoreは実施済みなら日付を問わず
+                    // 永久にlimitReached=trueになる（src/data/store.tsxのisChoreLimitReachedFor
+                    // 参照）。「きょうは」固定の文言だと、実際は別の日に完了報告した場合でも
+                    // 「今日やった」ように見えてしまうとユーザーが実機で発見したため、
+                    // is_repeatableで文言を出し分けた（「くり返す」設定は本当にその日の
+                    // 上限到達なので従来どおり）。
+                    <Text style={styles.doneLabel}>
+                      {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ おわったよ"}
+                    </Text>
+                  ) : (
+                    <Text style={styles.pointLabel}>+{chore.points}pt</Text>
+                  )}
+                </Pressable>
+                <Pressable onPress={() => toggleDaily(chore.id, !isDaily)} hitSlop={8}>
+                  <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
+                    {isDaily ? "☀️ まいにち" : "☀️ まいにちにする"}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          };
           return (
             <>
               {todo.length > 0 && <View style={styles.grid}>{todo.map(renderCard)}</View>}
@@ -145,12 +164,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
     borderRadius: theme.radius.childXl,
     alignItems: "center",
-    justifyContent: "center",
     padding: theme.spacing.s4,
   },
+  cardMain: { flex: 1, alignItems: "center", justifyContent: "center" },
   cardDone: {
     backgroundColor: theme.colors.brandPrimarySoft,
   },
   pointLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { marginTop: theme.spacing.s1, textAlign: "center", color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  dailyToggle: { marginTop: theme.spacing.s1, fontSize: 11, color: theme.colors.neutralTextSecondary },
+  dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
 });

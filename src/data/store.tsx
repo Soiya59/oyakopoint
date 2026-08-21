@@ -76,6 +76,13 @@ export interface State {
   activeChildMemberId: string;
   /** 保護者向け画面で「いま操作中」として扱うmember_id（リアクションのreacted_byに使う） */
   activeParentMemberId: string;
+  /**
+   * [2026-08-22追加] 「まいにち」個人設定（chore_daily_flags）。いまログイン中の
+   * メンバー（子どもならactiveChildMemberId、保護者ならactiveParentMemberId）自身が
+   * 「まいにち」に設定したchore.idの一覧。家族の他メンバーの設定は含まない
+   * （個人設定のため、RLSも本人の行のみ返す設計）。
+   */
+  dailyFlaggedChoreIds: string[];
 }
 
 export type Action =
@@ -96,7 +103,8 @@ export type Action =
       commentBody?: string;
     }
   | { type: "REDEEM_REWARD"; rewardId: string; memberId: string }
-  | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string };
+  | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string }
+  | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean };
 
 export type DispatchResult = { ok: true } | { ok: false; error: ApiError };
 
@@ -238,6 +246,7 @@ const EMPTY_STATE: State = {
   gratitude: [],
   activeChildMemberId: "",
   activeParentMemberId: "",
+  dailyFlaggedChoreIds: [],
 };
 
 function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
@@ -284,23 +293,30 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return toJstDateString(d);
     })();
 
-    const [completionsRes, reactionsRes, redemptionsRes, memberPointsRes, gratitudeRes, dailySummaryRes] = await Promise.all([
-      api.fetchCompletions(client, familyId),
-      api.fetchReactions(client, familyId),
-      api.fetchRedemptions(client, familyId),
-      api.fetchMemberPoints(client, familyId),
-      // [2026-08-16追加] 感謝ポイント家族全体ログ（P16/C8通帳への統合表示用、
-      // buildLedgers()のgratitudeReceivedLedger参照）。member_points View自体は
-      // 既にgratitude_points受領分を合算済み（スキーマ設計.sql 14章）のため、
-      // ここで再取得するのは通帳の履歴行表示用のみ。
-      api.fetchGratitudeLog(client, familyId),
-      client
-        .from("chore_completion_daily_summary")
-        .select("*")
-        .eq("family_id", familyId)
-        .gte("activity_date", windowStart)
-        .lte("activity_date", today),
-    ]);
+    // [2026-08-22追加] 「まいにち」個人設定はいまログイン中の本人の行のみを見る
+    // （chore_daily_flagsのRLSも本人の行のみ許可。activeChildMemberId/
+    // activeParentMemberIdのどちらか一方だけが非空になる設計、上記参照）。
+    const activeMemberId = activeChildMemberId || activeParentMemberId;
+
+    const [completionsRes, reactionsRes, redemptionsRes, memberPointsRes, gratitudeRes, dailySummaryRes, dailyFlagsRes] =
+      await Promise.all([
+        api.fetchCompletions(client, familyId),
+        api.fetchReactions(client, familyId),
+        api.fetchRedemptions(client, familyId),
+        api.fetchMemberPoints(client, familyId),
+        // [2026-08-16追加] 感謝ポイント家族全体ログ（P16/C8通帳への統合表示用、
+        // buildLedgers()のgratitudeReceivedLedger参照）。member_points View自体は
+        // 既にgratitude_points受領分を合算済み（スキーマ設計.sql 14章）のため、
+        // ここで再取得するのは通帳の履歴行表示用のみ。
+        api.fetchGratitudeLog(client, familyId),
+        client
+          .from("chore_completion_daily_summary")
+          .select("*")
+          .eq("family_id", familyId)
+          .gte("activity_date", windowStart)
+          .lte("activity_date", today),
+        api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
+      ]);
 
     if (!completionsRes.ok) {
       setLoadError(completionsRes.error.message);
@@ -332,6 +348,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
+    if (!dailyFlagsRes.ok) {
+      setLoadError(dailyFlagsRes.error.message);
+      setLoading(false);
+      return;
+    }
 
     setState({
       family: bundleRes.data.family,
@@ -345,6 +366,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       gratitude: gratitudeRes.data,
       activeChildMemberId,
       activeParentMemberId,
+      dailyFlaggedChoreIds: dailyFlagsRes.data,
     });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
@@ -437,6 +459,14 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
         }
 
+        case "SET_DAILY_FLAG": {
+          if (!familyId) return { ok: false, error: { code: "no_family", message: "家族が確定していません" } };
+          const res = await api.setChoreDailyFlag(client, familyId, action.memberId, action.choreId, action.flagged);
+          if (!res.ok) return { ok: false, error: res.error };
+          await load();
+          return { ok: true };
+        }
+
         default:
           return { ok: true };
       }
@@ -519,6 +549,7 @@ const initialState: State = {
   gratitude: [],
   activeChildMemberId: "member-child-1",
   activeParentMemberId: "member-parent-1",
+  dailyFlaggedChoreIds: [],
 };
 
 function reducer(state: State, action: Action): State {
@@ -595,6 +626,13 @@ function reducer(state: State, action: Action): State {
         ...state,
         chores: state.chores.map((c) => (c.id === action.choreId ? { ...c, nfc_tag_id: action.tagValue } : c)),
       };
+    }
+
+    case "SET_DAILY_FLAG": {
+      const flagged = new Set(state.dailyFlaggedChoreIds);
+      if (action.flagged) flagged.add(action.choreId);
+      else flagged.delete(action.choreId);
+      return { ...state, dailyFlaggedChoreIds: [...flagged] };
     }
 
     default:

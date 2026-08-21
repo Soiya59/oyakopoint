@@ -24,7 +24,7 @@ import { useAppData } from "@/data/store";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ParentMyChoresScreen() {
-  const { state, isChoreLimitReached } = useAppData();
+  const { state, isChoreLimitReached, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // [2026-08-16] P20からの復帰時のみ一時的に表示する、控えめな確認表示（スナックバー）。
   // 主要画面ワイヤーフレーム.md 9.2章「送信成功時の表現（新規画面を作らない）」対応。
@@ -50,6 +50,13 @@ export default function ParentMyChoresScreen() {
   const myChores = state.chores.filter(
     (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me?.id)
   );
+
+  // [2026-08-22追加] app/child/(tabs)/home.tsxと同じ理由・同じ仕組み（chore_daily_flags）。
+  // 「まいにち」は個人設定のため、子ども・保護者それぞれが自分の画面から独立に設定できる。
+  const toggleDaily = (choreId: string, flagged: boolean) => {
+    if (!me) return;
+    void dispatch({ type: "SET_DAILY_FLAG", memberId: me.id, choreId, flagged });
+  };
 
   return (
     <Screen tone="parent">
@@ -95,13 +102,14 @@ export default function ParentMyChoresScreen() {
         const done = withDone.filter((x) => x.done);
         const renderRow = ({ chore: c, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => {
           const highlighted = snackbar?.choreId === c.id;
+          const isDaily = state.dailyFlaggedChoreIds.includes(c.id);
           return (
-            <Pressable
-              key={c.id}
-              disabled={done || !me}
-              onPress={() => router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } })}
-            >
-              <Card style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
+            <Card key={c.id} style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
+              <Pressable
+                disabled={done || !me}
+                onPress={() => router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } })}
+                style={styles.rowMain}
+              >
                 <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
                 <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.title}
@@ -114,8 +122,13 @@ export default function ParentMyChoresScreen() {
                     <Text style={styles.chevron}>›</Text>
                   </>
                 )}
-              </Card>
-            </Pressable>
+              </Pressable>
+              <Pressable onPress={() => toggleDaily(c.id, !isDaily)} hitSlop={8}>
+                <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
+                  {isDaily ? "☀️ まいにち" : "☀️ まいにちにする"}
+                </Text>
+              </Pressable>
+            </Card>
           );
         };
         return (
@@ -152,8 +165,11 @@ export default function ParentMyChoresScreen() {
 
 const styles = StyleSheet.create({
   sectionHeading: { color: theme.colors.neutralTextSecondary, fontWeight: "700" },
-  row: { flexDirection: "row", alignItems: "center" },
+  row: {},
+  rowMain: { flexDirection: "row", alignItems: "center" },
   rowHighlighted: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
+  dailyToggle: { marginTop: theme.spacing.s1, fontSize: 11, color: theme.colors.neutralTextSecondary },
+  dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },
   chevron: { color: theme.colors.neutralTextSecondary, marginLeft: theme.spacing.s2, fontSize: 18 },
   snackbar: {
