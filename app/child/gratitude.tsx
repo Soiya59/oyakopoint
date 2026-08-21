@@ -13,6 +13,7 @@ import {
   fetchMyGratitudeGiveableBalance,
   type GratitudePointWithCounterpart,
 } from "@/data/api";
+import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 /**
  * C16 感謝ポイント（子どもビュー・ハブ）
@@ -134,9 +135,10 @@ export default function ChildGratitudeHubScreen() {
           ) : (
             <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
               {rows.map((r) => (
-                <Text key={r.id} style={theme.typography.childBody}>
-                  {r.text}
-                </Text>
+                <View key={r.id}>
+                  <Text style={theme.typography.childBody}>{r.text}</Text>
+                  <Text style={styles.dateLabel}>{formatDateShort(toJstDateString(r.when))}</Text>
+                </View>
               ))}
             </View>
           )}
@@ -165,4 +167,5 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.childXl,
   },
   gaugeBar: { marginTop: theme.spacing.s2, fontSize: 18, letterSpacing: 2, color: theme.colors.brandPrimaryStrong },
+  dateLabel: { fontSize: 12, color: theme.colors.neutralTextSecondary },
 });

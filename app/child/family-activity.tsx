@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
-import { toJstDateString } from "@/lib/calendarDates";
+import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 /**
  * かぞくのがんばり（子ども向け、双方向リアクション・子→親方向）
@@ -26,14 +26,6 @@ import { toJstDateString } from "@/lib/calendarDates";
  * 「見る」「（任意で）スタンプ／コメントを贈る」の2操作のみのフィード構成を踏襲しつつ、
  * 子ども向けの見た目・言葉づかいに合わせた。
  */
-// [2026-08-20修正・本部長] 当初formatDateChildJp（「8がつ20にち」ひらがな表記）を
-// 使っていたが、ユーザーから「8/20という表示にしてほしい」との依頼があったため、
-// この画面専用の短い日付表記に差し替えた。
-function formatShortDate(dateStr: string): string {
-  const [, m, d] = dateStr.split("-").map(Number);
-  return `${m}/${d}`;
-}
-
 export default function FamilyActivityScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp } = useAppData();
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
@@ -91,7 +83,7 @@ export default function FamilyActivityScreen() {
                 </Text>
               </View>
               <Text style={styles.dateLabel}>
-                {formatShortDate(toJstDateString(c.reported_at))}
+                {formatDateShort(toJstDateString(c.reported_at))}
                 {" "}
                 {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
               </Text>
@@ -134,7 +126,7 @@ export default function FamilyActivityScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>{member?.display_name}が きろくしたよ</Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {formatShortDate(toJstDateString(detailTarget.reported_at))}
+                      {formatDateShort(toJstDateString(detailTarget.reported_at))}
                       {" "}
                       {new Date(detailTarget.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                     </Text>

@@ -90,3 +90,15 @@ export function formatDateChildJp(dateStr: string): string {
   const [, m, d] = dateStr.split("-").map(Number);
   return `${m}がつ${d}にち`;
 }
+
+/**
+ * "YYYY-MM-DD" から「M/D」形式の文字列を作る。
+ * [2026-08-20追加・本部長] app/child/family-activity.tsx（41章）の日付表示で
+ * 当初formatDateChildJpを使っていたが、ユーザーから「ひらがなでなく8/20という
+ * 表示にしてほしい」との依頼があり新設した。app/child/gratitude.tsxの
+ * 送受信履歴にも同じ理由で日付を追加する際に流用する。
+ */
+export function formatDateShort(dateStr: string): string {
+  const [, m, d] = dateStr.split("-").map(Number);
+  return `${m}/${d}`;
+}
