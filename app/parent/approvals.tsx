@@ -157,16 +157,6 @@ export default function ApprovalsScreen() {
           );
         })}
 
-      {/* 検証用: 通信エラー状態の見た目を確認するためのトグル */}
-      <Pressable
-        onPress={() => setLoadState(loadState === "error" ? "ready" : "error")}
-        style={{ marginTop: theme.spacing.s6 }}
-      >
-        <Text style={{ color: theme.colors.neutralTextSecondary, textAlign: "center", fontSize: 12 }}>
-          （検証用）通信エラー状態を切り替える
-        </Text>
-      </Pressable>
-
       {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
 

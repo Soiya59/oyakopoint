@@ -104,32 +104,8 @@ export default function ChildHomeScreen() {
         )}
       </View>
 
-      {/* 検証用: 通信エラー状態の見た目を確認するためのトグル */}
-      <Pressable onPress={() => setLoadState(loadState === "error" ? "ready" : "error")}>
-        <Text style={styles.debugToggle}>（検証用）通信エラー状態を切り替える</Text>
-      </Pressable>
-
-      {/* 検証用: 実機NFCが無いため、NFCタグ読み取り（C13→C14）を
-          モックchoreのnfc_tag_idからランダムに選んでシミュレートする導線。
-          設計書には存在しない開発検証専用のショートカット（P1の既存の検証用導線と同じ位置づけ）。 */}
-      <Pressable onPress={() => router.push({ pathname: "/child/nfc-scan", params: { tagValue: pickRandomTagValue(state.chores) } })}>
-        <Text style={styles.debugToggle}>（検証用）NFCタグを読み取る（シミュレート）</Text>
-      </Pressable>
     </Screen>
   );
-}
-
-/**
- * 登録済みの nfc_tag_id からランダムに1つ選ぶ。ときどき（約4回に1回）
- * どのchoreにも一致しないダミー値を混ぜ、C14「タグ未登録／他家族のタグ」状態も
- * ランダム選択の中で確認できるようにする。
- */
-function pickRandomTagValue(chores: { nfc_tag_id: string | null }[]): string {
-  const registeredTags = chores
-    .map((c) => c.nfc_tag_id)
-    .filter((tag): tag is string => !!tag);
-  const pool = [...registeredTags, "unregistered-tag-does-not-match-any-chore"];
-  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 const styles = StyleSheet.create({
@@ -157,5 +133,4 @@ const styles = StyleSheet.create({
   },
   pointLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { marginTop: theme.spacing.s1, textAlign: "center", color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  debugToggle: { textAlign: "center", fontSize: 11, color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
 });

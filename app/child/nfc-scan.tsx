@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import theme from "@/theme/theme";
@@ -10,10 +10,12 @@ import { PG_ERRCODE } from "@/data/api";
  * C13 NFCタグ読み取り中
  * 参照: 主要画面ワイヤーフレーム.md 7.2章、画面一覧・遷移図.md 3.7節
  *
- * [検証方法についての注記] 実機NFCハードウェアが無いため、実際のタグ検出は行わない。
- * この画面はC5/検証用ショートカットから渡される `tagValue` パラメータを、実機で
- * 「NFCタグを読み取って得たトークン文字列」の代わりとして扱う（src/lib/nfc.ts の
- * readNfcTag()コメント参照）。tagValue確定後の処理（chore特定→完了報告）は
+ * [2026-08-18改訂] 35章でWeb NFC APIによる本実装に切り替えた後は、この画面の
+ * `tagValue`はAndroid OS標準のNFCタグディスパッチが物理タグのURL
+ * （src/lib/nfc.ts の buildWebAppUrl参照）を開いた際にURLクエリパラメータとして
+ * 渡ってくる（実機タップ時のみ到達する経路）。開発検証用のシミュレーション導線
+ * （C5からのランダム選択ショートカット）は実機に不要なポイント付与を招くリスクが
+ * あったため撤去した（本部長対応）。tagValue確定後の処理（chore特定→完了報告）は
  * API仕様.md 4a章の手順どおり、通常の完了報告と同じロジック
  * （findChoreByTag・isChoreLimitReached・REPORT_COMPLETIONアクション）を再利用する。
  */
@@ -115,19 +117,6 @@ export default function NfcScanScreen() {
         <Animated.Text style={[styles.icon, { opacity: pulse }]}>📶 · · ·</Animated.Text>
         <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>タグをよみとっています</Text>
       </View>
-
-      {/* 検証用: 実際の通信を行わないため、通信エラー状態を確認するための強制トグル */}
-      <Pressable
-        onPress={() => {
-          processedRef.current = true;
-          router.replace({
-            pathname: "/child/nfc-complete",
-            params: { result: "networkError", tagValue: tagValue ?? "" },
-          });
-        }}
-      >
-        <Text style={styles.debugToggle}>（検証用）通信エラー状態を見る</Text>
-      </Pressable>
     </Screen>
   );
 }
@@ -135,11 +124,4 @@ export default function NfcScanScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   icon: { fontSize: 40 },
-  debugToggle: {
-    textAlign: "center",
-    fontSize: 11,
-    color: theme.colors.neutralTextSecondary,
-    marginTop: theme.spacing.s3,
-    marginBottom: theme.spacing.s4,
-  },
 });

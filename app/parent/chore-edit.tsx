@@ -334,10 +334,6 @@ export default function ChoreEditScreen() {
                   style={{ marginTop: theme.spacing.s6 }}
                   onPress={() => setModalVisible(false)}
                 />
-                {/* 検証用: モックの書き込みAPIは常に成功するため、失敗状態を確認するための強制トグル */}
-                <Pressable onPress={() => setNfcState("failed")}>
-                  <Text style={styles.debugToggle}>（検証用）書き込み失敗の状態を見る</Text>
-                </Pressable>
               </>
             )}
 
@@ -414,10 +410,4 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s4,
   },
   modalCard: { width: "100%", maxWidth: 420 },
-  debugToggle: {
-    textAlign: "center",
-    fontSize: 11,
-    color: theme.colors.neutralTextSecondary,
-    marginTop: theme.spacing.s3,
-  },
 });

@@ -213,11 +213,6 @@ export default function ChildReportScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={send}
       />
-
-      {/* 検証用: 通信エラー状態を試すためのリンク */}
-      <Pressable onPress={() => setScreenState("networkError")}>
-        <Text style={styles.debugToggle}>（検証用）通信エラー状態を見る</Text>
-      </Pressable>
     </Screen>
   );
 }
@@ -242,5 +237,4 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s3,
     textAlignVertical: "top",
   },
-  debugToggle: { textAlign: "center", fontSize: 11, color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s3 },
 });
