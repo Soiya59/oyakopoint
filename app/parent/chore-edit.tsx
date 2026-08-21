@@ -9,6 +9,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createChore, updateChore } from "@/data/api";
 import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
+import { CHORE_EMOJI_OPTIONS } from "@/lib/emojiOptions";
 
 /**
  * P11 お手伝い登録・編集
@@ -48,6 +49,7 @@ export default function ChoreEditScreen() {
   // 変わり、Reactが実行時エラーを投げる）。
   // ---- フォーム項目（スキーマ設計.sql 4章 chores参照） ----
   const [title, setTitle] = useState(chore?.title ?? "");
+  const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? null);
   const [pointsText, setPointsText] = useState(chore ? String(chore.points) : "");
   const [categoryId, setCategoryId] = useState<string | null>(chore?.category_id ?? null);
   const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? false);
@@ -115,6 +117,7 @@ export default function ChoreEditScreen() {
     const input = {
       category_id: categoryId,
       title: title.trim(),
+      emoji,
       points: pointsNum,
       is_repeatable: isRepeatable,
       daily_limit: dailyLimitNum,
@@ -168,6 +171,19 @@ export default function ChoreEditScreen() {
         maxLength={100}
         style={styles.input}
       />
+
+      {/* 絵文字（任意） */}
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（未選択でも登録できます）</Text>
+      <View style={styles.chipRow}>
+        <Pressable onPress={() => setEmoji(null)} style={[styles.chip, emoji === null && styles.chipSelected]}>
+          <Text>未選択</Text>
+        </Pressable>
+        {CHORE_EMOJI_OPTIONS.map((e) => (
+          <Pressable key={e} onPress={() => setEmoji(e)} style={[styles.chip, emoji === e && styles.chipSelected]}>
+            <Text style={{ fontSize: 18 }}>{e}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {/* ポイント */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>ポイント（1以上の整数）</Text>

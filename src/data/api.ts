@@ -429,15 +429,14 @@ export async function createChildProfile(
  * が空のときの「お手伝い管理で追加する」導線（`router.push("/parent/chore-edit")`、id無し）
  * が行き止まりになっていた不具合の対応で新設した（開発部/成果物/実装メモ.md参照）。
  *
- * `emoji`は今回のフォーム対象外（ユーザー依頼の「フォーム項目」一覧に含まれていないため）。
- * 意図的にこの型・insert/update双方のペイロードから除外している。新規作成時はDB側の
- * デフォルト（列定義に無いためNULL）に委ね、編集時もキー自体を送らないことで
- * 既存chore.emoji（絵文字ピッカー等、将来別画面で設定される想定）を上書きしない
- * （キーを含めてnullを送ってしまうと編集のたびに絵文字が消えてしまうため、意図的に省略）。
+ * [2026-08-20追加] 当初`emoji`はフォーム対象外だったが、絵文字が一切表示されず
+ * 一覧が見にくいとユーザーが実機で発見したため、`src/lib/emojiOptions.ts`の候補から
+ * 選ぶ形でフォームに追加した（43章のレイアウト改善に続く見やすさ改善）。
  */
 export interface ChoreFormInput {
   category_id: string | null;
   title: string;
+  emoji: string | null;
   points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
@@ -446,8 +445,7 @@ export interface ChoreFormInput {
 
 /**
  * API仕様.md 3章「新規登録」: `supabase.from('chores').insert({ family_id, category_id,
- * title, emoji, points, is_repeatable, daily_limit, assigned_to })`。emoji省略の理由は
- * ChoreFormInputのコメント参照。
+ * title, emoji, points, is_repeatable, daily_limit, assigned_to })`。
  *
  * [注記] スキーマ設計.sql 4章 `chores_before_write` トリガーは、
  * `is_repeatable=true かつ daily_limit未指定(NULL)`のINSERTに限りdaily_limitをサーバー側で
@@ -468,6 +466,7 @@ export async function createChore(
       family_id: familyId,
       category_id: input.category_id,
       title: input.title,
+      emoji: input.emoji,
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
@@ -490,6 +489,7 @@ export async function updateChore(
     .update({
       category_id: input.category_id,
       title: input.title,
+      emoji: input.emoji,
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
@@ -506,11 +506,13 @@ export async function updateChore(
  * [2026-08-18実装・本部長] P13（ごほうび登録・編集）が長らくStubScreenのままで
  * 「ごほうびの追加ができない」とユーザーが実機で発見した。P11（chore-edit、実装メモ.md
  * 21章）と同じ構成で、rewards用のフォーム入力型・作成/更新APIを新設する。
- * emojiはchoresと同様NULL許容・クライアント側フォールバック方針（実装メモ.md 6.1章）の
- * ため、フォーム自体には含めない（ChoreFormInputと同じ設計判断）。
+ *
+ * [2026-08-20追加] 当初`emoji`はフォーム対象外だったが、ChoreFormInputと同じ理由
+ * （43章のレイアウト改善に続く見やすさ改善）でフォームに追加した。
  */
 export interface RewardFormInput {
   name: string;
+  emoji: string | null;
   cost: number;
   description: string | null;
 }
@@ -525,6 +527,7 @@ export async function createReward(
     .insert({
       family_id: familyId,
       name: input.name,
+      emoji: input.emoji,
       cost: input.cost,
       description: input.description,
     })
@@ -543,6 +546,7 @@ export async function updateReward(
     .from("rewards")
     .update({
       name: input.name,
+      emoji: input.emoji,
       cost: input.cost,
       description: input.description,
     })
