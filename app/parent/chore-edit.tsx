@@ -10,6 +10,10 @@ import { useSession } from "@/lib/session";
 import { createChore, updateChore } from "@/data/api";
 import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
 
+// [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
+// （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
+const CHORE_EMOJI_SUGGESTIONS = ["📚", "🧹", "🛁", "🧺", "🍽️"];
+
 /**
  * P11 お手伝い登録・編集
  * 参照: 画面一覧・遷移図.md P11、API仕様.md 3章
@@ -180,7 +184,11 @@ export default function ChoreEditScreen() {
         style={styles.input}
       />
 
-      {/* 絵文字（任意・自由入力） */}
+      {/* 絵文字（任意・自由入力＋候補）
+          [2026-08-23追加] 自由入力のみだと何を入れればいいか迷うとのフィードバックがあり、
+          よくあるお手伝い（勉強・掃除・お風呂等）を想定した候補チップを追加した。
+          チップは自由入力を補助するショートカットであり、選択肢を自由入力の代わりに
+          するものではない（前回の「選択ではなく自分で決めたい」という要望とも矛盾しない）。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（任意）</Text>
       <TextInput
         value={emoji ?? ""}
@@ -189,6 +197,17 @@ export default function ChoreEditScreen() {
         maxLength={8}
         style={[styles.input, styles.emojiInput]}
       />
+      <View style={styles.chipRow}>
+        {CHORE_EMOJI_SUGGESTIONS.map((e) => (
+          <Pressable
+            key={e}
+            onPress={() => setEmoji(e)}
+            style={[styles.chip, emoji === e && styles.chipSelected]}
+          >
+            <Text style={{ fontSize: 18 }}>{e}</Text>
+          </Pressable>
+        ))}
+      </View>
       <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
         Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
       </Text>
