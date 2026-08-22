@@ -19,6 +19,15 @@ import theme from "@/theme/theme";
  * ユーザーが実機で発見した。Screen.tsx側はedges=["top","left","right"]でbottomの
  * safe areaを意図的に含めていない（スクロール領域を圧迫しないため）ため、
  * タブバー自体でuseSafeAreaInsets().bottomを高さ・paddingに加算するよう修正した。
+ *
+ * [2026-08-22追加修正・本部長] 上記対応後も「絵文字の下の文字が5分の1くらい途切れる」
+ * と実機で再現した。height・paddingBottomの両方にinsets.bottomを加算していたため
+ * 打ち消し合い、アイコン+ラベルに使える実質の高さ（height-paddingTop-paddingBottom）は
+ * 従来の64pxのときから50pxのまま変わっておらず、実機のフォント描画では
+ * この50pxがアイコン(fontSize20の絵文字)+ラベル(fontSize12)にそもそも不足していた
+ * ことが真因だった（PCブラウザでの検証では余裕があり再現しなかった）。
+ * ベースの高さを64→80に増やして実質の高さを66pxに広げ、ラベルにも明示的な
+ * lineHeightを指定して端末ごとのフォント行高のばらつきで再び詰まらないようにした。
  */
 export default function ChildTabsLayout() {
   const insets = useSafeAreaInsets();
@@ -30,11 +39,11 @@ export default function ChildTabsLayout() {
         tabBarInactiveTintColor: theme.colors.neutralTextSecondary,
         tabBarStyle: {
           backgroundColor: theme.colors.neutralSurface,
-          height: 64 + insets.bottom,
+          height: 80 + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: "700" },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
       }}
     >
       <Tabs.Screen
