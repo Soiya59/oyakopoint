@@ -53,12 +53,18 @@ export default function ChildHomeScreen() {
 
   return (
     <Screen tone="child">
+      {/* [2026-08-23修正・本部長] 「ベルマークがアカウント切り替えにつながっていて、
+          新着のお知らせだと思っていたので分かりにくい」とユーザーが実機で発見した。
+          ベル（🔔・新着リアクション件数）は「きろく」タブ（届いたリアクションを
+          確認できる）へ、左上のアバター・名前はアカウント切り替えへ、と役割を
+          入れ替えた（ベル＝お知らせ、自分の名前をタップ＝自分の切り替え、という
+          一般的なアプリの配置パターンに合わせた）。 */}
       <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
+        <Pressable style={styles.headerLeft} onPress={() => router.push("/child/profile-switch")}>
           <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
           <Text style={theme.typography.childBody}>{me.display_name}</Text>
-        </View>
-        <Pressable onPress={() => router.push("/child/profile-switch")}>
+        </Pressable>
+        <Pressable onPress={() => router.push("/child/history")}>
           <Text style={styles.notifBadge}>🔔{newReactionCount}</Text>
         </Pressable>
       </View>

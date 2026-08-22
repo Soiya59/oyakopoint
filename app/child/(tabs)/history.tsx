@@ -29,7 +29,7 @@ import {
 type LoadState = "loading" | "error" | "ready";
 
 export default function ChildHistoryScreen() {
-  const { state, dailySummary } = useAppData();
+  const { state, dailySummary, reactionsForCompletion } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [expanded, setExpanded] = useState(false);
 
@@ -140,17 +140,40 @@ export default function ChildHistoryScreen() {
               {dailyCompletions.map((c) => {
                 const chore = state.chores.find((ch) => ch.id === c.chore_id);
                 const isRoutine = !!chore?.is_repeatable;
+                // [2026-08-23追加・本部長] ホーム画面のベルマーク（新着リアクション件数）を
+                // 押すとこの「きろく」画面に来る導線に変更したため、実際にリアクションの
+                // 中身（スタンプ・コメント）をここで確認できるようにした
+                // （family-activity.tsxの詳細モーダルと同じ表示パターンを踏襲）。
+                const reactions = reactionsForCompletion(c.id);
                 return (
                   <View key={c.id} style={styles.row}>
-                    <Text style={theme.typography.childBody}>
-                      {isRoutine ? "🔄 " : ""}
-                      {c.chore_emoji} {c.chore_title}
-                      {isRoutine ? "（つづけてる）" : ""}
-                    </Text>
-                    <Text style={{ flex: 1 }} />
-                    <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
-                      +{c.points}pt
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Text style={theme.typography.childBody}>
+                          {isRoutine ? "🔄 " : ""}
+                          {c.chore_emoji} {c.chore_title}
+                          {isRoutine ? "（つづけてる）" : ""}
+                        </Text>
+                        <Text style={{ flex: 1 }} />
+                        <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
+                          +{c.points}pt
+                        </Text>
+                      </View>
+                      {reactions.length > 0 && (
+                        <View style={{ marginTop: theme.spacing.s1, gap: 2 }}>
+                          {reactions.map((r) => {
+                            const reactor = state.members.find((m) => m.id === r.reacted_by);
+                            const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
+                            return (
+                              <Text key={r.id} style={theme.typography.parentCaption}>
+                                {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
+                                {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
+                              </Text>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
                   </View>
                 );
               })}
