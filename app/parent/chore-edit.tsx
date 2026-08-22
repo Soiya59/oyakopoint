@@ -107,6 +107,15 @@ export default function ChoreEditScreen() {
       setErrorMessage(validationError);
       return;
     }
+    // [2026-08-22追加・本部長] ユーザーが実機で「invalid input syntax for type
+    // uuid: ''」という分かりにくいエラーに遭遇した。state.family.idが未確定の
+    // まま保存しようとすると発生しうるため（通常はsrc/data/store.tsxの
+    // ローディングゲートで防がれるはずだが、念のための二重の安全策として）、
+    // ここでも明示的にチェックし、分かりやすい案内を表示する。
+    if (!state.family.id) {
+      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      return;
+    }
     setErrorMessage(null);
     setSaving(true);
 

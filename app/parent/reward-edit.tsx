@@ -52,6 +52,11 @@ export default function RewardEditScreen() {
       setErrorMessage(validationError);
       return;
     }
+    // app/parent/chore-edit.tsxと同じ理由の安全策（実装メモ.md参照）。
+    if (!state.family.id) {
+      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      return;
+    }
     setErrorMessage(null);
     setSaving(true);
 
