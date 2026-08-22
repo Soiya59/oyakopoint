@@ -16,6 +16,10 @@ import { useAppData } from "@/data/store";
  * 参考として一覧で眺める画面。完了報告の実績はP8/P18側で確認できるため、本画面は
  * chore定義そのものの参考閲覧に限定し、編集・完了報告の導線は一切持たない
  * （行のUIコンポーネント自体をタップ不可の表示専用リストとして実装する）。
+ *
+ * [2026-08-23追加] 「ごほうびも家族に見せたい」というユーザー要望を受け、お手伝いと
+ * 同じ扱いでごほうび（rewards, scope='personal'）も参考表示に加えた
+ * （交換できるのは引き続き作成者本人だけ、reward_redemptions_insert_scoped）。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -31,6 +35,12 @@ export default function ParentSupporterChoresScreen() {
   const byCreator = personalChores.reduce<Record<string, typeof personalChores>>((acc, c) => {
     const key = c.created_by as string;
     (acc[key] ??= []).push(c);
+    return acc;
+  }, {});
+  const personalRewards = state.rewards.filter((r) => r.is_active && r.scope === "personal" && r.created_by);
+  const rewardsByCreator = personalRewards.reduce<Record<string, typeof personalRewards>>((acc, r) => {
+    const key = r.created_by as string;
+    (acc[key] ??= []).push(r);
     return acc;
   }, {});
   const creatorOf = (id: string) => state.members.find((m) => m.id === id);
@@ -75,8 +85,33 @@ export default function ParentSupporterChoresScreen() {
         </View>
       )}
 
+      {loadState === "ready" && Object.keys(rewardsByCreator).length > 0 && (
+        <>
+          <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>🎁 みんなのごほうび</Text>
+          <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s3 }}>
+            {Object.entries(rewardsByCreator).map(([creatorId, rewards]) => {
+              const creator = creatorOf(creatorId);
+              return (
+                <Card key={creatorId} style={styles.groupCard}>
+                  <Text style={theme.typography.parentBodyMedium}>{creator?.display_name ?? "みまもりメンバー"}</Text>
+                  <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+                    {rewards.map((r) => (
+                      <View key={r.id} style={styles.item}>
+                        <Text style={{ fontSize: 18 }}>{r.emoji ?? "🎁"}</Text>
+                        <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{r.name}</Text>
+                        <Text style={theme.typography.parentBodyMedium}>{r.cost}pt</Text>
+                      </View>
+                    ))}
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        </>
+      )}
+
       <Text style={[theme.typography.parentCaption, styles.footNote]}>
-        みんなの参考にどうぞ。ここから直接完了報告や編集はできません
+        みんなの参考にどうぞ。ここから直接完了報告・編集・交換はできません
       </Text>
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />

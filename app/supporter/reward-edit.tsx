@@ -96,8 +96,11 @@ export default function SupporterRewardEditScreen() {
       <Text style={theme.typography.supporterTitle}>
         {reward ? `${reward.emoji ?? "🎁"} ごほうびを編集` : "じぶんのごほうびを新規登録"}
       </Text>
+      {/* [2026-08-23改訂] 「ごほうびも家族に見せたい」というユーザー要望を受け、
+          choreと同じく家族公開に変更した（rewards_select_scoped、family_id一致のみ）。
+          交換できるのは引き続き本人だけ（reward_redemptions、作成者本人限定）。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        この一覧は本人専用です。家族には公開されません。
+        このごほうびは家族みんなに見えます。交換できるのは自分だけです。
       </Text>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>名前（必須）</Text>

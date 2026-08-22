@@ -160,7 +160,7 @@ export default function SupporterChoreEditScreen() {
       )}
 
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-        ※ このお手伝いは家族みんなに見えます（ごほうびは見えません）。完了報告や編集ができるのは自分だけです。
+        ※ このお手伝いは家族みんなに見えます。完了報告や編集ができるのは自分だけです。
       </Text>
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}

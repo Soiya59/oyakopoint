@@ -46,7 +46,7 @@ export default function SupporterMyChoresScreen() {
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
       </View>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したお手伝いは家族みんなに見えます（ごほうびは見えません）。
+        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したお手伝いは家族みんなに見えます。
       </Text>
 
       {myChores.length === 0 && (
