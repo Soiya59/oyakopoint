@@ -95,12 +95,20 @@ export default function ParentMyChoresScreen() {
       )}
 
       {/* [2026-08-20修正・本部長] 未実施・きろくずみが入り混じって表示され見分けにくいと
-          ユーザーが実機で発見したため、見出しで2群に分けた（並び順自体は変更していない）。 */}
+          ユーザーが実機で発見したため、見出しで2群に分けた（並び順自体は変更していない）。
+          [2026-08-22追加] app/child/(tabs)/home.tsxと同じ理由で、「まいにち」設定分を
+          専用セクションに切り出した（残りは従来どおり未実施/きろくずみで分ける）。 */}
       {loadState === "ready" && myChores.length > 0 && (() => {
-        const withDone = myChores.map((c) => ({ chore: c, done: me ? isChoreLimitReached(c, me.id) : false }));
-        const todo = withDone.filter((x) => !x.done);
-        const done = withDone.filter((x) => x.done);
-        const renderRow = ({ chore: c, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => {
+        const withDaily = myChores.map((c) => ({
+          chore: c,
+          done: me ? isChoreLimitReached(c, me.id) : false,
+          isDaily: state.dailyFlaggedChoreIds.includes(c.id),
+        }));
+        const daily = withDaily.filter((x) => x.isDaily);
+        const rest = withDaily.filter((x) => !x.isDaily);
+        const todo = rest.filter((x) => !x.done);
+        const done = rest.filter((x) => x.done);
+        const renderRow = ({ chore: c, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean }) => {
           const highlighted = snackbar?.choreId === c.id;
           const isDaily = state.dailyFlaggedChoreIds.includes(c.id);
           return (
@@ -133,6 +141,14 @@ export default function ParentMyChoresScreen() {
         };
         return (
           <>
+            {daily.length > 0 && (
+              <View style={{ marginTop: theme.spacing.s4 }}>
+                <Text style={[styles.sectionHeading, styles.dailySectionHeading]}>☀️ まいにちのお手伝い</Text>
+                <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+                  {daily.map(renderRow)}
+                </View>
+              </View>
+            )}
             {todo.length > 0 && (
               <View style={{ marginTop: theme.spacing.s4 }}>
                 <Text style={styles.sectionHeading}>まだのお手伝い</Text>
@@ -165,6 +181,7 @@ export default function ParentMyChoresScreen() {
 
 const styles = StyleSheet.create({
   sectionHeading: { color: theme.colors.neutralTextSecondary, fontWeight: "700" },
+  dailySectionHeading: { color: theme.colors.brandPrimaryStrong },
   row: {},
   rowMain: { flexDirection: "row", alignItems: "center" },
   rowHighlighted: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },

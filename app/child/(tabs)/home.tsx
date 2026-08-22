@@ -52,7 +52,7 @@ export default function ChildHomeScreen() {
   };
 
   return (
-    <Screen tone="child" scroll={false}>
+    <Screen tone="child">
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
@@ -75,9 +75,7 @@ export default function ChildHomeScreen() {
         </Text>
       </Pressable>
 
-      <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>やることリスト</Text>
-
-      <View style={{ flex: 1, marginTop: theme.spacing.s2 }}>
+      <View style={{ marginTop: theme.spacing.s2 }}>
         {loadState === "loading" && <SkeletonList count={4} />}
         {loadState === "error" && (
           <ErrorState
@@ -91,12 +89,22 @@ export default function ChildHomeScreen() {
         )}
         {/* [2026-08-20修正・本部長] まだ・きろくずみが1つのグリッドに混在し見分けにくいと
             ユーザーが実機で発見したため、app/parent/my-chores.tsx（46章）と同じ考え方で
-            2グループに分けた。 */}
+            2グループに分けた。
+            [2026-08-22追加] 「まいにちにする」の小さい文字だけでは分かりにくい、
+            やることリスト/きろくずみのような専用セクションにしたいとの依頼を受け、
+            「まいにち」設定されたchoreを別セクションに切り出した（残りは従来どおり
+            未実施/きろくずみで分ける。まいにち設定分は重複させない）。 */}
         {loadState === "ready" && chores.length > 0 && (() => {
-          const withDone = chores.map((chore) => ({ chore, done: isChoreLimitReached(chore, me.id) }));
-          const todo = withDone.filter((x) => !x.done);
-          const done = withDone.filter((x) => x.done);
-          const renderCard = ({ chore, done }: { chore: (typeof withDone)[number]["chore"]; done: boolean }) => {
+          const withDaily = chores.map((chore) => ({
+            chore,
+            done: isChoreLimitReached(chore, me.id),
+            isDaily: state.dailyFlaggedChoreIds.includes(chore.id),
+          }));
+          const daily = withDaily.filter((x) => x.isDaily);
+          const rest = withDaily.filter((x) => !x.isDaily);
+          const todo = rest.filter((x) => !x.done);
+          const done = rest.filter((x) => x.done);
+          const renderCard = ({ chore, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean }) => {
             const isDaily = state.dailyFlaggedChoreIds.includes(chore.id);
             return (
               <View key={chore.id} style={[styles.card, done && styles.cardDone]}>
@@ -131,7 +139,20 @@ export default function ChildHomeScreen() {
           };
           return (
             <>
-              {todo.length > 0 && <View style={styles.grid}>{todo.map(renderCard)}</View>}
+              {daily.length > 0 && (
+                <>
+                  <Text style={[theme.typography.childBody, styles.sectionHeading, styles.dailySectionHeading]}>
+                    ☀️ まいにちのお手伝い
+                  </Text>
+                  <View style={styles.grid}>{daily.map(renderCard)}</View>
+                </>
+              )}
+              {todo.length > 0 && (
+                <>
+                  <Text style={[theme.typography.childBody, styles.sectionHeading]}>やることリスト</Text>
+                  <View style={styles.grid}>{todo.map(renderCard)}</View>
+                </>
+              )}
               {done.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading]}>きろくずみ</Text>
@@ -157,6 +178,7 @@ const styles = StyleSheet.create({
     color: theme.colors.brandPrimaryStrong,
   },
   sectionHeading: { marginTop: theme.spacing.s4, marginBottom: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+  dailySectionHeading: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
   card: {
     width: "47%",
