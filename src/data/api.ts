@@ -696,7 +696,9 @@ export async function updateReward(
 // 対応するスキーマはスキーマ設計.sql 19章（chores.created_by/scope、
 // chores_write_personal_by_creatorポリシー）。
 // [2026-08-23改訂] is_shared_with_family（可視性トグル）は要件定義書07-7章4回目の
-// スコープ変更により撤回した。自分専用choreは常に非公開（例外なし）。
+// スコープ変更により撤回した。[2026-08-23再改訂・5回目のスコープ変更] 自分専用chore
+// は常に家族全員に公開される（4回目時点の「常に非公開」から反転）。可視性を選べる
+// 設定（トグル）は引き続き設けない。編集・完了報告は引き続き作成者本人のみに限定。
 // ============================================================
 
 export interface PersonalChoreFormInput {

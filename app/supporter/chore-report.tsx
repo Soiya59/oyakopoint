@@ -15,6 +15,10 @@ import { PG_ERRCODE } from "@/data/api";
  *
  * 通常どおりポイントが表示・付与される点でS4（家族共有への参加）と対象範囲が異なるだけで
  * APIロジックは同一（呼び出し方自体は保護者・子どもと全く同一。4c章参照）。
+ *
+ * [2026-08-23改訂・5回目のスコープ変更] この完了報告は家族全員に公開され、家族の
+ * 完了報告一覧・実施履歴カレンダーにも表示されてリアクションをもらえる（要件定義書
+ * 07-7章「自分専用choreの公開方針」参照。4回目時点の「常に非公開」から反転）。
  */
 type ScreenState = "form" | "uploadingPhoto" | "sending" | "networkError" | "limitReached";
 
@@ -152,7 +156,7 @@ export default function SupporterChoreReportScreen() {
         きろくすると +{chore.points}pt
       </Text>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        🔒 このお手伝いは非公開です。家族には表示されません。
+        👀 この完了報告は家族に公開され、リアクションをもらえます。
       </Text>
 
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s6 }]}>写真（任意）</Text>

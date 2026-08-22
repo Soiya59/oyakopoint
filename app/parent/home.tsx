@@ -19,6 +19,11 @@ import { useAppData } from "@/data/store";
  */
 export default function ParentHomeScreen() {
   const { state } = useAppData();
+  // [2026-08-23追加・5回目のスコープ変更] P25「かぞくのみまもりメンバーのお手伝い
+  // （参考一覧）」への導線。画面一覧・遷移図.md P25行「家族にみまもりメンバーが
+  // 1人もいない場合は導線自体を表示しない」に対応し、家族に有効なsupporterが
+  // 1人以上いる場合のみメニューに表示する。
+  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
   const newCount = state.completions.filter(
     (c) => new Date(c.reported_at).getTime() >= oneDayAgoMs
@@ -45,6 +50,9 @@ export default function ParentHomeScreen() {
     { emoji: "👨‍👩‍👧‍👦", label: "家族", path: "/parent/family" },
     { emoji: "⚙️", label: "設定", path: "/parent/settings" },
   ];
+  if (hasAnySupporter) {
+    shortcuts.push({ emoji: "👀", label: "かぞくのみまもりメンバーのお手伝い", path: "/parent/supporter-chores" });
+  }
 
   return (
     <Screen tone="parent">

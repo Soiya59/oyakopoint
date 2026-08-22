@@ -127,16 +127,26 @@ export default function ApprovalsScreen() {
           const isChildCard = member?.role === "child";
           // [2026-08-23改訂] 🤝/🎯バッジ（旧デザイントークン.md 1.7節）は要件定義書
           // 07-7章4回目のスコープ変更（家族共有choreへの参加機能の撤回）に伴い廃止した。
-          // みまもりメンバーの完了報告は常に自分専用choreであり、
-          // chore_completions_select_scoped RLSにより本人以外にはそもそも返らないため、
-          // このフィード（自分以外の家族が見る想定）に混在することはない
-          // （isSupporterCardの分岐自体が実質到達不能になったため削除した）。
+          // [2026-08-23再改訂・5回目のスコープ変更] 自分専用choreの公開方針の撤回により、
+          // みまもりメンバーの完了報告も再びこのフィードに表示されるようになった
+          // （chore_completions_select_scoped RLSがfamily_id一致のみに単純化されたため）。
+          // バッジは復活させないが、`color-supporter-accent-soft`の控えめな配色で
+          // 区別する（画面一覧・遷移図.md P8行参照）。
+          const isSupporterCard = member?.role === "supporter";
           // 自分自身の完了報告カードにはリアクションボタン自体を表示しない
           // （3.1章「自己リアクションは要件定義書に無い操作のため、UI側で選択肢自体を出さない」）。
           const isOwnCard = c.reported_by === myParentId;
           return (
             <Pressable key={c.id} onPress={() => openDetail(c)}>
-              <Card style={isChildCard ? { ...styles.card, ...styles.cardChildTint } : styles.card}>
+              <Card
+                style={
+                  isChildCard
+                    ? { ...styles.card, ...styles.cardChildTint }
+                    : isSupporterCard
+                    ? { ...styles.card, ...styles.cardSupporterTint }
+                    : styles.card
+                }
+              >
                 <View style={styles.cardTop}>
                   <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
                   <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
@@ -325,6 +335,8 @@ const styles = StyleSheet.create({
   // 背景色はcolor-neutral-surfaceのまま（淡い彩色を加えない）」。子どものカードにのみ
   // 淡い彩色を追加し、保護者のカード（自分・配偶者いずれも）はCardデフォルトのまま。
   cardChildTint: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
+  // [2026-08-23追加・5回目のスコープ変更] みまもりメンバーの完了報告カードの控えめな配色。
+  cardSupporterTint: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   cardMeta: { marginTop: theme.spacing.s2 },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },

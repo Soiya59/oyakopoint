@@ -19,7 +19,10 @@ import { createPersonalChore, deactivateChore, updatePersonalChore } from "@/dat
  *
  * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更（ユーザーの要望「いっしょに
  * やるというのはいらない」）により、「家族に共有する／しない」トグルは撤回した。
- * 自分専用のお手伝いは常に本人のみが確認できる非公開情報として扱う（設定自体が無い）。
+ * [2026-08-23再改訂・5回目のスコープ変更] 「常に非公開」という方針を撤回し、
+ * 自分専用のお手伝いは常に家族全員に公開される（可視性を選べる設定は引き続き
+ * 設けない）。編集・完了報告は引き続き作成者本人のみが行える（要件定義書07-7章
+ * 「自分専用choreの公開方針」参照）。
  */
 export default function SupporterChoreEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -157,7 +160,7 @@ export default function SupporterChoreEditScreen() {
       )}
 
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-        このお手伝いは自分だけが見られます（家族には表示されません）。
+        ※ このお手伝いは家族みんなに見えます（ごほうびは見えません）。完了報告や編集ができるのは自分だけです。
       </Text>
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
