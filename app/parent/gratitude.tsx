@@ -174,12 +174,21 @@ export default function ParentGratitudeHubScreen() {
               <Text style={styles.linkText}>通帳へ→</Text>
             </Pressable>
           </View>
-          {received.slice(0, 3).map((g) => (
-            <Text key={g.id} style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>
-              {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
-              {g.family_members?.display_name ?? "?"}から {g.points}pt
-            </Text>
-          ))}
+          {/* [2026-08-22修正・本部長] 「贈った記録」側はg.noteを表示しているのに、
+              こちら「もらった感謝」側はコメント自体がどこにも表示されず、
+              ユーザーが実機で「感謝ポイントのコメントが見えない」と発見した。
+              贈った記録側と同じ体裁でコメントを追加した。 */}
+          <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+            {received.slice(0, 3).map((g) => (
+              <View key={g.id}>
+                <Text style={theme.typography.parentBody}>
+                  {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
+                  {g.family_members?.display_name ?? "?"}から {g.points}pt
+                </Text>
+                <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>「{g.note}」</Text>
+              </View>
+            ))}
+          </View>
 
           {/* [2026-08-16修正・本部長] P19と同じ理由でホームへ戻るボタンを追加した。 */}
           <AppButton

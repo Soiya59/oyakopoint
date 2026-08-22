@@ -26,7 +26,7 @@ import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
  * 連続記録・合計数のような競争的な数値は表示しない（10.3章決定）。
  */
 type LoadState = "loading" | "error" | "ready";
-type LogRow = { id: string; when: string; text: string };
+type LogRow = { id: string; when: string; text: string; note: string };
 
 export default function ChildGratitudeHubScreen() {
   const { state } = useAppData();
@@ -45,11 +45,13 @@ export default function ChildGratitudeHubScreen() {
         id: `sent-${g.id}`,
         when: g.created_at,
         text: `💌 ${g.family_members?.display_name ?? "?"}に ${g.points}こ おくったよ`,
+        note: g.note,
       }));
     const receivedRows: LogRow[] = received.map((g) => ({
       id: `received-${g.id}`,
       when: g.created_at,
       text: `💌 ${g.family_members?.display_name ?? "?"}から ${g.points}こ もらったよ`,
+      note: g.note,
     }));
     return [...sentRows, ...receivedRows].sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime());
   };
@@ -134,9 +136,12 @@ export default function ChildGratitudeHubScreen() {
             />
           ) : (
             <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+              {/* [2026-08-22修正・本部長] 保護者版（app/parent/gratitude.tsx）と同じ理由で、
+                  メッセージ（note）がどこにも表示されていなかったため追加した。 */}
               {rows.map((r) => (
                 <View key={r.id}>
                   <Text style={theme.typography.childBody}>{r.text}</Text>
+                  <Text style={styles.noteLabel}>「{r.note}」</Text>
                   <Text style={styles.dateLabel}>{formatDateShort(toJstDateString(r.when))}</Text>
                 </View>
               ))}
@@ -167,5 +172,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.childXl,
   },
   gaugeBar: { marginTop: theme.spacing.s2, fontSize: 18, letterSpacing: 2, color: theme.colors.brandPrimaryStrong },
+  noteLabel: { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
   dateLabel: { fontSize: 12, color: theme.colors.neutralTextSecondary },
 });
