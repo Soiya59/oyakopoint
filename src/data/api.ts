@@ -344,6 +344,26 @@ export async function fetchFamilyBundle(client: SupabaseClient, familyId: string
 }
 
 /**
+ * 家族名の変更（P17設定画面）。スキーマ設計.sql「families_update_by_parent」
+ * ポリシー（保護者のみ、is_current_user_parent()）により、みまもりメンバー・
+ * 子どもからの呼び出しはRLSで拒否される。
+ */
+export async function updateFamilyName(
+  client: SupabaseClient,
+  familyId: string,
+  name: string
+): Promise<ApiResult<Family>> {
+  const { data, error } = await client
+    .from("families")
+    .update({ name })
+    .eq("id", familyId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Family };
+}
+
+/**
  * API仕様.md 6章「獲得履歴」・6a章「日別実績」に対応。実施履歴カレンダー・通帳の両方が
  * 同じ完了報告一覧を参照するため、ここでまとめて取得する（chore_reactionsもネストする）。
  * `sinceIso` を指定すると reported_at >= sinceIso のみに絞る（無指定なら全件）。

@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { router } from "expo-router";
-import { View } from "react-native";
+import { TextInput, View } from "react-native";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { removeMember } from "@/data/api";
+import { removeMember, updateFamilyName } from "@/data/api";
 
 /**
  * P17 設定
@@ -23,13 +23,37 @@ import { removeMember } from "@/data/api";
  * 画面側は2段階の確認（AppButton押下→確認ダイアログ）を必須にする。
  */
 export default function SettingsScreen() {
-  const { state } = useAppData();
-  const { parentMember, logoutParent } = useSession();
+  const { state, refresh } = useAppData();
+  const { client, parentMember, logoutParent } = useSession();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const me = parentMember;
+
+  // [2026-08-23追加] 家族名の変更。families_update_by_parentポリシー
+  // （保護者のみ）により、みまもりメンバーはこの画面自体にたどり着かないが
+  // （P17は保護者専用画面）、念のためRLS側でも保護者以外は更新できない。
+  const [familyName, setFamilyName] = useState(state.family.name);
+  const [savingName, setSavingName] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const saveFamilyName = async () => {
+    const trimmed = familyName.trim();
+    if (!trimmed || trimmed === state.family.name) return;
+    setSavingName(true);
+    setNameError(null);
+    setNameSaved(false);
+    const res = await updateFamilyName(client, state.family.id, trimmed);
+    setSavingName(false);
+    if (!res.ok) {
+      setNameError(res.error.message);
+      return;
+    }
+    await refresh();
+    setNameSaved(true);
+  };
 
   const doLogout = async () => {
     await logoutParent();
@@ -72,7 +96,38 @@ export default function SettingsScreen() {
     <Screen tone="parent">
       <Text style={theme.typography.parentTitle}>設定</Text>
 
-      <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
+      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>家族名</Text>
+      <TextInput
+        value={familyName}
+        onChangeText={(t) => {
+          setFamilyName(t);
+          setNameSaved(false);
+        }}
+        maxLength={100}
+        style={{
+          marginTop: theme.spacing.s2,
+          borderWidth: 1,
+          borderColor: theme.colors.neutralBorder,
+          borderRadius: theme.radius.parentMd,
+          padding: theme.spacing.s3,
+          backgroundColor: theme.colors.neutralSurface,
+        }}
+      />
+      {nameError && (
+        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{nameError}</Text>
+      )}
+      {nameSaved && !nameError && (
+        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }}>変更しました</Text>
+      )}
+      <AppButton
+        label={savingName ? "保存中…" : "家族名を保存する"}
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s3 }}
+        onPress={saveFamilyName}
+        disabled={savingName || !familyName.trim() || familyName.trim() === state.family.name}
+      />
+
+      <View style={{ marginTop: theme.spacing.s8, gap: theme.spacing.s3 }}>
         <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
         <AppButton
           label={processing ? "処理中…" : "家族から抜ける"}
