@@ -71,7 +71,7 @@ export default function JoinPreviewScreen() {
       <TextInput
         value={displayName}
         onChangeText={setDisplayName}
-        placeholder="例: もりした けい"
+        placeholder="例: たろう"
         style={{
           borderWidth: 1,
           borderColor: theme.colors.neutralBorder,
