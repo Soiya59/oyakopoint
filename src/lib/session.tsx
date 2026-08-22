@@ -63,6 +63,16 @@ const SessionContext = createContext<SessionContextValue | null>(null);
  * role IN ('parent','supporter') に広げた。子ども（role='child'）は
  * auth_user_idを持たない設計（chk_child_has_no_auth_user）のため、
  * この条件だけで子どもの行が誤って返ることはない。
+ *
+ * [2026-08-22追加・本部長発見] 既存のバグ（今回の機能とは無関係、以前から存在）:
+ * このクエリは`is_active`を一切見ていなかったため、remove-member(soft_remove)で
+ * 退会済み（is_active=false）になった保護者が、そのアカウントでログインすると
+ * 依然として`status:"parent"`として扱われてしまっていた。`current_family_id()`等の
+ * RLSヘルパー関数側は`fm.is_active`を条件に含めているため、退会済みアカウントは
+ * 実際にはどのRLSチェックも通らず（`is_current_user_parent()`が常にfalse相当になる
+ * 等）、ユーザーが実機で「招待の送信がRLSエラーになる」という形で発見した。
+ * `.eq("is_active", true)`を追加し、退会済みアカウントは`fetchParentMember`の
+ * 時点で「見つからない」（→ status: "parentNoFamily"）として扱うようにした。
  */
 async function fetchParentMember(userId: string): Promise<FamilyMember | null> {
   const { data, error } = await supabase
@@ -70,6 +80,7 @@ async function fetchParentMember(userId: string): Promise<FamilyMember | null> {
     .select("*")
     .eq("auth_user_id", userId)
     .in("role", ["parent", "supporter"])
+    .eq("is_active", true)
     .maybeSingle();
   if (error) {
     console.error("session: family_members lookup failed", error);
