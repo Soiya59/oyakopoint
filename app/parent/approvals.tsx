@@ -125,44 +125,28 @@ export default function ApprovalsScreen() {
           // 主要画面ワイヤーフレーム.md 9.3章のとおり、reported_by先family_members.roleで
           // 判定する（chore側に区分列は無い。スキーマ設計.sql 12章確認5）。
           const isChildCard = member?.role === "child";
-          // [2026-08-22追加] みまもりメンバーの完了報告には🤝/🎯バッジを付ける
-          // （デザイントークン.md 1.7節「このバッジはP8完了報告一覧…にも同じ絵文字・
-          // 同じ配色ルールで表示する」）。非公開設定の自分専用chore完了報告は
-          // chore_completions_select_scoped RLSにより本人以外にはそもそも返らないため
-          // このフィード（自分以外の家族が見る想定）に混在することはない。
-          const isSupporterCard = member?.role === "supporter";
-          const badge =
-            isSupporterCard && c.chore_scope === "personal"
-              ? theme.supporterCompletionBadge.personal
-              : isSupporterCard
-              ? theme.supporterCompletionBadge.family
-              : null;
+          // [2026-08-23改訂] 🤝/🎯バッジ（旧デザイントークン.md 1.7節）は要件定義書
+          // 07-7章4回目のスコープ変更（家族共有choreへの参加機能の撤回）に伴い廃止した。
+          // みまもりメンバーの完了報告は常に自分専用choreであり、
+          // chore_completions_select_scoped RLSにより本人以外にはそもそも返らないため、
+          // このフィード（自分以外の家族が見る想定）に混在することはない
+          // （isSupporterCardの分岐自体が実質到達不能になったため削除した）。
           // 自分自身の完了報告カードにはリアクションボタン自体を表示しない
           // （3.1章「自己リアクションは要件定義書に無い操作のため、UI側で選択肢自体を出さない」）。
           const isOwnCard = c.reported_by === myParentId;
           return (
             <Pressable key={c.id} onPress={() => openDetail(c)}>
-              <Card
-                style={
-                  isChildCard
-                    ? { ...styles.card, ...styles.cardChildTint }
-                    : isSupporterCard
-                    ? { ...styles.card, backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent }
-                    : styles.card
-                }
-              >
+              <Card style={isChildCard ? { ...styles.card, ...styles.cardChildTint } : styles.card}>
                 <View style={styles.cardTop}>
                   <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
                   <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.parentBodyMedium}>
-                    {badge ? `${badge.emoji} ` : ""}
                     {c.chore_emoji} {c.chore_title} +{c.points}pt
                   </Text>
                 </View>
                 <View style={styles.cardMeta}>
                   <Text style={theme.typography.parentCaption}>
-                    {badge ? `${badge.label} ・ ` : ""}
                     {c.photo_url ? "📷 写真あり ・ " : ""}
                     {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}{" "}
                     {isChildCard ? "とどいた" : "きろくした"}

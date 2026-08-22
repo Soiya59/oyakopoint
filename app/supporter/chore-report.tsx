@@ -151,11 +151,9 @@ export default function SupporterChoreReportScreen() {
       <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
         きろくすると +{chore.points}pt
       </Text>
-      {!chore.is_shared_with_family && (
-        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-          🔒 このお手伝いは非公開設定です。家族には表示されません。
-        </Text>
-      )}
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        🔒 このお手伝いは非公開です。家族には表示されません。
+      </Text>
 
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s6 }]}>写真（任意）</Text>
       <Pressable onPress={pickPhoto} style={styles.photoBox}>

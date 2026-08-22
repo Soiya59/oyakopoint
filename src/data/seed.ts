@@ -88,12 +88,13 @@ const MOCK_NFC_TOKENS = {
   chore5: "nfc-tag-a5555555-5555-4555-8555-555555555555",
 } as const;
 
-// [2026-08-22追加] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 19章）で
-// Chore型に created_by/scope/is_shared_with_family が追加されたため、モックシードにも
-// 既存データ相当のデフォルト値（scope='family'・is_shared_with_family=true・
-// created_by=null）を補完する。実DB側もADD COLUMN DEFAULTで同様にバックフィルされる
-// （後方互換、19章コメント参照）。
-type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "is_shared_with_family">;
+// [2026-08-22追加、2026-08-23改訂] みまもりメンバー対応（要件定義書07-7章、
+// スキーマ設計.sql 19章）で Chore型に created_by/scope が追加されたため、
+// モックシードにも既存データ相当のデフォルト値（scope='family'・created_by=null）を
+// 補完する。実DB側もADD COLUMN DEFAULTで同様にバックフィルされる（後方互換、19章
+// コメント参照）。is_shared_with_family（可視性トグル）は4回目のスコープ変更により
+// 撤回されたため、ここでの補完対象からも外した。
+type LegacyChoreSeed = Omit<Chore, "created_by" | "scope">;
 
 export const seedChores: Chore[] = (
   [
@@ -169,18 +170,18 @@ export const seedChores: Chore[] = (
     nfc_tag_id: MOCK_NFC_TOKENS.chore5,
   },
   ] satisfies LegacyChoreSeed[]
-).map((c) => ({ ...c, created_by: null, scope: "family" as const, is_shared_with_family: true }));
+).map((c) => ({ ...c, created_by: null, scope: "family" as const }));
 
 // [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止(スキーマ設計.sql 5章「[廃止]」)に伴い、
 // status/review_note/reviewed_by/reviewed_atを持つエントリから、確定済みの完了報告のみを
 // 持つエントリへ書き換えた。あわせて実施履歴カレンダー（07-3章）の週間バー・月間カレンダーを
 // 画面確認できるよう、直近1週間（システム日付2026-08-15基準）に日をまたいだ完了報告を
 // 複数用意している。
-// [2026-08-22追加] Chore型と同じ理由（19章・21章コメント参照）でChoreCompletion型に
-// chore_scope/is_shared_with_familyが追加されたため、モックシードにもデフォルト値
-// （chore_scope='family'・is_shared_with_family=true、いずれも既存chore由来の
-// 完了報告として自然な値）を補完する。
-type LegacyCompletionSeed = Omit<ChoreCompletion, "chore_scope" | "is_shared_with_family">;
+// [2026-08-22追加・2026-08-23撤回] Chore型と同じ理由（19章・21章コメント参照）で
+// 一時的にChoreCompletion型にchore_scope/is_shared_with_familyスナップショット列を
+// 追加していたが、4回目のスコープ変更（可視性判定を都度JOINへ一本化）により
+// ChoreCompletion型・実DBの両方から削除された。そのためモックシード側の補完も不要になった。
+type LegacyCompletionSeed = ChoreCompletion;
 
 export const seedCompletions: ChoreCompletion[] = (
   [
@@ -293,7 +294,7 @@ export const seedCompletions: ChoreCompletion[] = (
     reported_at: "2026-08-10T08:00:00+09:00",
   },
   ] satisfies LegacyCompletionSeed[]
-).map((c) => ({ ...c, chore_scope: "family" as const, is_shared_with_family: true }));
+);
 
 // [新設] chore_reactions（スキーマ設計.sql 5b章）。保護者リアクション（スタンプ／コメント）の
 // モックデータ。主要画面ワイヤーフレーム.md 3.2章・4章の例文（ママ「がんばったね」等）に寄せている。

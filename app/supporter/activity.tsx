@@ -17,8 +17,11 @@ import type { ChoreCompletion, StampKey } from "@/types/domain";
  * P8「見る」「（任意で）スタンプ／コメントを贈る」の2操作をそのまま踏襲する。
  * 対象は家族全員の完了報告（自分専用choreの非公開設定分は
  * `chore_completions_select_scoped` RLSにより最初からこのクエリ結果に含まれないため、
- * クライアント側で追加のフィルタは不要）。🤝／🎯バッジで対象範囲を区別する
- * （デザイントークン.md 1.7節）。
+ * クライアント側で追加のフィルタは不要）。
+ *
+ * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更により、みまもりメンバーは
+ * 家族共有choreへの参加機能自体を持たなくなった。これに伴い🤝／🎯バッジ
+ * （旧デザイントークン.md 1.7節）も廃止したため、本画面のバッジ表示コードを削除した。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -41,8 +44,6 @@ export default function SupporterActivityScreen() {
   );
 
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
-  const badgeOf = (c: ChoreCompletion) =>
-    c.chore_scope === "personal" ? theme.supporterCompletionBadge.personal : theme.supporterCompletionBadge.family;
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
     if (hasReactedWithStamp(completionId, myId, stampKey)) return;
@@ -96,30 +97,21 @@ export default function SupporterActivityScreen() {
       {loadState === "ready" &&
         completions.map((c) => {
           const member = memberOf(c.reported_by);
-          const badge = badgeOf(c);
           const isOwnCard = c.reported_by === myId;
           return (
             <Pressable key={c.id} onPress={() => openDetail(c)}>
-              <Card
-                tone="supporter"
-                style={
-                  c.chore_scope === "personal"
-                    ? { ...styles.card, backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent }
-                    : styles.card
-                }
-              >
+              <Card tone="supporter" style={styles.card}>
                 <View style={styles.cardTop}>
                   <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
                   <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.supporterBodyMedium}>
-                    {badge.emoji} {c.chore_emoji} {c.chore_title} +{c.points}pt
+                    {c.chore_emoji} {c.chore_title} +{c.points}pt
                   </Text>
                 </View>
                 <View style={styles.cardMeta}>
                   <Text style={theme.typography.supporterCaption}>
-                    {badge.label} ・
-                    {c.photo_url ? " 📷 写真あり ・ " : " "}
+                    {c.photo_url ? "📷 写真あり ・ " : ""}
                     {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                   </Text>
                 </View>
@@ -161,15 +153,14 @@ export default function SupporterActivityScreen() {
               (() => {
                 const member = memberOf(detailTarget.reported_by);
                 const reactions = reactionsForCompletion(detailTarget.id);
-                const badge = badgeOf(detailTarget);
                 const isOwnCard = detailTarget.reported_by === myId;
                 return (
                   <>
                     <Text style={theme.typography.supporterTitle}>
-                      {badge.emoji} {detailTarget.chore_emoji} {detailTarget.chore_title}
+                      {detailTarget.chore_emoji} {detailTarget.chore_title}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
-                      {member?.display_name} さんから ・ +{detailTarget.points}pt ・ {badge.label}
+                      {member?.display_name} さんから ・ +{detailTarget.points}pt
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
                       {new Date(detailTarget.reported_at).toLocaleString("ja-JP")}

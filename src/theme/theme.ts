@@ -79,14 +79,9 @@ export const typography = {
   supporterCaption: { fontSize: 13, fontWeight: "400" as const },
 } as const;
 
-// 07-7章「自分専用choreの可視性・双方向リアクションとの関係」・デザイントークン.md
-// 1.7節「みまもりメンバーの2種類の完了報告バッジ」対応。全画面（P8/P18/C15、S2/S12、
-// S1〜S11）で共通に使う唯一の定義（開発部が独自の絵文字を選んでしまわないよう
-// ここに集約する）。
-export const supporterCompletionBadge = {
-  family: { emoji: "🤝", label: "いっしょに" },
-  personal: { emoji: "🎯", label: "じぶんの目標" },
-} as const;
+// [2026-08-23削除] supporterCompletionBadge（🤝/🎯バッジ）は要件定義書07-7章
+// 4回目のスコープ変更（家族共有choreへの参加機能・自分専用choreの可視性トグルの撤回）
+// に伴い廃止した。デザイントークン.md旧1.7節に対応していた定義。
 
 // ---- 3. 間隔・レイアウト ----
 export const spacing = {
@@ -136,7 +131,6 @@ export const theme = {
   colors,
   memberColorPalette,
   stampDefinitions,
-  supporterCompletionBadge,
   typography,
   spacing,
   radius,

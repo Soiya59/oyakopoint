@@ -577,11 +577,6 @@ function reducer(state: State, action: Action): State {
         photo_url: action.photoUrl,
         note: action.note,
         reported_at: now,
-        // [2026-08-22追加] みまもりメンバー対応（19〜21章コメント参照）。モック実装は
-        // 自分専用chore作成機能を持たないため、常にchore側の現在値をそのまま
-        // スナップショットすればよい（実DBのトリガーと同じロジック）。
-        chore_scope: chore.scope,
-        is_shared_with_family: chore.is_shared_with_family,
       };
       return { ...state, completions: [completion, ...state.completions] };
     }

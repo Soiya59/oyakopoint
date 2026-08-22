@@ -202,14 +202,6 @@ export default function ParentHistoryScreen() {
                 const member = state.members.find((m) => m.id === c.reported_by);
                 const chore = state.chores.find((ch) => ch.id === c.chore_id);
                 const isRoutine = !!chore?.is_repeatable;
-                // [2026-08-22追加] みまもりメンバーの完了報告に🤝/🎯バッジを付ける
-                // （デザイントークン.md 1.7節。approvals.tsx P8と同じ判定ロジック）。
-                const badge =
-                  member?.role === "supporter"
-                    ? c.chore_scope === "personal"
-                      ? theme.supporterCompletionBadge.personal
-                      : theme.supporterCompletionBadge.family
-                    : null;
                 return (
                   <View key={c.id} style={styles.row}>
                     <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
@@ -217,7 +209,7 @@ export default function ParentHistoryScreen() {
                       {member?.display_name}
                     </Text>
                     <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
-                      {badge ? `${badge.emoji} ` : isRoutine ? "🔄 " : ""}
+                      {isRoutine ? "🔄 " : ""}
                       {c.chore_emoji} {c.chore_title}
                       {isRoutine ? "(ルーチン)" : ""}
                     </Text>

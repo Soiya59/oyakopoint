@@ -25,6 +25,12 @@ import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
  * 07-6章の対象外のため含めない）。app/parent/approvals.tsx（P8/P9）と同じ
  * 「見る」「（任意で）スタンプ／コメントを贈る」の2操作のみのフィード構成を踏襲しつつ、
  * 子ども向けの見た目・言葉づかいに合わせた。
+ *
+ * [2026-08-22追加→2026-08-23撤回] 一時的にみまもりメンバーの完了報告も対象に含めて
+ * いたが（要件定義書07-7章1回目のスコープ変更「家族共有choreへの参加」が前提だった）、
+ * 4回目のスコープ変更でその参加機能自体が撤回されたため、当初（07-6章）の設計どおり
+ * 保護者の完了報告のみに戻した。みまもりメンバーは完了報告の「もらう」側には一切
+ * ならない（送る側専用）。
  */
 export default function FamilyActivityScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp } = useAppData();
@@ -38,18 +44,12 @@ export default function FamilyActivityScreen() {
   const myId = state.activeChildMemberId;
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  // 保護者・みまもりメンバーの完了報告を対象にする（子ども同士の相互リアクションは
-  // 対象外のまま。15章「roleがparentの場合のみ子どももリアクション可」に対し、
-  // 要件定義書07-7章「双方向リアクション（07-6章）との関係」・API仕様.md 5章の
-  // 更新（chore_reactions_insert_scoped、role IN ('parent','supporter')への拡張）に
-  // 合わせて対象をみまもりメンバーにも広げた。非公開設定の自分専用chore完了報告は
-  // chore_completions_select_scoped RLSによりそもそもこのstate.completionsに
-  // 含まれないため、追加のフィルタは不要）。新しい順。
+  // 保護者の完了報告のみを対象にする（子ども同士の相互リアクションは対象外のまま。
+  // 15章「roleがparentの場合のみ子どももリアクション可」の当初方針どおり）。
+  // [2026-08-23改訂] みまもりメンバーは要件定義書07-7章4回目のスコープ変更により
+  // 完了報告の「もらう」側には一切ならない（送る側専用に回帰）ため、対象から外した。
   const parentCompletions = [...state.completions]
-    .filter((c) => {
-      const role = memberOf(c.reported_by)?.role;
-      return role === "parent" || role === "supporter";
-    })
+    .filter((c) => memberOf(c.reported_by)?.role === "parent")
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {

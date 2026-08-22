@@ -29,7 +29,7 @@ export default function SupporterMyChoresScreen() {
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
       </View>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。
+        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したお手伝いは自分だけが見られます（家族には表示されません）。
       </Text>
 
       {myChores.length === 0 && (
@@ -58,7 +58,7 @@ export default function SupporterMyChoresScreen() {
                   )}
                 </Pressable>
                 <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
-                  {!c.is_shared_with_family && <Text style={styles.privateLabel}>🔒 非公開</Text>}
+                  <Text style={styles.privateLabel}>🔒 非公開</Text>
                   <Text style={{ flex: 1 }} />
                   <Pressable onPress={() => router.push({ pathname: "/supporter/chore-edit", params: { id: c.id } })}>
                     <Text style={styles.editLink}>編集する</Text>

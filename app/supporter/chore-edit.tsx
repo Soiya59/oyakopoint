@@ -15,9 +15,11 @@ import { createPersonalChore, deactivateChore, updatePersonalChore } from "@/dat
  * app/parent/chore-edit.tsx（P11）と同じ構成の基本項目フォームだが、以下が異なる。
  * - カテゴリー・担当（assigned_to）・NFCタグ登録は対象外（自分専用choreには存在しない
  *   概念、19章「自分専用choreにおけるassigned_toは自己指定」のためUIで選ばせる必要が無い）
- * - 「家族に共有する／しない」トグルを追加（デフォルト共有ON、07-7章「自分専用choreの
- *   可視性」）
  * - 削除ボタンを追加（編集時のみ。論理削除＝is_active=false）
+ *
+ * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更（ユーザーの要望「いっしょに
+ * やるというのはいらない」）により、「家族に共有する／しない」トグルは撤回した。
+ * 自分専用のお手伝いは常に本人のみが確認できる非公開情報として扱う（設定自体が無い）。
  */
 export default function SupporterChoreEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -31,7 +33,6 @@ export default function SupporterChoreEditScreen() {
   const [pointsText, setPointsText] = useState(chore ? String(chore.points) : "");
   const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? false);
   const [dailyLimitText, setDailyLimitText] = useState(chore?.daily_limit != null ? String(chore.daily_limit) : "");
-  const [isShared, setIsShared] = useState(chore?.is_shared_with_family ?? true);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -68,7 +69,6 @@ export default function SupporterChoreEditScreen() {
       points: Number(pointsText),
       is_repeatable: isRepeatable,
       daily_limit: isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null,
-      is_shared_with_family: isShared,
     };
 
     const res = chore
@@ -156,18 +156,9 @@ export default function SupporterChoreEditScreen() {
         </>
       )}
 
-      <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>家族に共有する</Text>
-      <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
-        共有すると、家族もこのお手伝いの完了報告を見てスタンプ・コメントを贈れます。非公開にすると、自分だけが見られます。
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
+        このお手伝いは自分だけが見られます（家族には表示されません）。
       </Text>
-      <View style={styles.chipRow}>
-        <Pressable onPress={() => setIsShared(true)} style={[styles.chip, isShared && styles.chipSelected]}>
-          <Text>共有する</Text>
-        </Pressable>
-        <Pressable onPress={() => setIsShared(false)} style={[styles.chip, !isShared && styles.chipSelected]}>
-          <Text>🔒 非公開</Text>
-        </Pressable>
-      </View>
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
 

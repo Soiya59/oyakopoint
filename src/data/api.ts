@@ -673,8 +673,10 @@ export async function updateReward(
 
 // ============================================================
 // 3b. 自分専用chore管理（みまもりメンバー操作、要件定義書.md 07-7章、API仕様.md 3b章）
-// 対応するスキーマはスキーマ設計.sql 19章（chores.created_by/scope/
-// is_shared_with_family、chores_write_personal_by_creatorポリシー）。
+// 対応するスキーマはスキーマ設計.sql 19章（chores.created_by/scope、
+// chores_write_personal_by_creatorポリシー）。
+// [2026-08-23改訂] is_shared_with_family（可視性トグル）は要件定義書07-7章4回目の
+// スコープ変更により撤回した。自分専用choreは常に非公開（例外なし）。
 // ============================================================
 
 export interface PersonalChoreFormInput {
@@ -683,7 +685,6 @@ export interface PersonalChoreFormInput {
   points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
-  is_shared_with_family: boolean;
 }
 
 /**
@@ -707,7 +708,6 @@ export async function createPersonalChore(
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
-      is_shared_with_family: input.is_shared_with_family,
     })
     .select("*")
     .single();
@@ -732,7 +732,6 @@ export async function updatePersonalChore(
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
-      is_shared_with_family: input.is_shared_with_family,
     })
     .eq("id", choreId)
     .select("*")

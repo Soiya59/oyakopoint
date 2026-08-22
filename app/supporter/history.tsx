@@ -18,11 +18,11 @@ import type { DailySummaryEntry } from "@/types/domain";
  * P18を土台に、以下をみまもりメンバー向けに変更した。
  * - メンバー切替タブに"supporter"ロールのメンバーも含める（07-7章はみまもりメンバーも
  *   完了報告の当事者になるため、家族全体ビューの一員として扱う）
- * - 日別実績リストに🤝（家族共有choreへの参加）／🎯（自分専用choreの完了）バッジを付ける
- *   （デザイントークン.md 1.7節）。自分専用choreが「非公開」設定の場合、本人が自分の
- *   履歴を見る際にのみ🔒を追加で表示する（07-7章「自分専用choreの可視性」）。
- *   非公開分は`chore_completions_select_scoped`RLSにより他人には最初から返らないため、
- *   このクライアント側の🔒表示は「本人にだけ見えている」ことを本人に伝える目的である。
+ *
+ * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更により、みまもりメンバーは
+ * 家族共有choreへの参加機能自体を持たなくなり、自分専用choreの可視性トグルも撤回された
+ * （自分専用のお手伝いは常に非公開・例外なし）。これに伴い🤝／🎯バッジ・🔒表示
+ * （旧デザイントークン.md 1.7節）を廃止した。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -44,7 +44,6 @@ export default function SupporterHistoryScreen() {
     return () => clearTimeout(t);
   }, []);
 
-  const myId = state.activeParentMemberId;
   const members = state.members.filter((m) => m.is_active);
   const memberColor = (memberId: string) =>
     members.find((m) => m.id === memberId)?.avatar_color ?? theme.colors.neutralBorder;
@@ -194,11 +193,6 @@ export default function SupporterHistoryScreen() {
             <View style={{ marginTop: theme.spacing.s2 }}>
               {dailyCompletions.map((c) => {
                 const member = state.members.find((m) => m.id === c.reported_by);
-                const badge =
-                  c.chore_scope === "personal"
-                    ? theme.supporterCompletionBadge.personal
-                    : theme.supporterCompletionBadge.family;
-                const isPrivateToMe = c.chore_scope === "personal" && !c.is_shared_with_family && c.reported_by === myId;
                 return (
                   <View key={c.id} style={styles.row}>
                     <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
@@ -206,8 +200,7 @@ export default function SupporterHistoryScreen() {
                       {member?.display_name}
                     </Text>
                     <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
-                      {badge.emoji} {c.chore_emoji} {c.chore_title}
-                      {isPrivateToMe ? " 🔒" : ""}
+                      {c.chore_emoji} {c.chore_title}
                     </Text>
                     <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
                   </View>

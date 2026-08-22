@@ -13,6 +13,11 @@ import { useAppData } from "@/data/store";
  *
  * 家族の様子を一目で把握し、主要導線に飛ぶ。お手伝い管理・ポイント直接操作・
  * ごほうび管理（家族共有分）・家族管理の導線は一切表示しない（07-7章「できないこと」）。
+ *
+ * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更（ユーザーの要望「いっしょに
+ * やるというのはいらない」）により、家族共有choreへの参加機能（「いっしょにやる」
+ * 導線）を撤去した。あわせて🤝／🎯バッジ（デザイントークン.md旧1.7節）も廃止した
+ * ため、最近のようすの表示からバッジを外した。
  */
 export default function SupporterHomeScreen() {
   const { state } = useAppData();
@@ -20,12 +25,9 @@ export default function SupporterHomeScreen() {
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
-  const badgeOf = (scope: "family" | "personal") =>
-    scope === "personal" ? theme.supporterCompletionBadge.personal : theme.supporterCompletionBadge.family;
 
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "👀", label: "かぞくのようす", path: "/supporter/activity" },
-    { emoji: "🤝", label: "いっしょにやる", path: "/supporter/shared-chores" },
     { emoji: "🎯", label: "じぶんのお手伝い", path: "/supporter/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
@@ -45,14 +47,13 @@ export default function SupporterHomeScreen() {
         )}
         {recent.map((c) => {
           const member = memberOf(c.reported_by);
-          const badge = badgeOf(c.chore_scope);
           return (
             <Pressable key={c.id} onPress={() => router.push("/supporter/activity")}>
               <Card tone="supporter" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                   <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
                   <Text style={{ marginLeft: theme.spacing.s2 }}>
-                    {member?.display_name} {badge.emoji} {c.chore_emoji} {c.chore_title}
+                    {member?.display_name} {c.chore_emoji} {c.chore_title}
                   </Text>
                 </View>
                 <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>

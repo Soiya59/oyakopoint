@@ -59,11 +59,11 @@ export interface Chore {
   // scope='family'（家族共有・既存の全chores行はこの値）/ 'personal'（自分専用。
   // role='supporter'のみ新規登録可）。created_byはscope='personal'の場合は必須で、
   // assigned_toと同一値（自己指定）になる（DBトリガーで強制）。
+  // [2026-08-23削除] is_shared_with_family（可視性トグル）は要件定義書07-7章
+  // 4回目のスコープ変更（家族共有choreへの参加機能の撤回）により撤回した。
+  // scope='personal'のchoreは常に非公開（本人のみ閲覧可能。例外なし）。
   created_by: string | null;
   scope: "family" | "personal";
-  // scope='personal'のchoreを家族に共有するかどうか（デフォルトtrue）。
-  // scope='family'の場合は常にtrue固定（CHECK制約 chk_chores_family_always_shared）。
-  is_shared_with_family: boolean;
 }
 
 // [削除] CompletionStatus型（pending/approved/rejected）はスキーマ設計.sql 5章の
@@ -83,12 +83,11 @@ export interface ChoreCompletion {
   photo_url: string | null;
   note: string | null; // 子どもが完了報告時に書くひとことメモ（任意）
   reported_at: string;
-  // [追加・2026-08-22] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 21章）。
-  // 完了報告時点のchore.scope/is_shared_with_familyのスナップショット
-  // （可視性判定専用。ポイント算出には使わない。chore側の設定を後から変えても
-  // 過去の完了報告の公開範囲はここに固定される）。
-  chore_scope: "family" | "personal";
-  is_shared_with_family: boolean;
+  // [2026-08-23削除] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 21章）で
+  // 追加していたchore_scope/is_shared_with_familyスナップショット列は、4回目の
+  // スコープ変更（家族共有choreへの参加機能・可視性トグルの撤回）に伴い撤回した。
+  // 可視性判定は`chores`への都度JOINに一本化した
+  // （設計部/成果物/スキーマ設計.sql 21b章「可視性判定を都度JOINに変更した理由」）。
 }
 
 // [新設] chore_reactions（スキーマ設計.sql 5b章）。保護者リアクション（スタンプ／コメント）。
