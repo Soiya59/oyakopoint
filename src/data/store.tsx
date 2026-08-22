@@ -258,15 +258,20 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
 
+  // [2026-08-22変更] みまもりメンバー（session.status === "supporter"）対応。
+  // 認証方式・family_membersの持ち方が保護者と全く同じ（06章・07-7章）ため、
+  // データ読み込み・activeParentMemberIdの解決ロジックも「parent」と全く同じ扱いで
+  // 済む（画面側は state.activeParentMemberId を通じて自分のmember_idを得る）。
   const familyId =
-    session.status === "parent"
+    session.status === "parent" || session.status === "supporter"
       ? session.parentMember?.family_id ?? null
       : session.status === "child"
       ? session.childSession?.member.family_id ?? null
       : null;
 
   const activeChildMemberId = session.status === "child" ? session.childSession?.member.member_id ?? "" : "";
-  const activeParentMemberId = session.status === "parent" ? session.parentMember?.id ?? "" : "";
+  const activeParentMemberId =
+    session.status === "parent" || session.status === "supporter" ? session.parentMember?.id ?? "" : "";
 
   const load = useCallback(async () => {
     if (!familyId) return;
@@ -572,6 +577,11 @@ function reducer(state: State, action: Action): State {
         photo_url: action.photoUrl,
         note: action.note,
         reported_at: now,
+        // [2026-08-22追加] みまもりメンバー対応（19〜21章コメント参照）。モック実装は
+        // 自分専用chore作成機能を持たないため、常にchore側の現在値をそのまま
+        // スナップショットすればよい（実DBのトリガーと同じロジック）。
+        chore_scope: chore.scope,
+        is_shared_with_family: chore.is_shared_with_family,
       };
       return { ...state, completions: [completion, ...state.completions] };
     }

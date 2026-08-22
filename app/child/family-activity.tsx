@@ -38,10 +38,18 @@ export default function FamilyActivityScreen() {
   const myId = state.activeChildMemberId;
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  // 保護者の完了報告のみを対象にする（15章「roleがparentの場合のみ子どもも
-  // リアクション可」）。新しい順。
+  // 保護者・みまもりメンバーの完了報告を対象にする（子ども同士の相互リアクションは
+  // 対象外のまま。15章「roleがparentの場合のみ子どももリアクション可」に対し、
+  // 要件定義書07-7章「双方向リアクション（07-6章）との関係」・API仕様.md 5章の
+  // 更新（chore_reactions_insert_scoped、role IN ('parent','supporter')への拡張）に
+  // 合わせて対象をみまもりメンバーにも広げた。非公開設定の自分専用chore完了報告は
+  // chore_completions_select_scoped RLSによりそもそもこのstate.completionsに
+  // 含まれないため、追加のフィルタは不要）。新しい順。
   const parentCompletions = [...state.completions]
-    .filter((c) => memberOf(c.reported_by)?.role === "parent")
+    .filter((c) => {
+      const role = memberOf(c.reported_by)?.role;
+      return role === "parent" || role === "supporter";
+    })
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {

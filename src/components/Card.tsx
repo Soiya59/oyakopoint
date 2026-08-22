@@ -5,7 +5,7 @@ import theme from "@/theme/theme";
 interface CardProps {
   children: React.ReactNode;
   style?: ViewStyle;
-  tone?: "parent" | "child";
+  tone?: "parent" | "child" | "supporter";
 }
 
 export function Card({ children, style, tone = "parent" }: CardProps) {

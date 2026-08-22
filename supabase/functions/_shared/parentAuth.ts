@@ -22,6 +22,19 @@ export interface ParentCaller {
   authUserId: string;
 }
 
+/**
+ * [2026-08-22追加] みまもりメンバー（role='supporter'）対応。
+ * remove-member は「家族から抜ける」（自分自身のsoft_remove）をみまもりメンバー
+ * 自身にも許可する必要がある（要件定義書07-7章はみまもりメンバーの家族管理操作を
+ * 禁止しているが、S13設定画面の「家族から抜ける」は自分自身の退会であり、他者への
+ * 管理操作ではないため対象外と判断した）。一方 set-child-pin 等の純粋な家族管理
+ * 操作は引き続き resolveParentCaller（role='parent'限定）のみを使い、
+ * このヘルパーは使わせない。
+ */
+export interface FamilyMemberCaller extends ParentCaller {
+  role: "parent" | "supporter";
+}
+
 export class ParentAuthError extends Error {
   status: number;
   code: string;
@@ -85,5 +98,51 @@ export async function resolveParentCaller(
     memberId: member.id,
     isOwner: member.is_owner,
     authUserId,
+  };
+}
+
+/**
+ * [2026-08-22追加] resolveParentCaller と同じ検証だが、role IN ('parent','supporter')
+ * を許可する（remove-member専用）。set-child-pin等、家族管理そのものの操作には
+ * このヘルパーを使わないこと（resolveParentCaller のまま role='parent' 限定を維持する）。
+ */
+export async function resolveFamilyMemberCaller(
+  admin: SupabaseClient,
+  jwtSecret: string,
+  req: Request
+): Promise<FamilyMemberCaller> {
+  const token = extractBearerToken(req);
+
+  let authUserId: string;
+  try {
+    const claims = await verifyToken(jwtSecret, token);
+    authUserId = claims.sub;
+  } catch {
+    throw new ParentAuthError(401, "invalid_token");
+  }
+
+  const { data: member, error } = await admin
+    .from("family_members")
+    .select("id, family_id, is_owner, role, is_active, auth_user_id")
+    .eq("auth_user_id", authUserId)
+    .in("role", ["parent", "supporter"])
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) {
+    console.error("resolveFamilyMemberCaller: family_members lookup failed", error);
+    throw new ParentAuthError(500, "internal_error");
+  }
+
+  if (!member) {
+    throw new ParentAuthError(403, "forbidden");
+  }
+
+  return {
+    familyId: member.family_id,
+    memberId: member.id,
+    isOwner: member.is_owner,
+    authUserId,
+    role: member.role as "parent" | "supporter",
   };
 }

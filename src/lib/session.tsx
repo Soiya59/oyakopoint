@@ -18,6 +18,9 @@
  * - "parentNoFamily": 保護者としてSupabase Authにログイン済みだが、
  *   family_membersにまだ行が無い（家族作成/参加が未完了。P4/P5へ誘導する）。
  * - "parent": 保護者としてログイン済み・家族に所属済み。
+ * - "supporter": みまもりメンバー（要件定義書07-7章）としてログイン済み・家族に
+ *   所属済み。認証方式は保護者と全く同じマジックリンク方式（06章・07-7章
+ *   「認証・招待方式」）であり、family_members.role の違いだけで判定する。
  * - "child": 子どもとしてログイン済み（カスタムJWTが有効）。
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -32,7 +35,7 @@ import {
 } from "./childSession";
 import type { FamilyMember } from "@/types/domain";
 
-export type SessionStatus = "loading" | "signedOut" | "parentNoFamily" | "parent" | "child";
+export type SessionStatus = "loading" | "signedOut" | "parentNoFamily" | "parent" | "supporter" | "child";
 
 interface SessionContextValue {
   status: SessionStatus;
@@ -53,18 +56,32 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+/**
+ * [2026-08-22変更] みまもりメンバー対応。当初は `.eq("role", "parent")` で
+ * 保護者のみを引いていたが、みまもりメンバーも保護者と全く同じ
+ * auth_user_id経由のマジックリンク認証を使う（06章・07-7章）ため、
+ * role IN ('parent','supporter') に広げた。子ども（role='child'）は
+ * auth_user_idを持たない設計（chk_child_has_no_auth_user）のため、
+ * この条件だけで子どもの行が誤って返ることはない。
+ */
 async function fetchParentMember(userId: string): Promise<FamilyMember | null> {
   const { data, error } = await supabase
     .from("family_members")
     .select("*")
     .eq("auth_user_id", userId)
-    .eq("role", "parent")
+    .in("role", ["parent", "supporter"])
     .maybeSingle();
   if (error) {
     console.error("session: family_members lookup failed", error);
     return null;
   }
   return (data as FamilyMember | null) ?? null;
+}
+
+/** member.role からSessionStatusを決める（fetchParentMemberの結果があるとき）。 */
+function statusForMember(member: FamilyMember | null): SessionStatus {
+  if (!member) return "parentNoFamily";
+  return member.role === "supporter" ? "supporter" : "parent";
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -93,7 +110,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
     const member = await fetchParentMember(user.id);
     setParentMember(member);
-    setStatus(member ? "parent" : "parentNoFamily");
+    setStatus(statusForMember(member));
   }, []);
 
   useEffect(() => {
@@ -126,7 +143,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const member = await fetchParentMember(user.id);
         if (!mounted) return;
         setParentMember(member);
-        setStatus(member ? "parent" : "parentNoFamily");
+        setStatus(statusForMember(member));
       } else {
         setStatus("signedOut");
       }
@@ -146,7 +163,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         const member = await fetchParentMember(user.id);
         setParentMember(member);
-        setStatus(member ? "parent" : "parentNoFamily");
+        setStatus(statusForMember(member));
       } else {
         setParentMember(null);
         setStatus("signedOut");

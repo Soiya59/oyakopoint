@@ -4,7 +4,9 @@
  * 各テーブル・Viewの列構成にできる限り対応させている。
  */
 
-export type FamilyRole = "parent" | "child";
+// [変更・2026-08-22] みまもりメンバー（要件定義書07-7章、スキーマ設計.sql 18章）
+// 対応で "supporter" を追加。DBカラム値・呼称は設計部の決定どおり。
+export type FamilyRole = "parent" | "child" | "supporter";
 
 export interface Family {
   id: string;
@@ -53,6 +55,15 @@ export interface Chore {
   // 1chore=1タグ。null=タグ未登録。家族をまたいだグローバル一意
   // （uq_chores_nfc_tag_id、nfc_tag_id IS NOT NULLの部分ユニークインデックス）。
   nfc_tag_id: string | null;
+  // [追加・2026-08-22] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 19章）。
+  // scope='family'（家族共有・既存の全chores行はこの値）/ 'personal'（自分専用。
+  // role='supporter'のみ新規登録可）。created_byはscope='personal'の場合は必須で、
+  // assigned_toと同一値（自己指定）になる（DBトリガーで強制）。
+  created_by: string | null;
+  scope: "family" | "personal";
+  // scope='personal'のchoreを家族に共有するかどうか（デフォルトtrue）。
+  // scope='family'の場合は常にtrue固定（CHECK制約 chk_chores_family_always_shared）。
+  is_shared_with_family: boolean;
 }
 
 // [削除] CompletionStatus型（pending/approved/rejected）はスキーマ設計.sql 5章の
@@ -72,6 +83,12 @@ export interface ChoreCompletion {
   photo_url: string | null;
   note: string | null; // 子どもが完了報告時に書くひとことメモ（任意）
   reported_at: string;
+  // [追加・2026-08-22] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 21章）。
+  // 完了報告時点のchore.scope/is_shared_with_familyのスナップショット
+  // （可視性判定専用。ポイント算出には使わない。chore側の設定を後から変えても
+  // 過去の完了報告の公開範囲はここに固定される）。
+  chore_scope: "family" | "personal";
+  is_shared_with_family: boolean;
 }
 
 // [新設] chore_reactions（スキーマ設計.sql 5b章）。保護者リアクション（スタンプ／コメント）。
@@ -117,6 +134,11 @@ export interface Reward {
   cost: number;
   description: string | null;
   is_active: boolean;
+  // [追加・2026-08-22] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 20章）。
+  // chores.scope/created_byと同じ設計。scope='personal'のrewardには
+  // is_shared_with_family相当の概念は無い（自分専用rewardは常に非公開のまま）。
+  created_by: string | null;
+  scope: "family" | "personal";
 }
 
 export interface RewardRedemption {
@@ -168,4 +190,29 @@ export interface DailySummaryEntry {
   family_id: string;
   completion_count: number;
   total_points: number;
+}
+
+// [新設・2026-08-22] family_invites（スキーマ設計.sql 25章）。みまもりメンバー招待
+// （要件定義書06章・07-7章）。既存の共有シークレット方式（families.invite_code）とは
+// 別の、宛先メールアドレス・ロールを1件ごとに固定した招待の仕組み。
+export interface FamilyInvite {
+  id: string;
+  family_id: string;
+  role: "supporter"; // 現時点ではみまもりメンバー招待専用（スキーマ設計.sql 25章）
+  invited_email: string;
+  token: string;
+  status: "pending" | "accepted" | "revoked";
+  created_by: string; // family_members.id（招待発行者＝保護者）
+  accepted_by: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+// family_invite_lookup RPC の返り値（API仕様.md 2d章手順3）。
+export interface FamilyInviteLookupResult {
+  family_name: string;
+  role: "supporter";
+  status: "pending" | "accepted" | "revoked";
+  expires_at: string;
 }

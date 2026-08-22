@@ -19,10 +19,32 @@ export function buildWebAppUrl(path: string, params: Record<string, string>): st
   return `${window.location.origin}${basePath}${path}${query ? `?${query}` : ""}`;
 }
 
-/** マジックリンクの emailRedirectTo を組み立てる。ネイティブ版はLinking.createURL()に任せる。 */
-export function buildAuthRedirectUrl(intent: string): string {
+/**
+ * マジックリンクの emailRedirectTo を組み立てる。ネイティブ版はLinking.createURL()に任せる。
+ *
+ * [2026-08-22拡張] みまもりメンバー招待（S0、要件定義書07-7章・API仕様.md 2d章）に
+ * 対応するため、intent以外の任意の追加クエリパラメータ（招待トークン等）を
+ * 渡せるようにした。マジックリンクは別タブ・別セッション（メールクライアント経由）で
+ * 開かれるため、この関数でURLに埋め込んだ値だけが auth-callback.tsx 側に引き継がれる
+ * （P2/email.tsxのintent引き継ぎと同じ設計、実装メモ.md参照）。
+ */
+export function buildAuthRedirectUrl(intent: string, extraParams: Record<string, string> = {}): string {
+  const params = { intent, ...extraParams };
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    return buildWebAppUrl("/auth-callback", { intent });
+    return buildWebAppUrl("/auth-callback", params);
   }
-  return Linking.createURL("auth-callback", { queryParams: { intent } });
+  return Linking.createURL("auth-callback", { queryParams: params });
+}
+
+/**
+ * [2026-08-22追加] みまもりメンバー招待リンク（S0、要件定義書07-7章・
+ * 認証・データ管理設計書.md 8.2章）。保護者がP24でこのリンクをコピーし、
+ * メール・メッセージアプリ等アプリ外の任意の手段で招待相手に共有する
+ * （既存の招待コード共有と同じ設計、8.2章「招待リンクを送付」参照）。
+ */
+export function buildSupporterInviteUrl(token: string): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return buildWebAppUrl("/onboarding/join-supporter", { token });
+  }
+  return Linking.createURL("onboarding/join-supporter", { queryParams: { token } });
 }

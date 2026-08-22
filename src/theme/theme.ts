@@ -30,6 +30,11 @@ export const colors = {
   // brandPrimary系の達成色域で表現し、専用の「もう一度」色は不要になった
   // （デザイントークン.md 1.4節、主要画面ワイヤーフレーム.md 3章参照）。
   statusBlocking: "#EF4444", // 保護者向け画面限定。子ども向けでは使用しない。
+
+  // 1.7 みまもりメンバー向けの第三のトーン（2026-08-22追加、要件定義書07-7章対応）
+  // 参照: デザイントークン.md 1.7節。中彩度、neutralを基調に差し色として使う。
+  supporterAccent: "#F2A65A",
+  supporterAccentSoft: "#FFF3E6",
 } as const;
 
 // ---- 1.3 メンバーカラーパレット（avatar_color） ----
@@ -65,6 +70,22 @@ export const typography = {
   childHeadline: { fontSize: 30, fontWeight: "700" as const },
   childBody: { fontSize: 17, fontWeight: "700" as const },
   childButton: { fontSize: 19, fontWeight: "700" as const },
+
+  // みまもりメンバー向け（デザイントークン.md 1.7節）。保護者よりわずかに大きく、
+  // 老眼等の視認性にも配慮した文字サイズ。
+  supporterTitle: { fontSize: 21, fontWeight: "700" as const },
+  supporterBody: { fontSize: 16, fontWeight: "400" as const },
+  supporterBodyMedium: { fontSize: 16, fontWeight: "600" as const },
+  supporterCaption: { fontSize: 13, fontWeight: "400" as const },
+} as const;
+
+// 07-7章「自分専用choreの可視性・双方向リアクションとの関係」・デザイントークン.md
+// 1.7節「みまもりメンバーの2種類の完了報告バッジ」対応。全画面（P8/P18/C15、S2/S12、
+// S1〜S11）で共通に使う唯一の定義（開発部が独自の絵文字を選んでしまわないよう
+// ここに集約する）。
+export const supporterCompletionBadge = {
+  family: { emoji: "🤝", label: "いっしょに" },
+  personal: { emoji: "🎯", label: "じぶんの目標" },
 } as const;
 
 // ---- 3. 間隔・レイアウト ----
@@ -88,6 +109,9 @@ export const tapTarget = {
   parent: 44,
   child: 56,
   childPrimary: 72,
+  // デザイントークン.md 1.7節: みまもりメンバー向けは最小44×44dpを基本としつつ、
+  // 主要ボタンは48×48dp以上を推奨（祖父母等、保護者より年齢層が高い利用者を想定）。
+  supporterPrimary: 48,
 } as const;
 
 // ---- 8章 実施履歴カレンダー: 日別セルの濃淡（GitHubヒートマップ的表現） ----
@@ -112,6 +136,7 @@ export const theme = {
   colors,
   memberColorPalette,
   stampDefinitions,
+  supporterCompletionBadge,
   typography,
   spacing,
   radius,

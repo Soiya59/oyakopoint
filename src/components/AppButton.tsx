@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from "react
 import theme from "@/theme/theme";
 
 type Variant = "primary" | "secondary" | "danger" | "ghost";
-type Tone = "parent" | "child";
+type Tone = "parent" | "child" | "supporter";
 
 interface AppButtonProps {
   label: string;
@@ -36,9 +36,14 @@ export function AppButton({
   style,
 }: AppButtonProps) {
   const isChild = tone === "child";
+  // [2026-08-22追加] tone="supporter"（デザイントークン.md 1.7節）。primaryボタンは
+  // 差し色のsupporterAccentを使い、タップ領域も48dp以上を推奨値どおり確保する。
+  const isSupporter = tone === "supporter";
   const bg =
     variant === "primary"
-      ? theme.colors.brandPrimary
+      ? isSupporter
+        ? theme.colors.supporterAccent
+        : theme.colors.brandPrimary
       : variant === "danger"
       ? theme.colors.statusBlocking
       : variant === "secondary"
@@ -62,7 +67,11 @@ export function AppButton({
           backgroundColor: bg,
           borderWidth: variant === "secondary" ? 1 : 0,
           borderColor,
-          minHeight: isChild ? theme.tapTarget.child : theme.tapTarget.parent,
+          minHeight: isChild
+            ? theme.tapTarget.child
+            : isSupporter
+            ? theme.tapTarget.supporterPrimary
+            : theme.tapTarget.parent,
           borderRadius: isChild ? theme.radius.childXl : theme.radius.parentMd,
           opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
           width: fullWidth ? "100%" : undefined,
@@ -76,7 +85,11 @@ export function AppButton({
       ) : (
         <Text
           style={[
-            isChild ? theme.typography.childButton : theme.typography.parentBodyMedium,
+            isChild
+              ? theme.typography.childButton
+              : isSupporter
+              ? theme.typography.supporterBodyMedium
+              : theme.typography.parentBodyMedium,
             { color: textColor, textAlign: "center" },
           ]}
         >

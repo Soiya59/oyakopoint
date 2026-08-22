@@ -47,7 +47,7 @@ import { handleCorsPreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabaseAdmin.ts";
 import { env } from "../_shared/env.ts";
-import { resolveParentCaller, ParentAuthError } from "../_shared/parentAuth.ts";
+import { resolveFamilyMemberCaller, ParentAuthError } from "../_shared/parentAuth.ts";
 
 const CHORE_PHOTOS_BUCKET = "chore-photos"; // 認証・データ管理設計書.md 5章
 
@@ -63,7 +63,12 @@ Deno.serve(async (req: Request) => {
 
   let caller;
   try {
-    caller = await resolveParentCaller(admin, env.jwtSecret, req);
+    // [2026-08-22変更] みまもりメンバー（07-7章）の「家族から抜ける」（自分自身の
+    // soft_remove）を許可するため、role IN ('parent','supporter') を受け付ける
+    // resolveFamilyMemberCaller に切り替えた。家族管理そのものの操作
+    // （他者のsoft_remove・delete_family）はみまもりメンバーには許可しないよう、
+    // 下記で caller.role による追加チェックを行う。
+    caller = await resolveFamilyMemberCaller(admin, env.jwtSecret, req);
   } catch (e) {
     if (e instanceof ParentAuthError) {
       return jsonResponse({ error: e.code }, e.status);
@@ -120,6 +125,13 @@ Deno.serve(async (req: Request) => {
         },
         409
       );
+    }
+
+    // [2026-08-22追加] みまもりメンバー（07-7章）は家族管理操作（他者の退会）を
+    // 行えない。呼び出し元がsupporterの場合、対象は自分自身（家族から抜ける）に
+    // 限定する。
+    if (caller.role === "supporter" && target.id !== caller.memberId) {
+      return jsonResponse({ error: "forbidden" }, 403);
     }
 
     // [実装判断/解釈の記録] 3.4章は soft_remove の対象を「子ども、または

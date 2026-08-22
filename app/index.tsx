@@ -22,6 +22,10 @@ export default function WelcomeScreen() {
   useEffect(() => {
     if (status === "parent") {
       router.replace("/parent/home");
+    } else if (status === "supporter") {
+      // [2026-08-22追加] みまもりメンバー（要件定義書07-7章）。ログイン済みの場合は
+      // 保護者と同様に自動的に専用ホーム（S1）へ遷移する。
+      router.replace("/supporter/home");
     } else if (status === "child") {
       router.replace("/child/home");
     }

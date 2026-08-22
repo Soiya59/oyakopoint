@@ -6,7 +6,7 @@ import theme from "@/theme/theme";
 interface ScreenProps {
   children: React.ReactNode;
   scroll?: boolean;
-  tone?: "parent" | "child";
+  tone?: "parent" | "child" | "supporter";
   style?: ViewStyle;
   contentStyle?: ViewStyle;
 }
@@ -25,6 +25,9 @@ interface ScreenProps {
  * スマホ実機での見え方はwidth:100%のため変化しない。
  */
 export function Screen({ children, scroll = true, tone = "parent", style, contentStyle }: ScreenProps) {
+  // tone="supporter"（デザイントークン.md 1.7節「neutralを基調にcolor-supporter-accentを
+  // 差し色として使う」）は背景を保護者向けと同じneutralBgのままにし、差し色はボタン・見出し等
+  // 個別コンポーネント側でsupporterAccentを使う設計とした（tone="child"のような全画面着色はしない）。
   const bg = tone === "child" ? theme.colors.brandPrimarySoft : theme.colors.neutralBg;
   const Container = scroll ? ScrollView : View;
   return (

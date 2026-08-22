@@ -24,6 +24,8 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   Family,
+  FamilyInvite,
+  FamilyInviteLookupResult,
   FamilyMember,
   GratitudePoint,
   MemberPoints,
@@ -227,6 +229,78 @@ export async function removeMember(
   mode: "soft_remove" | "delete_family"
 ): Promise<ApiResult<{ ok: true }>> {
   return invokeEdgeFunction<{ ok: true }>("remove-member", { member_id: memberId, mode });
+}
+
+// ============================================================
+// 2d. みまもりメンバーの招待・参加（要件定義書.md 06章・07-7章、API仕様.md 2d章）
+// 対応するスキーマはスキーマ設計.sql 25章 family_invites（新規）。
+// ============================================================
+
+/**
+ * API仕様.md 2d章手順1: 招待発行（保護者操作）。role/family_id/created_by/status は
+ * DBトリガー(family_invites_before_insert)が自動設定するため送らない
+ * （RLS: family_invites_insert_by_parentにより保護者のみ実行可）。
+ */
+export async function createFamilyInvite(client: SupabaseClient, invitedEmail: string): Promise<ApiResult<FamilyInvite>> {
+  const token = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const { data, error } = await client
+    .from("family_invites")
+    .insert({ invited_email: invitedEmail.trim().toLowerCase(), token })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyInvite };
+}
+
+/** API仕様.md 2d章手順2: 発行済み招待の一覧（保護者操作、家族管理画面P14拡張用） */
+export async function fetchFamilyInvites(client: SupabaseClient, familyId: string): Promise<ApiResult<FamilyInvite[]>> {
+  const { data, error } = await client
+    .from("family_invites")
+    .select("*")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as FamilyInvite[] };
+}
+
+/** API仕様.md 2d章手順2: 招待の取消（保護者操作）。pending→revokedのみ許可される。 */
+export async function revokeFamilyInvite(client: SupabaseClient, inviteId: string): Promise<ApiResult<FamilyInvite>> {
+  const { data, error } = await client
+    .from("family_invites")
+    .update({ status: "revoked" })
+    .eq("id", inviteId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyInvite };
+}
+
+/**
+ * API仕様.md 2d章手順3: 招待プレビュー（未ログイン時）。SECURITY DEFINER RPCのため
+ * anon/authenticatedのどちらでも呼べる。ログイン前に呼ぶ想定のため、常にデフォルトの
+ * `supabase`クライアント（session.clientではない）を使う。
+ */
+export async function familyInviteLookup(token: string): Promise<ApiResult<FamilyInviteLookupResult>> {
+  const { data, error } = await supabase.rpc("family_invite_lookup", { p_token: token });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: { code: "no_data_found", message: "招待が見つかりません" } };
+  return { ok: true, data: row as FamilyInviteLookupResult };
+}
+
+/**
+ * API仕様.md 2d章手順5: 参加確定。roleは引数に含まれず、常に招待発行時に保護者が
+ * 固定した値がそのまま使われる（06章・07-7章「参加者本人が自己申告でロールを
+ * 選べる設計にはしない」）。マジックリンク認証完了後（auth.uid()が存在する状態）に
+ * 呼ぶため、常にデフォルトの`supabase`クライアントを使う。
+ */
+export async function acceptFamilyInvite(token: string, displayName: string): Promise<ApiResult<string>> {
+  const { data, error } = await supabase.rpc("accept_family_invite", {
+    p_token: token,
+    p_display_name: displayName,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
 }
 
 // ============================================================
@@ -595,6 +669,144 @@ export async function updateReward(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as Reward };
+}
+
+// ============================================================
+// 3b. 自分専用chore管理（みまもりメンバー操作、要件定義書.md 07-7章、API仕様.md 3b章）
+// 対応するスキーマはスキーマ設計.sql 19章（chores.created_by/scope/
+// is_shared_with_family、chores_write_personal_by_creatorポリシー）。
+// ============================================================
+
+export interface PersonalChoreFormInput {
+  title: string;
+  emoji: string | null;
+  points: number;
+  is_repeatable: boolean;
+  daily_limit: number | null;
+  is_shared_with_family: boolean;
+}
+
+/**
+ * API仕様.md 3b章「新規登録」: created_by/assigned_toは送らなくてよい
+ * （DBトリガーchores_before_writeが呼び出し本人のmember_idで強制上書きする）。
+ * scope: 'personal' 固定。RLS chores_write_personal_by_creator によりrole='supporter'
+ * かつ本人のみ許可される。
+ */
+export async function createPersonalChore(
+  client: SupabaseClient,
+  familyId: string,
+  input: PersonalChoreFormInput
+): Promise<ApiResult<Chore>> {
+  const { data, error } = await client
+    .from("chores")
+    .insert({
+      family_id: familyId,
+      scope: "personal",
+      title: input.title,
+      emoji: input.emoji,
+      points: input.points,
+      is_repeatable: input.is_repeatable,
+      daily_limit: input.daily_limit,
+      is_shared_with_family: input.is_shared_with_family,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Chore };
+}
+
+/**
+ * API仕様.md 3b章「編集」: scope列自体はペイロードに含めない
+ * （DBトリガーが「公開範囲（scope）は作成後に変更できません」で拒否するため）。
+ */
+export async function updatePersonalChore(
+  client: SupabaseClient,
+  choreId: string,
+  input: PersonalChoreFormInput
+): Promise<ApiResult<Chore>> {
+  const { data, error } = await client
+    .from("chores")
+    .update({
+      title: input.title,
+      emoji: input.emoji,
+      points: input.points,
+      is_repeatable: input.is_repeatable,
+      daily_limit: input.daily_limit,
+      is_shared_with_family: input.is_shared_with_family,
+    })
+    .eq("id", choreId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Chore };
+}
+
+/** API仕様.md 3b章「論理削除（非表示化）」 */
+export async function deactivateChore(client: SupabaseClient, choreId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("chores").update({ is_active: false }).eq("id", choreId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+// ============================================================
+// 7b. 自分専用reward管理・交換（みまもりメンバー操作、要件定義書.md 07-7章、API仕様.md 7b章）
+// 対応するスキーマはスキーマ設計.sql 20章（rewards.created_by/scope、
+// rewards_write_personal_by_creatorポリシー）・23章（reward_redemptions_insert_scoped）。
+// ============================================================
+
+export interface PersonalRewardFormInput {
+  name: string;
+  emoji: string | null;
+  cost: number;
+  description: string | null;
+}
+
+export async function createPersonalReward(
+  client: SupabaseClient,
+  familyId: string,
+  input: PersonalRewardFormInput
+): Promise<ApiResult<Reward>> {
+  const { data, error } = await client
+    .from("rewards")
+    .insert({
+      family_id: familyId,
+      scope: "personal",
+      name: input.name,
+      emoji: input.emoji,
+      cost: input.cost,
+      description: input.description,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Reward };
+}
+
+export async function updatePersonalReward(
+  client: SupabaseClient,
+  rewardId: string,
+  input: PersonalRewardFormInput
+): Promise<ApiResult<Reward>> {
+  const { data, error } = await client
+    .from("rewards")
+    .update({
+      name: input.name,
+      emoji: input.emoji,
+      cost: input.cost,
+      description: input.description,
+    })
+    .eq("id", rewardId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Reward };
+}
+
+/** API仕様.md 7b章「論理削除（非表示化）」 */
+export async function deactivateReward(client: SupabaseClient, rewardId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("rewards").update({ is_active: false }).eq("id", rewardId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
 }
 
 // ============================================================

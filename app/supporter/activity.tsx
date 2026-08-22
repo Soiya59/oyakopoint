@@ -11,42 +11,26 @@ import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
- * P8 完了報告一覧・リアクション ＋ P9 完了報告詳細・リアクション（モーダルに統合）
- * 参照: 主要画面ワイヤーフレーム.md 3章、画面一覧・遷移図.md P8/P9・3.4章
+ * S2 完了報告一覧・リアクション（みまもりメンバービュー）
+ * 参照: 画面一覧・遷移図.md 2.5節S2・3.12節、P8（app/parent/approvals.tsx）と同一構成
  *
- * [2026-08-15全面書き換え] 要件定義書.md v0.5 07章・スキーマ設計.sql v2.0
- * （chore_reactions新設、chore_completionsのUPDATEポリシー全廃）を受け、旧
- * 「承認待ち一覧」（承認/差し戻しボタン）を全面的に置き換えた。保護者ができる操作は
- * 「見る」と「（任意で）スタンプ／コメントを贈る」の2つのみで、承認・却下・差し戻しに
- * 相当するボタン・状態はこの画面のどこにも存在しない。
- *
- * カードは「処理待ちのタスクを片付ける」画面ではなく「家族のがんばりを眺めて、
- * 気が向いたら反応する」フィード画面であるため、リアクション付与後も一覧から
- * 消えない・未読/既読の概念も持たない（画面一覧・遷移図.md 3.4章）。
- *
- * 状態: 読み込み中 / 空状態 / 通常 / 通信エラー をワイヤーフレームどおりに実装。
+ * P8「見る」「（任意で）スタンプ／コメントを贈る」の2操作をそのまま踏襲する。
+ * 対象は家族全員の完了報告（自分専用choreの非公開設定分は
+ * `chore_completions_select_scoped` RLSにより最初からこのクエリ結果に含まれないため、
+ * クライアント側で追加のフィルタは不要）。🤝／🎯バッジで対象範囲を区別する
+ * （デザイントークン.md 1.7節）。
  */
 type LoadState = "loading" | "error" | "ready";
 
-export default function ApprovalsScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, refresh } = useAppData();
+export default function SupporterActivityScreen() {
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
-  // [2026-08-20修正・本部長] sendStamp/sendCommentがdispatch()の戻り値を確認せず、
-  // 失敗時に何もフィードバックが無いままだった（ユーザーが「文字を入力しないと
-  // リアクションおくれない？？」と誤解した一因と考えられる。実際はAPI直接検証で
-  // スタンプ送信自体は正常に動くことを確認済みのため、たまたま失敗した際に
-  // 気づけない設計だったことが問題）。また送信成功後もモーダルが閉じず
-  // 「そのUIが消えない」との指摘もあったため、送信失敗時のエラー表示と、
-  // コメント送信成功時にモーダルを閉じる処理を追加した。
   const [reactionError, setReactionError] = useState<string | null>(null);
 
-  // 自分（いま操作している保護者）のfamily_member_id。実接続時は
-  // current_family_member_id()相当（session.parentMember.id）がstate.activeParentMemberIdに
-  // すでに反映されている（src/data/store.tsx RealDataProviderImpl参照）。
-  const myParentId = state.activeParentMemberId;
+  const myId = state.activeParentMemberId;
 
   useEffect(() => {
     if (!loading) setLoadState(loadError ? "error" : "ready");
@@ -56,19 +40,14 @@ export default function ApprovalsScreen() {
     (a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()
   );
 
-  // 「新着◯件」は消化すべきタスク数ではなく、直近24時間に届いた報告のお知らせという
-  // 位置づけ（主要画面ワイヤーフレーム.md 3.1章）。未処理バッジの概念は持たない。
-  const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newCount = completions.filter((c) => new Date(c.reported_at).getTime() >= oneDayAgoMs).length;
-
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
+  const badgeOf = (c: ChoreCompletion) =>
+    c.chore_scope === "personal" ? theme.supporterCompletionBadge.personal : theme.supporterCompletionBadge.family;
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    // uq_chore_reactions_stamp_dedup（スキーマ設計.sql 5b章）をボタン無効化で未然に防ぐ
-    // （主要画面ワイヤーフレーム.md 6章「送信済みのstamp_keyのボタンをあらかじめ無効化」）。
-    if (hasReactedWithStamp(completionId, myParentId, stampKey)) return;
+    if (hasReactedWithStamp(completionId, myId, stampKey)) return;
     setReactionError(null);
-    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myParentId, kind: "stamp", stampKey });
+    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myId, kind: "stamp", stampKey });
     if (!result.ok) setReactionError("スタンプを送信できませんでした。もう一度お試しください");
   };
 
@@ -87,7 +66,7 @@ export default function ApprovalsScreen() {
     const result = await dispatch({
       type: "ADD_REACTION",
       completionId: detailTarget.id,
-      reactedBy: myParentId,
+      reactedBy: myId,
       kind: "comment",
       commentBody: body,
     });
@@ -101,11 +80,8 @@ export default function ApprovalsScreen() {
   };
 
   return (
-    <Screen tone="parent">
-      <View style={styles.header}>
-        <Text style={theme.typography.parentTitle}>完了報告</Text>
-        <Text style={{ color: theme.colors.neutralTextSecondary }}>新着{newCount}件</Text>
-      </View>
+    <Screen tone="supporter">
+      <Text style={theme.typography.supporterTitle}>かぞくのようす</Text>
 
       {loadState === "loading" && <SkeletonList count={3} />}
 
@@ -114,66 +90,43 @@ export default function ApprovalsScreen() {
       )}
 
       {loadState === "ready" && completions.length === 0 && (
-        <EmptyState emoji="📮" title="まだ完了報告がありません。お手伝いがはじまると、ここに届きます" />
+        <EmptyState emoji="📮" title="まだ完了報告がありません" />
       )}
 
       {loadState === "ready" &&
         completions.map((c) => {
           const member = memberOf(c.reported_by);
-          // [2026-08-16追加] 主要画面ワイヤーフレーム.md 3.1章「保護者自身の完了報告（07-4章）
-          // もこのフィードに時系列で混在表示する」。トーンの書き分けはAPI仕様.md 4b章・
-          // 主要画面ワイヤーフレーム.md 9.3章のとおり、reported_by先family_members.roleで
-          // 判定する（chore側に区分列は無い。スキーマ設計.sql 12章確認5）。
-          const isChildCard = member?.role === "child";
-          // [2026-08-22追加] みまもりメンバーの完了報告には🤝/🎯バッジを付ける
-          // （デザイントークン.md 1.7節「このバッジはP8完了報告一覧…にも同じ絵文字・
-          // 同じ配色ルールで表示する」）。非公開設定の自分専用chore完了報告は
-          // chore_completions_select_scoped RLSにより本人以外にはそもそも返らないため
-          // このフィード（自分以外の家族が見る想定）に混在することはない。
-          const isSupporterCard = member?.role === "supporter";
-          const badge =
-            isSupporterCard && c.chore_scope === "personal"
-              ? theme.supporterCompletionBadge.personal
-              : isSupporterCard
-              ? theme.supporterCompletionBadge.family
-              : null;
-          // 自分自身の完了報告カードにはリアクションボタン自体を表示しない
-          // （3.1章「自己リアクションは要件定義書に無い操作のため、UI側で選択肢自体を出さない」）。
-          const isOwnCard = c.reported_by === myParentId;
+          const badge = badgeOf(c);
+          const isOwnCard = c.reported_by === myId;
           return (
             <Pressable key={c.id} onPress={() => openDetail(c)}>
               <Card
+                tone="supporter"
                 style={
-                  isChildCard
-                    ? { ...styles.card, ...styles.cardChildTint }
-                    : isSupporterCard
+                  c.chore_scope === "personal"
                     ? { ...styles.card, backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent }
                     : styles.card
                 }
               >
                 <View style={styles.cardTop}>
                   <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
-                  <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
+                  <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
-                  <Text style={theme.typography.parentBodyMedium}>
-                    {badge ? `${badge.emoji} ` : ""}
-                    {c.chore_emoji} {c.chore_title} +{c.points}pt
+                  <Text style={theme.typography.supporterBodyMedium}>
+                    {badge.emoji} {c.chore_emoji} {c.chore_title} +{c.points}pt
                   </Text>
                 </View>
                 <View style={styles.cardMeta}>
-                  <Text style={theme.typography.parentCaption}>
-                    {badge ? `${badge.label} ・ ` : ""}
-                    {c.photo_url ? "📷 写真あり ・ " : ""}
-                    {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}{" "}
-                    {isChildCard ? "とどいた" : "きろくした"}
+                  <Text style={theme.typography.supporterCaption}>
+                    {badge.label} ・
+                    {c.photo_url ? " 📷 写真あり ・ " : " "}
+                    {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                   </Text>
                 </View>
-                {/* カード上のクイックスタンプ。タップで即座にchore_reactions insert（3.1章）。
-                    自分自身の完了報告カードには表示しない。 */}
                 {!isOwnCard && (
                   <View style={styles.stampRow}>
                     {theme.stampDefinitions.map((s) => {
-                      const sent = hasReactedWithStamp(c.id, myParentId, s.key as StampKey);
+                      const sent = hasReactedWithStamp(c.id, myId, s.key as StampKey);
                       return (
                         <Pressable
                           key={s.key}
@@ -199,31 +152,27 @@ export default function ApprovalsScreen() {
           );
         })}
 
-      {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
 
-      {/* P9 完了報告詳細・リアクション */}
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>
-          <Card style={styles.modalCard}>
+          <Card tone="supporter" style={styles.modalCard}>
             {detailTarget &&
               (() => {
                 const member = memberOf(detailTarget.reported_by);
                 const reactions = reactionsForCompletion(detailTarget.id);
-                // [2026-08-16追加] P8カードと同じ役割判定（9.3章「トーンの書き分けルール」）。
-                const isChildCard = member?.role === "child";
-                const isOwnCard = detailTarget.reported_by === myParentId;
+                const badge = badgeOf(detailTarget);
+                const isOwnCard = detailTarget.reported_by === myId;
                 return (
                   <>
-                    <Text style={theme.typography.parentTitle}>
-                      {detailTarget.chore_emoji} {detailTarget.chore_title}
+                    <Text style={theme.typography.supporterTitle}>
+                      {badge.emoji} {detailTarget.chore_emoji} {detailTarget.chore_title}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
-                      {member?.display_name} さんから ・ +{detailTarget.points}pt
+                      {member?.display_name} さんから ・ +{detailTarget.points}pt ・ {badge.label}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {new Date(detailTarget.reported_at).toLocaleString("ja-JP")}{" "}
-                      {isChildCard ? "とどいた" : "きろくした"}
+                      {new Date(detailTarget.reported_at).toLocaleString("ja-JP")}
                     </Text>
                     <View style={styles.photoPlaceholder}>
                       <Text style={{ color: theme.colors.neutralTextSecondary }}>
@@ -234,13 +183,13 @@ export default function ApprovalsScreen() {
                       <Text style={{ marginTop: theme.spacing.s2 }}>ひとことメモ: {detailTarget.note}</Text>
                     ) : null}
 
-                    <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>
+                    <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
                       とどいたリアクション
                     </Text>
                     {reactions.length === 0 ? (
                       <Text
                         style={[
-                          theme.typography.parentCaption,
+                          theme.typography.supporterCaption,
                           { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
                         ]}
                       >
@@ -252,29 +201,23 @@ export default function ApprovalsScreen() {
                           const reactor = memberOf(r.reacted_by);
                           const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
                           return (
-                            <Text key={r.id} style={theme.typography.parentBody}>
+                            <Text key={r.id} style={theme.typography.supporterBody}>
                               {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                              {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}{" "}
-                              <Text style={theme.typography.parentCaption}>
-                                {new Date(r.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                              </Text>
+                              {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
                             </Text>
                           );
                         })}
                       </View>
                     )}
 
-                    {/* [2026-08-16追加] 3.1章「自分自身の完了報告カードにはリアクション
-                        ボタン自体を表示しない」。受け取ったリアクション一覧（上のブロック）は
-                        自分の完了報告でも表示したままにする。 */}
                     {!isOwnCard && (
                       <>
-                        <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>
+                        <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
                           スタンプを贈る
                         </Text>
                         <View style={styles.stampGrid}>
                           {theme.stampDefinitions.map((s) => {
-                            const sent = hasReactedWithStamp(detailTarget.id, myParentId, s.key as StampKey);
+                            const sent = hasReactedWithStamp(detailTarget.id, myId, s.key as StampKey);
                             return (
                               <Pressable
                                 key={s.key}
@@ -291,18 +234,19 @@ export default function ApprovalsScreen() {
                           })}
                         </View>
 
-                        <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>
+                        <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
                           ひとことおくる（にんい・200文字まで）
                         </Text>
                         <TextInput
                           value={commentDraft}
                           onChangeText={setCommentDraft}
-                          placeholder="あわ、上手にできてたよ"
+                          placeholder="よくがんばったね"
                           multiline
                           maxLength={200}
                           style={styles.textArea}
                         />
                         <AppButton
+                          tone="supporter"
                           label={sendingComment ? "送信中…" : "おくる"}
                           loading={sendingComment}
                           style={{ marginTop: theme.spacing.s2 }}
@@ -319,6 +263,7 @@ export default function ApprovalsScreen() {
                     )}
 
                     <AppButton
+                      tone="supporter"
                       label="もどる"
                       variant="ghost"
                       style={{ marginTop: theme.spacing.s3 }}
@@ -335,18 +280,13 @@ export default function ApprovalsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   card: { marginTop: theme.spacing.s3 },
-  // [2026-08-16追加] 3.1章「子どものカード：…背景色は淡い彩色／保護者自身のカード：
-  // 背景色はcolor-neutral-surfaceのまま（淡い彩色を加えない）」。子どものカードにのみ
-  // 淡い彩色を追加し、保護者のカード（自分・配偶者いずれも）はCardデフォルトのまま。
-  cardChildTint: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   cardMeta: { marginTop: theme.spacing.s2 },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
   stampBtn: {
-    width: theme.tapTarget.parent,
-    height: theme.tapTarget.parent,
+    width: theme.tapTarget.supporterPrimary,
+    height: theme.tapTarget.supporterPrimary,
     borderRadius: theme.radius.parentMd,
     alignItems: "center",
     justifyContent: "center",
@@ -355,11 +295,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
   },
   stampBtnSent: {
-    backgroundColor: theme.colors.brandPrimarySoft,
-    borderColor: theme.colors.brandPrimary,
+    backgroundColor: theme.colors.supporterAccentSoft,
+    borderColor: theme.colors.supporterAccent,
   },
   stampEmoji: { fontSize: 18 },
-  commentLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  commentLink: { color: theme.colors.supporterAccent, fontWeight: "700" },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -393,8 +333,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
   },
   stampChipSent: {
-    backgroundColor: theme.colors.brandPrimarySoft,
-    borderColor: theme.colors.brandPrimary,
+    backgroundColor: theme.colors.supporterAccentSoft,
+    borderColor: theme.colors.supporterAccent,
   },
   textArea: {
     marginTop: theme.spacing.s2,

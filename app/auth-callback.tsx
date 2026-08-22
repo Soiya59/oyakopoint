@@ -32,7 +32,11 @@ import { useSession } from "@/lib/session";
  */
 export default function AuthCallbackScreen() {
   const { status } = useSession();
-  const { intent } = useLocalSearchParams<{ intent?: string }>();
+  // [2026-08-22追加] みまもりメンバー招待（S0、要件定義書07-7章）対応。
+  // intent="join-supporter" のときはtokenパラメータも一緒に受け取り、
+  // /onboarding/join-supporter（S0）へ引き継ぐ（src/lib/authRedirect.tsの
+  // extraParams経由でここまで届く）。
+  const { intent, token } = useLocalSearchParams<{ intent?: string; token?: string }>();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,10 +55,20 @@ export default function AuthCallbackScreen() {
   useEffect(() => {
     if (status === "parent") {
       router.replace("/parent/home");
+    } else if (status === "supporter") {
+      // [2026-08-22追加] みまもりメンバーが既存アカウントで再ログインした場合
+      // （例: ログアウト後に再度マジックリンクを踏んだ等）。
+      router.replace("/supporter/home");
     } else if (status === "parentNoFamily") {
-      router.replace(intent === "join" ? "/onboarding/join-family" : "/onboarding/create-family");
+      if (intent === "join-supporter" && token) {
+        // [2026-08-22追加] S0「招待プレビュー・参加確認」へ。認証は完了済みだが
+        // まだfamily_membersに行が無い状態（accept_family_invite未実行）。
+        router.replace({ pathname: "/onboarding/join-supporter", params: { token } });
+      } else {
+        router.replace(intent === "join" ? "/onboarding/join-family" : "/onboarding/create-family");
+      }
     }
-  }, [status, intent]);
+  }, [status, intent, token]);
 
   if (errorMessage) {
     return (

@@ -88,7 +88,15 @@ const MOCK_NFC_TOKENS = {
   chore5: "nfc-tag-a5555555-5555-4555-8555-555555555555",
 } as const;
 
-export const seedChores: Chore[] = [
+// [2026-08-22追加] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 19章）で
+// Chore型に created_by/scope/is_shared_with_family が追加されたため、モックシードにも
+// 既存データ相当のデフォルト値（scope='family'・is_shared_with_family=true・
+// created_by=null）を補完する。実DB側もADD COLUMN DEFAULTで同様にバックフィルされる
+// （後方互換、19章コメント参照）。
+type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "is_shared_with_family">;
+
+export const seedChores: Chore[] = (
+  [
   {
     id: "chore-1",
     family_id: "family-1",
@@ -160,14 +168,22 @@ export const seedChores: Chore[] = [
     // （2回目以降は非繰り返しchoreのため上限到達扱いになる）。
     nfc_tag_id: MOCK_NFC_TOKENS.chore5,
   },
-];
+  ] satisfies LegacyChoreSeed[]
+).map((c) => ({ ...c, created_by: null, scope: "family" as const, is_shared_with_family: true }));
 
-// [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止（スキーマ設計.sql 5章「[廃止]」）に伴い、
+// [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止(スキーマ設計.sql 5章「[廃止]」)に伴い、
 // status/review_note/reviewed_by/reviewed_atを持つエントリから、確定済みの完了報告のみを
 // 持つエントリへ書き換えた。あわせて実施履歴カレンダー（07-3章）の週間バー・月間カレンダーを
 // 画面確認できるよう、直近1週間（システム日付2026-08-15基準）に日をまたいだ完了報告を
 // 複数用意している。
-export const seedCompletions: ChoreCompletion[] = [
+// [2026-08-22追加] Chore型と同じ理由（19章・21章コメント参照）でChoreCompletion型に
+// chore_scope/is_shared_with_familyが追加されたため、モックシードにもデフォルト値
+// （chore_scope='family'・is_shared_with_family=true、いずれも既存chore由来の
+// 完了報告として自然な値）を補完する。
+type LegacyCompletionSeed = Omit<ChoreCompletion, "chore_scope" | "is_shared_with_family">;
+
+export const seedCompletions: ChoreCompletion[] = (
+  [
   {
     id: "completion-1",
     family_id: "family-1",
@@ -276,7 +292,8 @@ export const seedCompletions: ChoreCompletion[] = [
     note: null,
     reported_at: "2026-08-10T08:00:00+09:00",
   },
-];
+  ] satisfies LegacyCompletionSeed[]
+).map((c) => ({ ...c, chore_scope: "family" as const, is_shared_with_family: true }));
 
 // [新設] chore_reactions（スキーマ設計.sql 5b章）。保護者リアクション（スタンプ／コメント）の
 // モックデータ。主要画面ワイヤーフレーム.md 3.2章・4章の例文（ママ「がんばったね」等）に寄せている。
@@ -333,7 +350,13 @@ export const seedReactions: ChoreReaction[] = [
   },
 ];
 
-export const seedRewards: Reward[] = [
+// [2026-08-22追加] Chore型と同じ理由（19〜20章コメント参照）でReward型に
+// created_by/scopeが追加されたため、モックシードにもデフォルト値
+// （scope='family'・created_by=null）を補完する。
+type LegacyRewardSeed = Omit<Reward, "created_by" | "scope">;
+
+export const seedRewards: Reward[] = (
+  [
   {
     id: "reward-1",
     family_id: "family-1",
@@ -370,7 +393,8 @@ export const seedRewards: Reward[] = [
     description: "ほごしゃといっしょに",
     is_active: true,
   },
-];
+  ] satisfies LegacyRewardSeed[]
+).map((r) => ({ ...r, created_by: null, scope: "family" as const }));
 
 export const seedRedemptions: RewardRedemption[] = [
   {

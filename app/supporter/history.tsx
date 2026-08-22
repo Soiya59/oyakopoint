@@ -12,20 +12,21 @@ import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJ
 import type { DailySummaryEntry } from "@/types/domain";
 
 /**
- * P18 実施履歴カレンダー（保護者ビュー）
- * 参照: 主要画面ワイヤーフレーム.md 8章、画面一覧・遷移図.md 3.8章
+ * S12 実施履歴カレンダー（みまもりメンバービュー）
+ * 参照: 画面一覧・遷移図.md 2.5節S12、P18（app/parent/history.tsx）と同一構成
  *
- * [2026-08-15新規追加] 要件定義書07-3章「実施履歴カレンダー」に対応する新規画面。
- * データソースはchore_completion_daily_summary View相当（週間・月間集計）と
- * chore_completions（日別詳細）で、新規テーブルは無い（API仕様.md 6a章）。
- *
- * 保護者ビューは「家族全体」を既定表示とし、P16ポイント通帳と同じ「メンバー切替タブ」
- * UIで特定の子どもに絞り込める（8.0決定3）。ドットの色は`family_members.avatar_color`
- * をそのまま使い、保護者にも同じルールを適用する（8.0決定1）。
+ * P18を土台に、以下をみまもりメンバー向けに変更した。
+ * - メンバー切替タブに"supporter"ロールのメンバーも含める（07-7章はみまもりメンバーも
+ *   完了報告の当事者になるため、家族全体ビューの一員として扱う）
+ * - 日別実績リストに🤝（家族共有choreへの参加）／🎯（自分専用choreの完了）バッジを付ける
+ *   （デザイントークン.md 1.7節）。自分専用choreが「非公開」設定の場合、本人が自分の
+ *   履歴を見る際にのみ🔒を追加で表示する（07-7章「自分専用choreの可視性」）。
+ *   非公開分は`chore_completions_select_scoped`RLSにより他人には最初から返らないため、
+ *   このクライアント側の🔒表示は「本人にだけ見えている」ことを本人に伝える目的である。
  */
 type LoadState = "loading" | "error" | "ready";
 
-export default function ParentHistoryScreen() {
+export default function SupporterHistoryScreen() {
   const { state, dailySummary } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [expanded, setExpanded] = useState(false);
@@ -43,6 +44,7 @@ export default function ParentHistoryScreen() {
     return () => clearTimeout(t);
   }, []);
 
+  const myId = state.activeParentMemberId;
   const members = state.members.filter((m) => m.is_active);
   const memberColor = (memberId: string) =>
     members.find((m) => m.id === memberId)?.avatar_color ?? theme.colors.neutralBorder;
@@ -86,12 +88,6 @@ export default function ParentHistoryScreen() {
     [state.completions, selectedDate, selectedMemberId]
   );
 
-  // [2026-08-18追加・本部長] 「きろく」はchore_completion_daily_summary相当
-  // （お手伝い実施）専用のデータソースだったため、ごほうび交換が一切反映されて
-  // いなかった。ユーザーの依頼により、日別実績リストにのみごほうび交換も追加する
-  // （週間バー・月間カレンダーのドット・ポイント合計は「お手伝いをがんばった記録」の
-  // 意味合いを保つため、意図的にお手伝い実施のままにしている）。emoji等の
-  // フォールバック方針はsrc/data/store.tsxのspendLedger()と同一にする。
   const dailyRedemptions = useMemo(
     () =>
       state.redemptions
@@ -107,14 +103,12 @@ export default function ParentHistoryScreen() {
   const isWeekEmpty = weekRows.length === 0;
 
   return (
-    <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>きろく</Text>
+    <Screen tone="supporter">
+      <Text style={theme.typography.supporterTitle}>きろく</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: theme.spacing.s3 }}>
         <View style={{ flexDirection: "row", gap: theme.spacing.s2 }}>
           {members
-            // [2026-08-22追加] みまもりメンバーもタブに含め、個別の実施履歴を見られるようにする
-            // （07-7章。家族全体タブでは元々ロールを問わず全メンバーの記録が集計されていた）。
             .filter((m) => m.role === "child" || m.role === "parent" || m.role === "supporter")
             .map((m) => (
               <Pressable
@@ -123,8 +117,8 @@ export default function ParentHistoryScreen() {
                 style={[
                   styles.tab,
                   {
-                    backgroundColor: selectedMemberId === m.id ? theme.colors.brandPrimary : theme.colors.neutralSurface,
-                    borderColor: selectedMemberId === m.id ? theme.colors.brandPrimary : theme.colors.neutralBorder,
+                    backgroundColor: selectedMemberId === m.id ? theme.colors.supporterAccent : theme.colors.neutralSurface,
+                    borderColor: selectedMemberId === m.id ? theme.colors.supporterAccent : theme.colors.neutralBorder,
                   },
                 ]}
               >
@@ -138,8 +132,8 @@ export default function ParentHistoryScreen() {
             style={[
               styles.tab,
               {
-                backgroundColor: selectedMemberId === null ? theme.colors.brandPrimary : theme.colors.neutralSurface,
-                borderColor: selectedMemberId === null ? theme.colors.brandPrimary : theme.colors.neutralBorder,
+                backgroundColor: selectedMemberId === null ? theme.colors.supporterAccent : theme.colors.neutralSurface,
+                borderColor: selectedMemberId === null ? theme.colors.supporterAccent : theme.colors.neutralBorder,
               },
             ]}
           >
@@ -191,37 +185,31 @@ export default function ParentHistoryScreen() {
             />
           )}
 
-          <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
+          <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
             {formatDateJp(selectedDate)}の実績
           </Text>
           {dailyCompletions.length === 0 && dailyRedemptions.length === 0 ? (
-            <Text style={[theme.typography.parentCaption, styles.emptyDayText]}>この日の実績はありません</Text>
+            <Text style={[theme.typography.supporterCaption, styles.emptyDayText]}>この日の実績はありません</Text>
           ) : (
             <View style={{ marginTop: theme.spacing.s2 }}>
               {dailyCompletions.map((c) => {
                 const member = state.members.find((m) => m.id === c.reported_by);
-                const chore = state.chores.find((ch) => ch.id === c.chore_id);
-                const isRoutine = !!chore?.is_repeatable;
-                // [2026-08-22追加] みまもりメンバーの完了報告に🤝/🎯バッジを付ける
-                // （デザイントークン.md 1.7節。approvals.tsx P8と同じ判定ロジック）。
                 const badge =
-                  member?.role === "supporter"
-                    ? c.chore_scope === "personal"
-                      ? theme.supporterCompletionBadge.personal
-                      : theme.supporterCompletionBadge.family
-                    : null;
+                  c.chore_scope === "personal"
+                    ? theme.supporterCompletionBadge.personal
+                    : theme.supporterCompletionBadge.family;
+                const isPrivateToMe = c.chore_scope === "personal" && !c.is_shared_with_family && c.reported_by === myId;
                 return (
                   <View key={c.id} style={styles.row}>
                     <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
-                    <Text style={[theme.typography.parentBody, { marginLeft: theme.spacing.s2 }]}>
+                    <Text style={[theme.typography.supporterBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>
-                    <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
-                      {badge ? `${badge.emoji} ` : isRoutine ? "🔄 " : ""}
-                      {c.chore_emoji} {c.chore_title}
-                      {isRoutine ? "(ルーチン)" : ""}
+                    <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
+                      {badge.emoji} {c.chore_emoji} {c.chore_title}
+                      {isPrivateToMe ? " 🔒" : ""}
                     </Text>
-                    <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                    <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
                   </View>
                 );
               })}
@@ -231,13 +219,13 @@ export default function ParentHistoryScreen() {
                 return (
                   <View key={r.id} style={styles.row}>
                     <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
-                    <Text style={[theme.typography.parentBody, { marginLeft: theme.spacing.s2 }]}>
+                    <Text style={[theme.typography.supporterBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>
-                    <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
+                    <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
                       {emoji} {r.reward_name}
                     </Text>
-                    <Text style={theme.typography.parentBodyMedium}>-{r.cost}pt</Text>
+                    <Text style={theme.typography.supporterBodyMedium}>-{r.cost}pt</Text>
                   </View>
                 );
               })}
@@ -246,8 +234,13 @@ export default function ParentHistoryScreen() {
         </>
       )}
 
-      {/* [2026-08-16修正・本部長] P16・P8と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton
+        tone="supporter"
+        label="ホームへ戻る"
+        variant="ghost"
+        style={{ marginTop: theme.spacing.s6 }}
+        onPress={() => router.back()}
+      />
     </Screen>
   );
 }
