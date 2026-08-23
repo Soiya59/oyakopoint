@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import MemberAvatar from "@/components/MemberAvatar";
+import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 
 /**
  * C5 やることリスト（ホーム）（主要5画面のひとつ）
@@ -18,6 +19,9 @@ type LoadState = "loading" | "error" | "ready";
 export default function ChildHomeScreen() {
   const { state, memberPoints, isChoreLimitReached, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
+  // 20.6章決定7）。段階名のみを軽く添える（内訳・件数までは表示しない、C5行の設計）。
+  const { season: treeSeason } = useFamilyTreeSummary();
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -78,6 +82,14 @@ export default function ChildHomeScreen() {
       <Pressable onPress={() => router.push("/child/family-activity")}>
         <Text style={[theme.typography.childBody, styles.familyActivityLink]}>
           👨‍👩‍👧‍👦 かぞくのがんばりを見る →
+        </Text>
+      </Pressable>
+
+      {/* [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
+          20.6章）。段階名のみを添える軽量表示。タップでC20へ。 */}
+      <Pressable onPress={() => router.push("/child/family-tree")}>
+        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>
+          🌳 かぞくの木を見る（いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」）→
         </Text>
       </Pressable>
 

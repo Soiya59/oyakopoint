@@ -109,6 +109,49 @@ export const tapTarget = {
   supporterPrimary: 48,
 } as const;
 
+// ---- 1.8 家族の木・色分け表示のトークン（2026-08-23追加、07-9章・07-10章対応） ----
+// 参照: UIUXデザイン部/成果物/デザイントークン.md 1.8節。
+// 木の共有部分（土・幹・枝）は固定色とし、family_members.avatar_colorを絶対に使わない。
+// 色が付くのは完了報告1件ごとの視覚要素（色丸）のみ。
+export const treeStages = [
+  { stage: 0, name: "種", emoji: "🌰", threshold: 0 },
+  { stage: 1, name: "芽", emoji: "🌱", threshold: 10 },
+  { stage: 2, name: "若木", emoji: "🌿", threshold: 30 },
+  { stage: 3, name: "花", emoji: "🌸", threshold: 60 },
+  { stage: 4, name: "実", emoji: "🍎", threshold: 100 },
+] as const;
+
+/** family_tree_stage_for_count()（DB側）と完全に一致させる閾値表（API仕様.md 9.1章）。 */
+export function treeStageForCount(count: number): number {
+  if (count >= 100) return 4;
+  if (count >= 60) return 3;
+  if (count >= 30) return 2;
+  if (count >= 10) return 1;
+  return 0;
+}
+
+export function treeStageName(stage: number): string {
+  return treeStages[stage]?.name ?? treeStages[0].name;
+}
+
+export function treeStageEmoji(stage: number): string {
+  return treeStages[stage]?.emoji ?? treeStages[0].emoji;
+}
+
+/** 次の段階までの閾値（最終段階=実の場合はnull。締切表現にしないため件数ベースのみ）。 */
+export function treeNextStageInfo(count: number): { name: string; remaining: number } | null {
+  const stage = treeStageForCount(count);
+  const next = treeStages[stage + 1];
+  if (!next) return null;
+  return { name: next.name, remaining: next.threshold - count };
+}
+
+export const treeColors = {
+  soil: "#B98A5A",
+  trunk: "#8B5E3C",
+  foliageBase: "#BFE3C6",
+} as const;
+
 // ---- 8章 実施履歴カレンダー: 日別セルの濃淡（GitHubヒートマップ的表現） ----
 // 主要画面ワイヤーフレーム.md 8.5節「セル背景の濃淡はcolor-brand-primary-softを基準とした
 // 3段階程度に留め、GitHubのような多段階グラデーションは採用しない」に対応。
@@ -136,6 +179,8 @@ export const theme = {
   radius,
   tapTarget,
   motion,
+  treeStages,
+  treeColors,
 } as const;
 
 export type Theme = typeof theme;

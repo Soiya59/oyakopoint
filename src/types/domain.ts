@@ -222,3 +222,49 @@ export interface FamilyInviteLookupResult {
   status: "pending" | "accepted" | "revoked";
   expires_at: string;
 }
+
+// [新設・2026-08-23] 家族の木（要件定義書07-9章、スキーマ設計.sql 29章）・
+// 色分けによる個人の可視化（07-10章）・今週のまとめメッセージ（07-8章）対応。
+// 実装メモ.md 66章参照。
+
+/** family_tree_seasons テーブル/family_tree_current_season Viewの1行（API仕様.md 9.1・9.4章）。 */
+export interface FamilyTreeSeason {
+  id: string;
+  family_id: string;
+  season_start: string; // "YYYY-MM-DD"（JST基準の暦月初日）
+  season_end: string | null; // NULL=進行中シーズン
+  completion_count: number; // シーズン内累計完了報告数（加算のみの単調増加）
+  current_stage: number; // 0=種 1=芽 2=若木 3=花 4=実
+  created_at: string;
+  updated_at: string;
+}
+
+/** family_tree_member_breakdown Viewの1行（API仕様.md 9.3章「詳細内訳」）。 */
+export interface FamilyTreeMemberBreakdown {
+  family_id: string;
+  season_id: string;
+  season_start: string;
+  member_id: string;
+  display_name: string;
+  avatar_color: string | null;
+  member_created_at: string;
+  completion_count: number;
+}
+
+/** weekly_family_digests テーブルの1行（API仕様.md 10章「今週のまとめメッセージ」）。 */
+export type WeeklyDigestPattern =
+  | "tree_growth"
+  | "weekday_highlight"
+  | "streak_highlight"
+  | "week_comparison"
+  | "default";
+
+export interface WeeklyFamilyDigest {
+  id: string;
+  family_id: string;
+  week_start: string; // "YYYY-MM-DD"（対象週の月曜日、JST基準）
+  message: string;
+  detected_pattern: WeeklyDigestPattern;
+  detail: Record<string, unknown> | null;
+  generated_at: string;
+}

@@ -27,12 +27,15 @@ import type {
   FamilyInvite,
   FamilyInviteLookupResult,
   FamilyMember,
+  FamilyTreeMemberBreakdown,
+  FamilyTreeSeason,
   GratitudePoint,
   MemberPoints,
   ReactionKind,
   Reward,
   RewardRedemption,
   StampKey,
+  WeeklyFamilyDigest,
 } from "@/types/domain";
 
 export interface ApiError {
@@ -937,4 +940,123 @@ export async function revokeGratitudePoints(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as GratitudePoint };
+}
+
+// ============================================================
+// 家族の木（要件定義書07-9章、API仕様.md 9章）・
+// 色分けによる個人の可視化（07-10章、API仕様.md 9.2〜9.3章）
+// 対応するスキーマはスキーマ設計.sql 29章（family_tree_seasons本体・
+// family_tree_current_season/family_tree_member_breakdown の2View）。
+// 書き込みはトリガー・SECURITY DEFINER関数のみが行うため、本ファイルには
+// 読み取り専用の関数のみを用意する（クライアント側に「木を育てる」専用APIは
+// 存在しない。API仕様.md 9.5節）。
+// ============================================================
+
+/** API仕様.md 9.1章: 進行中シーズンの状態（0件のことがあり得るためmaybeSingle）。 */
+export async function fetchFamilyTreeCurrentSeason(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<FamilyTreeSeason | null>> {
+  const { data, error } = await client
+    .from("family_tree_current_season")
+    .select("*")
+    .eq("family_id", familyId)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as FamilyTreeSeason | null) ?? null };
+}
+
+/** API仕様.md 9.4章: 過去分も含めた全シーズン一覧（新しい順）。20.0節決定6「先月の木」表示用。 */
+export async function fetchFamilyTreeSeasonHistory(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<FamilyTreeSeason[]>> {
+  const { data, error } = await client
+    .from("family_tree_seasons")
+    .select("*")
+    .eq("family_id", familyId)
+    .order("season_start", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as FamilyTreeSeason[] };
+}
+
+/**
+ * API仕様.md 9.3章: 詳細内訳（今シーズンのメンバー別完了報告件数）。
+ * 必須3条件（07-10章）: 呼び出し側は必ずmember_created_at昇順で並べ替えること。
+ * completion_count順にソートしてはならない（Viewは意図的にORDER BYを持たない）。
+ */
+export async function fetchFamilyTreeMemberBreakdown(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<FamilyTreeMemberBreakdown[]>> {
+  const { data, error } = await client
+    .from("family_tree_member_breakdown")
+    .select("*")
+    .eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as FamilyTreeMemberBreakdown[];
+  // ソートしない要件（07-10章必須条件1）を満たしつつ、表示順だけ登録順に揃える。
+  return { ok: true, data: [...rows].sort((a, b) => (a.member_created_at < b.member_created_at ? -1 : 1)) };
+}
+
+/** 完了報告1件ごとの視覚要素の色付け用（API仕様.md 9.2章）。今シーズン開始以降の完了報告を報告者の色付きで返す。 */
+export interface FamilyTreeCompletionDot {
+  id: string;
+  reported_at: string;
+  reported_by: string;
+  avatar_color: string | null;
+}
+
+export async function fetchFamilyTreeCompletionDots(
+  client: SupabaseClient,
+  familyId: string,
+  seasonStartIso: string
+): Promise<ApiResult<FamilyTreeCompletionDot[]>> {
+  const { data, error } = await client
+    .from("chore_completions")
+    .select("id, reported_at, reported_by, family_members!reported_by(avatar_color)")
+    .eq("family_id", familyId)
+    .gte("reported_at", seasonStartIso)
+    .order("reported_at");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    reported_at: string;
+    reported_by: string;
+    family_members: { avatar_color: string | null } | null;
+  }[];
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      reported_at: r.reported_at,
+      reported_by: r.reported_by,
+      avatar_color: r.family_members?.avatar_color ?? null,
+    })),
+  };
+}
+
+// ============================================================
+// 今週のまとめメッセージ（要件定義書07-8章、API仕様.md 10章）
+// 対応するスキーマはスキーマ設計.sql 31章（weekly_family_digests本体・
+// generate_weekly_family_digest/generate_weekly_family_digests_for_all_families）。
+// 生成は週次バッチ（pg_cron）のみが行う。クライアントからは直近1件を読むだけでよい
+// （API仕様.md 10.1章）。生成用RPCはservice_roleにのみEXECUTE権限があり、
+// クライアント（authenticated）からは呼び出せない（実装メモ.md 66章参照）。
+// ============================================================
+
+/** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */
+export async function fetchLatestWeeklyFamilyDigest(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<WeeklyFamilyDigest | null>> {
+  const { data, error } = await client
+    .from("weekly_family_digests")
+    .select("*")
+    .eq("family_id", familyId)
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as WeeklyFamilyDigest | null) ?? null };
 }

@@ -6,6 +6,8 @@ import Card from "@/components/Card";
 import MemberAvatar from "@/components/MemberAvatar";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
+import { useWeeklyDigest } from "@/hooks/useWeeklyDigest";
 
 /**
  * P7 ホーム（保護者ダッシュボード）
@@ -19,6 +21,21 @@ import { useAppData } from "@/data/store";
  */
 export default function ParentHomeScreen() {
   const { state } = useAppData();
+  // [2026-08-23追加] 今週のまとめメッセージ（07-8章、主要画面ワイヤーフレーム.md 19章）。
+  // 決定1「専用の詳細画面・タップ操作は持たせない」・決定3「通信エラー時も控えめな
+  // 1行に差し替えるだけにとどめる」・決定4「集計対象0件はデフォルトメッセージで
+  // 正常系として吸収する（週次バッチ側で対応済み）」に対応する。
+  const { loadState: digestLoadState, digest } = useWeeklyDigest();
+  const digestMessage =
+    digestLoadState === "error"
+      ? "今週のできごとは、また後で見てみてね"
+      : digestLoadState === "loading"
+      ? null
+      : digest?.message ?? "今週のできごとは、また後で見てみてね";
+  // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md 20.6章
+  // 決定7）。段階名・今シーズンの完了報告数の2情報のみを表示し、内訳・色つき要素の
+  // 密な表示はP26（→app/parent/family-tree.tsx）側で行う。
+  const { season: treeSeason } = useFamilyTreeSummary();
   // [2026-08-23追加・5回目のスコープ変更] P25「かぞくのみまもりメンバーのお手伝い
   // （参考一覧）」への導線。画面一覧・遷移図.md P25行「家族にみまもりメンバーが
   // 1人もいない場合は導線自体を表示しない」に対応し、家族に有効なsupporterが
@@ -57,6 +74,30 @@ export default function ParentHomeScreen() {
   return (
     <Screen tone="parent">
       <Text style={theme.typography.parentTitle}>{state.family.name} の ホーム</Text>
+
+      {/* [2026-08-23追加] 今週のまとめメッセージカード（07-8章、主要画面ワイヤーフレーム.md
+          19章）。決定1のとおり非タップ（表示専用）。読み込み中は1行スケルトンにする。 */}
+      <Card style={{ marginTop: theme.spacing.s4 }}>
+        <Text style={theme.typography.parentBodyMedium}>今週のできごと</Text>
+        {digestMessage === null ? (
+          <View style={styles.digestSkeleton} />
+        ) : (
+          <Text style={{ marginTop: theme.spacing.s2 }}>{digestMessage}</Text>
+        )}
+      </Card>
+
+      {/* [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
+          20.6章決定7）。段階名・今シーズンの完了報告数の2情報のみ。タップでP26へ。 */}
+      <Pressable onPress={() => router.push("/parent/family-tree")}>
+        <Card style={styles.treeWidget}>
+          <Text style={theme.typography.parentBodyMedium}>
+            🌿 家族の木 いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
+          </Text>
+          <Text style={{ color: theme.colors.neutralTextSecondary }}>
+            今シーズン {treeSeason?.completion_count ?? 0}回 →
+          </Text>
+        </Card>
+      </Pressable>
 
       <Pressable onPress={() => router.push("/parent/approvals")}>
         <Card style={styles.pendingCard}>
@@ -106,6 +147,14 @@ export default function ParentHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  digestSkeleton: {
+    marginTop: theme.spacing.s2,
+    height: 18,
+    borderRadius: theme.radius.parentMd,
+    backgroundColor: theme.colors.neutralBorder,
+    opacity: 0.6,
+  },
+  treeWidget: { marginTop: theme.spacing.s3 },
   pendingCard: {
     marginTop: theme.spacing.s4,
     backgroundColor: theme.colors.statusPendingSoft,
