@@ -46,9 +46,14 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
   return key;
 }
 
-// 認証・データ管理設計書.md 2章「有効期限: 子ども端末は共有タブレットの
-// 可能性があるため短め（例: 12時間）を推奨」に従う。
-const CHILD_TOKEN_TTL_SECONDS = 12 * 60 * 60;
+// [2026-08-24変更] 従来は12時間（共有タブレットを想定した短め設定）だったが、
+// 「毎回ログインが面倒」との利用実態のフィードバックを受けて1週間に延長した。
+// 延長にあたり、退会(remove-member soft_remove)後もトークンが生きている間は
+// is_activeチェックを経由せずアクセスできてしまう問題（本部長の粗探しで発見）を
+// 同時に修正済み（current_family_id()等がfamily_member_idクレームがあっても
+// 都度is_activeを確認するようになった。スキーマ設計.sql 32章）。そのため
+// TTLを延ばしても、退会は既発行トークンに即座に反映される。
+const CHILD_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export interface ChildTokenClaims {
   familyId: string;
