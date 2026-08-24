@@ -38,7 +38,11 @@ export default function SupporterFamilyTreeScreen() {
       {loadState === "ready" && (
         <Card tone="supporter" style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>
           <TreeStageVisual stage={stage} dots={dots} />
-          <Text style={theme.typography.supporterBodyMedium}>いま「{theme.treeStages[stage].name}」です。</Text>
+          {/* [2026-08-24改訂] 木の絵そのものをViewで描くようにしたため、段階の絵文字は
+              木の代わりではなく段階名テキストに添える役割へ移した（FamilyTree.tsx参照）。 */}
+          <Text style={theme.typography.supporterBodyMedium}>
+            いま「{theme.treeStages[stage].name}」です。{theme.treeStages[stage].emoji}
+          </Text>
           <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s1, textAlign: "center" }]}>
             今シーズンも、みんなで少しずつ育てています
           </Text>

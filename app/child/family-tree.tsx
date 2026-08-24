@@ -41,7 +41,11 @@ export default function ChildFamilyTreeScreen() {
       {loadState === "ready" && (
         <Card tone="child" style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>
           <TreeStageVisual stage={stage} dots={dots} />
-          <Text style={theme.typography.childBody}>いま「{theme.treeStages[stage].name}」だよ！</Text>
+          {/* [2026-08-24改訂] 木の絵そのものをViewで描くようにしたため、段階の絵文字は
+              木の代わりではなく段階名テキストに添える役割へ移した（FamilyTree.tsx参照）。 */}
+          <Text style={theme.typography.childBody}>
+            いま「{theme.treeStages[stage].name}」だよ！{theme.treeStages[stage].emoji}
+          </Text>
           <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>
             みんなで {count}かい がんばったよ
           </Text>
