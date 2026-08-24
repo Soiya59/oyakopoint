@@ -161,17 +161,67 @@ function dotOffsetInEllipse(id: string, rx: number, ry: number): { x: number; y:
   return { x: Math.cos(angle) * normalized * rx, y: Math.sin(angle) * normalized * ry };
 }
 
-function dotOffsetInCircle(id: string, radius: number): { x: number; y: number } {
-  return dotOffsetInEllipse(id, radius, radius);
-}
 
 /**
- * stage0（種）用。地面にまかれた種として、土の上に低く広がるように散らす。
- * 円内配置の縦だけを潰して、一直線に並ばず・浮き上がりもしない見え方にする。
+ * 色丸どうしが重ならないように配置する。
+ *
+ * [2026-08-24追加・本部長] 「ひとつひとつに一定の間隔（近づきすぎない）を」との
+ * 要望に対応。各点を独立にランダム配置していたため重なりが頻発していた。
+ *
+ * 方式は棄却サンプリング。候補位置を順に試し、既に置いた点すべてと
+ * 「互いの半径の合計＋余白」以上離れている最初の位置を採用する。
+ * 候補も完了報告IDから作る（`id|0`, `id|1`, …）ため乱数を使わず、
+ * どの端末でも必ず同じ配置になるという決定4の性質を維持している。
+ *
+ * 将来ガチャの絵と交換された丸は半径が大きくなるが、判定を固定距離ではなく
+ * 「互いの半径の合計」にしてあるため、そのまま正しく動く。絵の周囲に小さい丸が
+ * 寄るのは、絵が丸で縁取られたように見えるため許容する（本部長判断）。
  */
-function dotOffsetOnGround(id: string): { x: number; y: number } {
-  const { x, y } = dotOffsetInCircle(id, SEED_SCATTER_RADIUS);
-  return { x, y: y * 0.42 };
+type PlacedDot = { x: number; y: number; r: number };
+type PlacementBounds = { cx: number; cy: number; rx: number; ry: number };
+
+const PLACEMENT_TRIES = 24;
+const PLACEMENT_GAP = 2;
+
+function placeWithoutOverlap(
+  id: string,
+  radius: number,
+  bounds: PlacementBounds,
+  placed: readonly PlacedDot[]
+): { x: number; y: number } {
+  let best = { x: bounds.cx, y: bounds.cy };
+  let bestSlack = -Infinity;
+  for (let t = 0; t < PLACEMENT_TRIES; t++) {
+    const off = dotOffsetInEllipse(`${id}|${t}`, bounds.rx, bounds.ry);
+    const x = bounds.cx + off.x;
+    const y = bounds.cy + off.y;
+    let slack = Infinity;
+    for (const p of placed) {
+      const d = Math.hypot(x - p.x, y - p.y) - (p.r + radius + PLACEMENT_GAP);
+      if (d < slack) slack = d;
+    }
+    if (slack >= 0) return { x, y };
+    if (slack > bestSlack) {
+      bestSlack = slack;
+      best = { x, y };
+    }
+  }
+  // 候補を試し切っても空きが無い場合は、最も余裕のあった位置を使う
+  // （点が多すぎて物理的に収まらないケース。重なりは残るが最小限になる）。
+  return best;
+}
+
+/** 同じ座標系に属する色丸をまとめて配置する（互いの重なりを避ける）。 */
+function placeGroup(
+  items: readonly { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[],
+  radius: number
+): { dot: FamilyTreeCompletionDot; x: number; y: number }[] {
+  const placed: PlacedDot[] = [];
+  return items.map(({ dot, bounds }) => {
+    const p = placeWithoutOverlap(dot.id, radius, bounds, placed);
+    placed.push({ x: p.x, y: p.y, r: radius });
+    return { dot, x: p.x, y: p.y };
+  });
 }
 
 /**
@@ -246,19 +296,26 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
     return map;
   }, [slots, shape.kind]);
 
-  /** 指定した楕円の中に、決定論的に色丸を1つ置く。 */
-  const renderDot = (dot: FamilyTreeCompletionDot, cx: number, cy: number, rx: number, ry: number) => {
-    const { x, y } = dotOffsetInEllipse(dot.id, Math.max(rx, 0), Math.max(ry, 0));
-    return (
+  const bounds = (cx: number, cy: number, rx: number, ry: number): PlacementBounds => ({
+    cx, cy, rx: Math.max(rx, 0), ry: Math.max(ry, 0),
+  });
+
+  /** 重なりを避けて配置済みの色丸を描く。 */
+  const renderPlaced = (items: { dot: FamilyTreeCompletionDot; x: number; y: number }[]) =>
+    items.map(({ dot, x, y }) => (
       <View
         key={dot.id}
         style={[
           styles.dot,
-          { backgroundColor: dotColor(dot), left: cx + x - DOT_SIZE / 2, top: cy + y - DOT_SIZE / 2 },
+          { backgroundColor: dotColor(dot), left: x - DOT_SIZE / 2, top: y - DOT_SIZE / 2 },
         ]}
       />
-    );
-  };
+    ));
+
+  /** 1つの座標系に属する色丸をまとめて配置して描く。 */
+  const renderGroup = (
+    items: { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
+  ) => renderPlaced(placeGroup(items, DOT_SIZE / 2));
 
   return (
     <View
@@ -279,8 +336,11 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
       {/* 空に散る色丸。木より背面になるよう木の前に置く。木に重なった分は
           隠れる＝空いている場所にだけ現れる（SKY_WIDTHのコメント参照）。 */}
       <View style={styles.skyLayer} pointerEvents="none">
-        {byRegion.sky.map((dot) =>
-          renderDot(dot, canvasWidth / 2, CANVAS_HEIGHT * 0.36, canvasWidth / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.32)
+        {renderGroup(
+          byRegion.sky.map((dot) => ({
+            dot,
+            bounds: bounds(canvasWidth / 2, CANVAS_HEIGHT * 0.36, canvasWidth / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.32),
+          }))
         )}
       </View>
 
@@ -316,15 +376,22 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
                     { width: mainSize, height: mainSize, borderRadius: leafRadius, left: (boxWidth - mainSize) / 2, top: 0 },
                   ]}
                 />
-                {byRegion.canopy.map((dot) =>
-                  renderDot(dot, boxWidth / 2, leafRadius, dotRadius, dotRadius)
-                )}
-                {byRegion.lobeLeft.map((dot) =>
-                  renderDot(dot, sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE)
-                )}
-                {byRegion.lobeRight.map((dot) =>
-                  renderDot(dot, boxWidth - sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE)
-                )}
+                {/* 樹冠と左右のふくらみは同じ座標系なので、まとめて配置して
+                    部位をまたいだ重なりも避ける。 */}
+                {renderGroup([
+                  ...byRegion.canopy.map((dot) => ({
+                    dot,
+                    bounds: bounds(boxWidth / 2, leafRadius, dotRadius, dotRadius),
+                  })),
+                  ...byRegion.lobeLeft.map((dot) => ({
+                    dot,
+                    bounds: bounds(sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE),
+                  })),
+                  ...byRegion.lobeRight.map((dot) => ({
+                    dot,
+                    bounds: bounds(boxWidth - sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE),
+                  })),
+                ])}
               </View>
             );
           })()}
@@ -338,14 +405,16 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
               borderBottomRightRadius: 3,
             }}
           >
-            {byRegion.trunk.map((dot) =>
-              renderDot(
+            {renderGroup(
+              byRegion.trunk.map((dot) => ({
                 dot,
-                shape.trunkWidth / 2,
-                shape.trunkHeight / 2,
-                shape.trunkWidth / 2 - DOT_SIZE / 2,
-                shape.trunkHeight / 2 - DOT_SIZE
-              )
+                bounds: bounds(
+                  shape.trunkWidth / 2,
+                  shape.trunkHeight / 2,
+                  shape.trunkWidth / 2 - DOT_SIZE / 2,
+                  shape.trunkHeight / 2 - DOT_SIZE
+                ),
+              }))
             )}
           </View>
         </>
@@ -380,22 +449,9 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
               },
             ]}
           >
-            {leafDots.map((dot) => {
-              const { x, y } = dotOffsetInEllipse(dot.id, rx, ry);
-              return (
-                <View
-                  key={dot.id}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor: dotColor(dot),
-                      left: leafWidth / 2 + x - DOT_SIZE / 2,
-                      top: leafHeight / 2 + y - DOT_SIZE / 2,
-                    },
-                  ]}
-                />
-              );
-            })}
+            {renderGroup(
+              leafDots.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) }))
+            )}
           </View>
         );
         return (
@@ -411,22 +467,18 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
           色丸が土に埋もれないよう、土より前面へ重ねる。 */}
       {shape.kind === "seed" && (
         <View style={styles.groundScatter}>
-          {slots.map((dot) => {
-            const { x, y } = dotOffsetOnGround(dot.id);
-            return (
-              <View
-                key={dot.id}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor: dotColor(dot),
-                    left: SEED_SCATTER_RADIUS + x - DOT_SIZE / 2,
-                    top: SEED_SCATTER_RADIUS * 0.42 + y - DOT_SIZE / 2,
-                  },
-                ]}
-              />
-            );
-          })}
+          {renderGroup(
+            slots.map((dot) => ({
+              dot,
+              // 地面に沿うよう縦を潰した楕円の中に散らす。
+              bounds: bounds(
+                SEED_SCATTER_RADIUS,
+                SEED_SCATTER_RADIUS * 0.42,
+                SEED_SCATTER_RADIUS - DOT_SIZE / 2,
+                SEED_SCATTER_RADIUS * 0.42 - DOT_SIZE / 2
+              ),
+            }))
+          )}
           <View style={styles.seed} />
         </View>
       )}
@@ -434,14 +486,11 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
       {/* 地面は全段階で画面幅いっぱい。上端だけ緩く丸めて、平らな板ではなく
           なだらかな地平線に見せる。 */}
       <View style={styles.soil}>
-        {byRegion.soil.map((dot) =>
-          renderDot(
+        {renderGroup(
+          byRegion.soil.map((dot) => ({
             dot,
-            canvasWidth / 2,
-            SOIL_HEIGHT / 2 + 6,
-            canvasWidth / 2 - DOT_SIZE,
-            SOIL_HEIGHT / 2 - DOT_SIZE
-          )
+            bounds: bounds(canvasWidth / 2, SOIL_HEIGHT / 2 + 6, canvasWidth / 2 - DOT_SIZE, SOIL_HEIGHT / 2 - DOT_SIZE),
+          }))
         )}
       </View>
     </View>
