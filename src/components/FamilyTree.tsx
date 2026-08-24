@@ -28,13 +28,29 @@ import MemberAvatar from "./MemberAvatar";
 const MAX_SLOTS = 40;
 const DOT_SIZE = 9;
 
-/** 文字列から決定論的な非負整数ハッシュを作る（FNV-1a風の簡易実装）。 */
+/**
+ * 文字列から決定論的な非負整数ハッシュを作る（FNV-1a＋最終ミックス）。
+ *
+ * [2026-08-24修正] FNV-1aは最後の演算が奇数の素数との乗算であるため、
+ * 入力によっては**最下位ビットがほぼ固定される**という偏りがある。実際に
+ * `dot-0`〜`dot-19` の20件すべてで `hash % 2 === 0` となることを確認した。
+ * このため `% 2` での左右振り分けが全て片側に寄り、さらに
+ * pickDisplaySlots の `% (i + 1)` も、i+1が偶数のときは置き換え先が
+ * 偶数スロットにしか当たらないという偏りを生んでいた（40件超過時のみ
+ * 影響する潜在不具合）。
+ * 全ビットが均等に散るよう、最後にavalanche（lowbias32）を掛ける。
+ */
 function stableHash(input: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
     h ^= input.charCodeAt(i);
     h = (h * 0x01000193) >>> 0;
   }
+  h ^= h >>> 16;
+  h = (h * 0x7feb352d) >>> 0;
+  h ^= h >>> 15;
+  h = (h * 0x846ca68b) >>> 0;
+  h ^= h >>> 16;
   return h >>> 0;
 }
 
@@ -56,17 +72,48 @@ export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): (FamilyTreeCo
 }
 
 /**
- * 段階ごとの木の寸法。段階が上がるほど葉が大きく・幹が太く高くなる。
- * stage0（種）はまだ木が生えていないため葉も幹も持たず、色丸は土の中に
- * 「まかれた種」として配置する（0件でも寂しく見えないよう種の絵は常に描く）。
+ * 段階ごとの木の形。
+ *
+ * [2026-08-24再改訂・本部長] 初回の作り直しでは段階ごとに「大きさ」だけを変え、
+ * 形はどの段階も同じ樹冠にしていた。その結果、芽（stage1）が「小さい木」に
+ * 見えてしまい、ユーザーから「これは芽なのかは疑問」との指摘を受けた。
+ * 芽は木の縮小版ではなく双葉という別の形であるため、段階ごとに
+ * 「形の種類（kind）」自体を変える設計に改めた。
+ *   seed  : まだ何も生えていない。土と種のみ
+ *   sprout: 双葉。細く短い茎＋左右に開いた2枚の葉（樹冠は作らない）
+ *   tree  : 幹＋樹冠。若木→花→実で単調に大きくなる
  */
-const STAGE_GEOMETRY = [
-  { hasTree: false, leafRadius: 0, trunkWidth: 0, trunkHeight: 0 },
-  { hasTree: true, leafRadius: 42, trunkWidth: 10, trunkHeight: 24 },
-  { hasTree: true, leafRadius: 54, trunkWidth: 14, trunkHeight: 38 },
-  { hasTree: true, leafRadius: 64, trunkWidth: 18, trunkHeight: 48 },
-  { hasTree: true, leafRadius: 72, trunkWidth: 22, trunkHeight: 56 },
+type StageShape =
+  | { kind: "seed" }
+  | { kind: "sprout"; stemHeight: number; leafWidth: number; leafHeight: number }
+  | { kind: "tree"; leafRadius: number; trunkWidth: number; trunkHeight: number };
+
+const STAGE_GEOMETRY: readonly StageShape[] = [
+  { kind: "seed" },
+  { kind: "sprout", stemHeight: 26, leafWidth: 66, leafHeight: 40 },
+  { kind: "tree", leafRadius: 48, trunkWidth: 12, trunkHeight: 40 },
+  { kind: "tree", leafRadius: 62, trunkWidth: 17, trunkHeight: 50 },
+  { kind: "tree", leafRadius: 74, trunkWidth: 22, trunkHeight: 58 },
 ] as const;
+
+/** 双葉の開き角（左右対称）。 */
+const SPROUT_LEAF_ANGLE_DEG = 26;
+
+/**
+ * 色丸の色を決める。
+ *
+ * [2026-08-24追加] 本番データを確認したところ、アクティブなメンバー6人のうち
+ * 4人が avatar_color 未設定（NULL）であり、従来の実装ではそれらが一律グレーで
+ * 描画されていた。07-10章「色分けによる個人の可視化」の目的が実データでは
+ * ほぼ成立していない状態だったため、未設定の場合は報告者ID（reported_by）から
+ * 決定論的にパレット色（1.3節の8色）を割り当てるフォールバックを入れる。
+ * DBには書き込まず表示上のみの割り当てであり、同じ人には常に同じ色が出る。
+ */
+function dotColor(dot: FamilyTreeCompletionDot): string {
+  if (dot.avatar_color) return dot.avatar_color;
+  const palette = theme.memberColorPalette;
+  return palette[stableHash(dot.reported_by) % palette.length].value;
+}
 
 // 土は「板」に見えないよう、段階に応じて幅が変わる横長の楕円（土の盛り上がり）にする。
 const SOIL_WIDTH_BY_STAGE = [92, 116, 136, 152, 164] as const;
@@ -79,12 +126,15 @@ const SEED_SCATTER_RADIUS = 32;
  * 極座標で求め、半径にsqrtを掛けることで円内に偏りなく散る（中心に密集しない）。
  * 乱数を使わないため、どの家族メンバーの端末で見ても必ず同じ配置になる。
  */
-function dotOffsetInCircle(id: string, radius: number): { x: number; y: number } {
+function dotOffsetInEllipse(id: string, rx: number, ry: number): { x: number; y: number } {
   const h = stableHash(id);
   const angle = ((h % 3600) / 3600) * Math.PI * 2;
   const normalized = Math.sqrt(((h >>> 11) % 1000) / 1000);
-  const r = normalized * radius;
-  return { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
+  return { x: Math.cos(angle) * normalized * rx, y: Math.sin(angle) * normalized * ry };
+}
+
+function dotOffsetInCircle(id: string, radius: number): { x: number; y: number } {
+  return dotOffsetInEllipse(id, radius, radius);
 }
 
 /**
@@ -101,94 +151,132 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
     () => pickDisplaySlots(dots).filter((d): d is FamilyTreeCompletionDot => d !== null),
     [dots]
   );
-  const geometry = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
-  const { hasTree, leafRadius, trunkWidth, trunkHeight } = geometry;
-
-  // 葉のかたまりは大小3つの円を重ねて作る（1つの楕円だけだと棒付きキャンディに
-  // 見えてしまうため）。色丸は中央の大きい円の内側にだけ配置し、常に葉の上に
-  // 乗っているように見せる。
+  const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
   const soilWidth = SOIL_WIDTH_BY_STAGE[stage] ?? SOIL_WIDTH_BY_STAGE[0];
-  const leafBoxWidth = leafRadius * 2.7;
-  const leafBoxHeight = leafRadius * 2.05;
-  const mainLeafSize = leafRadius * 2;
-  const sideLeafSize = leafRadius * 1.3;
-  const dotRadius = Math.max(leafRadius - DOT_SIZE, 0);
 
   return (
     <View style={styles.canvas}>
-      {hasTree && (
-        <View style={{ width: leafBoxWidth, height: leafBoxHeight }}>
-          <View
-            style={[
-              styles.leafCircle,
-              {
-                width: sideLeafSize,
-                height: sideLeafSize,
-                borderRadius: sideLeafSize / 2,
-                left: 0,
-                top: leafBoxHeight - sideLeafSize,
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.leafCircle,
-              {
-                width: sideLeafSize,
-                height: sideLeafSize,
-                borderRadius: sideLeafSize / 2,
-                right: 0,
-                top: leafBoxHeight - sideLeafSize,
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.leafCircle,
-              {
-                width: mainLeafSize,
-                height: mainLeafSize,
-                borderRadius: leafRadius,
-                left: (leafBoxWidth - mainLeafSize) / 2,
-                top: 0,
-              },
-            ]}
-          />
-          {slots.map((dot) => {
-            const { x, y } = dotOffsetInCircle(dot.id, dotRadius);
+      {shape.kind === "tree" && (
+        <>
+          {/* 樹冠は大小3つの円を重ねて作る（1つの楕円だけだと棒付きキャンディに
+              見えてしまうため）。色丸は中央の大きい円の内側にだけ配置し、
+              常に葉の上に乗っているように見せる。 */}
+          {(() => {
+            const { leafRadius } = shape;
+            const boxWidth = leafRadius * 2.7;
+            const boxHeight = leafRadius * 2.05;
+            const mainSize = leafRadius * 2;
+            const sideSize = leafRadius * 1.3;
+            const dotRadius = Math.max(leafRadius - DOT_SIZE, 0);
             return (
-              <View
-                key={dot.id}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor: dot.avatar_color ?? theme.colors.neutralBorder,
-                    left: leafBoxWidth / 2 + x - DOT_SIZE / 2,
-                    top: leafRadius + y - DOT_SIZE / 2,
-                  },
-                ]}
-              />
+              <View style={{ width: boxWidth, height: boxHeight }}>
+                <View
+                  style={[
+                    styles.leafShape,
+                    { width: sideSize, height: sideSize, borderRadius: sideSize / 2, left: 0, top: boxHeight - sideSize },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.leafShape,
+                    { width: sideSize, height: sideSize, borderRadius: sideSize / 2, right: 0, top: boxHeight - sideSize },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.leafShape,
+                    { width: mainSize, height: mainSize, borderRadius: leafRadius, left: (boxWidth - mainSize) / 2, top: 0 },
+                  ]}
+                />
+                {slots.map((dot) => {
+                  const { x, y } = dotOffsetInCircle(dot.id, dotRadius);
+                  return (
+                    <View
+                      key={dot.id}
+                      style={[
+                        styles.dot,
+                        {
+                          backgroundColor: dotColor(dot),
+                          left: boxWidth / 2 + x - DOT_SIZE / 2,
+                          top: leafRadius + y - DOT_SIZE / 2,
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
             );
-          })}
-        </View>
+          })()}
+          <View
+            style={{
+              width: shape.trunkWidth,
+              height: shape.trunkHeight,
+              marginTop: -2,
+              backgroundColor: theme.treeColors.trunk,
+              borderBottomLeftRadius: 3,
+              borderBottomRightRadius: 3,
+            }}
+          />
+        </>
       )}
 
-      {hasTree && (
-        <View
-          style={{
-            width: trunkWidth,
-            height: trunkHeight,
-            marginTop: -2,
-            backgroundColor: theme.treeColors.trunk,
-            borderBottomLeftRadius: 3,
-            borderBottomRightRadius: 3,
-          }}
-        />
-      )}
+      {/* stage1（芽）は双葉。細い茎の先に左右へ開いた葉を2枚つける。
+          色丸は葉の子要素として置くので、葉の傾きに合わせて一緒に傾く
+          （＝葉の表面に乗っているように見える）。 */}
+      {shape.kind === "sprout" && (() => {
+        const { stemHeight, leafWidth, leafHeight } = shape;
+        const rx = leafWidth / 2 - DOT_SIZE / 2 - 2;
+        const ry = leafHeight / 2 - DOT_SIZE / 2 - 2;
+        const leftDots = slots.filter((d) => stableHash(d.id) % 2 === 0);
+        const rightDots = slots.filter((d) => stableHash(d.id) % 2 === 1);
+        // 双葉は左右の葉を「外側の先端が上・内側の付け根が下」に傾けてV字に開く。
+        // 回転方向を逆にすると2枚が外へ垂れて1つの塊に重なり、茂みのように
+        // 見えてしまう（初回実装の不具合）。CSSの正の回転は時計回りなので、
+        // 左の葉が時計回り(+)・右の葉が反時計回り(-)でV字になる。
+        const renderLeaf = (leafDots: FamilyTreeCompletionDot[], side: "left" | "right") => (
+          <View
+            style={[
+              styles.leafShape,
+              {
+                width: leafWidth,
+                height: leafHeight,
+                borderRadius: leafWidth / 2,
+                [side]: 0,
+                top: 0,
+                transform: [{ rotate: `${side === "left" ? SPROUT_LEAF_ANGLE_DEG : -SPROUT_LEAF_ANGLE_DEG}deg` }],
+              },
+            ]}
+          >
+            {leafDots.map((dot) => {
+              const { x, y } = dotOffsetInEllipse(dot.id, rx, ry);
+              return (
+                <View
+                  key={dot.id}
+                  style={[
+                    styles.dot,
+                    {
+                      backgroundColor: dotColor(dot),
+                      left: leafWidth / 2 + x - DOT_SIZE / 2,
+                      top: leafHeight / 2 + y - DOT_SIZE / 2,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        );
+        return (
+          <View style={{ width: leafWidth * 2, height: leafHeight + stemHeight, alignItems: "center" }}>
+            {renderLeaf(leftDots, "left")}
+            {renderLeaf(rightDots, "right")}
+            <View style={[styles.sproutStem, { height: stemHeight + 8, top: leafHeight - 8 }]} />
+          </View>
+        );
+      })()}
 
-      {/* stage0（種）はまだ木が無いので、まかれた種を土の上に散らして見せる。
-          色丸が土に埋もれないよう、木がある段階と違って土より前面へ重ねる。 */}
-      {!hasTree && (
+      {/* stage0（種）はまだ何も生えていないので、まかれた種を土の上に散らして見せる。
+          色丸が土に埋もれないよう、土より前面へ重ねる。 */}
+      {shape.kind === "seed" && (
         <View style={styles.groundScatter}>
           {slots.map((dot) => {
             const { x, y } = dotOffsetOnGround(dot.id);
@@ -198,7 +286,7 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: dot.avatar_color ?? theme.colors.neutralBorder,
+                    backgroundColor: dotColor(dot),
                     left: SEED_SCATTER_RADIUS + x - DOT_SIZE / 2,
                     top: SEED_SCATTER_RADIUS * 0.42 + y - DOT_SIZE / 2,
                   },
@@ -258,9 +346,16 @@ export function FamilyTreeBreakdownList({
 
 const styles = StyleSheet.create({
   canvas: { alignItems: "center", justifyContent: "flex-end", paddingVertical: theme.spacing.s4 },
-  leafCircle: {
+  leafShape: {
     position: "absolute",
     backgroundColor: theme.treeColors.foliageBase,
+  },
+  sproutStem: {
+    position: "absolute",
+    width: 6,
+    backgroundColor: theme.treeColors.trunk,
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
   },
   dot: {
     position: "absolute",
@@ -268,9 +363,11 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     borderWidth: 1,
-    // 葉の緑・土の茶に対して色丸の輪郭を立たせ、同系色のavatar_colorでも
-    // 埋もれないようにする（勝者演出ではなく単なる視認性確保）。
-    borderColor: "rgba(255,255,255,0.7)",
+    // [2026-08-24修正] 当初は白の縁取りにしていたが、メンバーカラーが
+    // パステル調（1.3節の8色）で葉の下地とも明度が近いため、白縁が色を
+    // 洗い流して全部が白っぽく見えてしまっていた。暗い半透明の縁に変更して
+    // 輪郭だけを締める（勝者演出ではなく単なる視認性確保）。
+    borderColor: "rgba(0,0,0,0.16)",
   },
   soil: {
     height: SOIL_HEIGHT,
