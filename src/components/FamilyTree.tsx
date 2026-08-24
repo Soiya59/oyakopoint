@@ -26,7 +26,9 @@ import MemberAvatar from "./MemberAvatar";
  */
 
 const MAX_SLOTS = 40;
-const DOT_SIZE = 9;
+// [2026-08-24拡大] 木の拡大にあわせて色丸も少し大きくする。樹冠の面積が約2.9倍に
+// なったため、丸を大きくしても拡大前より密度は下がる（＝重なりにくくなる）。
+const DOT_SIZE = 13;
 
 /**
  * 文字列から決定論的な非負整数ハッシュを作る（FNV-1a＋最終ミックス）。
@@ -88,13 +90,32 @@ type StageShape =
   | { kind: "sprout"; stemHeight: number; leafWidth: number; leafHeight: number }
   | { kind: "tree"; leafRadius: number; trunkWidth: number; trunkHeight: number };
 
+// [2026-08-24拡大・本部長] ユーザーから「家族の木はもっと大きくてもよい、
+// スマホ画面の3分の2くらい」との要望を受けて全段階を拡大した。
+// 制約は縦ではなく**横**にある。スマホ幅375ptから余白を引いた実質340ptに
+// 樹冠の横幅（leafRadius * 2.7）が収まる必要があり、leafRadius=125 が上限に近い
+// （125 * 2.7 = 337.5pt）。この横幅に対して樹冠の高さは自動的に決まるため、
+// 画面の3分の2に近づけるぶんは幹を長くして稼いでいる（幹が長いほど、将来
+// 枝先に飾りを吊るす余地も増える）。実の段階で全体約480pt≒画面の約60%。
+// 樹冠の面積は拡大前の約2.9倍になり、色丸40個が重なりにくくなる。
 const STAGE_GEOMETRY: readonly StageShape[] = [
   { kind: "seed" },
-  { kind: "sprout", stemHeight: 26, leafWidth: 66, leafHeight: 40 },
-  { kind: "tree", leafRadius: 48, trunkWidth: 12, trunkHeight: 40 },
-  { kind: "tree", leafRadius: 62, trunkWidth: 17, trunkHeight: 50 },
-  { kind: "tree", leafRadius: 74, trunkWidth: 22, trunkHeight: 58 },
+  { kind: "sprout", stemHeight: 62, leafWidth: 116, leafHeight: 70 },
+  { kind: "tree", leafRadius: 82, trunkWidth: 20, trunkHeight: 88 },
+  { kind: "tree", leafRadius: 105, trunkWidth: 27, trunkHeight: 110 },
+  { kind: "tree", leafRadius: 125, trunkWidth: 34, trunkHeight: 130 },
 ] as const;
+
+/**
+ * 表示領域の高さを全段階で固定するための値（実の段階の全高に合わせる）。
+ * 段階ごとに高さが変わると、成長した瞬間に画面がガタつくうえ、
+ * 種・芽の段階で「まだ小さい」ことが余白の少なさとして伝わってしまう。
+ * 高さを固定して下端（地面）を揃えることで、小さい段階では上方向に
+ * 伸びしろが見える＝「これから育つ」ことが余白として伝わるようにする。
+ */
+// 実の段階の実寸に合わせた値: 樹冠256(=125*2.05) + 幹130 + 土44 ≒ 430。
+// これ以上大きくすると、種・芽の段階で上部の空白が過剰になる。
+const CANVAS_HEIGHT = 440;
 
 /** 双葉の開き角（左右対称）。 */
 const SPROUT_LEAF_ANGLE_DEG = 26;
@@ -118,10 +139,14 @@ function dotColor(dot: FamilyTreeCompletionDot): string {
 }
 
 // 土は「板」に見えないよう、段階に応じて幅が変わる横長の楕円（土の盛り上がり）にする。
-const SOIL_WIDTH_BY_STAGE = [92, 116, 136, 152, 164] as const;
-const SOIL_HEIGHT = 18;
+// [2026-08-24拡大] 木の拡大に合わせて土も広げる（木より土が細いと不安定に見えるため）。
+const SOIL_WIDTH_BY_STAGE = [150, 190, 230, 270, 300] as const;
+// 幅に対して高さが足りないと角の丸みが潰れ、土の盛り上がりではなく
+// 「平たい板」に見えてしまう（拡大時に一度この状態になった）。
+// 幅300ptに対しては高さ44pt程度が必要。
+const SOIL_HEIGHT = 44;
 /** stage0（種）で、まかれた種を散らす範囲の半径。地面に沿うよう縦は潰す。 */
-const SEED_SCATTER_RADIUS = 32;
+const SEED_SCATTER_RADIUS = 56;
 
 /**
  * 完了報告IDから、葉の円の内側の座標を決定論的に求める。
@@ -347,7 +372,13 @@ export function FamilyTreeBreakdownList({
 }
 
 const styles = StyleSheet.create({
-  canvas: { alignItems: "center", justifyContent: "flex-end", paddingVertical: theme.spacing.s4 },
+  // 高さを固定し、下端（地面）を揃える。段階が上がっても画面がガタつかない。
+  canvas: {
+    height: CANVAS_HEIGHT,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: theme.spacing.s4,
+  },
   leafShape: {
     position: "absolute",
     backgroundColor: theme.treeColors.foliageBase,
