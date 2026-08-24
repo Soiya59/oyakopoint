@@ -184,15 +184,26 @@ function dotOffsetOnGround(id: string): { x: number; y: number } {
  * 位置決め（dotOffsetInEllipse）とは**別のハッシュ**を使う。同じハッシュの
  * 別ビットを使うと部位と座標に相関が出て、特定の部位だけ角度が偏るため。
  */
-type TreeRegion = "canopy" | "lobeLeft" | "lobeRight" | "trunk" | "soil";
+type TreeRegion = "canopy" | "lobeLeft" | "lobeRight" | "trunk" | "soil" | "sky";
 
 const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
-  ["canopy", 55],
-  ["lobeLeft", 13],
-  ["lobeRight", 13],
-  ["trunk", 6],
-  ["soil", 13],
+  ["canopy", 45],
+  ["lobeLeft", 11],
+  ["lobeRight", 11],
+  ["trunk", 5],
+  ["soil", 11],
+  ["sky", 17],
 ] as const;
+
+/**
+ * 空に散る色丸の配置範囲。木より少し広めにとり、木の**背面**に描画する。
+ * 背面に置くことで、木に重なった分は隠れて「空いている場所にだけ現れる」形になり、
+ * 段階によって空の広さが変わっても（若木は上が広く、実は左右だけ空く）
+ * 自動的に馴染む。
+ */
+// カード内の実質的な表示幅に収める。これより広くすると、キャンバスの外にはみ出した
+// 分がReact Nativeの既定の切り取り（overflow: hidden）で消えてしまう。
+const SKY_WIDTH = 320;
 
 function pickTreeRegion(id: string): TreeRegion {
   const h = stableHash(`${id}|region`) % 100;
@@ -215,10 +226,20 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
   // 木の段階だけ、色丸を部位ごとに振り分ける（種・芽は従来どおり地面／双葉に置く）。
   const byRegion = useMemo(() => {
     const map: Record<TreeRegion, FamilyTreeCompletionDot[]> = {
-      canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [],
+      canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [], sky: [],
     };
-    if (shape.kind !== "tree") return map;
-    for (const dot of slots) map[pickTreeRegion(dot.id)].push(dot);
+    if (shape.kind === "tree") {
+      for (const dot of slots) map[pickTreeRegion(dot.id)].push(dot);
+    } else if (shape.kind === "sprout") {
+      // 芽は樹冠・幹が無いので双葉と空だけに振り分ける。芽の段階は完了報告が
+      // 10〜29件あり、2枚の葉だけでは密集しがちなため、空に逃がす意味もある。
+      for (const dot of slots) {
+        const r = pickTreeRegion(dot.id);
+        if (r === "sky") map.sky.push(dot);
+        else if (stableHash(dot.id) % 2 === 0) map.lobeLeft.push(dot);
+        else map.lobeRight.push(dot);
+      }
+    }
     return map;
   }, [slots, shape.kind]);
 
@@ -238,6 +259,14 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
 
   return (
     <View style={styles.canvas}>
+      {/* 空に散る色丸。最初の子として置くことで木より背面になり、木に重なった分は
+          隠れる＝空いている場所にだけ現れる（SKY_WIDTHのコメント参照）。 */}
+      <View style={styles.skyLayer} pointerEvents="none">
+        {byRegion.sky.map((dot) =>
+          renderDot(dot, SKY_WIDTH / 2, CANVAS_HEIGHT * 0.42, SKY_WIDTH / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.4)
+        )}
+      </View>
+
       {shape.kind === "tree" && (
         <>
           {/* 樹冠は大小3つの円を重ねて作る（1つの楕円だけだと棒付きキャンディに
@@ -312,8 +341,10 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
         const { stemHeight, leafWidth, leafHeight } = shape;
         const rx = leafWidth / 2 - DOT_SIZE / 2 - 2;
         const ry = leafHeight / 2 - DOT_SIZE / 2 - 2;
-        const leftDots = slots.filter((d) => stableHash(d.id) % 2 === 0);
-        const rightDots = slots.filter((d) => stableHash(d.id) % 2 === 1);
+        // 空に振り分けられた分は上のskyLayerが描くので、ここでは葉の分だけを使う
+        // （両方で描くと同じ色丸が二重に出てしまう）。
+        const leftDots = byRegion.lobeLeft;
+        const rightDots = byRegion.lobeRight;
         // 双葉は左右の葉を「外側の先端が上・内側の付け根が下」に傾けてV字に開く。
         // 回転方向を逆にすると2枚が外へ垂れて1つの塊に重なり、茂みのように
         // 見えてしまう（初回実装の不具合）。CSSの正の回転は時計回りなので、
@@ -436,10 +467,19 @@ export function FamilyTreeBreakdownList({
 const styles = StyleSheet.create({
   // 高さを固定し、下端（地面）を揃える。段階が上がっても画面がガタつかない。
   canvas: {
+    // 空の色丸レイヤーを収めるため横幅いっぱいに広げる。木の幅しか無いと
+    // はみ出した空の色丸が切り取られて消える。
+    width: "100%",
     height: CANVAS_HEIGHT,
     alignItems: "center",
     justifyContent: "flex-end",
     paddingBottom: theme.spacing.s4,
+  },
+  skyLayer: {
+    position: "absolute",
+    top: 0,
+    width: SKY_WIDTH,
+    height: CANVAS_HEIGHT,
   },
   leafShape: {
     position: "absolute",
