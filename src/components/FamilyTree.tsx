@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot } from "@/data/api";
@@ -113,9 +113,11 @@ const STAGE_GEOMETRY: readonly StageShape[] = [
  * 高さを固定して下端（地面）を揃えることで、小さい段階では上方向に
  * 伸びしろが見える＝「これから育つ」ことが余白として伝わるようにする。
  */
-// 実の段階の実寸に合わせた値: 樹冠256(=125*2.05) + 幹130 + 土44 ≒ 430。
-// これ以上大きくすると、種・芽の段階で上部の空白が過剰になる。
-const CANVAS_HEIGHT = 440;
+// 樹冠256(=125*2.05) + 幹130 + 土110 ≒ 496。
+// [2026-08-24再改訂] 地面を下方向に広げた分だけ全体も高くした（木の位置は変えず、
+// 下に伸ばすだけ）。スマホ812ptに対して約64%で、当初の要望「画面の3分の2くらい」
+// にほぼ一致する。
+const CANVAS_HEIGHT = 520;
 
 /** 双葉の開き角（左右対称）。 */
 const SPROUT_LEAF_ANGLE_DEG = 26;
@@ -138,13 +140,12 @@ function dotColor(dot: FamilyTreeCompletionDot): string {
   return dot.avatar_color ?? theme.colors.neutralBorder;
 }
 
-// 土は「板」に見えないよう、段階に応じて幅が変わる横長の楕円（土の盛り上がり）にする。
-// [2026-08-24拡大] 木の拡大に合わせて土も広げる（木より土が細いと不安定に見えるため）。
-const SOIL_WIDTH_BY_STAGE = [150, 190, 230, 270, 300] as const;
-// 幅に対して高さが足りないと角の丸みが潰れ、土の盛り上がりではなく
-// 「平たい板」に見えてしまう（拡大時に一度この状態になった）。
-// 幅300ptに対しては高さ44pt程度が必要。
-const SOIL_HEIGHT = 44;
+// [2026-08-24再改訂] 当初は段階ごとに土の幅を変えていたが、
+// 「地面は端まで届かせて、下方向に広げてよい」との指摘を受けて全段階で
+// 画面幅いっぱいに変更した。地面は木と違って「育つもの」ではないので、
+// 段階によって広さが変わる必然性がそもそも無い。
+// 面積が広がったことで、色丸の「地面タイプ」の配分が意味を持つようになる。
+const SOIL_HEIGHT = 110;
 /** stage0（種）で、まかれた種を散らす範囲の半径。地面に沿うよう縦は潰す。 */
 const SEED_SCATTER_RADIUS = 56;
 
@@ -201,9 +202,8 @@ const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
  * 段階によって空の広さが変わっても（若木は上が広く、実は左右だけ空く）
  * 自動的に馴染む。
  */
-// カード内の実質的な表示幅に収める。これより広くすると、キャンバスの外にはみ出した
-// 分がReact Nativeの既定の切り取り（overflow: hidden）で消えてしまう。
-const SKY_WIDTH = 320;
+/** 幅を実測できるまでの初期値。実測後は onLayout の値を使う。 */
+const FALLBACK_WIDTH = 320;
 
 function pickTreeRegion(id: string): TreeRegion {
   const h = stableHash(`${id}|region`) % 100;
@@ -221,7 +221,9 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
     [dots]
   );
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
-  const soilWidth = SOIL_WIDTH_BY_STAGE[stage] ?? SOIL_WIDTH_BY_STAGE[0];
+  // 幅は固定値ではなく実測する。固定値だと画面幅とずれ、はみ出した分が
+  // React Nativeの既定の切り取りで消える（空の色丸が出ない不具合の原因になった）。
+  const [canvasWidth, setCanvasWidth] = useState(FALLBACK_WIDTH);
 
   // 木の段階だけ、色丸を部位ごとに振り分ける（種・芽は従来どおり地面／双葉に置く）。
   const byRegion = useMemo(() => {
@@ -236,6 +238,7 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
       for (const dot of slots) {
         const r = pickTreeRegion(dot.id);
         if (r === "sky") map.sky.push(dot);
+        else if (r === "soil" || r === "trunk") map.soil.push(dot); // 芽には幹が無いので地面へ寄せる
         else if (stableHash(dot.id) % 2 === 0) map.lobeLeft.push(dot);
         else map.lobeRight.push(dot);
       }
@@ -258,7 +261,10 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
   };
 
   return (
-    <View style={styles.canvas}>
+    <View
+      style={styles.canvas}
+      onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
+    >
       {/* 背景（晴れた空）。太陽と雲は固定色で、個人色には染めない。
           いちばん背面に置き、木や色丸より目立たないよう彩度を抑える。 */}
       <View style={styles.skyBackground} pointerEvents="none">
@@ -274,7 +280,7 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
           隠れる＝空いている場所にだけ現れる（SKY_WIDTHのコメント参照）。 */}
       <View style={styles.skyLayer} pointerEvents="none">
         {byRegion.sky.map((dot) =>
-          renderDot(dot, SKY_WIDTH / 2, CANVAS_HEIGHT * 0.42, SKY_WIDTH / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.4)
+          renderDot(dot, canvasWidth / 2, CANVAS_HEIGHT * 0.36, canvasWidth / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.32)
         )}
       </View>
 
@@ -425,20 +431,17 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
         </View>
       )}
 
-      <View
-        style={[
-          styles.soil,
-          {
-            width: soilWidth,
-            borderTopLeftRadius: soilWidth / 2,
-            borderTopRightRadius: soilWidth / 2,
-            borderBottomLeftRadius: soilWidth / 2,
-            borderBottomRightRadius: soilWidth / 2,
-          },
-        ]}
-      >
+      {/* 地面は全段階で画面幅いっぱい。上端だけ緩く丸めて、平らな板ではなく
+          なだらかな地平線に見せる。 */}
+      <View style={styles.soil}>
         {byRegion.soil.map((dot) =>
-          renderDot(dot, soilWidth / 2, SOIL_HEIGHT / 2, soilWidth / 2 - DOT_SIZE * 1.5, SOIL_HEIGHT / 2 - DOT_SIZE / 2)
+          renderDot(
+            dot,
+            canvasWidth / 2,
+            SOIL_HEIGHT / 2 + 6,
+            canvasWidth / 2 - DOT_SIZE,
+            SOIL_HEIGHT / 2 - DOT_SIZE
+          )
         )}
       </View>
     </View>
@@ -513,7 +516,8 @@ const styles = StyleSheet.create({
   skyLayer: {
     position: "absolute",
     top: 0,
-    width: SKY_WIDTH,
+    left: 0,
+    right: 0,
     height: CANVAS_HEIGHT,
   },
   leafShape: {
@@ -540,8 +544,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.16)",
   },
   soil: {
+    alignSelf: "stretch",
     height: SOIL_HEIGHT,
     backgroundColor: theme.treeColors.soil,
+    borderTopLeftRadius: 44,
+    borderTopRightRadius: 44,
   },
   groundScatter: {
     width: SEED_SCATTER_RADIUS * 2,
