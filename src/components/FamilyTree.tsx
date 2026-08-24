@@ -102,17 +102,19 @@ const SPROUT_LEAF_ANGLE_DEG = 26;
 /**
  * 色丸の色を決める。
  *
- * [2026-08-24追加] 本番データを確認したところ、アクティブなメンバー6人のうち
- * 4人が avatar_color 未設定（NULL）であり、従来の実装ではそれらが一律グレーで
- * 描画されていた。07-10章「色分けによる個人の可視化」の目的が実データでは
- * ほぼ成立していない状態だったため、未設定の場合は報告者ID（reported_by）から
- * 決定論的にパレット色（1.3節の8色）を割り当てるフォールバックを入れる。
- * DBには書き込まず表示上のみの割り当てであり、同じ人には常に同じ色が出る。
+ * [2026-08-24] 一時は「avatar_colorがNULLなら報告者IDから色を導出する」という
+ * 表示側フォールバックを入れたが、**内訳リストのアバター（MemberAvatar）には
+ * 同じ処理が無いため、木の色丸と内訳の色が食い違う**という不整合をユーザーの
+ * 実機確認で指摘された。表示箇所ごとにフォールバックを実装して回る方式は
+ * 漏れが必ず起きるため撤回し、データ側で全メンバーに色を持たせる方式に変更した
+ * （マイグレーション 20260824221436_assign_avatar_color_to_all_members.sql。
+ * 保護者・みまもりメンバーを作る3つのRPCが avatar_color を一切設定していない
+ * という根本原因を修正し、既存メンバーにも色を補充した）。
+ * よってここは素直にavatar_colorを使う。万一NULLが残っていた場合はグレーに
+ * なるが、それは内訳リスト側の表示とも一致する（食い違わない）。
  */
 function dotColor(dot: FamilyTreeCompletionDot): string {
-  if (dot.avatar_color) return dot.avatar_color;
-  const palette = theme.memberColorPalette;
-  return palette[stableHash(dot.reported_by) % palette.length].value;
+  return dot.avatar_color ?? theme.colors.neutralBorder;
 }
 
 // 土は「板」に見えないよう、段階に応じて幅が変わる横長の楕円（土の盛り上がり）にする。
