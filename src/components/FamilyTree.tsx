@@ -259,7 +259,18 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
 
   return (
     <View style={styles.canvas}>
-      {/* 空に散る色丸。最初の子として置くことで木より背面になり、木に重なった分は
+      {/* 背景（晴れた空）。太陽と雲は固定色で、個人色には染めない。
+          いちばん背面に置き、木や色丸より目立たないよう彩度を抑える。 */}
+      <View style={styles.skyBackground} pointerEvents="none">
+        <View style={styles.sun} />
+        <View style={[styles.cloudPuff, { width: 58, height: 58, borderRadius: 29, left: 18, top: 96 }]} />
+        <View style={[styles.cloudPuff, { width: 42, height: 42, borderRadius: 21, left: 56, top: 108 }]} />
+        <View style={[styles.cloudPuff, { width: 36, height: 36, borderRadius: 18, left: 0, top: 112 }]} />
+        <View style={[styles.cloudPuff, { width: 46, height: 46, borderRadius: 23, right: 24, top: 168 }]} />
+        <View style={[styles.cloudPuff, { width: 34, height: 34, borderRadius: 17, right: 58, top: 178 }]} />
+      </View>
+
+      {/* 空に散る色丸。木より背面になるよう木の前に置く。木に重なった分は
           隠れる＝空いている場所にだけ現れる（SKY_WIDTHのコメント参照）。 */}
       <View style={styles.skyLayer} pointerEvents="none">
         {byRegion.sky.map((dot) =>
@@ -474,6 +485,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     paddingBottom: theme.spacing.s4,
+  },
+  skyBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: CANVAS_HEIGHT,
+    backgroundColor: theme.treeColors.sky,
+    borderRadius: theme.radius.childXl,
+    overflow: "hidden",
+  },
+  sun: {
+    position: "absolute",
+    right: 26,
+    top: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.treeColors.sun,
+  },
+  cloudPuff: {
+    position: "absolute",
+    backgroundColor: theme.treeColors.cloud,
+    opacity: 0.85,
   },
   skyLayer: {
     position: "absolute",

@@ -150,6 +150,11 @@ export const treeColors = {
   soil: "#B98A5A",
   trunk: "#8B5E3C",
   foliageBase: "#BFE3C6",
+  // [2026-08-24追加] 「もっと背景をよくして（天気が良い感じ）」との要望に対応。
+  // 木の共有部分と同じく固定色であり、個人色（avatar_color）には絶対に染めない。
+  sky: "#DCF0FB",
+  sun: "#FFE3A3",
+  cloud: "#FFFFFF",
 } as const;
 
 // ---- 8章 実施履歴カレンダー: 日別セルの濃淡（GitHubヒートマップ的表現） ----
