@@ -173,6 +173,37 @@ function dotOffsetOnGround(id: string): { x: number; y: number } {
   return { x, y: y * 0.42 };
 }
 
+/**
+ * 木の段階（stage2以降）で、色丸をどの部位に置くかを決める。
+ *
+ * [2026-08-24追加・本部長] 当初は樹冠の中央の円の内側にしか置いていなかったが、
+ * ユーザーから「木全体に色を散らばせたい。そのほうが1つ1つの木に特徴が出て
+ * 面白い」との要望を受けて、幹・地面・葉の左右のふくらみにも置けるようにした。
+ * 割合は樹冠を主役に保ちつつ、他の部位にも必ず幾つか乗るよう調整している。
+ *
+ * 位置決め（dotOffsetInEllipse）とは**別のハッシュ**を使う。同じハッシュの
+ * 別ビットを使うと部位と座標に相関が出て、特定の部位だけ角度が偏るため。
+ */
+type TreeRegion = "canopy" | "lobeLeft" | "lobeRight" | "trunk" | "soil";
+
+const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
+  ["canopy", 55],
+  ["lobeLeft", 13],
+  ["lobeRight", 13],
+  ["trunk", 6],
+  ["soil", 13],
+] as const;
+
+function pickTreeRegion(id: string): TreeRegion {
+  const h = stableHash(`${id}|region`) % 100;
+  let acc = 0;
+  for (const [region, weight] of REGION_WEIGHTS) {
+    acc += weight;
+    if (h < acc) return region;
+  }
+  return "canopy";
+}
+
 export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTreeCompletionDot[] }) {
   const slots = useMemo(
     () => pickDisplaySlots(dots).filter((d): d is FamilyTreeCompletionDot => d !== null),
@@ -180,6 +211,30 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
   );
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
   const soilWidth = SOIL_WIDTH_BY_STAGE[stage] ?? SOIL_WIDTH_BY_STAGE[0];
+
+  // 木の段階だけ、色丸を部位ごとに振り分ける（種・芽は従来どおり地面／双葉に置く）。
+  const byRegion = useMemo(() => {
+    const map: Record<TreeRegion, FamilyTreeCompletionDot[]> = {
+      canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [],
+    };
+    if (shape.kind !== "tree") return map;
+    for (const dot of slots) map[pickTreeRegion(dot.id)].push(dot);
+    return map;
+  }, [slots, shape.kind]);
+
+  /** 指定した楕円の中に、決定論的に色丸を1つ置く。 */
+  const renderDot = (dot: FamilyTreeCompletionDot, cx: number, cy: number, rx: number, ry: number) => {
+    const { x, y } = dotOffsetInEllipse(dot.id, Math.max(rx, 0), Math.max(ry, 0));
+    return (
+      <View
+        key={dot.id}
+        style={[
+          styles.dot,
+          { backgroundColor: dotColor(dot), left: cx + x - DOT_SIZE / 2, top: cy + y - DOT_SIZE / 2 },
+        ]}
+      />
+    );
+  };
 
   return (
     <View style={styles.canvas}>
@@ -215,22 +270,15 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
                     { width: mainSize, height: mainSize, borderRadius: leafRadius, left: (boxWidth - mainSize) / 2, top: 0 },
                   ]}
                 />
-                {slots.map((dot) => {
-                  const { x, y } = dotOffsetInCircle(dot.id, dotRadius);
-                  return (
-                    <View
-                      key={dot.id}
-                      style={[
-                        styles.dot,
-                        {
-                          backgroundColor: dotColor(dot),
-                          left: boxWidth / 2 + x - DOT_SIZE / 2,
-                          top: leafRadius + y - DOT_SIZE / 2,
-                        },
-                      ]}
-                    />
-                  );
-                })}
+                {byRegion.canopy.map((dot) =>
+                  renderDot(dot, boxWidth / 2, leafRadius, dotRadius, dotRadius)
+                )}
+                {byRegion.lobeLeft.map((dot) =>
+                  renderDot(dot, sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE)
+                )}
+                {byRegion.lobeRight.map((dot) =>
+                  renderDot(dot, boxWidth - sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE)
+                )}
               </View>
             );
           })()}
@@ -243,7 +291,17 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
               borderBottomLeftRadius: 3,
               borderBottomRightRadius: 3,
             }}
-          />
+          >
+            {byRegion.trunk.map((dot) =>
+              renderDot(
+                dot,
+                shape.trunkWidth / 2,
+                shape.trunkHeight / 2,
+                shape.trunkWidth / 2 - DOT_SIZE / 2,
+                shape.trunkHeight / 2 - DOT_SIZE
+              )
+            )}
+          </View>
         </>
       )}
 
@@ -336,7 +394,11 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
             borderBottomRightRadius: soilWidth / 2,
           },
         ]}
-      />
+      >
+        {byRegion.soil.map((dot) =>
+          renderDot(dot, soilWidth / 2, SOIL_HEIGHT / 2, soilWidth / 2 - DOT_SIZE * 1.5, SOIL_HEIGHT / 2 - DOT_SIZE / 2)
+        )}
+      </View>
     </View>
   );
 }
