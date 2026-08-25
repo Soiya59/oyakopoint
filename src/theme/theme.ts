@@ -197,6 +197,21 @@ export const drawingLimits = {
   maxBytes: 20480,
 } as const;
 
+// ---- 1.10 ガチャのアクセントカラー・景品カタログ（`color-gacha-*`、2026-08-26追加、07-13-1章対応） ----
+// 参照: デザイントークン.md 1.10節。「あと◯回でガチャ」の進捗表示・まわすボタン・
+// 景品公開演出専用の差し色（お祭り・くじ引きを連想させる金色）。
+export const gachaColors = {
+  accent: "#FFC94D",
+  accentSoft: "#FFF6DE",
+} as const;
+
+// 5コマ表示（プレート）の直径。子ども向けのみやや大きくする（デザイントークン.md 1.10節）。
+export const gachaPlateSize = {
+  parent: 14,
+  child: 20,
+  supporter: 14,
+} as const;
+
 // ---- 5. モーション ----
 export const motion = {
   successDurationMs: 260,
@@ -216,6 +231,8 @@ export const theme = {
   treeColors,
   drawingPalette,
   drawingLimits,
+  gachaColors,
+  gachaPlateSize,
 } as const;
 
 export type Theme = typeof theme;

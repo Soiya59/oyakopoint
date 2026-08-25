@@ -3,10 +3,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import GachaHomeWidget from "@/components/GachaHomeWidget";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import MemberAvatar from "@/components/MemberAvatar";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
+import { useGachaProgress } from "@/hooks/useGacha";
 
 /**
  * C5 やることリスト（ホーム）（主要5画面のひとつ）
@@ -22,6 +24,11 @@ export default function ChildHomeScreen() {
   // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
   // 20.6章決定7）。段階名のみを軽く添える（内訳・件数までは表示しない、C5行の設計）。
   const { season: treeSeason } = useFamilyTreeSummary();
+  // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
+  // ワイヤーフレーム.md 21.0節決定1「特に子ども向け（C5）では最も目立つ専用カード」・
+  // 21.1節「残高表示のすぐ下、他の全リンクより上に配置」）。
+  const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
+    useGachaProgress(state.activeChildMemberId);
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -76,6 +83,14 @@ export default function ChildHomeScreen() {
       <View style={styles.pointsRow}>
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>
       </View>
+
+      <GachaHomeWidget
+        tone="child"
+        loadState={gachaLoadState}
+        remaining={gachaRemaining}
+        canDrawNow={gachaCanDrawNow}
+        onPress={() => router.push("/child/gacha")}
+      />
 
       {/* [2026-08-20追加] 双方向リアクション（子→親）への導線。
           app/child/family-activity.tsx参照。 */}

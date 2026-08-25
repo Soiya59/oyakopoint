@@ -31,6 +31,9 @@ import type {
   FamilyMember,
   FamilyTreeMemberBreakdown,
   FamilyTreeSeason,
+  GachaDrawResult,
+  GachaMemberProgressSummary,
+  GachaPresetOrnament,
   GratitudePoint,
   MemberPoints,
   ReactionKind,
@@ -1105,6 +1108,88 @@ export async function deleteDrawing(client: SupabaseClient, drawingId: string): 
   const { error } = await client.from("family_drawings").delete().eq("id", drawingId);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
+}
+
+// ============================================================
+// ガチャ（要件定義書07-13-1章、API仕様.md 12.1・12.3章）
+// [2026-08-26新設・第3段階] 対応するスキーマはスキーマ設計.sql 33a章
+// gacha_member_progress_summary／33c章 gacha_preset_ornaments／
+// 33d章 gacha_draws・draw_gacha()。第1段階（69章）で本番適用・秘匿性検証済み。
+// [重要] decorate_tree_with_gacha_prize()（木への飾り付け、第4段階）・
+// コレクター棚向けの一覧クエリ（第5段階）はここには一切実装しない。
+// ============================================================
+
+/**
+ * API仕様.md 12.1章「あと◯回でガチャ」。行が存在しない（`maybeSingle()`が`null`）
+ * 場合は対象メンバーがまだ1件も完了報告していない状態であり、呼び出し側は
+ * remaining_until_next_draw=5・can_draw_now=falseとして扱うこと（スキーマ設計.sql 33a章）。
+ */
+export async function fetchGachaProgressSummary(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<GachaMemberProgressSummary | null>> {
+  const { data, error } = await client
+    .from("gacha_member_progress_summary")
+    .select("*")
+    .eq("member_id", memberId)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as GachaMemberProgressSummary | null) ?? null };
+}
+
+/**
+ * API仕様.md 12.3章「ガチャを引く」。`draw_gacha()`は引数を一切取らない
+ * （景品をクライアントが指定できないようにするための構造的な設計、スキーマ設計.sql 33d章）。
+ * `RETURNS TABLE`のため`data`は配列で返る（常に1行）。
+ */
+export async function drawGacha(client: SupabaseClient): Promise<ApiResult<GachaDrawResult>> {
+  const { data, error } = await client.rpc("draw_gacha");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: { code: "unknown_error", message: "抽選結果を取得できませんでした" } };
+  return { ok: true, data: row as GachaDrawResult };
+}
+
+/**
+ * API仕様.md 12.3章「景品の詳細」既製の飾り側。`gacha_preset_ornaments_select_authenticated`
+ * ポリシーにより認証済みなら誰でもSELECT可（全家族共通のグローバルカタログ、33c章）。
+ */
+export async function fetchGachaPresetOrnament(
+  client: SupabaseClient,
+  ornamentId: string
+): Promise<ApiResult<GachaPresetOrnament>> {
+  const { data, error } = await client
+    .from("gacha_preset_ornaments")
+    .select("*")
+    .eq("id", ornamentId)
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as GachaPresetOrnament };
+}
+
+/** `family_drawings`に作成者の表示名をネストした、ガチャ結果表示用の1行。 */
+export interface GachaPrizeDrawing extends FamilyDrawing {
+  family_members: { display_name: string } | null;
+}
+
+/**
+ * API仕様.md 12.3章「景品の詳細」家族の絵側。`draw_gacha()`実行後は既に
+ * `is_published=true`になっているため`family_drawings_select_scoped`ポリシーの
+ * SELECT条件（`is_published`側）を満たし、家族の誰からでも取得できる。
+ * 「誰が描いたものかが分かる形にする」（依頼要件、07-13-2章「秘密が初めて家族に
+ * 公開される瞬間」）ため、作成者の表示名をネストして取得する。
+ */
+export async function fetchGachaPrizeDrawing(
+  client: SupabaseClient,
+  drawingId: string
+): Promise<ApiResult<GachaPrizeDrawing>> {
+  const { data, error } = await client
+    .from("family_drawings")
+    .select("*, family_members!artist_member_id(display_name)")
+    .eq("id", drawingId)
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as unknown as GachaPrizeDrawing };
 }
 
 /** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */

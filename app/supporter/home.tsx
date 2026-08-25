@@ -3,9 +3,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
+import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useGachaProgress } from "@/hooks/useGacha";
 
 /**
  * S1 みまもりホーム
@@ -21,6 +23,11 @@ import { useAppData } from "@/data/store";
  */
 export default function SupporterHomeScreen() {
   const { state } = useAppData();
+  // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
+  // ワイヤーフレーム.md 21.1節「S1みまもりホーム内。ホーム上部、既存のショートカット
+  // グリッドとは別枠で配置。演出は控えめ」）。
+  const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
+    useGachaProgress(state.activeParentMemberId);
   const recent = [...state.completions]
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
@@ -43,6 +50,14 @@ export default function SupporterHomeScreen() {
   return (
     <Screen tone="supporter">
       <Text style={theme.typography.supporterTitle}>{state.family.name} の みまもり</Text>
+
+      <GachaHomeWidget
+        tone="supporter"
+        loadState={gachaLoadState}
+        remaining={gachaRemaining}
+        canDrawNow={gachaCanDrawNow}
+        onPress={() => router.push("/supporter/gacha")}
+      />
 
       <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>最近のようす</Text>
       <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>

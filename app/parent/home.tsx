@@ -3,10 +3,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
+import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
+import { useGachaProgress } from "@/hooks/useGacha";
 import { useWeeklyDigest } from "@/hooks/useWeeklyDigest";
 
 /**
@@ -36,6 +38,11 @@ export default function ParentHomeScreen() {
   // 決定7）。段階名・今シーズンの完了報告数の2情報のみを表示し、内訳・色つき要素の
   // 密な表示はP26（→app/parent/family-tree.tsx）側で行う。
   const { season: treeSeason } = useFamilyTreeSummary();
+  // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
+  // ワイヤーフレーム.md 21.0節決定1・21.1節）。木ウィジェットの近く・メニューより上に
+  // 配置する（依頼どおり）。専用の差し色（color-gacha-accent）を持つ独立コンポーネント。
+  const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
+    useGachaProgress(state.activeParentMemberId);
   // [2026-08-23追加・5回目のスコープ変更] P25「かぞくのみまもりメンバーのお手伝い
   // （参考一覧）」への導線。画面一覧・遷移図.md P25行「家族にみまもりメンバーが
   // 1人もいない場合は導線自体を表示しない」に対応し、家族に有効なsupporterが
@@ -109,6 +116,14 @@ export default function ParentHomeScreen() {
           </Text>
         </Card>
       </Pressable>
+
+      <GachaHomeWidget
+        tone="parent"
+        loadState={gachaLoadState}
+        remaining={gachaRemaining}
+        canDrawNow={gachaCanDrawNow}
+        onPress={() => router.push("/parent/gacha")}
+      />
 
       <Pressable onPress={() => router.push("/parent/approvals")}>
         <Card style={styles.pendingCard}>

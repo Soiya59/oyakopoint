@@ -280,6 +280,45 @@ export interface FamilyDrawing {
   created_at: string;
 }
 
+// [新設・2026-08-26・第3段階] ガチャ（要件定義書07-13-1章、スキーマ設計.sql
+// 33a章 gacha_member_progress_summary／33c章 gacha_preset_ornaments／
+// 33d章 gacha_draws・draw_gacha()、API仕様.md 12.1・12.3章）。
+// 木への飾り付け・コレクター棚（07-13章の第4〜5段階）はここでは扱わない
+// （decorate_tree_with_gacha_prize()は第3段階の実装範囲外。
+// 開発部/成果物/実装メモ.md参照）。
+
+/** gacha_member_progress_summary Viewの1行（API仕様.md 12.1章）。 */
+export interface GachaMemberProgressSummary {
+  member_id: string;
+  family_id: string;
+  lifetime_completion_count: number;
+  draw_count: number;
+  next_draw_threshold: number;
+  /** あと何回で次のガチャが引けるか。0なら引ける。 */
+  remaining_until_next_draw: number;
+  can_draw_now: boolean;
+}
+
+export type GachaPrizeKind = "preset_ornament" | "family_drawing";
+
+/** draw_gacha()（引数なし）の戻り値1行（API仕様.md 12.3章）。 */
+export interface GachaDrawResult {
+  draw_id: string;
+  prize_kind: GachaPrizeKind;
+  preset_ornament_id: string | null;
+  prize_drawing_id: string | null;
+}
+
+/** gacha_preset_ornaments テーブルの1行（既製の飾りカタログ、全家族共通）。 */
+export interface GachaPresetOrnament {
+  id: string;
+  ornament_key: string;
+  display_name: string;
+  emoji: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 /** weekly_family_digests テーブルの1行（API仕様.md 10章「今週のまとめメッセージ」）。 */
 export type WeeklyDigestPattern =
   | "tree_growth"
