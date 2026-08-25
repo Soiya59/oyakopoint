@@ -251,6 +251,35 @@ export interface FamilyTreeMemberBreakdown {
   completion_count: number;
 }
 
+// [新設・2026-08-26] お絵かき（要件定義書07-13-2章、スキーマ設計.sql 33b章
+// family_drawings、API仕様.md 12.2章）。ガチャ・コレクター棚・木への飾り付け
+// （07-13章の第3〜5段階）はここでは扱わない（第2段階のみの実装範囲。
+// 開発部/成果物/実装メモ.md参照）。
+
+/** line_data(JSONB)内の線1本。cは8色固定パレットのHEXコードのいずれか。 */
+export interface FamilyDrawingLine {
+  c: string;
+  /** [x1,y1,x2,y2,...] のフラット配列。座標は0〜1000の整数（スキーマ設計.sql 33b章）。 */
+  p: number[];
+}
+
+/** family_drawings.line_data(JSONB)本体。`is_valid_drawing_line_data()`が検証する形式と一致させる。 */
+export interface FamilyDrawingLineData {
+  v: 1;
+  lines: FamilyDrawingLine[];
+}
+
+/** family_drawings テーブルの1行。 */
+export interface FamilyDrawing {
+  id: string;
+  family_id: string;
+  artist_member_id: string;
+  line_data: FamilyDrawingLineData;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+}
+
 /** weekly_family_digests テーブルの1行（API仕様.md 10章「今週のまとめメッセージ」）。 */
 export type WeeklyDigestPattern =
   | "tree_growth"

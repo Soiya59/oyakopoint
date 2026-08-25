@@ -93,6 +93,12 @@ export default function ChildHomeScreen() {
         </Text>
       </Pressable>
 
+      {/* [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
+          「子ども: [C5 やることリスト]から ──▶ [C24 おえかき]」。 */}
+      <Pressable onPress={() => router.push("/child/drawing")}>
+        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>🎨 おえかきする →</Text>
+      </Pressable>
+
       <View style={{ marginTop: theme.spacing.s2 }}>
         {loadState === "loading" && <SkeletonList count={4} />}
         {loadState === "error" && (

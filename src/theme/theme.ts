@@ -169,6 +169,34 @@ export function pointsTierBackground(totalPoints: number): string {
   return "rgba(16,185,129,0.48)";
 }
 
+// ---- 1.9 お絵かきの8色パレット（`color-drawing-*`、2026-08-26追加、07-13-2章対応） ----
+// 本部長決定済みの固定8色。DB側 is_valid_drawing_line_data() の許可リストと
+// 完全に一致させること（順序は不問、値の集合のみ一致していればよい）。
+export const drawingPalette = [
+  { name: "くろ", value: "#2E2E2E" },
+  { name: "あか", value: "#E4572E" },
+  { name: "オレンジ", value: "#F2913D" },
+  { name: "きいろ", value: "#F5C518" },
+  { name: "みどり", value: "#3FA34D" },
+  { name: "あお", value: "#2F80ED" },
+  { name: "ピンク", value: "#E5449B" },
+  { name: "むらさき", value: "#8B5CD6" },
+] as const;
+
+// お絵かき（07-13-2章）のキャンバス・上限値。デザイントークン.md 1.9節・
+// スキーマ設計.sql 33b章（is_valid_drawing_line_data / max_unpublished_drawings_per_member）
+// と値を一致させること。DB側のCHECK制約が最終防衛線であり、ここでの値は
+// あくまでUX目的の事前ガード（DBエラーをユーザーに見せないため）にすぎない。
+export const drawingLimits = {
+  canvasDiameter: 280,
+  swatchSize: 56, // 1.9節「役割を問わず56dpにする理由」: 全ロール共通で56dp
+  maxUnpublished: 3, // max_unpublished_drawings_per_member()と一致させる単一の定義箇所
+  maxLines: 150,
+  maxPointsPerLine: 300, // p配列は[x,y]の組なので要素数は最大600
+  maxTotalPoints: 3000,
+  maxBytes: 20480,
+} as const;
+
 // ---- 5. モーション ----
 export const motion = {
   successDurationMs: 260,
@@ -186,6 +214,8 @@ export const theme = {
   motion,
   treeStages,
   treeColors,
+  drawingPalette,
+  drawingLimits,
 } as const;
 
 export type Theme = typeof theme;

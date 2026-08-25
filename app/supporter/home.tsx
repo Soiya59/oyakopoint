@@ -34,6 +34,9 @@ export default function SupporterHomeScreen() {
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章
     // 「S1みまもりホーム内（既存のショートカットグリッドに1枠追加）」）。→S14。
     { emoji: "🌿", label: "家族の木", path: "/supporter/family-tree" },
+    // [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
+    // 「みまもりメンバー: [S1 みまもりホーム]のショートカット『お絵かき』 ──▶ [S18 お絵かき]」。
+    { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     { emoji: "⚙️", label: "設定", path: "/supporter/settings" },
   ];
 

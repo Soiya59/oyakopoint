@@ -64,6 +64,9 @@ export default function ParentHomeScreen() {
     // ポイントで交換するための別画面（app/parent/my-rewards.tsx）への導線を追加した。
     { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
+    // [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
+    // 「保護者: [P7 ホーム]のメニュー『お絵かき』 ──▶ [P30 お絵かき]」。
+    { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     { emoji: "👨‍👩‍👧‍👦", label: "家族", path: "/parent/family" },
     { emoji: "⚙️", label: "設定", path: "/parent/settings" },
   ];

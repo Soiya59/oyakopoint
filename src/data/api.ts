@@ -24,6 +24,8 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   Family,
+  FamilyDrawing,
+  FamilyDrawingLineData,
   FamilyInvite,
   FamilyInviteLookupResult,
   FamilyMember,
@@ -1044,6 +1046,66 @@ export async function fetchFamilyTreeCompletionDots(
 // （API仕様.md 10.1章）。生成用RPCはservice_roleにのみEXECUTE権限があり、
 // クライアント（authenticated）からは呼び出せない（実装メモ.md 66章参照）。
 // ============================================================
+
+// ============================================================
+// お絵かき（要件定義書07-13-2章、API仕様.md 12.2章）
+// [2026-08-26新設・第2段階] 対応するスキーマはスキーマ設計.sql 33b章 family_drawings。
+// 第1段階（DB基盤、実装メモ.md 69章）は本部長により秘匿性検証済み・本番適用済み。
+// [重要] draw_gacha()等（33d章・API仕様.md 12.3章）はガチャ機能（第3段階）の範囲であり、
+// ここには一切実装しない。
+// ============================================================
+
+/**
+ * API仕様.md 12.2章「自分の絵の一覧（未公開＋公開済み）を見る」。RLS
+ * （family_drawings_select_scoped、33b章）により他人の未公開の絵は構造上
+ * 一切返らない（0件になるだけでエラーにもならない）。第2段階のUIは未公開分のみを
+ * 表示に使うが、クエリ自体はAPI仕様.md記載どおり絞り込まずに取得しておく
+ * （将来のコレクター棚〔第5段階〕実装時にそのまま流用できるようにするため）。
+ */
+export async function fetchMyDrawings(client: SupabaseClient, memberId: string): Promise<ApiResult<FamilyDrawing[]>> {
+  const { data, error } = await client
+    .from("family_drawings")
+    .select("*")
+    .eq("artist_member_id", memberId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as FamilyDrawing[] };
+}
+
+/**
+ * API仕様.md 12.2章「新しい絵を描いて保存」。family_id/artist_member_id/is_published/
+ * published_at/revealed_by_draw_idはいずれもDBトリガー（family_drawings_before_insert、
+ * 33b章）が常に上書きするため送らない。未公開の保有上限（同時3枚、
+ * max_unpublished_drawings_per_member()）を超えるINSERTはcheck_violation（23514、
+ * PG_ERRCODE.checkViolation）で拒否される。クライアント側でも同じ上限（
+ * theme.drawingLimits）で事前にボタンを無効化し、通常この経路のエラーには
+ * 到達しない設計だが、DB側を最終防衛線として保つ（開発部CLAUDE.md/API仕様.md 12.2章）。
+ */
+export async function createDrawing(
+  client: SupabaseClient,
+  lineData: FamilyDrawingLineData
+): Promise<ApiResult<FamilyDrawing>> {
+  const { data, error } = await client
+    .from("family_drawings")
+    .insert({ line_data: lineData })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyDrawing };
+}
+
+/**
+ * API仕様.md 12.2章「未公開の絵を削除する（描き直したい場合）」
+ * （【2026-08-25本部長決定B】family_drawings_delete_own_unpublishedポリシー）。
+ * 公開済み（is_published=true）の行はRLSのUSING句を満たさないため対象0件になる
+ * だけでエラーにはならない（33b章コメント参照。呼び出し側で「削除できなかった」旨の
+ * ハンドリングは不要）。
+ */
+export async function deleteDrawing(client: SupabaseClient, drawingId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("family_drawings").delete().eq("id", drawingId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
 
 /** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */
 export async function fetchLatestWeeklyFamilyDigest(
