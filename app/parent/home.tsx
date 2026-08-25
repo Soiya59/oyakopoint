@@ -50,28 +50,36 @@ export default function ParentHomeScreen() {
     .slice(0, 3);
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  const shortcuts: { emoji: string; label: string; path: string }[] = [
+  // [2026-08-26整理・本部長] メニュー項目が12個に達し「多すぎる」との指摘を受けて
+  // 2グループに分けた。項目自体は1つも減らしていない。
+  //
+  // 混雑の原因は項目数ではなく**役割の混在**だった。07-4章「親の完了報告（対等な
+  // 参加）」以降、保護者は「家族を管理する人」と「自分もお手伝いをする参加者」の
+  // 2つの立場を持つが、その道具が1つの列に並んでいたため、
+  // 「お手伝い（管理）」と「じぶんのお手伝い（自分がやる）」、
+  // 「ごほうび（管理）」と「じぶんのごほうび（自分が交換する）」が隣り合って
+  // 取り違えやすくなっていた（🎁の絵文字が2項目で重複してもいた）。
+  // 立場ごとに分けることで、一度に見る数が5〜6個に収まる。
+  const myShortcuts: { emoji: string; label: string; path: string }[] = [
+    { emoji: "🧹", label: "じぶんのお手伝い", path: "/parent/my-chores" },
+    { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
+    { emoji: "📔", label: "通帳", path: "/parent/points" },
+    { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
+    { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
+  ];
+
+  const familyShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
     { emoji: "🧺", label: "お手伝い", path: "/parent/chores" },
-    { emoji: "🎁", label: "ごほうび", path: "/parent/rewards" },
-    { emoji: "📔", label: "通帳", path: "/parent/points" },
-    // [2026-08-16追加] 画面一覧・遷移図.md P7行「『じぶんのお手伝い』（→P19）・
-    // 『感謝ポイント』（→P21）のショートカットを追加」に対応。
-    { emoji: "🧹", label: "じぶんのお手伝い", path: "/parent/my-chores" },
-    // [2026-08-18追加] ユーザーの指摘「親のコマンドでもご褒美ができるようにしたい」
-    // 対応。app/parent/rewards.tsx（P12）はごほうびの管理のみのため、じぶんの
-    // ポイントで交換するための別画面（app/parent/my-rewards.tsx）への導線を追加した。
-    { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
-    { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
-    // [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
-    // 「保護者: [P7 ホーム]のメニュー『お絵かき』 ──▶ [P30 お絵かき]」。
-    { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
+    // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
+    { emoji: "🏆", label: "ごほうび", path: "/parent/rewards" },
     { emoji: "👨‍👩‍👧‍👦", label: "家族", path: "/parent/family" },
     { emoji: "⚙️", label: "設定", path: "/parent/settings" },
   ];
   if (hasAnySupporter) {
-    shortcuts.push({ emoji: "👀", label: "かぞくのみまもりメンバーのお手伝い", path: "/parent/supporter-chores" });
+    // ラベルが1行に収まらず折り返していたため短縮した（遷移先は変更なし）。
+    familyShortcuts.push({ emoji: "👀", label: "みまもりの記録", path: "/parent/supporter-chores" });
   }
 
   return (
@@ -134,11 +142,21 @@ export default function ParentHomeScreen() {
         })}
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        メニュー
-      </Text>
+      {/* [2026-08-26整理] 「わたしの」＝保護者が参加者として使うもの、
+          「かぞくの管理」＝管理者として使うもの。上のconst定義のコメント参照。 */}
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしの</Text>
       <View style={styles.grid}>
-        {shortcuts.map((s) => (
+        {myShortcuts.map((s) => (
+          <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
+            <Text style={{ fontSize: 28 }}>{s.emoji}</Text>
+            <Text style={theme.typography.parentBody}>{s.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくの管理</Text>
+      <View style={styles.grid}>
+        {familyShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
             <Text style={{ fontSize: 28 }}>{s.emoji}</Text>
             <Text style={theme.typography.parentBody}>{s.label}</Text>
@@ -150,6 +168,11 @@ export default function ParentHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  sectionHeading: {
+    marginTop: theme.spacing.s6,
+    marginBottom: theme.spacing.s2,
+    color: theme.colors.neutralTextSecondary,
+  },
   digestSkeleton: {
     marginTop: theme.spacing.s2,
     height: 18,
