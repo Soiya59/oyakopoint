@@ -1035,9 +1035,10 @@ export interface FamilyTreeCompletionDot {
  * [2026-08-26改訂・第4段階] `seasonEndIso`を追加した。省略時（進行中シーズン）は
  * 従来どおり`reported_at >= seasonStartIso`のみで絞り込む。指定すると
  * `< seasonEndIso`も加わり、過去シーズンの木を当時のデータのまま再現する用途にも
- * 使える（API仕様.md 12.5章「過去の木」区画のクエリと同じ形状。専用の一覧画面
- * 〔コレクター棚、第5段階〕は今回実装しないが、このデータ取得自体は再現可能な
- * 状態にしておく、という依頼への対応）。
+ * 使える（API仕様.md 12.5章「過去の木」区画のクエリと同じ形状。
+ * [2026-08-27追加・第5段階] コレクター棚「過去の木」区画（本ファイル末尾
+ * `fetchFamilyCollectedGachaDraws`の近く、useCollectorShelf.ts）が
+ * `seasonEndIso`を指定してこの関数をそのまま呼び出す）。
  */
 /**
  * PostgRESTの埋め込み結果を必ず配列として扱うための正規化。
@@ -1198,7 +1199,8 @@ export async function deleteDrawing(client: SupabaseClient, drawingId: string): 
 // 33d章 gacha_draws・draw_gacha()。第1段階（69章）で本番適用・秘匿性検証済み。
 // [2026-08-26追加・第4段階] 木への飾り付け（decorate_tree_with_gacha_prize()、
 // family_tree_decorations）は本セクション末尾に追加した。
-// [重要] コレクター棚向けの一覧クエリ（第5段階）はここには一切実装しない。
+// [2026-08-27追加・第5段階] コレクター棚「集めたもの」区画向けの一覧クエリ
+// （fetchFamilyCollectedGachaDraws）は本セクション末尾に追加した。
 // ============================================================
 
 /**
@@ -1279,7 +1281,9 @@ export async function fetchGachaPrizeDrawing(
 // [2026-08-26新設・第4段階] 対応するスキーマはスキーマ設計.sql 33e章
 // family_tree_decorations・decorate_tree_with_gacha_prize()。第1段階（69章）で
 // 本番適用済み（家族の木のDB基盤と同じマイグレーションに含まれる）。
-// コレクター棚（第5段階、集めたもの一覧・過去の木の専用画面）はここには実装しない。
+// コレクター棚（第5段階、集めたもの一覧・過去の木）は本ファイル末尾の専用セクションに
+// 実装した（fetchFamilyCollectedGachaDraws。過去の木は既存のfetchFamilyTreeCompletionDots・
+// fetchFamilyTreeSeasonHistoryをそのまま流用するため新規関数は無い）。
 // ------------------------------------------------------------
 
 /**
@@ -1386,6 +1390,88 @@ export async function decorateTreeWithGachaPrize(
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as string };
+}
+
+// ------------------------------------------------------------
+// コレクター棚「集めたもの」区画（要件定義書07-13-3章、API仕様.md 12.4章）
+// [2026-08-27新設・第5段階（最終段階）]
+// 「過去の木」区画は新規関数を追加しない（要件定義書07-13-7章・API仕様.md 12.5章の
+// とおり既存の`fetchFamilyTreeCompletionDots`〔seasonEndIso指定〕・
+// `fetchFamilyTreeSeasonHistory`〔29章〕の組み合わせで完全に再現できるため）。
+//
+// [本部長への実装メモ・重要] API仕様.md 12.4章記載のクエリ例
+// `prize_drawing:family_drawings(line_data,artist_member_id)` は
+// 第4段階でPGRST201（曖昧な関係）を引き起こした形と全く同じ形（gacha_draws↔
+// family_drawingsの相互参照）である。本関数では33d章コメントに明記されている
+// 実際のFK制約名（`gacha_draws_prize_drawing_id_fkey`、`ALTER TABLE ADD COLUMN
+// prize_drawing_id UUID NULL REFERENCES family_drawings(id)`の暗黙生成名）を
+// 明示して回避した。実際に叩いて確認した結果は開発部/成果物/実装メモ.md
+// 「第5段階：コレクター棚」章に記録した。
+// ------------------------------------------------------------
+
+/**
+ * コレクター棚「集めたもの」区画の1件（API仕様.md 12.4章）。
+ * `gacha_draws`から見て`member_id`（誰が引いたか＝獲得した人）・
+ * `preset_ornament_id`・`prize_drawing_id`はいずれも本テーブル自身が持つ外部キー
+ * であるため、埋め込みは常に単一オブジェクトで返る（`family_tree_decorations`の
+ * ような「UNIQUE制約により1対1になったため配列がオブジェクトに変わる」特殊系
+ * ではない。第4段階の教訓`asEmbeddedArray`はここでは不要）。
+ */
+export interface CollectedGachaDraw {
+  id: string;
+  drawnAt: string;
+  prizeKind: GachaPrizeKind;
+  /** ガチャを引いて獲得した人（07-13-3章「引いた人のものではなく家族のもの」だが、獲得の記録として表示する）。 */
+  collectorName: string;
+  presetOrnament: { display_name: string; emoji: string | null } | null;
+  drawing: { line_data: FamilyDrawingLineData; artistName: string } | null;
+}
+
+/**
+ * API仕様.md 12.4章「家族が集めた景品一覧（家族共有・永久保管）」。
+ * `gacha_draws_select_same_family`ポリシーにより家族全員が閲覧可能。未公開の絵は
+ * `draw_gacha()`が景品として選んだ時点で必ず`is_published=true`に更新済みのため
+ * （33d章）、本クエリが未公開の絵を返すことは構造上ない（UI側の絞り込みは不要だが、
+ * 依頼の「未公開の絵は棚に出してはいけない」はDB側の`family_drawings_select_scoped`
+ * ポリシーとあわせてこの経路でも二重に守られている）。
+ */
+export async function fetchFamilyCollectedGachaDraws(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<CollectedGachaDraw[]>> {
+  const { data, error } = await client
+    .from("gacha_draws")
+    .select(
+      "id, drawn_at, prize_kind, " +
+        "collector:family_members!member_id(display_name), " +
+        "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data," +
+        "artist:family_members!artist_member_id(display_name))"
+    )
+    .eq("family_id", familyId)
+    .order("drawn_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    drawn_at: string;
+    prize_kind: GachaPrizeKind;
+    collector: { display_name: string } | null;
+    preset_ornament: { display_name: string; emoji: string | null } | null;
+    prize_drawing: { line_data: FamilyDrawingLineData; artist: { display_name: string } | null } | null;
+  }[];
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      drawnAt: r.drawn_at,
+      prizeKind: r.prize_kind,
+      collectorName: r.collector?.display_name ?? "だれか",
+      presetOrnament: r.preset_ornament,
+      drawing: r.prize_drawing
+        ? { line_data: r.prize_drawing.line_data, artistName: r.prize_drawing.artist?.display_name ?? "だれか" }
+        : null,
+    })),
+  };
 }
 
 /** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */

@@ -73,6 +73,9 @@ export default function ParentHomeScreen() {
     { emoji: "📔", label: "通帳", path: "/parent/points" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
+    // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
+    // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
+    { emoji: "🗄️", label: "コレクター棚", path: "/parent/collector-shelf" },
   ];
 
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [

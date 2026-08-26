@@ -44,6 +44,9 @@ export default function SupporterHomeScreen() {
     // [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
     // 「みまもりメンバー: [S1 みまもりホーム]のショートカット『お絵かき』 ──▶ [S18 お絵かき]」。
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
+    // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
+    // 遷移図.md「S1みまもりホームのショートカット『コレクター棚』──▶S19」）。
+    { emoji: "🗄️", label: "コレクター棚", path: "/supporter/collector-shelf" },
     { emoji: "⚙️", label: "設定", path: "/supporter/settings" },
   ];
 

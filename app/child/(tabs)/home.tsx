@@ -114,6 +114,12 @@ export default function ChildHomeScreen() {
         <Text style={[theme.typography.childBody, styles.familyActivityLink]}>🎨 おえかきする →</Text>
       </Pressable>
 
+      {/* [2026-08-27追加・第5段階（最終段階）] コレクション棚（07-13-3章、画面一覧・
+          遷移図.md「C5やることリストから ──▶ C26 コレクションだな」）。 */}
+      <Pressable onPress={() => router.push("/child/collector-shelf")}>
+        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>🗄️ コレクションだなを見る →</Text>
+      </Pressable>
+
       <View style={{ marginTop: theme.spacing.s2 }}>
         {loadState === "loading" && <SkeletonList count={4} />}
         {loadState === "error" && (
