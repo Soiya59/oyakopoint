@@ -34,6 +34,7 @@ import type {
   GachaDrawResult,
   GachaMemberProgressSummary,
   GachaPresetOrnament,
+  GachaPrizeKind,
   GratitudePoint,
   MemberPoints,
   ReactionKind,
@@ -1004,40 +1005,101 @@ export async function fetchFamilyTreeMemberBreakdown(
   return { ok: true, data: [...rows].sort((a, b) => (a.member_created_at < b.member_created_at ? -1 : 1)) };
 }
 
-/** 完了報告1件ごとの視覚要素の色付け用（API仕様.md 9.2章）。今シーズン開始以降の完了報告を報告者の色付きで返す。 */
+/**
+ * [2026-08-26新設・第4段階] 完了報告が景品と交換済みの場合の詳細。
+ * `family_tree_decorations`経由で`gacha_draws`（さらにその先の
+ * `gacha_preset_ornaments`／`family_drawings`）を辿った内容（API仕様.md 12.5章）。
+ */
+export interface FamilyTreeDotPrize {
+  decorationId: string;
+  drawId: string;
+  prizeKind: GachaPrizeKind;
+  presetOrnament: { display_name: string; emoji: string | null } | null;
+  drawing: { line_data: FamilyDrawingLineData } | null;
+}
+
+/**
+ * 完了報告1件ごとの視覚要素の色付け用（API仕様.md 9.2章）。今シーズン開始以降の完了報告を報告者の色付きで返す。
+ * [2026-08-26改訂・第4段階] `prize`（非null＝景品に交換済み）を追加し、
+ * `family_tree_decorations`をembedするよう変更した（API仕様.md 12.5章のクエリ形状）。
+ */
 export interface FamilyTreeCompletionDot {
   id: string;
   reported_at: string;
   reported_by: string;
   avatar_color: string | null;
+  prize: FamilyTreeDotPrize | null;
 }
 
+/**
+ * [2026-08-26改訂・第4段階] `seasonEndIso`を追加した。省略時（進行中シーズン）は
+ * 従来どおり`reported_at >= seasonStartIso`のみで絞り込む。指定すると
+ * `< seasonEndIso`も加わり、過去シーズンの木を当時のデータのまま再現する用途にも
+ * 使える（API仕様.md 12.5章「過去の木」区画のクエリと同じ形状。専用の一覧画面
+ * 〔コレクター棚、第5段階〕は今回実装しないが、このデータ取得自体は再現可能な
+ * 状態にしておく、という依頼への対応）。
+ */
 export async function fetchFamilyTreeCompletionDots(
   client: SupabaseClient,
   familyId: string,
-  seasonStartIso: string
+  seasonStartIso: string,
+  seasonEndIso?: string | null
 ): Promise<ApiResult<FamilyTreeCompletionDot[]>> {
-  const { data, error } = await client
+  let query = client
     .from("chore_completions")
-    .select("id, reported_at, reported_by, family_members!reported_by(avatar_color)")
+    .select(
+      "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
+        "family_tree_decorations(id, draw_id, gacha_draws(prize_kind, " +
+        "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
+        "prize_drawing:family_drawings(line_data)))"
+    )
     .eq("family_id", familyId)
     .gte("reported_at", seasonStartIso)
     .order("reported_at");
+  if (seasonEndIso) query = query.lt("reported_at", seasonEndIso);
+  const { data, error } = await query;
   if (error) return { ok: false, error: fromPostgrestError(error) };
   const rows = (data ?? []) as unknown as {
     id: string;
     reported_at: string;
     reported_by: string;
     family_members: { avatar_color: string | null } | null;
+    family_tree_decorations: {
+      id: string;
+      draw_id: string;
+      gacha_draws: {
+        prize_kind: GachaPrizeKind;
+        preset_ornament: { display_name: string; emoji: string | null } | null;
+        prize_drawing: { line_data: FamilyDrawingLineData } | null;
+      } | null;
+    }[];
   }[];
   return {
     ok: true,
-    data: rows.map((r) => ({
-      id: r.id,
-      reported_at: r.reported_at,
-      reported_by: r.reported_by,
-      avatar_color: r.family_members?.avatar_color ?? null,
-    })),
+    data: rows.map((r) => {
+      // family_tree_decorationsはcompletion_idにUNIQUE制約があるため実際は0〜1件だが、
+      // PostgRESTの埋め込みは（gacha_draws側からの`family_tree_decorations(id)`と
+      // 同様に）配列で返る。API仕様.md 12.3章「空配列の行が未反映」と同じ扱いで
+      // 先頭要素の有無だけを見る。
+      const decoration = r.family_tree_decorations?.[0] ?? null;
+      const prize: FamilyTreeDotPrize | null =
+        decoration && decoration.gacha_draws
+          ? {
+              decorationId: decoration.id,
+              drawId: decoration.draw_id,
+              prizeKind: decoration.gacha_draws.prize_kind,
+              presetOrnament: decoration.gacha_draws.preset_ornament,
+              drawing: decoration.gacha_draws.prize_drawing,
+            }
+          : null;
+      return {
+        id: r.id,
+        reported_at: r.reported_at,
+        reported_by: r.reported_by,
+        avatar_color: r.family_members?.avatar_color ?? null,
+        prize,
+      };
+    }),
   };
 }
 
@@ -1115,8 +1177,9 @@ export async function deleteDrawing(client: SupabaseClient, drawingId: string): 
 // [2026-08-26新設・第3段階] 対応するスキーマはスキーマ設計.sql 33a章
 // gacha_member_progress_summary／33c章 gacha_preset_ornaments／
 // 33d章 gacha_draws・draw_gacha()。第1段階（69章）で本番適用・秘匿性検証済み。
-// [重要] decorate_tree_with_gacha_prize()（木への飾り付け、第4段階）・
-// コレクター棚向けの一覧クエリ（第5段階）はここには一切実装しない。
+// [2026-08-26追加・第4段階] 木への飾り付け（decorate_tree_with_gacha_prize()、
+// family_tree_decorations）は本セクション末尾に追加した。
+// [重要] コレクター棚向けの一覧クエリ（第5段階）はここには一切実装しない。
 // ============================================================
 
 /**
@@ -1190,6 +1253,120 @@ export async function fetchGachaPrizeDrawing(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as unknown as GachaPrizeDrawing };
+}
+
+// ------------------------------------------------------------
+// 木への飾り付け（要件定義書07-13-4章、API仕様.md 12.3章）
+// [2026-08-26新設・第4段階] 対応するスキーマはスキーマ設計.sql 33e章
+// family_tree_decorations・decorate_tree_with_gacha_prize()。第1段階（69章）で
+// 本番適用済み（家族の木のDB基盤と同じマイグレーションに含まれる）。
+// コレクター棚（第5段階、集めたもの一覧・過去の木の専用画面）はここには実装しない。
+// ------------------------------------------------------------
+
+/**
+ * API仕様.md 12.3章「自分のガチャ結果のうち、まだ木に反映していないものを見る」。
+ * 主要画面ワイヤーフレーム.md 21.2節「未配置の景品あり」バナー（ガチャ画面）用。
+ */
+export interface UndecoratedGachaDraw {
+  draw_id: string;
+  prize_kind: GachaPrizeKind;
+  preset_ornament_id: string | null;
+  prize_drawing_id: string | null;
+  drawn_at: string;
+}
+
+export async function fetchUndecoratedGachaDraws(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<UndecoratedGachaDraw[]>> {
+  const { data, error } = await client
+    .from("gacha_draws")
+    .select("id, prize_kind, preset_ornament_id, prize_drawing_id, drawn_at, family_tree_decorations(id)")
+    .eq("member_id", memberId)
+    .order("drawn_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    prize_kind: GachaPrizeKind;
+    preset_ornament_id: string | null;
+    prize_drawing_id: string | null;
+    drawn_at: string;
+    family_tree_decorations: { id: string }[];
+  }[];
+  return {
+    ok: true,
+    data: rows
+      .filter((r) => (r.family_tree_decorations?.length ?? 0) === 0)
+      .map((r) => ({
+        draw_id: r.id,
+        prize_kind: r.prize_kind,
+        preset_ornament_id: r.preset_ornament_id,
+        prize_drawing_id: r.prize_drawing_id,
+        drawn_at: r.drawn_at,
+      })),
+  };
+}
+
+/**
+ * 木に飾る対象として選べる、自分の今シーズンの完了報告（未交換分のみ）。
+ * 主要画面ワイヤーフレーム.md 21.0節「新規APIの要否について（確定）」のとおり、
+ * 新規APIの追加は不要という本部長判断に基づき、既存の`chore_completions`への
+ * 通常SELECT（RLS: 家族内は閲覧可）で成立させる。
+ */
+export interface DecoratableCompletion {
+  id: string;
+  chore_title: string;
+  chore_emoji: string;
+  reported_at: string;
+}
+
+export async function fetchMyDecoratableCompletions(
+  client: SupabaseClient,
+  familyId: string,
+  memberId: string,
+  seasonStartIso: string
+): Promise<ApiResult<DecoratableCompletion[]>> {
+  const { data, error } = await client
+    .from("chore_completions")
+    .select("id, chore_title, chore_emoji, reported_at, family_tree_decorations(id)")
+    .eq("family_id", familyId)
+    .eq("reported_by", memberId)
+    .gte("reported_at", seasonStartIso)
+    .order("reported_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    chore_title: string;
+    chore_emoji: string;
+    reported_at: string;
+    family_tree_decorations: { id: string }[];
+  }[];
+  return {
+    ok: true,
+    data: rows
+      .filter((r) => (r.family_tree_decorations?.length ?? 0) === 0)
+      .map((r) => ({ id: r.id, chore_title: r.chore_title, chore_emoji: r.chore_emoji, reported_at: r.reported_at })),
+  };
+}
+
+/**
+ * API仕様.md 12.3章「選んだ色丸に景品を飾る」。`decorate_tree_with_gacha_prize()`は
+ * 「自分の」ガチャ結果と「自分の」今シーズンの完了報告しか受け付けず、他人の
+ * ID・過去シーズンのID・既に交換済みのIDを渡した場合はいずれもDB側で拒否される
+ * （スキーマ設計.sql 33e章、検証はすべてfunction内で完結）。戻り値は新規
+ * `family_tree_decorations.id`（UUID）。
+ */
+export async function decorateTreeWithGachaPrize(
+  client: SupabaseClient,
+  drawId: string,
+  completionId: string
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("decorate_tree_with_gacha_prize", {
+    p_draw_id: drawId,
+    p_completion_id: completionId,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
 }
 
 /** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */

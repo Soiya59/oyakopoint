@@ -8,10 +8,10 @@
  * 一段階の開示演出（0.5秒後に自動で切り替わる）を追加する。保護者・みまもりメンバー
  * 向けは常に単一表示（21.3節「2段階演出にせず単一表示にする」）。
  *
- * [今回のスコープ外の確認] ワイヤーフレームの「[ きに かざる → ]」ボタンは木への
- * 飾り付け（`decorate_tree_with_gacha_prize()`、第4段階）への導線であり、依頼により
- * 今回は実装しない。本コンポーネントでは代わりに「閉じて戻る」操作（`onClose`）のみを
- * 提供する（開発部/成果物/実装メモ.md「本部長への申し送り事項」参照）。
+ * [2026-08-26改訂・第4段階] ワイヤーフレームの「[ きに かざる → ]」ボタンを実装した
+ * （`onClose` → `onDecorate`に置き換え）。第3段階時点では
+ * `decorate_tree_with_gacha_prize()`が前提のため意図的に省略していたが
+ * （開発部/成果物/実装メモ.md参照）、本コンポーネントは今回で完成形になる。
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -25,12 +25,13 @@ type Tone = "parent" | "child" | "supporter";
 export interface GachaResultViewProps {
   tone: Tone;
   result: GachaPrizeDetail;
-  onClose: () => void;
+  /** 「木に飾る」導線（21.4節、木への飾り付け画面）への遷移。 */
+  onDecorate: () => void;
 }
 
 const TWO_STEP_REVEAL_DELAY_MS = 500;
 
-export function GachaResultView({ tone, result, onClose }: GachaResultViewProps) {
+export function GachaResultView({ tone, result, onDecorate }: GachaResultViewProps) {
   const isChild = tone === "child";
   const headlineStyle = isChild ? theme.typography.childHeadline : tone === "supporter" ? theme.typography.supporterTitle : theme.typography.parentTitle;
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
@@ -50,7 +51,7 @@ export function GachaResultView({ tone, result, onClose }: GachaResultViewProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useTwoStepReveal, result]);
 
-  const closeLabel = isChild ? "ホームに もどる" : "とじる";
+  const decorateLabel = isChild ? "きに かざる →" : "木に飾る →";
 
   if (useTwoStepReveal && !revealed) {
     return (
@@ -69,7 +70,7 @@ export function GachaResultView({ tone, result, onClose }: GachaResultViewProps)
         <Text style={[bodyStyle, styles.prizeName]}>
           {isChild ? `「${result.ornament.display_name}」が でてきたよ！` : `「${result.ornament.display_name}」`}
         </Text>
-        <AppButton label={closeLabel} tone={tone} fullWidth style={styles.button} onPress={onClose} />
+        <AppButton label={decorateLabel} tone={tone} fullWidth style={styles.button} onPress={onDecorate} />
       </View>
     );
   }
@@ -83,7 +84,7 @@ export function GachaResultView({ tone, result, onClose }: GachaResultViewProps)
         <Text style={[bodyStyle, styles.prizeName]}>
           {isChild ? `「${artistName}」の ひみつの絵 でした！` : `「${artistName}」が描いた絵です`}
         </Text>
-        <AppButton label={closeLabel} tone={tone} fullWidth style={styles.button} onPress={onClose} />
+        <AppButton label={decorateLabel} tone={tone} fullWidth style={styles.button} onPress={onDecorate} />
       </View>
     );
   }
@@ -93,7 +94,6 @@ export function GachaResultView({ tone, result, onClose }: GachaResultViewProps)
   return (
     <View style={styles.container}>
       <Text style={bodyStyle}>けっかを ひょうじできませんでした</Text>
-      <AppButton label={closeLabel} tone={tone} fullWidth style={styles.button} onPress={onClose} />
     </View>
   );
 }

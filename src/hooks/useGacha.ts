@@ -3,8 +3,9 @@
  * 参照: src/data/api.ts（fetchGachaProgressSummary/drawGacha/fetchGachaPresetOrnament/
  * fetchGachaPrizeDrawing）。
  *
- * [重要] 第3段階（ガチャ）の実装範囲。木への飾り付け（`decorate_tree_with_gacha_prize`、
- * 第4段階）・コレクター棚（第5段階）はここには一切含めない。
+ * [重要] 第3段階（ガチャを引く）の実装範囲。木への飾り付け
+ * （`decorate_tree_with_gacha_prize`、第4段階）は`useTreeDecoration.ts`に分離した。
+ * コレクター棚（第5段階）はここには一切含めない。
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";

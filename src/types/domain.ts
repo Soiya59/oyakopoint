@@ -283,9 +283,11 @@ export interface FamilyDrawing {
 // [新設・2026-08-26・第3段階] ガチャ（要件定義書07-13-1章、スキーマ設計.sql
 // 33a章 gacha_member_progress_summary／33c章 gacha_preset_ornaments／
 // 33d章 gacha_draws・draw_gacha()、API仕様.md 12.1・12.3章）。
-// 木への飾り付け・コレクター棚（07-13章の第4〜5段階）はここでは扱わない
-// （decorate_tree_with_gacha_prize()は第3段階の実装範囲外。
-// 開発部/成果物/実装メモ.md参照）。
+// [2026-08-26追加・第4段階] 木への飾り付け（decorate_tree_with_gacha_prize()、
+// family_tree_decorations）関連の型はsrc/data/api.ts側に定義した
+// （FamilyTreeDotPrize・UndecoratedGachaDraw・DecoratableCompletion。既存の
+// FamilyTreeCompletionDot／GachaDrawResult型と同じ置き場所に揃えるため）。
+// コレクター棚（07-13章の第5段階）はここでは扱わない。
 
 /** gacha_member_progress_summary Viewの1行（API仕様.md 12.1章）。 */
 export interface GachaMemberProgressSummary {

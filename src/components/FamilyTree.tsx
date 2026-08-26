@@ -4,6 +4,7 @@ import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot } from "@/data/api";
 import type { FamilyTreeMemberBreakdown } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
+import { DrawingThumbnail } from "./DrawingCanvas";
 
 /**
  * 家族の木の共通ビジュアル（P26/C20/S14の3画面から共有）。
@@ -23,12 +24,33 @@ import MemberAvatar from "./MemberAvatar";
  * 実際に描き、色丸は葉の内側に決定論的に散らして配置する（色丸が「木に実った
  * もの」として読めるようにする）。段階の絵文字は木の絵の代わりではなく、
  * 各画面の段階名テキストに添える役割へ移した。
+ *
+ * [2026-08-26追加・第4段階] 木への飾り付け（要件定義書07-13-4章）対応。
+ * 主要画面ワイヤーフレーム.md 21.0節決定7のとおり、独立した別ビジュアルは新設せず
+ * 本コンポーネントに「かざりつけモード」を追加する形にした。
+ *   決定8: 交換相手の選択は木の絵の直接タップではなく専用の一覧UIから行う。
+ *     木の絵の上では`highlightMemberId`に一致する自分の色丸にのみ「淡い強調」を
+ *     加算的に添え（`mineHalo`）、他人の丸の描画には一切手を加えない
+ *     （グレーアウト・縮小のような減算的表現は行わない）。
+ *   決定10（本部長裁定）: 景品（36pt、`PRIZE_DOT_SIZE`）は40スロット上限の対象外に
+ *     せず、`pickDisplaySlots`が「全景品を優先確保→残り枠を通常の色丸で
+ *     reservoir samplingして埋める」処理を行う（詳細は同関数のコメント参照）。
+ *   景品の重なり判定は既存の「互いの半径の合計＋余白」方式をそのまま使う
+ *   （下記2026-08-24コメント「将来ガチャの絵と交換された丸は…」で既に想定済み）。
  */
 
 const MAX_SLOTS = 40;
 // [2026-08-24拡大] 木の拡大にあわせて色丸も少し大きくする。樹冠の面積が約2.9倍に
 // なったため、丸を大きくしても拡大前より密度は下がる（＝重なりにくくなる）。
 const DOT_SIZE = 13;
+// [2026-08-26追加・第4段階] ガチャの景品に交換された丸（デザイントークン.md 1.8節
+// 「ガチャの景品（36pt）の表示ルール」）。大きさは「これは景品だ」という意味のみを
+// 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
+const PRIZE_DOT_SIZE = 36;
+/** 景品の識別リング（交換した本人のavatar_color、2pt実線）の太さ。 */
+const PRIZE_RING_WIDTH = 2;
+/** かざりつけモードで自分の色丸に添える「淡い強調」のはみ出し幅（決定8）。 */
+const MINE_HALO_PADDING = 4;
 
 /**
  * 文字列から決定論的な非負整数ハッシュを作る（FNV-1a＋最終ミックス）。
@@ -57,20 +79,49 @@ function stableHash(input: string): number {
 }
 
 /**
- * 決定3・4のreservoir sampling実装。dotsは`reported_at`昇順であることを前提とする
+ * 決定3・4のreservoir sampling本体。`slotCount`個の枠に対して`dots`をreservoir
+ * samplingで割り当てる（`dots.length <= slotCount`ならそのまま全件を返す）。
+ * dotsは`reported_at`昇順であることを前提とする
  * （src/data/api.ts fetchFamilyTreeCompletionDots がその順で返す）。
  */
-export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): (FamilyTreeCompletionDot | null)[] {
-  const slots: (FamilyTreeCompletionDot | null)[] = Array.from({ length: MAX_SLOTS }, () => null);
+function reservoirSample(dots: FamilyTreeCompletionDot[], slotCount: number): FamilyTreeCompletionDot[] {
+  if (slotCount <= 0) return [];
+  const slots: (FamilyTreeCompletionDot | null)[] = Array.from({ length: slotCount }, () => null);
   dots.forEach((dot, i) => {
-    if (i < MAX_SLOTS) {
+    if (i < slotCount) {
       slots[i] = dot;
       return;
     }
     const j = stableHash(dot.id) % (i + 1);
-    if (j < MAX_SLOTS) slots[j] = dot;
+    if (j < slotCount) slots[j] = dot;
   });
-  return slots;
+  return slots.filter((d): d is FamilyTreeCompletionDot => d !== null);
+}
+
+/**
+ * [2026-08-26改訂・第4段階・本部長裁定（決定10）] 景品は40スロットの中で
+ * 「優先確保」する（上限の対象外にはしない）。
+ *   1. その季節の全景品（`dot.prize !== null`）をまず確定的に表示枠へ入れる。
+ *   2. 残った枠数を、従来どおり通常の色丸のreservoir samplingで埋める。
+ *   3. 合計は常に40スロット以下を維持する。
+ *   4. 万一景品だけで40スロットを超える場合は、景品側もreservoir sampling
+ *      （4-a. 古い順ではなく既存と同じ決定論的アルゴリズムを流用）で間引く。
+ *      1シーズンに景品40個＝完了報告200件が必要なため実運用ではまず起こらない
+ *      （デザイントークン.md 1.8節・主要画面ワイヤーフレーム.md 21.0節決定10参照）。
+ *
+ * 景品（36pt）は通常の色丸（13pt）の約7.7倍の面積があるため、上限の対象外に
+ * すると20章決定3が守ろうとした視覚的な予算（40個）を超えてしまう、というのが
+ * この方式を採用した理由（当初のUIUXデザイン部案からの本部長修正）。
+ */
+export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): FamilyTreeCompletionDot[] {
+  const prizeDots = dots.filter((d) => d.prize !== null);
+  const normalDots = dots.filter((d) => d.prize === null);
+
+  const keptPrizes = prizeDots.length <= MAX_SLOTS ? prizeDots : reservoirSample(prizeDots, MAX_SLOTS);
+  const remainingSlots = MAX_SLOTS - keptPrizes.length;
+  const keptNormal = reservoirSample(normalDots, remainingSlots);
+
+  return [...keptPrizes, ...keptNormal];
 }
 
 /**
@@ -138,6 +189,15 @@ const SPROUT_LEAF_ANGLE_DEG = 26;
  */
 function dotColor(dot: FamilyTreeCompletionDot): string {
   return dot.avatar_color ?? theme.colors.neutralBorder;
+}
+
+/**
+ * [2026-08-26追加・第4段階] 表示直径。景品に交換された丸だけ36pt、それ以外は
+ * 通常どおり13pt固定。要件定義書07-13-4章の必須条件どおり、この大きさは
+ * 「これは景品だ」という意味のみを持ち、報告者の貢献度・完了報告数では変動しない。
+ */
+function dotDisplaySize(dot: FamilyTreeCompletionDot): number {
+  return dot.prize ? PRIZE_DOT_SIZE : DOT_SIZE;
 }
 
 // [2026-08-24再改訂] 当初は段階ごとに土の幅を変えていたが、
@@ -211,13 +271,19 @@ function placeWithoutOverlap(
   return best;
 }
 
-/** 同じ座標系に属する色丸をまとめて配置する（互いの重なりを避ける）。 */
+/**
+ * 同じ座標系に属する色丸をまとめて配置する（互いの重なりを避ける）。
+ * [2026-08-26改訂・第4段階] 半径は`radius`引数で一律に受け取るのではなく、
+ * `dotDisplaySize`でドットごとに個別算出するよう変更した（景品36pt・通常13ptが
+ * 混在するグループに対応するため）。重なり判定自体は既存の「互いの半径の合計＋
+ * 余白」方式のままで正しく動く（本ファイル冒頭コメント参照）。
+ */
 function placeGroup(
-  items: readonly { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[],
-  radius: number
+  items: readonly { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
 ): { dot: FamilyTreeCompletionDot; x: number; y: number }[] {
   const placed: PlacedDot[] = [];
   return items.map(({ dot, bounds }) => {
+    const radius = dotDisplaySize(dot) / 2;
     const p = placeWithoutOverlap(dot.id, radius, bounds, placed);
     placed.push({ x: p.x, y: p.y, r: radius });
     return { dot, x: p.x, y: p.y };
@@ -265,11 +331,73 @@ function pickTreeRegion(id: string): TreeRegion {
   return "canopy";
 }
 
-export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTreeCompletionDot[] }) {
-  const slots = useMemo(
-    () => pickDisplaySlots(dots).filter((d): d is FamilyTreeCompletionDot => d !== null),
-    [dots]
+/**
+ * [2026-08-26新設・第4段階] 景品に交換された丸（36pt）の中身の表現。
+ * デザイントークン.md 1.8節「ガチャの景品（36pt）の表示ルール」対応。
+ * - 既製の飾り: 円の中にカタログの絵文字を配置する。
+ * - 家族の絵: 線データを`DrawingThumbnail`（第2段階、DrawingCanvas.tsx）で
+ *   円の内側に静止レンダリングする。
+ * - 識別リング: 交換した本人の`avatar_color`（=通常の色丸と同じ色決定ロジック）を
+ *   2pt実線で外周に添える（07-10章「識別表現を残すか」への回答。サイズ自体は
+ *   「景品である」という意味のみを持たせ、誰の記録かはリングという別チャンネルで持たせる）。
+ */
+function PrizeDotView({
+  dot,
+  x,
+  y,
+  size,
+}: {
+  dot: FamilyTreeCompletionDot;
+  x: number;
+  y: number;
+  size: number;
+}) {
+  const prize = dot.prize;
+  if (!prize) return null;
+  const ringColor = dotColor(dot);
+  const innerSize = Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
+  return (
+    <View
+      style={[
+        styles.prizeDot,
+        {
+          left: x - size / 2,
+          top: y - size / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: ringColor,
+        },
+      ]}
+    >
+      {prize.prizeKind === "preset_ornament" ? (
+        <Text style={styles.prizeEmoji}>{prize.presetOrnament?.emoji ?? "🎁"}</Text>
+      ) : prize.drawing ? (
+        <DrawingThumbnail lineData={prize.drawing.line_data} size={innerSize} />
+      ) : null}
+    </View>
   );
+}
+
+export function TreeStageVisual({
+  stage,
+  dots,
+  highlightMemberId = null,
+  highlightCompletionId = null,
+}: {
+  stage: number;
+  dots: FamilyTreeCompletionDot[];
+  /**
+   * [2026-08-26新設・第4段階] 木への飾り付け「かざりつけモード」用（決定7・決定8）。
+   * 指定すると、このmember_idが報告者の色丸にのみ「淡い強調」を加算的に添える。
+   * 他人の丸の描画には一切手を加えない（グレーアウト・縮小のような減算的表現は
+   * 行わない）。通常表示（家族の木画面）ではnullのまま渡し、従来どおりの見た目にする。
+   */
+  highlightMemberId?: string | null;
+  /** 一覧UIで選択中の完了報告ID。40スロットの表示対象に含まれる場合のみ木の上でも強調する。 */
+  highlightCompletionId?: string | null;
+}) {
+  const slots = useMemo(() => pickDisplaySlots(dots), [dots]);
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
   // 幅は固定値ではなく実測する。固定値だと画面幅とずれ、はみ出した分が
   // React Nativeの既定の切り取りで消える（空の色丸が出ない不具合の原因になった）。
@@ -300,22 +428,62 @@ export function TreeStageVisual({ stage, dots }: { stage: number; dots: FamilyTr
     cx, cy, rx: Math.max(rx, 0), ry: Math.max(ry, 0),
   });
 
-  /** 重なりを避けて配置済みの色丸を描く。 */
+  /**
+   * 重なりを避けて配置済みの色丸を描く。
+   * [2026-08-26改訂・第4段階] 景品（`dot.prize`非null）は`PrizeDotView`で描き、
+   * 通常の色丸は従来どおり単色の円で描く。`highlightMemberId`と一致する報告者の
+   * 丸には、決定8の「淡い強調」（`mineHalo`）を丸の背面に加算的に添える
+   * （他人の丸のスタイルは一切変更しない）。
+   */
   const renderPlaced = (items: { dot: FamilyTreeCompletionDot; x: number; y: number }[]) =>
-    items.map(({ dot, x, y }) => (
-      <View
-        key={dot.id}
-        style={[
-          styles.dot,
-          { backgroundColor: dotColor(dot), left: x - DOT_SIZE / 2, top: y - DOT_SIZE / 2 },
-        ]}
-      />
-    ));
+    items.map(({ dot, x, y }) => {
+      const size = dotDisplaySize(dot);
+      const isMine = highlightMemberId != null && dot.reported_by === highlightMemberId;
+      const isSelected = isMine && highlightCompletionId != null && dot.id === highlightCompletionId;
+      const haloSize = size + MINE_HALO_PADDING * 2;
+      return (
+        <React.Fragment key={dot.id}>
+          {isMine && (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.mineHalo,
+                {
+                  left: x - haloSize / 2,
+                  top: y - haloSize / 2,
+                  width: haloSize,
+                  height: haloSize,
+                  borderRadius: haloSize / 2,
+                },
+                isSelected && styles.mineHaloSelected,
+              ]}
+            />
+          )}
+          {dot.prize ? (
+            <PrizeDotView dot={dot} x={x} y={y} size={size} />
+          ) : (
+            <View
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: dotColor(dot),
+                  left: x - size / 2,
+                  top: y - size / 2,
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                },
+              ]}
+            />
+          )}
+        </React.Fragment>
+      );
+    });
 
   /** 1つの座標系に属する色丸をまとめて配置して描く。 */
   const renderGroup = (
     items: { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
-  ) => renderPlaced(placeGroup(items, DOT_SIZE / 2));
+  ) => renderPlaced(placeGroup(items));
 
   return (
     <View
@@ -591,6 +759,30 @@ const styles = StyleSheet.create({
     // 洗い流して全部が白っぽく見えてしまっていた。暗い半透明の縁に変更して
     // 輪郭だけを締める（勝者演出ではなく単なる視認性確保）。
     borderColor: "rgba(0,0,0,0.16)",
+  },
+  // [2026-08-26追加・第4段階] 景品（36pt）の円。識別リング（avatar_color）の内側に
+  // 既製の飾りの絵文字、または家族の絵のサムネイル（DrawingThumbnail）を収める。
+  prizeDot: {
+    position: "absolute",
+    borderWidth: PRIZE_RING_WIDTH,
+    backgroundColor: theme.colors.neutralSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  prizeEmoji: {
+    fontSize: 20,
+  },
+  // [2026-08-26追加・第4段階] かざりつけモードで自分の色丸にのみ添える「淡い強調」
+  // （決定8、加算的表現）。他人の丸にはこのViewを一切描かない。
+  mineHalo: {
+    position: "absolute",
+    backgroundColor: "rgba(255,201,77,0.28)", // gachaColors.accentのソフト版
+  },
+  mineHaloSelected: {
+    backgroundColor: "rgba(255,201,77,0.55)",
+    borderWidth: 1,
+    borderColor: theme.gachaColors.accent,
   },
   soil: {
     alignSelf: "stretch",

@@ -6,6 +6,7 @@ import GachaDrawPanel from "@/components/GachaDrawPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaDrawAction, useGachaProgress } from "@/hooks/useGacha";
+import { useUndecoratedGachaDraw } from "@/hooks/useTreeDecoration";
 
 /**
  * P27 ガチャ（保護者）
@@ -20,6 +21,8 @@ export default function ParentGachaScreen() {
   const myId = state.activeParentMemberId;
   const { loadState, remaining, canDrawNow, reload } = useGachaProgress(myId);
   const { drawing, draw } = useGachaDrawAction();
+  // [2026-08-26追加・第4段階] 21.2節「未配置の景品あり」案内カード用。
+  const { draw: undecoratedDraw, reload: reloadUndecorated } = useUndecoratedGachaDraw(myId);
   const [drawErrorMessage, setDrawErrorMessage] = useState<string | null>(null);
 
   const handleDraw = async () => {
@@ -29,9 +32,11 @@ export default function ParentGachaScreen() {
       setDrawErrorMessage(res.error.message);
       return;
     }
+    void reloadUndecorated();
     router.push({
       pathname: "/parent/gacha-result",
       params: {
+        drawId: res.data.draw_id,
         prizeKind: res.data.prize_kind,
         presetOrnamentId: res.data.preset_ornament_id ?? "",
         prizeDrawingId: res.data.prize_drawing_id ?? "",
@@ -59,6 +64,10 @@ export default function ParentGachaScreen() {
         drawErrorMessage={drawErrorMessage}
         onDraw={handleDraw}
         onRetryLoad={reload}
+        undecoratedDrawId={undecoratedDraw?.draw_id ?? null}
+        onGoToDecorate={(drawId) =>
+          router.push({ pathname: "/parent/tree-decorate", params: { drawId } })
+        }
       />
     </Screen>
   );

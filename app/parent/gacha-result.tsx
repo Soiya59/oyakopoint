@@ -15,11 +15,12 @@ import type { GachaPrizeKind } from "@/types/domain";
  * P27（app/parent/gacha.tsx）から`draw_gacha()`の戻り値（prizeKind・IDのみ）を
  * 遷移パラメータとして受け取り、表示に必要な詳細をここで取得する。
  *
- * [今回のスコープ外の確認] 「木に飾る」（`decorate_tree_with_gacha_prize()`、第4段階）は
- * 実装しない。GachaResultViewの「とじる」で前の画面（P27）に戻る。
+ * [2026-08-26改訂・第4段階] 「木に飾る」導線を実装した。P27から受け取った`drawId`を
+ * そのままP29（app/parent/tree-decorate.tsx）へ引き継ぐ。
  */
 export default function ParentGachaResultScreen() {
-  const { prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
+  const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
+    drawId?: string;
     prizeKind?: string;
     presetOrnamentId?: string;
     prizeDrawingId?: string;
@@ -43,7 +44,11 @@ export default function ParentGachaResultScreen() {
         <ErrorState title="読み込みに失敗しました" onRetry={() => router.back()} />
       )}
       {loadState === "ready" && detail && (
-        <GachaResultView tone="parent" result={detail} onClose={() => router.back()} />
+        <GachaResultView
+          tone="parent"
+          result={detail}
+          onDecorate={() => router.push({ pathname: "/parent/tree-decorate", params: { drawId: drawId ?? "" } })}
+        />
       )}
     </Screen>
   );

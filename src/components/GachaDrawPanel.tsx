@@ -6,12 +6,14 @@
  * 呼び出し側（各ロールの画面）が`useGachaDrawAction`で行った結果をpropsで渡す
  * （DrawingBoardと同じ役割分担：本コンポーネントは表示とボタンの活性/非活性のみに責任を持つ）。
  *
- * [今回のスコープ外の確認] 21.2節「未配置の景品あり」の案内カードは、木への飾り付け
- * （`decorate_tree_with_gacha_prize()`、第4段階）が前提の状態であり、本コンポーネントには
- * 実装しない（依頼「第4段階には手を付けない」に対応。開発部/成果物/実装メモ.md参照）。
+ * [2026-08-26追加・第4段階] 21.2節「未配置の景品あり」の案内カードを実装した
+ * （`undecoratedDrawId`・`onGoToDecorate`）。第3段階時点では
+ * `decorate_tree_with_gacha_prize()`が前提のため意図的に省略していた
+ * （開発部/成果物/実装メモ.md参照）。新しいガチャを引く操作自体はブロックしない
+ * （21.2節「未配置のまま複数回引けても構わない」）。
  */
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import GachaProgressDots from "./GachaProgressDots";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -30,6 +32,10 @@ export interface GachaDrawPanelProps {
   drawErrorMessage: string | null;
   onDraw: () => void;
   onRetryLoad: () => void;
+  /** [2026-08-26追加・第4段階] まだ`family_tree_decorations`に反映していない直近のガチャ結果。 */
+  undecoratedDrawId?: string | null;
+  /** 案内カードタップ時、木に飾る画面（21.4節）へ`drawId`を渡して遷移させる。 */
+  onGoToDecorate?: (drawId: string) => void;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -44,6 +50,8 @@ export function GachaDrawPanel({
   drawErrorMessage,
   onDraw,
   onRetryLoad,
+  undecoratedDrawId,
+  onGoToDecorate,
 }: GachaDrawPanelProps) {
   const bodyStyle = bodyStyleFor(tone);
   const isChild = tone === "child";
@@ -83,6 +91,17 @@ export function GachaDrawPanel({
 
   return (
     <View style={styles.container}>
+      {undecoratedDrawId && onGoToDecorate && (
+        <Pressable
+          onPress={() => onGoToDecorate(undecoratedDrawId)}
+          style={[styles.banner, isChild && styles.bannerChild]}
+          accessibilityRole="button"
+        >
+          <Text style={[bodyStyle, styles.bannerText]}>
+            {isChild ? "まだ かざっていない けいひんが あるよ →" : "まだ飾っていない景品があります →"}
+          </Text>
+        </Pressable>
+      )}
       <View style={styles.dotsWrap}>
         <GachaProgressDots remaining={remaining} size={dotSize} />
       </View>
@@ -104,7 +123,16 @@ export function GachaDrawPanel({
 }
 
 const styles = StyleSheet.create({
-  container: { alignItems: "center", marginTop: theme.spacing.s8 },
+  container: { alignItems: "center", marginTop: theme.spacing.s8, width: "100%" },
+  banner: {
+    width: "100%",
+    backgroundColor: theme.gachaColors.accentSoft,
+    borderRadius: theme.radius.parentMd,
+    padding: theme.spacing.s3,
+    marginBottom: theme.spacing.s4,
+  },
+  bannerChild: { borderRadius: theme.radius.childXl },
+  bannerText: { textAlign: "center" },
   dotsWrap: { marginBottom: theme.spacing.s4 },
   title: { marginBottom: theme.spacing.s6, textAlign: "center" },
   button: { marginTop: theme.spacing.s2, minWidth: 200 },

@@ -14,11 +14,12 @@ import type { GachaPrizeKind } from "@/types/domain";
  *
  * 家族の絵が当たった場合、GachaResultView内部で「だれかの ひみつが...」→
  * 「ひみつが あいたよ！」の2段階開示演出になる（決定3、子ども向けのみ）。
- * [今回のスコープ外の確認] 「木に飾る」は実装しない。「ホームに もどる」で
- * C5（やることリスト）へ`replace`する（app/child/drawing-done.tsxと同じパターン）。
+ * [2026-08-26改訂・第4段階] 「木に飾る」導線を実装した。C21（app/child/gacha.tsx）
+ * から受け取った`drawId`をそのままC23（app/child/tree-decorate.tsx）へ引き継ぐ。
  */
 export default function ChildGachaResultScreen() {
-  const { prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
+  const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
+    drawId?: string;
     prizeKind?: string;
     presetOrnamentId?: string;
     prizeDrawingId?: string;
@@ -42,7 +43,11 @@ export default function ChildGachaResultScreen() {
         <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={() => router.back()} />
       )}
       {loadState === "ready" && detail && (
-        <GachaResultView tone="child" result={detail} onClose={() => router.replace("/child/home")} />
+        <GachaResultView
+          tone="child"
+          result={detail}
+          onDecorate={() => router.push({ pathname: "/child/tree-decorate", params: { drawId: drawId ?? "" } })}
+        />
       )}
     </Screen>
   );
