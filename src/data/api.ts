@@ -1039,6 +1039,22 @@ export interface FamilyTreeCompletionDot {
  * 〔コレクター棚、第5段階〕は今回実装しないが、このデータ取得自体は再現可能な
  * 状態にしておく、という依頼への対応）。
  */
+/**
+ * PostgRESTの埋め込み結果を必ず配列として扱うための正規化。
+ *
+ * [2026-08-26修正・本部長] `family_tree_decorations.completion_id`には
+ * UNIQUE制約があるため、PostgRESTはこの埋め込みを**1対1と判断してオブジェクトで返す**
+ * （配列ではない）。実装当初は配列前提で`[0]`を取っていたため、景品が常に
+ * undefinedとなり木に一切表示されず、また「飾り済みか」の判定
+ * （`.length === 0`）も常にtrueになり飾り済みの記録が候補に出続けていた。
+ * 実際のAPIレスポンスを確認して判明。将来UNIQUE制約が外れれば配列で返るため、
+ * どちらの形でも動くようにここで吸収する。
+ */
+function asEmbeddedArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 export async function fetchFamilyTreeCompletionDots(
   client: SupabaseClient,
   familyId: string,
@@ -1064,15 +1080,18 @@ export async function fetchFamilyTreeCompletionDots(
     reported_at: string;
     reported_by: string;
     family_members: { avatar_color: string | null } | null;
-    family_tree_decorations: {
-      id: string;
-      draw_id: string;
-      gacha_draws: {
-        prize_kind: GachaPrizeKind;
-        preset_ornament: { display_name: string; emoji: string | null } | null;
-        prize_drawing: { line_data: FamilyDrawingLineData } | null;
-      } | null;
-    }[];
+    // UNIQUE制約のためPostgRESTはオブジェクトで返す（asEmbeddedArrayで吸収する）。
+    family_tree_decorations:
+      | {
+          id: string;
+          draw_id: string;
+          gacha_draws: {
+            prize_kind: GachaPrizeKind;
+            preset_ornament: { display_name: string; emoji: string | null } | null;
+            prize_drawing: { line_data: FamilyDrawingLineData } | null;
+          } | null;
+        }
+      | null;
   }[];
   return {
     ok: true,
@@ -1081,7 +1100,7 @@ export async function fetchFamilyTreeCompletionDots(
       // PostgRESTの埋め込みは（gacha_draws側からの`family_tree_decorations(id)`と
       // 同様に）配列で返る。API仕様.md 12.3章「空配列の行が未反映」と同じ扱いで
       // 先頭要素の有無だけを見る。
-      const decoration = r.family_tree_decorations?.[0] ?? null;
+      const decoration = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
       const prize: FamilyTreeDotPrize | null =
         decoration && decoration.gacha_draws
           ? {
@@ -1291,12 +1310,12 @@ export async function fetchUndecoratedGachaDraws(
     preset_ornament_id: string | null;
     prize_drawing_id: string | null;
     drawn_at: string;
-    family_tree_decorations: { id: string }[];
+    family_tree_decorations: { id: string } | { id: string }[] | null;
   }[];
   return {
     ok: true,
     data: rows
-      .filter((r) => (r.family_tree_decorations?.length ?? 0) === 0)
+      .filter((r) => asEmbeddedArray(r.family_tree_decorations).length === 0)
       .map((r) => ({
         draw_id: r.id,
         prize_kind: r.prize_kind,
@@ -1339,12 +1358,12 @@ export async function fetchMyDecoratableCompletions(
     chore_title: string;
     chore_emoji: string;
     reported_at: string;
-    family_tree_decorations: { id: string }[];
+    family_tree_decorations: { id: string } | { id: string }[] | null;
   }[];
   return {
     ok: true,
     data: rows
-      .filter((r) => (r.family_tree_decorations?.length ?? 0) === 0)
+      .filter((r) => asEmbeddedArray(r.family_tree_decorations).length === 0)
       .map((r) => ({ id: r.id, chore_title: r.chore_title, chore_emoji: r.chore_emoji, reported_at: r.reported_at })),
   };
 }
