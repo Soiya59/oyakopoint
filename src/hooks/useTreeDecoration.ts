@@ -56,9 +56,25 @@ export function useUndecoratedGachaDraw(memberId: string) {
 /**
  * 木に飾る画面（P29/C23/S17）の一覧部分。今シーズン（`seasonStart`、
  * "YYYY-MM-DD"形式）の自分の完了報告のうち、まだ景品と交換していないものを返す。
- * `seasonStart`がまだ取得できていない間（家族の木の読み込み中）は何もしない。
+ *
+ * [2026-08-26修正・本部長] **画面がスケルトン表示のまま永久に止まる不具合を修正した。**
+ * 修正前は入力が揃わないと`loadState`を変えずにreturnしていたため、
+ * `seasonStart`が最後までnullのままだと`"loading"`から二度と抜けられなかった
+ * （エラーにもならないので、ユーザーには「読み込み中が終わらない」としか見えない）。
+ * `useFamilyTreeDetail`は現在シーズンが取得できなくても`loadState="ready"`／
+ * `season=null`を返す実装のため、この経路は実際に発生しうる。
+ *
+ * 修正後は「まだ待っている状態」と「待っても来ない状態」を呼び出し側が区別できる
+ * ようにし、後者では空の一覧として`ready`にする（画面は空状態の案内を出せる）。
+ *
+ * @param seasonResolved 家族の木の読み込みが完了したか。`true`かつ`seasonStart`が
+ *   nullなら「進行中のシーズンが無い」と確定した状態であり、待ち続けない。
  */
-export function useDecoratableCompletions(memberId: string, seasonStart: string | null) {
+export function useDecoratableCompletions(
+  memberId: string,
+  seasonStart: string | null,
+  seasonResolved: boolean
+) {
   const { client } = useSession();
   const { state } = useAppData();
   const familyId = state.family.id;
@@ -66,6 +82,12 @@ export function useDecoratableCompletions(memberId: string, seasonStart: string 
   const [candidates, setCandidates] = useState<DecoratableCompletion[]>([]);
 
   const load = useCallback(async () => {
+    // 進行中のシーズンが無いことが確定した場合は、待たずに空で確定させる。
+    if (seasonResolved && !seasonStart) {
+      setCandidates([]);
+      setLoadState("ready");
+      return;
+    }
     if (!memberId || !familyId || !seasonStart) return;
     setLoadState("loading");
     // useFamilyTree.tsのfetchFamilyTreeCompletionDots呼び出しと同じ変換
@@ -79,7 +101,7 @@ export function useDecoratableCompletions(memberId: string, seasonStart: string 
     setCandidates(res.data);
     setLoadState("ready");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, familyId, memberId, seasonStart]);
+  }, [client, familyId, memberId, seasonStart, seasonResolved]);
 
   useEffect(() => {
     void load();

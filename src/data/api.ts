@@ -1051,7 +1051,7 @@ export async function fetchFamilyTreeCompletionDots(
       "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
         "family_tree_decorations(id, draw_id, gacha_draws(prize_kind, " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings(line_data)))"
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)))"
     )
     .eq("family_id", familyId)
     .gte("reported_at", seasonStartIso)

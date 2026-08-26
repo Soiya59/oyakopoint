@@ -27,7 +27,8 @@ export default function ChildTreeDecorateScreen() {
   const { loadState: treeLoadState, season, dots, reload: reloadTree } = useFamilyTreeDetail();
   const { loadState: candidatesLoadState, candidates, reload: reloadCandidates } = useDecoratableCompletions(
     myId,
-    season?.season_start ?? null
+    season?.season_start ?? null,
+    treeLoadState !== "loading"
   );
   const { decorating, decorate } = useDecorateTreeAction();
   const [decorateError, setDecorateError] = useState<string | null>(null);
