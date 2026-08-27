@@ -303,6 +303,9 @@ function placeGroup(
  */
 type TreeRegion = "canopy" | "lobeLeft" | "lobeRight" | "trunk" | "soil" | "sky";
 
+/** 空の重み。景品のときはこの分を樹冠へ振り替える（pickTreeRegion参照）。 */
+const SKY_WEIGHT = 17;
+
 const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
   ["canopy", 45],
   ["lobeLeft", 11],
@@ -321,11 +324,28 @@ const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
 /** 幅を実測できるまでの初期値。実測後は onLayout の値を使う。 */
 const FALLBACK_WIDTH = 320;
 
-function pickTreeRegion(id: string): TreeRegion {
+/**
+ * 色丸をどの部位に置くか決める。
+ *
+ * [2026-08-27修正・本部長] **景品（36pt）は絶対に「空」へ置かない。**
+ * 空の色丸は木の**背面**に描画する設計（空いている場所にだけ現れるようにするため。
+ * SKY_WIDTHのコメント参照）だが、13ptの通常の丸と違い36ptの景品が空に落ちると
+ * **樹冠の裏に隠れて完全に見えなくなる**。
+ *
+ * ユーザーが実機で「引いたのに木に反映されていない」と報告し調査したところ、
+ * 飾り4件のうち2件が空に割り当てられて隠れていた（データ・APIともに正常で、
+ * この配置ロジックだけが原因だった）。景品は樹冠・葉・幹・土のいずれかに置く。
+ *
+ * 空の分の重みは樹冠へ寄せる（樹冠がもっとも面積が広く、景品が最も自然に見える）。
+ */
+function pickTreeRegion(id: string, isPrize = false): TreeRegion {
   const h = stableHash(`${id}|region`) % 100;
   let acc = 0;
   for (const [region, weight] of REGION_WEIGHTS) {
-    acc += weight;
+    // 景品のときは空の枠を樹冠に振り替える（空の重み分だけ樹冠が広がる）。
+    const w = isPrize && region === "canopy" ? weight + SKY_WEIGHT : weight;
+    if (isPrize && region === "sky") continue;
+    acc += w;
     if (h < acc) return region;
   }
   return "canopy";
@@ -409,12 +429,12 @@ export function TreeStageVisual({
       canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [], sky: [],
     };
     if (shape.kind === "tree") {
-      for (const dot of slots) map[pickTreeRegion(dot.id)].push(dot);
+      for (const dot of slots) map[pickTreeRegion(dot.id, dot.prize !== null)].push(dot);
     } else if (shape.kind === "sprout") {
       // 芽は樹冠・幹が無いので双葉と空だけに振り分ける。芽の段階は完了報告が
       // 10〜29件あり、2枚の葉だけでは密集しがちなため、空に逃がす意味もある。
       for (const dot of slots) {
-        const r = pickTreeRegion(dot.id);
+        const r = pickTreeRegion(dot.id, dot.prize !== null);
         if (r === "sky") map.sky.push(dot);
         else if (r === "soil" || r === "trunk") map.soil.push(dot); // 芽には幹が無いので地面へ寄せる
         else if (stableHash(dot.id) % 2 === 0) map.lobeLeft.push(dot);
