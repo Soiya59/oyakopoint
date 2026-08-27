@@ -4,6 +4,7 @@ import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot } from "@/data/api";
 import type { FamilyTreeMemberBreakdown } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
+import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
 
 /**
@@ -47,6 +48,9 @@ const DOT_SIZE = 13;
 // 「ガチャの景品（36pt）の表示ルール」）。大きさは「これは景品だ」という意味のみを
 // 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
 const PRIZE_DOT_SIZE = 36;
+/** 花（stage3）の花芯の色。個人色に染めない固定色（木の共有部分と同じ扱い）。 */
+const FLOWER_CENTER_COLOR = "#FFF3B0";
+
 /** 景品の識別リング（交換した本人のavatar_color、2pt実線）の太さ。 */
 const PRIZE_RING_WIDTH = 2;
 /** かざりつけモードで自分の色丸に添える「淡い強調」のはみ出し幅（決定8）。 */
@@ -361,6 +365,59 @@ function pickTreeRegion(id: string, isPrize = false): TreeRegion {
  *   2pt実線で外周に添える（07-10章「識別表現を残すか」への回答。サイズ自体は
  *   「景品である」という意味のみを持たせ、誰の記録かはリングという別チャンネルで持たせる）。
  */
+/**
+ * [2026-08-27追加・本部長] 完了報告1件の色丸を、木の段階に応じた「形」で描く。
+ *
+ * ユーザーの指摘:「花や実は木の状態だと思う。若木と変化はないと思う」。実際、
+ * 若木・花・実はいずれも`kind: "tree"`で樹冠の半径が違うだけであり、
+ * **「花」と呼びながら花が無く、「実」と呼びながら実が無い**状態だった。
+ * 芽（stage1）を双葉に作り直したとき（2026-08-24）と同じ問題で、
+ * 上位3段階には同じ考えを適用できていなかった。
+ *
+ * [なぜ木に飾りを足すのではなく、色丸の形を変えるのか]
+ * 1. 要素を増やさない。木に装飾を追加すると色丸・景品（36pt）と視覚的に競合する
+ * 2. 意味が正しくなる。色丸は「誰かがお手伝いした1回」であり、それが
+ *    つぼみ→花→実と変化するのは「家族の積み重ねが実っていく」という
+ *    07-9章の趣旨そのものになる
+ * 3. 07-10章の必須3条件に抵触しない。全員の丸が同じように変わるため個人間の
+ *    比較は生まれない（大きさ・色は従来どおり変えていない）
+ *
+ * 色は従来どおり報告者のavatar_colorをそのまま使い、形だけが段階で変わる。
+ */
+function StageDot({ color, size, stage }: { color: string; size: number; stage: number }) {
+  if (stage < 3) {
+    return (
+      <View
+        style={[styles.dot, { backgroundColor: color, width: size, height: size, borderRadius: size / 2 }]}
+      />
+    );
+  }
+  const isFlower = stage === 3;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      {isFlower ? (
+        <>
+          {[0, 72, 144, 216, 288].map((deg) => (
+            <SvgCircle
+              key={deg}
+              cx={50 + 26 * Math.cos((deg - 90) * (Math.PI / 180))}
+              cy={50 + 26 * Math.sin((deg - 90) * (Math.PI / 180))}
+              r={22}
+              fill={color}
+            />
+          ))}
+          <SvgCircle cx={50} cy={50} r={15} fill={FLOWER_CENTER_COLOR} />
+        </>
+      ) : (
+        <>
+          <SvgPath d="M50 6 C58 12 62 20 58 28 L42 28 C38 20 42 12 50 6 Z" fill={theme.treeColors.trunk} />
+          <SvgCircle cx={50} cy={60} r={38} fill={color} />
+        </>
+      )}
+    </Svg>
+  );
+}
+
 function PrizeDotView({
   dot,
   x,
@@ -482,19 +539,9 @@ export function TreeStageVisual({
           {dot.prize ? (
             <PrizeDotView dot={dot} x={x} y={y} size={size} />
           ) : (
-            <View
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: dotColor(dot),
-                  left: x - size / 2,
-                  top: y - size / 2,
-                  width: size,
-                  height: size,
-                  borderRadius: size / 2,
-                },
-              ]}
-            />
+            <View style={[styles.dotWrap, { left: x - size / 2, top: y - size / 2, width: size, height: size }]}>
+              <StageDot color={dotColor(dot)} size={size} stage={stage} />
+            </View>
           )}
         </React.Fragment>
       );
@@ -768,6 +815,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 3,
     borderBottomRightRadius: 3,
   },
+  dotWrap: { position: "absolute" },
   dot: {
     position: "absolute",
     width: DOT_SIZE,
