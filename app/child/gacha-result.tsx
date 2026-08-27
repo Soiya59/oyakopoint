@@ -47,6 +47,7 @@ export default function ChildGachaResultScreen() {
           tone="child"
           result={detail}
           onDecorate={() => router.push({ pathname: "/child/tree-decorate", params: { drawId: drawId ?? "" } })}
+          onGoToShelf={() => router.replace("/child/collector-shelf")}
         />
       )}
     </Screen>

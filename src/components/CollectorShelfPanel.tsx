@@ -13,7 +13,7 @@
  * 「過去の木」: シーズンごとの家族の木を、その月に飾られた景品が乗った状態のまま
  *   再現表示する。読み取り専用（タップ操作を持たない）。
  */
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
@@ -101,7 +101,41 @@ export function CollectorShelfPanel({
     if (next && !dotsBySeasonId[season.id]) onExpandSeason(season);
   };
 
-  const selectedItem = collectedItems.find((i) => i.id === selectedItemId) ?? null;
+  /**
+   * [2026-08-27追加・本部長] 同じ既製の飾りは1マスにまとめて個数で見せる。
+   *
+   * ユーザーの指摘: 7人程度が参加する家族では「木も棚もパンパンになりそう」。
+   * 完了報告5回ごとに1回引けるため、7人がお手伝いをすれば月に数十回引かれ、
+   * 既製の飾りが半分出るとして半年で百個以上になる。1個1マスで並べると
+   * **せっかくの家族の絵が既製品に埋もれて探せなくなる**。
+   *
+   * 家族の絵は1枚ずつ固有のものなのでまとめず、常に個別に表示する。
+   * これにより、既製品が何個増えても絵が主役の位置を保てる。
+   * 個数が増えること自体は「集まってきた」という手応えになるため、
+   * まとめても失われる情報は無い（07-13-1章「外れ枠を作らない」とも整合）。
+   */
+  const shelfEntries = useMemo(() => {
+    const entries: { key: string; item: CollectedGachaDraw; count: number }[] = [];
+    const presetIndexByName = new Map<string, number>();
+    for (const item of collectedItems) {
+      if (item.prizeKind === "preset_ornament") {
+        const name = item.presetOrnament?.display_name ?? "?";
+        const at = presetIndexByName.get(name);
+        if (at !== undefined) {
+          entries[at].count += 1;
+          continue;
+        }
+        presetIndexByName.set(name, entries.length);
+        entries.push({ key: `preset:${name}`, item, count: 1 });
+      } else {
+        entries.push({ key: item.id, item, count: 1 });
+      }
+    }
+    return entries;
+  }, [collectedItems]);
+
+  const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
+  const selectedItem = selectedEntry?.item ?? null;
 
   return (
     <View style={{ marginTop: theme.spacing.s4 }}>
@@ -153,12 +187,13 @@ export function CollectorShelfPanel({
           {collectedLoadState === "ready" && collectedItems.length > 0 && (
             <>
               <View style={styles.grid}>
-                {collectedItems.map((item) => {
-                  const selected = item.id === selectedItemId;
+                {shelfEntries.map((entry) => {
+                  const item = entry.item;
+                  const selected = entry.key === selectedItemId;
                   return (
                     <Pressable
-                      key={item.id}
-                      onPress={() => setSelectedItemId(selected ? null : item.id)}
+                      key={entry.key}
+                      onPress={() => setSelectedItemId(selected ? null : entry.key)}
                       style={[styles.gridItem, selected && styles.gridItemSelected]}
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
@@ -168,7 +203,9 @@ export function CollectorShelfPanel({
                       ) : item.drawing ? (
                         <DrawingThumbnail lineData={item.drawing.line_data} size={48} />
                       ) : null}
-                      <Text style={[captionStyle, styles.gridCaption]}>{formatShortDate(item.drawnAt)}</Text>
+                      <Text style={[captionStyle, styles.gridCaption]}>
+                        {entry.count > 1 ? `×${entry.count}` : formatShortDate(item.drawnAt)}
+                      </Text>
                     </Pressable>
                   );
                 })}

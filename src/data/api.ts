@@ -1306,6 +1306,12 @@ export async function fetchUndecoratedGachaDraws(
     .from("gacha_draws")
     .select("id, prize_kind, preset_ornament_id, prize_drawing_id, drawn_at, family_tree_decorations(id)")
     .eq("member_id", memberId)
+    // [2026-08-27追加] 木に飾れるのは家族の絵のみ（既製の飾りは棚に保管するだけ）。
+    // 飾れないものに対して「まだ飾っていない景品があります」と案内してしまうと、
+    // 促されたのに飾れないという行き止まりになるため、ここで除外する。
+    // DB側でも decorate_tree_with_gacha_prize() が既製の飾りを拒否する
+    // （マイグレーション 20260827063303、UIだけの制限にしない方針）。
+    .eq("prize_kind", "family_drawing")
     .order("drawn_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   const rows = (data ?? []) as unknown as {

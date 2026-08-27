@@ -25,13 +25,16 @@ type Tone = "parent" | "child" | "supporter";
 export interface GachaResultViewProps {
   tone: Tone;
   result: GachaPrizeDetail;
-  /** 「木に飾る」導線（21.4節、木への飾り付け画面）への遷移。 */
+  /** 「木に飾る」導線（21.4節、木への飾り付け画面）への遷移。家族の絵のときのみ使う。 */
   onDecorate: () => void;
+  /** [2026-08-27追加] 既製の飾りが当たったときのコレクター棚への遷移。
+      木に飾れるのは家族の絵のみのため、既製の飾りではこちらを出す。 */
+  onGoToShelf: () => void;
 }
 
 const TWO_STEP_REVEAL_DELAY_MS = 500;
 
-export function GachaResultView({ tone, result, onDecorate }: GachaResultViewProps) {
+export function GachaResultView({ tone, result, onDecorate, onGoToShelf }: GachaResultViewProps) {
   const isChild = tone === "child";
   const headlineStyle = isChild ? theme.typography.childHeadline : tone === "supporter" ? theme.typography.supporterTitle : theme.typography.parentTitle;
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
@@ -52,6 +55,7 @@ export function GachaResultView({ tone, result, onDecorate }: GachaResultViewPro
   }, [useTwoStepReveal, result]);
 
   const decorateLabel = isChild ? "きに かざる →" : "木に飾る →";
+  const shelfLabel = isChild ? "コレクションだなを みる →" : "コレクター棚を見る →";
 
   if (useTwoStepReveal && !revealed) {
     return (
@@ -70,7 +74,14 @@ export function GachaResultView({ tone, result, onDecorate }: GachaResultViewPro
         <Text style={[bodyStyle, styles.prizeName]}>
           {isChild ? `「${result.ornament.display_name}」が でてきたよ！` : `「${result.ornament.display_name}」`}
         </Text>
-        <AppButton label={decorateLabel} tone={tone} fullWidth style={styles.button} onPress={onDecorate} />
+        {/* [2026-08-27] 木に飾れるのは家族の絵のみ（既製の飾りは棚に保管するだけ）。
+            ここで「木に飾る」を出すと、押しても飾れない行き止まりになるため出さない。
+            ただし07-13-1章「外れ枠を作らない」に配慮し、「はずれ」ではなく
+            「棚に加わった」という獲得の事実を前向きに伝える文言にする。 */}
+        <Text style={[bodyStyle, styles.shelfNote]}>
+          {isChild ? "コレクションだなに はいったよ！" : "コレクター棚に加わりました"}
+        </Text>
+        <AppButton label={shelfLabel} tone={tone} fullWidth style={styles.button} onPress={onGoToShelf} />
       </View>
     );
   }
@@ -99,6 +110,7 @@ export function GachaResultView({ tone, result, onDecorate }: GachaResultViewPro
 }
 
 const styles = StyleSheet.create({
+  shelfNote: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   container: { alignItems: "center", marginTop: theme.spacing.s8 },
   bigEmoji: { fontSize: 64, marginTop: theme.spacing.s6 },
   prizeName: { marginTop: theme.spacing.s4, textAlign: "center" },

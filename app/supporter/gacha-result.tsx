@@ -45,6 +45,7 @@ export default function SupporterGachaResultScreen() {
           tone="supporter"
           result={detail}
           onDecorate={() => router.push({ pathname: "/supporter/tree-decorate", params: { drawId: drawId ?? "" } })}
+          onGoToShelf={() => router.replace("/supporter/collector-shelf")}
         />
       )}
     </Screen>
