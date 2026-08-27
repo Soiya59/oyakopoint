@@ -19,7 +19,7 @@ import { useGachaProgress } from "@/hooks/useGacha";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ChildHomeScreen() {
-  const { state, memberPoints, isChoreLimitReached, dispatch } = useAppData();
+  const { state, memberPoints, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
   // 20.6章決定7）。段階名のみを軽く添える（内訳・件数までは表示しない、C5行の設計）。
@@ -48,8 +48,12 @@ export default function ChildHomeScreen() {
     (r) => myCompletionIds.has(r.completion_id) && new Date(r.created_at).getTime() >= oneDayAgoMs
   ).length;
 
+  // [2026-08-27修正・本部長] 実施済みの「単発」を一覧から外す。単発のchoreには「終わり」が
+  // 無く、実施後も「✅ おわったよ」のまま永久に「きろくずみ」へ並び続けていた
+  // （本番でも単発4件すべてが完了済みのまま最長12日間残っていた）。
+  // 「くり返す」設定のchoreは今日の上限に達しただけなので、従来どおり「きろくずみ」に残す。
   const chores = state.chores.filter(
-    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me.id)
+    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me.id) && !isOneOffFinished(c)
   );
 
   // [2026-08-22追加] 「まいにち」個人設定（chore_daily_flags）。ユーザーから
@@ -157,15 +161,13 @@ export default function ChildHomeScreen() {
                   <Text style={{ fontSize: 32 }}>{chore.emoji}</Text>
                   <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{chore.title}</Text>
                   {done ? (
-                    // 「1回だけ」設定（is_repeatable=false）のchoreは実施済みなら日付を問わず
-                    // 永久にlimitReached=trueになる（src/data/store.tsxのisChoreLimitReachedFor
-                    // 参照）。「きょうは」固定の文言だと、実際は別の日に完了報告した場合でも
-                    // 「今日やった」ように見えてしまうとユーザーが実機で発見したため、
-                    // is_repeatableで文言を出し分けた（「くり返す」設定は本当にその日の
-                    // 上限到達なので従来どおり）。
-                    <Text style={styles.doneLabel}>
-                      {chore.is_repeatable ? "✅ きょうは\nがんばったね" : "✅ おわったよ"}
-                    </Text>
+                    // [2026-08-27] 実施済みの「1回だけ」設定（is_repeatable=false）のchoreは
+                    // 上のフィルタで一覧から外れるようになったため、ここへ来るのは
+                    // 「くり返す」設定でその日の上限に達したものだけになった。
+                    // よって文言は「きょうは」で正しい（以前は単発も混ざっており、別の日に
+                    // 完了したものまで「今日やった」ように見えると実機で発見されたため
+                    // is_repeatableで出し分けていた。その分岐はもう到達しない）。
+                    <Text style={styles.doneLabel}>{"✅ きょうは\nがんばったね"}</Text>
                   ) : (
                     <Text style={styles.pointLabel}>+{chore.points}pt</Text>
                   )}

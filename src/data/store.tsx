@@ -119,6 +119,8 @@ export interface DataContextValue {
   dispatch: (action: Action) => Promise<DispatchResult>;
   memberPoints: MemberPoints[];
   isChoreLimitReached: (chore: Chore, memberId: string) => boolean;
+  /** 単発（is_repeatable=false）のお手伝いが実施済みで役目を終えているか。isOneOffFinishedFor参照。 */
+  isOneOffFinished: (chore: Chore) => boolean;
   earnLedger: (memberId: string) => LedgerEntry[];
   spendLedger: (memberId: string) => LedgerEntry[];
   fullLedger: (memberId: string) => LedgerEntry[];
@@ -144,12 +146,30 @@ export function useAppData(): DataContextValue {
 // 共通ヘルパー（両実装で使う純粋関数）
 // ============================================================
 
+/**
+ * [2026-08-27追加・本部長] 「単発」（is_repeatable=false）のお手伝いが、誰かに1回実施された
+ * ことで役目を終えているかどうか。
+ *
+ * 単発のchoreには「終わり」という状態が無く、実施後も is_active=true のまま一覧に残り続けて
+ * いた（本番でも4件すべてが完了済みのまま最長12日間並んでいた）。ユーザーから
+ * 「単発が同じ感じで残り続けるので見にくい」との指摘を受けて追加した判定。
+ *
+ * DBは変更していない。chore_completionsは追記専用ログなので、この判定は「完了記録が1件でも
+ * あるか」だけで決まり、記録を消さない限り勝手に元へ戻ることはない。
+ * なお state.completions は期間で絞らず全件取得している（api.fetchCompletionsをsinceIso無しで
+ * 呼んでいる）ため、何日前に完了したものでも正しく判定できる。
+ */
+function isOneOffFinishedFor(completions: ChoreCompletion[], chore: Chore): boolean {
+  if (chore.is_repeatable) return false;
+  return completions.some((c) => c.chore_id === chore.id);
+}
+
 function isChoreLimitReachedFor(completions: ChoreCompletion[], chore: Chore, memberId: string): boolean {
   // chore_completions_before_insertトリガー（daily_limit判定）のクライアント側事前チェック
   // （API仕様.md 3章「クライアントは上限超過時に返るエラーをハンドリングするだけでよい」）。
   // 最終防衛線はDB側であり、この関数はUXのための事前判定に過ぎない。
   if (!chore.is_repeatable) {
-    return completions.some((c) => c.chore_id === chore.id);
+    return isOneOffFinishedFor(completions, chore);
   }
   if (chore.daily_limit == null) return false;
   const today = new Date().toDateString();
@@ -499,6 +519,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dispatch,
       memberPoints,
       isChoreLimitReached: (chore, memberId) => isChoreLimitReachedFor(state.completions, chore, memberId),
+      isOneOffFinished: (chore) => isOneOffFinishedFor(state.completions, chore),
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>
@@ -699,6 +720,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       dispatch,
       memberPoints: computeMemberPoints(state),
       isChoreLimitReached: (chore, memberId) => isChoreLimitReachedFor(state.completions, chore, memberId),
+      isOneOffFinished: (chore) => isOneOffFinishedFor(state.completions, chore),
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>

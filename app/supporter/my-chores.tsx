@@ -26,9 +26,13 @@ import { useAppData } from "@/data/store";
  * よって作成者本人に限定される。
  */
 export default function SupporterMyChoresScreen() {
-  const { state, isChoreLimitReached } = useAppData();
+  const { state, isChoreLimitReached, isOneOffFinished } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
-  const personalChores = state.chores.filter((c) => c.is_active && c.scope === "personal");
+  // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
+  // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
+  const personalChores = state.chores.filter(
+    (c) => c.is_active && c.scope === "personal" && !isOneOffFinished(c)
+  );
   const myChores = personalChores.filter((c) => c.created_by === me?.id);
   const othersChores = personalChores.filter((c) => c.created_by && c.created_by !== me?.id);
 

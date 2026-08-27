@@ -24,7 +24,7 @@ import { useAppData } from "@/data/store";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ParentMyChoresScreen() {
-  const { state, isChoreLimitReached, dispatch } = useAppData();
+  const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // [2026-08-16] P20からの復帰時のみ一時的に表示する、控えめな確認表示（スナックバー）。
   // 主要画面ワイヤーフレーム.md 9.2章「送信成功時の表現（新規画面を作らない）」対応。
@@ -47,8 +47,11 @@ export default function ParentMyChoresScreen() {
   }, [params.justChoreId, params.justTitle, params.justPoints]);
 
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
+  // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
+  // ここは「これからやる」ための一覧なので、役目を終えた単発が残っていても押せないだけで邪魔になる。
+  // 管理用の一覧（P10 app/parent/chores.tsx）では折りたたみセクションとして引き続き確認できる。
   const myChores = state.chores.filter(
-    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me?.id)
+    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me?.id) && !isOneOffFinished(c)
   );
 
   // [2026-08-22追加] app/child/(tabs)/home.tsxと同じ理由・同じ仕組み（chore_daily_flags）。
