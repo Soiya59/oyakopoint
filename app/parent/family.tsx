@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -9,8 +9,11 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { fetchFamilyInvites, removeMember, revokeFamilyInvite } from "@/data/api";
+import { fetchFamilyInvites, removeMember, revokeFamilyInvite, updateMemberDisplayName } from "@/data/api";
 import type { FamilyInvite } from "@/types/domain";
+
+/** 表示名の最大文字数（MemberAvatarの頭文字表示・木の内訳表示が崩れない長さ）。 */
+const NAME_MAX_LENGTH = 12;
 
 /**
  * P14 家族管理（メンバー一覧・招待・子ども追加の起点）
@@ -24,6 +27,15 @@ import type { FamilyInvite } from "@/types/domain";
  * [2026-08-22追加] みまもりメンバー招待導線（要件定義書07-7章、画面一覧・遷移図.md
  * P14拡張・P23・P24）を追加した。「みまもりメンバーを招待する」ボタン（→P23）と、
  * 発行済み招待の一覧（招待中／参加済み／取消済み）を表示する。
+ *
+ * [2026-08-27追加・本部長] メンバーの表示名変更を追加した。家族名・お手伝い名・ごほうび名は
+ * 変更できたのに、メンバー名だけは作成時に決めたきり変えられなかった（実際に本番家族で
+ * 「jiji」のような仮の名前が残っていた）。
+ * 当初は「本人も自分の名前を変えられる」案だったが、子ども側には設定画面が存在せず
+ * 新たな導線の追加が必要になるため、ユーザー判断で**保護者のみが家族全員の名前を変更する**
+ * 形に絞った（みまもりメンバーの自己変更はS13に1枚足せば後から拡張できる）。
+ * 権限はDB側の既存RLS`family_members_update_scoped`がそのまま担保するため、
+ * マイグレーションは追加していない。
  */
 export default function FamilyScreen() {
   const { state, refresh } = useAppData();
@@ -33,6 +45,10 @@ export default function FamilyScreen() {
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
   const [invitesLoaded, setInvitesLoaded] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  // 名前を編集中のメンバーID（1人ずつ・カード内で完結させ、画面遷移を増やさない）
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const activeMembers = state.members.filter((m) => m.is_active);
   // supporterはfamily_members一覧（activeMembers）にすでに含まれる（accept_family_invite後）ため
@@ -82,6 +98,35 @@ export default function FamilyScreen() {
     void refresh();
   };
 
+  const startEditName = (memberId: string, currentName: string) => {
+    setErrorMessage(null);
+    setEditingId(memberId);
+    setDraftName(currentName);
+  };
+
+  const cancelEditName = () => {
+    setEditingId(null);
+    setDraftName("");
+  };
+
+  const saveName = async (memberId: string) => {
+    const name = draftName.trim();
+    if (name.length === 0) {
+      setErrorMessage("名前を入力してください。");
+      return;
+    }
+    setSavingName(true);
+    setErrorMessage(null);
+    const res = await updateMemberDisplayName(client, memberId, name);
+    setSavingName(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    cancelEditName();
+    void refresh();
+  };
+
   const revokeInvite = async (inviteId: string) => {
     setRevokingId(inviteId);
     const res = await revokeFamilyInvite(client, inviteId);
@@ -113,51 +158,86 @@ export default function FamilyScreen() {
           <Card key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 }}>
             <MemberAvatar name={m.display_name} color={m.avatar_color} />
             <View style={{ flex: 1 }}>
-              <Text style={theme.typography.parentBodyMedium}>{m.display_name}</Text>
-              <Text style={theme.typography.parentCaption}>
-                {m.role === "parent"
-                  ? m.is_owner
-                    ? "保護者（オーナー）"
-                    : "保護者"
-                  : m.role === "supporter"
-                  ? "🤝 みまもりメンバー"
-                  : "子ども"}
-              </Text>
+              {editingId === m.id ? (
+                <>
+                  <TextInput
+                    value={draftName}
+                    onChangeText={setDraftName}
+                    maxLength={NAME_MAX_LENGTH}
+                    placeholder="名前"
+                    autoFocus
+                    editable={!savingName}
+                    style={[theme.typography.parentBody, styles.nameInput]}
+                  />
+                  <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
+                    <AppButton
+                      label={savingName ? "保存中…" : "保存"}
+                      onPress={() => saveName(m.id)}
+                      disabled={savingName || draftName.trim().length === 0}
+                    />
+                    <AppButton label="やめる" variant="ghost" onPress={cancelEditName} disabled={savingName} />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={theme.typography.parentBodyMedium}>{m.display_name}</Text>
+                  <Text style={theme.typography.parentCaption}>
+                    {m.role === "parent"
+                      ? m.is_owner
+                        ? "保護者（オーナー）"
+                        : "保護者"
+                      : m.role === "supporter"
+                      ? "🤝 みまもりメンバー"
+                      : "子ども"}
+                  </Text>
+                </>
+              )}
             </View>
-            {m.role === "child" && (
+            {editingId !== m.id && (
               <View style={{ gap: theme.spacing.s2 }}>
-                {/* [2026-08-16追加・本部長] 既存の子どもにPINを設定・再発行する導線が
-                    無かった（P15は新規作成専用のため）。要件定義書10章未決事項「子ども用
-                    PINの再発行フロー」への対応。 */}
+                {/* 名前変更は役割を問わず保護者が全員に対して行える（RLS側も同条件）。 */}
                 <AppButton
-                  label="PINを設定"
+                  label="名前を変更"
                   variant="secondary"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/parent/child-pin-reset",
-                      params: { memberId: m.id, displayName: m.display_name },
-                    })
-                  }
-                  disabled={processingId !== null}
+                  onPress={() => startEditName(m.id, m.display_name)}
+                  disabled={processingId !== null || editingId !== null}
                 />
-                <AppButton
-                  label={processingId === m.id ? "処理中…" : "退会させる"}
-                  variant="secondary"
-                  onPress={() => removeChild(m.id)}
-                  disabled={processingId !== null}
-                />
+                {m.role === "child" && (
+                  <>
+                    {/* [2026-08-16追加・本部長] 既存の子どもにPINを設定・再発行する導線が
+                        無かった（P15は新規作成専用のため）。要件定義書10章未決事項「子ども用
+                        PINの再発行フロー」への対応。 */}
+                    <AppButton
+                      label="PINを設定"
+                      variant="secondary"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/parent/child-pin-reset",
+                          params: { memberId: m.id, displayName: m.display_name },
+                        })
+                      }
+                      disabled={processingId !== null || editingId !== null}
+                    />
+                    <AppButton
+                      label={processingId === m.id ? "処理中…" : "退会させる"}
+                      variant="secondary"
+                      onPress={() => removeChild(m.id)}
+                      disabled={processingId !== null || editingId !== null}
+                    />
+                  </>
+                )}
+                {/* [2026-08-22追加] みまもりメンバーの退会（07-7章「家族メンバーの招待発行・
+                    削除・役割変更などの家族管理操作」は保護者専権。みまもりメンバー自身は
+                    S13から自分自身のみ退会できるが、保護者はここから誰でも退会させられる）。 */}
+                {m.role === "supporter" && (
+                  <AppButton
+                    label={processingId === m.id ? "処理中…" : "退会させる"}
+                    variant="secondary"
+                    onPress={() => removeSupporter(m.id)}
+                    disabled={processingId !== null || editingId !== null}
+                  />
+                )}
               </View>
-            )}
-            {/* [2026-08-22追加] みまもりメンバーの退会（07-7章「家族メンバーの招待発行・
-                削除・役割変更などの家族管理操作」は保護者専権。みまもりメンバー自身は
-                S13から自分自身のみ退会できるが、保護者はここから誰でも退会させられる）。 */}
-            {m.role === "supporter" && (
-              <AppButton
-                label={processingId === m.id ? "処理中…" : "退会させる"}
-                variant="secondary"
-                onPress={() => removeSupporter(m.id)}
-                disabled={processingId !== null}
-              />
             )}
           </Card>
         ))}
@@ -202,3 +282,14 @@ export default function FamilyScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  nameInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentMd,
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+});

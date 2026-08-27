@@ -357,6 +357,31 @@ export async function fetchFamilyBundle(client: SupabaseClient, familyId: string
  * ポリシー（保護者のみ、is_current_user_parent()）により、みまもりメンバー・
  * 子どもからの呼び出しはRLSで拒否される。
  */
+/**
+ * [2026-08-27追加] メンバーの表示名（ニックネーム）を変更する。
+ *
+ * 権限は既存のRLS `family_members_update_scoped` がそのまま担保する
+ *   family_id = current_family_id() AND (is_current_user_parent() OR id = current_family_member_id())
+ * すなわち**保護者は家族全員、本人は自分自身のみ**変更できる
+ * （本部長・ユーザー協議で決めたルールと既存ポリシーが偶然一致していたため、
+ * DB側の変更は不要だった）。役割・オーナー権限・所属家族の変更は
+ * トリガー`family_members_before_update()`が引き続きブロックする。
+ */
+export async function updateMemberDisplayName(
+  client: SupabaseClient,
+  memberId: string,
+  displayName: string
+): Promise<ApiResult<FamilyMember>> {
+  const { data, error } = await client
+    .from("family_members")
+    .update({ display_name: displayName })
+    .eq("id", memberId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyMember };
+}
+
 export async function updateFamilyName(
   client: SupabaseClient,
   familyId: string,
