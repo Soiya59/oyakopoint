@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
+import MyPointsCard from "@/components/MyPointsCard";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
@@ -22,7 +23,7 @@ import { useWeeklyDigest } from "@/hooks/useWeeklyDigest";
  * あわせて実施履歴カレンダー（P18、要件定義書07-3章）への「きろく」ショートカットを追加した。
  */
 export default function ParentHomeScreen() {
-  const { state } = useAppData();
+  const { state, memberPoints } = useAppData();
   // [2026-08-23追加] 今週のまとめメッセージ（07-8章、主要画面ワイヤーフレーム.md 19章）。
   // 決定1「専用の詳細画面・タップ操作は持たせない」・決定3「通信エラー時も控えめな
   // 1行に差し替えるだけにとどめる」・決定4「集計対象0件はデフォルトメッセージで
@@ -56,6 +57,10 @@ export default function ParentHomeScreen() {
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
+
+  // [2026-08-27追加・本部長] 自分の現在ポイント。src/components/MyPointsCard.tsx参照。
+  const myPoints =
+    memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
   // [2026-08-26整理・本部長] メニュー項目が12個に達し「多すぎる」との指摘を受けて
   // 2グループに分けた。項目自体は1つも減らしていない。
@@ -95,6 +100,8 @@ export default function ParentHomeScreen() {
   return (
     <Screen tone="parent">
       <Text style={theme.typography.parentTitle}>{state.family.name} の ホーム</Text>
+
+      <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
 
       {/* [2026-08-23追加] 今週のまとめメッセージカード（07-8章、主要画面ワイヤーフレーム.md
           19章）。決定1のとおり非タップ（表示専用）。読み込み中は1行スケルトンにする。 */}

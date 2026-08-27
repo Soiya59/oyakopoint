@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
+import MyPointsCard from "@/components/MyPointsCard";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -22,7 +23,7 @@ import { useGachaProgress } from "@/hooks/useGacha";
  * ため、最近のようすの表示からバッジを外した。
  */
 export default function SupporterHomeScreen() {
-  const { state } = useAppData();
+  const { state, memberPoints } = useAppData();
   // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
   // ワイヤーフレーム.md 21.1節「S1みまもりホーム内。ホーム上部、既存のショートカット
   // グリッドとは別枠で配置。演出は控えめ」）。
@@ -32,6 +33,11 @@ export default function SupporterHomeScreen() {
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
+
+  // [2026-08-27追加・本部長] 自分の現在ポイント（P7保護者ホームと同じ。MyPointsCard参照）。
+  // みまもりメンバーには通帳画面が無いため、ここでは表示専用（onPress無し）にしている。
+  const myPoints =
+    memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "👀", label: "かぞくのようす", path: "/supporter/activity" },
@@ -53,6 +59,8 @@ export default function SupporterHomeScreen() {
   return (
     <Screen tone="supporter">
       <Text style={theme.typography.supporterTitle}>{state.family.name} の みまもり</Text>
+
+      <MyPointsCard tone="supporter" points={myPoints} />
 
       <GachaHomeWidget
         tone="supporter"
