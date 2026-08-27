@@ -92,33 +92,29 @@ export default function ChildHomeScreen() {
         onPress={() => router.push("/child/gacha")}
       />
 
-      {/* [2026-08-20追加] 双方向リアクション（子→親）への導線。
-          app/child/family-activity.tsx参照。 */}
-      <Pressable onPress={() => router.push("/child/family-activity")}>
-        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>
-          👨‍👩‍👧‍👦 かぞくのがんばりを見る →
-        </Text>
-      </Pressable>
-
-      {/* [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
-          20.6章）。段階名のみを添える軽量表示。タップでC20へ。 */}
-      <Pressable onPress={() => router.push("/child/family-tree")}>
-        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>
-          🌳 かぞくの木を見る（いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」）→
-        </Text>
-      </Pressable>
-
-      {/* [2026-08-26追加] お絵かき（07-13-2章、第2段階）。画面一覧・遷移図.md 3.15節
-          「子ども: [C5 やることリスト]から ──▶ [C24 おえかき]」。 */}
-      <Pressable onPress={() => router.push("/child/drawing")}>
-        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>🎨 おえかきする →</Text>
-      </Pressable>
-
-      {/* [2026-08-27追加・第5段階（最終段階）] コレクション棚（07-13-3章、画面一覧・
-          遷移図.md「C5やることリストから ──▶ C26 コレクションだな」）。 */}
-      <Pressable onPress={() => router.push("/child/collector-shelf")}>
-        <Text style={[theme.typography.childBody, styles.familyActivityLink]}>🗄️ コレクションだなを見る →</Text>
-      </Pressable>
+      {/* [2026-08-27整理・本部長] 第2〜5段階で機能を足すたびに文字リンクを1行ずつ
+          継ぎ足した結果、リンク4行が画面の中央を占め、**子どもの一番の仕事である
+          「お手伝いの報告」が画面の下へ押し出されていた**（ユーザーの実機指摘）。
+          あわせて、UIUXデザイン部CLAUDE.mdの「子ども向け画面は文字よりアイコン・色を
+          優先する」という原則にも反していた（4行とも素の文字リンクだった）。
+          アイコンを主役にした横1列に集約し、4行を1行に減らす。 */}
+      <View style={styles.shortcutRow}>
+        {[
+          { emoji: "👨‍👩‍👧‍👦", label: "かぞく", path: "/child/family-activity" },
+          {
+            emoji: "🌳",
+            label: theme.treeStages[treeSeason?.current_stage ?? 0].name,
+            path: "/child/family-tree",
+          },
+          { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
+          { emoji: "🗄️", label: "だな", path: "/child/collector-shelf" },
+        ].map((s2) => (
+          <Pressable key={s2.path} onPress={() => router.push(s2.path as never)} style={styles.shortcutItem}>
+            <Text style={styles.shortcutEmoji}>{s2.emoji}</Text>
+            <Text style={styles.shortcutLabel}>{s2.label}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       <View style={{ marginTop: theme.spacing.s2 }}>
         {loadState === "loading" && <SkeletonList count={4} />}
@@ -217,10 +213,26 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   notifBadge: { fontSize: 16, fontWeight: "700" },
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
-  familyActivityLink: {
-    textAlign: "center",
-    marginTop: theme.spacing.s2,
+  // [2026-08-27追加] 4本の文字リンクを置き換えた横1列のショートカット。
+  // 子ども向けタップ領域56dp（デザイントークン.md 1.7節）を高さで確保する。
+  shortcutRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: theme.spacing.s3,
+  },
+  shortcutItem: {
+    minWidth: theme.tapTarget.child,
+    minHeight: theme.tapTarget.child,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.s1,
+  },
+  shortcutEmoji: { fontSize: 30 },
+  shortcutLabel: {
+    fontSize: 12,
+    fontWeight: "700",
     color: theme.colors.brandPrimaryStrong,
+    marginTop: 2,
   },
   sectionHeading: { marginTop: theme.spacing.s4, marginBottom: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   dailySectionHeading: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
