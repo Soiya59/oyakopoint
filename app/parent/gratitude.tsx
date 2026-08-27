@@ -121,7 +121,7 @@ export default function ParentGratitudeHubScreen() {
       {loadState === "ready" && (
         <>
           <Card style={styles.balanceCard}>
-            <Text style={theme.typography.parentBodyMedium}>今週あと {balance}pt 贈れます</Text>
+            <Text style={theme.typography.parentBodyMedium}>きょうあと {balance}pt 贈れます</Text>
             <AppButton
               label="ありがとうを贈る"
               style={{ marginTop: theme.spacing.s3 }}

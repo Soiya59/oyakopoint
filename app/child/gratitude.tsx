@@ -83,15 +83,18 @@ export default function ChildGratitudeHubScreen() {
     void load();
   }, [load]);
 
-  // 週次配布額（企画部案：週50pt、スキーマ設計.sql gratitude_weekly_allowance()）は
-  // クライアントからは取得できない仕様（13e章「呼び出し本人の残存原資のみ返す」）ため、
-  // ゲージの分母は「今回観測したbalanceの最大値」で近似する。厳密な満タン表現ではないが、
-  // 「今週まだ贈れる分」の相対的な減り方が伝わればよいという10.3章の意図には沿う設計判断。
+  // [2026-08-27改訂] 配布額が週50pt→1日3ptになった（20260827180000_gratitude_daily_allowance.sql）。
+  // 配布額そのものはクライアントから取得できない仕様（13e章「呼び出し本人の残存原資のみ返す」）
+  // なので、ゲージの分母は従来どおり「今回観測したbalanceの最大値」で近似する。
+  // ただし3という小さい数になったため、10本固定のゲージをやめて**1ポイント＝1マス**にした。
+  // 「あと2こ」が ■■□ とそのまま読める。その日すでに使ったあとに初めて開いた場合は
+  // 分母が実際より小さく出るが、これは近似である以上避けられない（従来からの制約）。
   useEffect(() => {
     setMaxBalance((prev) => Math.max(prev, balance));
   }, [balance]);
 
-  const filledBars = Math.round((balance / Math.max(maxBalance, 1)) * 10);
+  const gaugeSize = Math.max(maxBalance, 1);
+  const filledBars = balance;
 
   return (
     <Screen tone="child">
@@ -110,10 +113,10 @@ export default function ChildGratitudeHubScreen() {
       {loadState === "ready" && (
         <>
           <View style={styles.gaugeBox}>
-            <Text style={theme.typography.childBody}>こんしゅう あと {balance}こ おくれるよ</Text>
+            <Text style={theme.typography.childBody}>きょう あと {balance}こ おくれるよ</Text>
             <Text style={styles.gaugeBar}>
               {"■".repeat(Math.max(filledBars, 0))}
-              {"□".repeat(Math.max(10 - filledBars, 0))}
+              {"□".repeat(Math.max(gaugeSize - filledBars, 0))}
             </Text>
             <AppButton
               label="ありがとうを おくる"

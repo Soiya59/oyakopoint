@@ -1,0 +1,38 @@
+-- 20260827180000_gratitude_daily_allowance.sql で行ったREVOKEを取り消す（修正）。
+--
+-- [2026-08-27・本部長] 直前のマイグレーションで gratitude_daily_allowance() と
+-- gratitude_points_daily_used() のEXECUTEを anon/authenticated から剥奪したが、これは誤りだった。
+--
+-- 剥奪した理由（当時の判断）:
+--   スキーマ設計.sql 13e章に「呼び出し本人の残存原資のみ返す」とあり、
+--   gratitude_points_daily_used(p_sender_id) は任意のsender_idを取れるため、authenticatedから
+--   直接呼べると他人の使用済み額が読めてしまう。週次版のACLは anon/authenticated に
+--   EXECUTEが付いた状態（Supabaseの既定）で、設計意図と食い違っていると考えた。
+--
+-- なぜ誤りだったか:
+--   **gratitude_points_before_insert() は SECURITY DEFINER ではない。**
+--   トリガー関数は呼び出し元のロール（authenticated）として実行されるため、
+--   その中の `v_allowance := public.gratitude_daily_allowance()` と
+--   `v_used := public.gratitude_points_daily_used(...)` に authenticated のEXECUTEが要る。
+--   CHECK制約 `points <= gratitude_daily_allowance()` も同じく呼び出し元として評価される。
+--   本番で実際にINSERTを試して発覚した:
+--     ERROR: 42501: permission denied for function gratitude_daily_allowance
+--     CONTEXT: PL/pgSQL assignment "v_allowance := public.gratitude_daily_allowance()"
+--   つまり週次版に付いていたEXECUTEは「Supabaseの既定で付いたままの緩さ」ではなく、
+--   **動作に必要な権限**だった。
+--
+-- トリガーをSECURITY DEFINERにして権限を絞る案は採らない。この関数は
+-- `SELECT family_id FROM family_members WHERE id = NEW.sender_id AND is_active` を
+-- 呼び出し元として（＝RLSで自分の家族に絞られた状態で）実行しており、それが
+-- 「送信者と受取人が同じ家族か」の検査の一部として効いている。SECURITY DEFINERにすると
+-- このRLSが外れて検査の意味が変わってしまう。
+--
+-- 結果として「任意のsender_idの使用済み額をauthenticatedが読める」状態は残る。これは
+-- 週次版から続く既存の性質であり、今回のマイグレーションで作った問題ではない。
+-- 漏れるのは同じ家族内の他メンバーの「その日の感謝ポイント使用額」で、家族内の
+-- 贈答ログ（gratitude_points）自体がもともと家族内に可視であることを踏まえると実害は小さい。
+-- 本格的に塞ぐなら関数を p_sender_id 引数なし（current_family_member_id() 固定）に
+-- 作り替える必要があり、軽微変更の範囲を超えるため別途判断する。
+
+GRANT EXECUTE ON FUNCTION public.gratitude_daily_allowance() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.gratitude_points_daily_used(UUID, TIMESTAMPTZ) TO anon, authenticated, service_role;

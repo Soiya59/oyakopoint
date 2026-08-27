@@ -56,7 +56,7 @@ export default function ChildGratitudeSendScreen() {
     });
     if (!res.ok) {
       if (res.error.code === PG_ERRCODE.checkViolation) {
-        setLimitMessage("こんしゅうは もう いっぱい おくったよ。また らいしゅう！");
+        setLimitMessage("きょうは もう いっぱい おくったよ。また あした！");
         setScreenState("form");
       } else {
         setScreenState("networkError");

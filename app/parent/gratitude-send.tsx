@@ -70,7 +70,7 @@ export default function ParentGratitudeSendScreen() {
         <Pressable onPress={() => router.back()}>
           <Text style={theme.typography.parentBody}>← もどる</Text>
         </Pressable>
-        <Text style={theme.typography.parentBody}>今週あと{balance ?? "…"}pt贈れます</Text>
+        <Text style={theme.typography.parentBody}>きょうあと{balance ?? "…"}pt贈れます</Text>
       </View>
 
       <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>だれに？</Text>

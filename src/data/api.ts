@@ -872,7 +872,8 @@ export async function deactivateReward(client: SupabaseClient, rewardId: string)
 // ============================================================
 
 /**
- * API仕様.md 7a.1章: 呼び出し本人の残存原資（今週まだ贈れるpt、0〜週次配布額）。
+ * API仕様.md 7a.1章: 呼び出し本人の残存原資（きょうまだ贈れるpt、0〜日次配布額）。
+ * [2026-08-27改訂] 週50pt→1日3pt（20260827180000_gratitude_daily_allowance.sql）。
  * SECURITY DEFINER RPCのため、呼び出し本人以外の残存原資は取得できない
  * （ランキング防止のための設計判断、スキーマ設計.sql 13e章参照）。
  */
