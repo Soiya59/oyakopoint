@@ -81,6 +81,49 @@ export function DrawingBoard({
     if (ok) setLines([]);
   };
 
+  /**
+   * 自分の未公開の絵のサムネイル一覧（本人だけが見える）。
+   *
+   * [2026-08-27修正・本部長] **以前はこの一覧を`if (atLimit)`の中にしか置いていなかった。**
+   * そのため未公開が3枚たまったときだけ自分の絵が見え、1〜2枚のときは「何を描いたか
+   * 確認できない・消せない」状態だった（ユーザーが実機で発見。本番でも絵を持つ3人が
+   * 全員ちょうど1枚ずつで、誰も自分の絵を見られない状態になっていた）。
+   * 1枚でも持っていれば常に出すように、この関数へ切り出して両方の分岐から呼ぶ。
+   */
+  const renderMyDrawings = (hint: string) => (
+    <>
+      <Text style={[bodyStyle, styles.sectionLabel]}>あなたの ひみつ（じぶんだけ みえるよ）</Text>
+      <Text style={[bodyStyle, styles.sectionHint]}>{hint}</Text>
+      <View style={styles.thumbRow}>
+        {unpublished.map((d) => (
+          <View key={d.id} style={styles.thumbWrap}>
+            <DrawingThumbnail lineData={d.line_data} size={72} />
+            {confirmingDeleteId === d.id ? (
+              <View style={styles.confirmRow}>
+                <Pressable
+                  onPress={() => onDeleteRequest(d.id)}
+                  disabled={deletingId === d.id}
+                  hitSlop={8}
+                >
+                  <Text style={[bodyStyle, styles.deleteConfirmText]}>
+                    {deletingId === d.id ? "けしています…" : "ほんとうに けす"}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => setConfirmingDeleteId(null)} disabled={deletingId === d.id} hitSlop={8}>
+                  <Text style={[bodyStyle, styles.deleteLinkText]}>やめる</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={() => setConfirmingDeleteId(d.id)} hitSlop={8} style={styles.deleteLink}>
+                <Text style={[bodyStyle, styles.deleteLinkText]}>けす</Text>
+              </Pressable>
+            )}
+          </View>
+        ))}
+      </View>
+    </>
+  );
+
   if (atLimit) {
     return (
       <View>
@@ -90,37 +133,7 @@ export function DrawingBoard({
           </Text>
         </Card>
 
-        <Text style={[bodyStyle, styles.sectionLabel]}>あなたの ひみつ（じぶんだけ みえるよ）</Text>
-        <Text style={[bodyStyle, styles.sectionHint]}>
-          かきなおしたいときは、ひとつ けすと あたらしい えが かけるようになるよ
-        </Text>
-        <View style={styles.thumbRow}>
-          {unpublished.map((d) => (
-            <View key={d.id} style={styles.thumbWrap}>
-              <DrawingThumbnail lineData={d.line_data} size={72} />
-              {confirmingDeleteId === d.id ? (
-                <View style={styles.confirmRow}>
-                  <Pressable
-                    onPress={() => onDeleteRequest(d.id)}
-                    disabled={deletingId === d.id}
-                    hitSlop={8}
-                  >
-                    <Text style={[bodyStyle, styles.deleteConfirmText]}>
-                      {deletingId === d.id ? "けしています…" : "ほんとうに けす"}
-                    </Text>
-                  </Pressable>
-                  <Pressable onPress={() => setConfirmingDeleteId(null)} disabled={deletingId === d.id} hitSlop={8}>
-                    <Text style={[bodyStyle, styles.deleteLinkText]}>やめる</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable onPress={() => setConfirmingDeleteId(d.id)} hitSlop={8} style={styles.deleteLink}>
-                  <Text style={[bodyStyle, styles.deleteLinkText]}>けす</Text>
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </View>
+        {renderMyDrawings("かきなおしたいときは、ひとつ けすと あたらしい えが かけるようになるよ")}
 
         {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
       </View>
@@ -154,6 +167,13 @@ export function DrawingBoard({
           style={styles.saveButton}
         />
       </View>
+
+      {/* 上限に達していなくても、すでに描いた絵は見られる・消せるようにする（上のコメント参照）。
+          あと何枚描けるかも添える（上限に達したときの文言とつながるように）。 */}
+      {unpublished.length > 0 &&
+        renderMyDrawings(
+          `あと${theme.drawingLimits.maxUnpublished - unpublished.length}まい かけるよ。きにいらない えは けせるよ`
+        )}
     </View>
   );
 }
