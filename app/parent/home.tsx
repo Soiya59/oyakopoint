@@ -10,7 +10,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 import { useGachaProgress } from "@/hooks/useGacha";
-import { useWeeklyDigest } from "@/hooks/useWeeklyDigest";
+import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
 /**
  * P7 ホーム（保護者ダッシュボード）
@@ -24,17 +24,37 @@ import { useWeeklyDigest } from "@/hooks/useWeeklyDigest";
  */
 export default function ParentHomeScreen() {
   const { state, memberPoints } = useAppData();
-  // [2026-08-23追加] 今週のまとめメッセージ（07-8章、主要画面ワイヤーフレーム.md 19章）。
-  // 決定1「専用の詳細画面・タップ操作は持たせない」・決定3「通信エラー時も控えめな
-  // 1行に差し替えるだけにとどめる」・決定4「集計対象0件はデフォルトメッセージで
-  // 正常系として吸収する（週次バッチ側で対応済み）」に対応する。
-  const { loadState: digestLoadState, digest } = useWeeklyDigest();
-  const digestMessage =
-    digestLoadState === "error"
+  // [2026-08-28改訂・家族の書き込みボード07-14章第1段階] 「今週のできごと」カードを
+  // `useWeeklyDigest`（まとめメッセージ専用）から`useFamilyHomeCard`
+  // （family_home_card View、書き込み優先・無ければまとめメッセージ）へ置き換えた。
+  // `useWeeklyDigest`自体は削除していない（src/hooks/useFamilyBoard.ts冒頭の
+  // コメント「E. useWeeklyDigestとの関係」参照）。
+  // 決定1（19章決定1の更新）「非タップ→タップして履歴一覧へ」・決定3「通信エラー時は
+  // 控えめな1行に差し替え、カードはタップ不可のまま」・19章決定4「集計対象0件は
+  // デフォルトメッセージで正常系として吸収する」は維持する。
+  const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
+  const cardMessage =
+    cardLoadState === "error"
       ? "今週のできごとは、また後で見てみてね"
-      : digestLoadState === "loading"
+      : cardLoadState === "loading"
       ? null
-      : digest?.message ?? "今週のできごとは、また後で見てみてね";
+      : card?.message ?? "今週のできごとは、また後で見てみてね";
+  const cardAuthorName =
+    card?.source === "board_post"
+      ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
+      : null;
+  // 主要画面ワイヤーフレーム.md 22.1.1節「本文抜粋（40字程度＋「…」）」。
+  const cardExcerpt =
+    cardMessage !== null && cardMessage.length > 40 ? `${cardMessage.slice(0, 40)}…` : cardMessage;
+  const cardTime =
+    card?.source === "board_post" && card.board_post_created_at
+      ? new Date(card.board_post_created_at).toLocaleString("ja-JP", {
+          month: "numeric",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
   // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md 20.6章
   // 決定7）。段階名・今シーズンの完了報告数の2情報のみを表示し、内訳・色つき要素の
   // 密な表示はP26（→app/parent/family-tree.tsx）側で行う。
@@ -103,16 +123,34 @@ export default function ParentHomeScreen() {
 
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
 
-      {/* [2026-08-23追加] 今週のまとめメッセージカード（07-8章、主要画面ワイヤーフレーム.md
-          19章）。決定1のとおり非タップ（表示専用）。読み込み中は1行スケルトンにする。 */}
-      <Card style={{ marginTop: theme.spacing.s4 }}>
-        <Text style={theme.typography.parentBodyMedium}>今週のできごと</Text>
-        {digestMessage === null ? (
-          <View style={styles.digestSkeleton} />
-        ) : (
-          <Text style={{ marginTop: theme.spacing.s2 }}>{digestMessage}</Text>
-        )}
-      </Card>
+      {/* [2026-08-28改訂] 家族の書き込みボード07-14章第1段階。主要画面ワイヤーフレーム.md
+          22.1.1節「決定1: カードを非タップから『タップして履歴一覧へ』に変更する」。
+          書き込みがあればその投稿者名＋本文抜粋＋時刻、無ければ従来のまとめメッセージ
+          （19章の見出し・表示ロジックをそのまま踏襲）。通信エラー時のみタップ不可のまま
+          （22.1.1節状態一覧「通信エラー」行）。 */}
+      <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
+        <Card style={{ marginTop: theme.spacing.s4 }}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={theme.typography.parentBodyMedium}>今週のできごと</Text>
+            {cardLoadState !== "error" && <Text style={theme.typography.parentBodyMedium}>›</Text>}
+          </View>
+          {cardMessage === null ? (
+            <View style={styles.digestSkeleton} />
+          ) : (
+            <>
+              {cardAuthorName !== null && (
+                <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+              )}
+              <Text style={{ marginTop: theme.spacing.s1 }}>{cardExcerpt}</Text>
+              {cardTime !== null && (
+                <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                  {cardTime}
+                </Text>
+              )}
+            </>
+          )}
+        </Card>
+      </Pressable>
 
       {/* [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
           20.6章決定7）。段階名・今シーズンの完了報告数の2情報のみ。タップでP26へ。 */}
@@ -198,6 +236,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.s2,
     color: theme.colors.neutralTextSecondary,
   },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   digestSkeleton: {
     marginTop: theme.spacing.s2,
     height: 18,

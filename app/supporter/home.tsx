@@ -6,9 +6,11 @@ import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
+import { ErrorState } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
+import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
 /**
  * S1 みまもりホーム
@@ -29,6 +31,30 @@ export default function SupporterHomeScreen() {
   // グリッドとは別枠で配置。演出は控えめ」）。
   const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
     useGachaProgress(state.activeParentMemberId);
+  // [2026-08-28追加・家族の書き込みボード07-14章第1段階、主要画面ワイヤーフレーム.md
+  // 22.1.3節・決定4] S1には元々「今週のできごと」相当のカードが無かった
+  // （週次まとめメッセージの概念自体がS1には存在しない、画面一覧・遷移図.md S1行
+  // 「今回は対象外とする」）。`family_home_card` Viewは他画面と同じ優先順位ロジックで
+  // 1行を返すが、**S1はその中の`source==='board_post'`の場合のみを採用し、
+  // `'weekly_digest'`（＝書き込みが無くまとめメッセージへフォールバックした状態）は
+  // 「フォールバック先が存在しない」ため空状態として扱う**（本部長指示E「みまもり
+  // ホームには元々まとめメッセージが無いので、書き込みが無いときのフォールバック先が
+  // 存在しません」への対応。P7/C5は同じViewの`source==='weekly_digest'`をそのまま
+  // 表示するが、S1だけはここで明示的に握りつぶす）。
+  const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
+  const hasBoardPost = card?.source === "board_post";
+  const cardAuthorName = hasBoardPost
+    ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
+    : null;
+  const cardTime =
+    hasBoardPost && card.board_post_created_at
+      ? new Date(card.board_post_created_at).toLocaleString("ja-JP", {
+          month: "numeric",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
   const recent = [...state.completions]
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
@@ -70,6 +96,45 @@ export default function SupporterHomeScreen() {
         onPress={() => router.push("/supporter/gacha")}
       />
 
+      {/* [2026-08-28追加] 「家族の書き込み」カード（主要画面ワイヤーフレーム.md
+          22.1.3節・決定4）。書き込みが無い場合は空状態文言のみ（まとめメッセージへの
+          フォールバックは無い、上のコメント参照）。通信エラー時のみ専用の再試行ボタンを
+          カード内に表示する（22.1.3節状態一覧「通信エラー」行）。 */}
+      {cardLoadState === "error" ? (
+        <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={theme.typography.supporterBodyMedium}>家族の書き込み</Text>
+          <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
+        </Card>
+      ) : (
+        <Pressable onPress={() => router.push("/supporter/family-board")}>
+          <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.supporterBodyMedium}>家族の書き込み</Text>
+              <Text style={theme.typography.supporterBodyMedium}>›</Text>
+            </View>
+            {cardLoadState === "loading" ? (
+              <View style={styles.digestSkeleton} />
+            ) : hasBoardPost ? (
+              <>
+                {cardAuthorName !== null && (
+                  <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+                )}
+                <Text style={{ marginTop: theme.spacing.s1 }}>{card.message}</Text>
+                {cardTime !== null && (
+                  <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                    {cardTime}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={{ marginTop: theme.spacing.s2 }}>
+                まだ書き込みはありません。家族のようすを、ひとことシェアしてみませんか
+              </Text>
+            )}
+          </Card>
+        </Pressable>
+      )}
+
       <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>最近のようす</Text>
       <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
         {recent.length === 0 && (
@@ -109,6 +174,14 @@ export default function SupporterHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  digestSkeleton: {
+    marginTop: theme.spacing.s2,
+    height: 18,
+    borderRadius: theme.radius.parentMd,
+    backgroundColor: theme.colors.neutralBorder,
+    opacity: 0.6,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",

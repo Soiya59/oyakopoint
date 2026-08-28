@@ -24,8 +24,10 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   Family,
+  FamilyBoardPostWithAuthor,
   FamilyDrawing,
   FamilyDrawingLineData,
+  FamilyHomeCard,
   FamilyInvite,
   FamilyInviteLookupResult,
   FamilyMember,
@@ -1520,4 +1522,62 @@ export async function fetchLatestWeeklyFamilyDigest(
     .maybeSingle();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data as WeeklyFamilyDigest | null) ?? null };
+}
+
+// ============================================================
+// 13. 家族の書き込みボード（要件定義書07-14章、API仕様.md 13章、
+//     スキーマ設計.sql 35章、2026-08-28追加・第1段階「見る側」のみ）
+//
+// [2026-08-28追加] 第1段階は「見る」機能のみ。投稿（13.1章）・上限確認RPC
+// （13.2章 my_family_board_posts_remaining_today）・削除（13.5章）はDB側は
+// 今回のマイグレーションで作成済みだが、呼び出しクライアントコードは第2段階まで
+// 実装しない（本部長指示のスコープ）。
+// ============================================================
+
+/**
+ * API仕様.md 13.3章: ホームカードに表示する内容を1件取得する
+ * （family_board_postsの削除されていない最新1件があればそれ、無ければ
+ * weekly_family_digestsの当該週メッセージ、という優先順位の統合をDB側の
+ * View〈family_home_card〉が1本化している。クライアント側では分岐しない）。
+ * 投稿もまとめメッセージも1件も無い家族（参加直後等）では0件（null）になり得る。
+ */
+export async function fetchFamilyHomeCard(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<FamilyHomeCard | null>> {
+  const { data, error } = await client
+    .from("family_home_card")
+    .select("*")
+    .eq("family_id", familyId)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as FamilyHomeCard | null) ?? null };
+}
+
+/**
+ * API仕様.md 13.4章: 家族の投稿履歴（新しい順・無期限保存）を範囲指定で取得する
+ * （主要画面ワイヤーフレーム.md 22.0節決定7「直近30件＋『もっと見る』」に対応する
+ * ページング用。`range`はSupabaseの`.range(from, to)`と同じ0始まり・両端含む指定）。
+ *
+ * `family_board_posts`は`author_member_id`・`deleted_by_member_id`の2列で
+ * `family_members`を参照しており、埋め込み先テーブルが同じで曖昧になり得る
+ * （実装メモ.md 73.3章のPGRST201と同種のリスク）。`!author_member_id`という
+ * 列名ヒントで明示的に解消している（本番の`gratitude_points`が
+ * `sender_id`/`recipient_id`の2列で`family_members`を参照する全く同じ形で
+ * 既に本番稼働しており、`family_members!recipient_id(...)`/`family_members!sender_id(...)`
+ * が有効であることを確認済み＝実装メモ.md 79章の検証を参照。同じ列名ヒント方式を踏襲した）。
+ */
+export async function fetchFamilyBoardPostsHistory(
+  client: SupabaseClient,
+  familyId: string,
+  range: { from: number; to: number }
+): Promise<ApiResult<FamilyBoardPostWithAuthor[]>> {
+  const { data, error } = await client
+    .from("family_board_posts")
+    .select("*, family_members!author_member_id(display_name, avatar_color)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false })
+    .range(range.from, range.to);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyBoardPostWithAuthor[] };
 }

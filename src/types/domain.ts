@@ -338,3 +338,45 @@ export interface WeeklyFamilyDigest {
   detail: Record<string, unknown> | null;
   generated_at: string;
 }
+
+/**
+ * family_board_posts テーブルの1行（要件定義書07-14章「家族の書き込みボード」、
+ * スキーマ設計.sql 35章）。RLS（family_board_posts_select_same_family）が
+ * 常に deleted_at IS NULL を要求するため、クライアントが取得できる行は
+ * 常に未削除のものだけになる（削除済みは家族内からも本文ごと見えない）。
+ */
+export interface FamilyBoardPost {
+  id: string;
+  family_id: string;
+  author_member_id: string;
+  body: string;
+  created_at: string;
+  deleted_at: string | null;
+  deleted_by_member_id: string | null;
+}
+
+/** 投稿者の表示名・アバター色をネストした投稿1行（履歴一覧表示用）。API仕様.md 13.4章。 */
+export interface FamilyBoardPostWithAuthor extends FamilyBoardPost {
+  family_members: { display_name: string; avatar_color: string | null } | null;
+}
+
+/** family_home_card View の source 列（スキーマ設計.sql 35d章）。 */
+export type FamilyHomeCardSource = "board_post" | "weekly_digest";
+
+/**
+ * family_home_card View の1行（API仕様.md 13.3章）。
+ * source==='board_post'のときのみ board_post_* 列が非NULL、
+ * source==='weekly_digest'のときのみ digest_* 列が非NULLになる
+ * （どちらの場合も message には表示すべき本文がそのまま入っている）。
+ */
+export interface FamilyHomeCard {
+  family_id: string;
+  source: FamilyHomeCardSource;
+  message: string;
+  board_post_id: string | null;
+  board_post_author_member_id: string | null;
+  board_post_created_at: string | null;
+  digest_id: string | null;
+  digest_week_start: string | null;
+  digest_generated_at: string | null;
+}

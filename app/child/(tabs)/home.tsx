@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
+import Card from "@/components/Card";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import theme from "@/theme/theme";
@@ -9,6 +10,7 @@ import { useAppData } from "@/data/store";
 import MemberAvatar from "@/components/MemberAvatar";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 import { useGachaProgress } from "@/hooks/useGacha";
+import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
 /**
  * C5 やることリスト（ホーム）（主要5画面のひとつ）
@@ -29,6 +31,23 @@ export default function ChildHomeScreen() {
   // 21.1節「残高表示のすぐ下、他の全リンクより上に配置」）。
   const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
     useGachaProgress(state.activeChildMemberId);
+  // [2026-08-28追加・家族の書き込みボード07-14章第1段階] 「かぞくのできごと」カード
+  // （主要画面ワイヤーフレーム.md 22.1.2節、C5新規）。07-8章の週次まとめメッセージは
+  // 元々C5に無かった（大人向けの文体だったため対象外）が、07-14章により書き込み内容は
+  // 家族自身の言葉になったため子ども向け画面にも表示できるようになった
+  // （22.1.2節「07-8章のコンセプト自体は『大人向け』だったが…」）。P7と同じ
+  // `family_home_card` Viewを同一クエリで使う（API仕様.md 13.3章）。
+  const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
+  const cardMessage =
+    cardLoadState === "error"
+      ? "かぞくのできごとは、またあとでみてね"
+      : cardLoadState === "loading"
+      ? null
+      : card?.message ?? "かぞくのできごとは、またあとでみてね";
+  const cardAuthorName =
+    card?.source === "board_post"
+      ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
+      : null;
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -95,6 +114,28 @@ export default function ChildHomeScreen() {
         canDrawNow={gachaCanDrawNow}
         onPress={() => router.push("/child/gacha")}
       />
+
+      {/* [2026-08-28追加] 「かぞくのできごと」カード（主要画面ワイヤーフレーム.md
+          22.1.2節）。ガチャウィジェットほどの視覚的重みは持たせない控えめなカードに
+          とどめる（22.1.2節「配置場所」）。通信エラー時のみタップ不可。 */}
+      <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>
+        <Card tone="child" style={styles.familyBoardCard}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={theme.typography.childBody}>💬 かぞくのできごと</Text>
+            {cardLoadState !== "error" && <Text style={theme.typography.childBody}>›</Text>}
+          </View>
+          {cardMessage === null ? (
+            <View style={styles.digestSkeleton} />
+          ) : (
+            <>
+              {cardAuthorName !== null && (
+                <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+              )}
+              <Text style={{ marginTop: theme.spacing.s1 }}>{cardMessage}</Text>
+            </>
+          )}
+        </Card>
+      </Pressable>
 
       {/* [2026-08-27整理・本部長] 第2〜5段階で機能を足すたびに文字リンクを1行ずつ
           継ぎ足した結果、リンク4行が画面の中央を占め、**子どもの一番の仕事である
@@ -215,6 +256,15 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   notifBadge: { fontSize: 16, fontWeight: "700" },
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
+  familyBoardCard: { marginTop: theme.spacing.s3 },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  digestSkeleton: {
+    marginTop: theme.spacing.s2,
+    height: 18,
+    borderRadius: theme.radius.childXl,
+    backgroundColor: theme.colors.neutralBorder,
+    opacity: 0.6,
+  },
   // [2026-08-27追加] 4本の文字リンクを置き換えた横1列のショートカット。
   // 子ども向けタップ領域56dp（デザイントークン.md 1.7節）を高さで確保する。
   shortcutRow: {
