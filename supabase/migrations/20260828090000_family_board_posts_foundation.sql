@@ -43,55 +43,19 @@
 -- 意味を持つ。34.5章参照）。
 
 -- ------------------------------------------------------------
--- 35a. 日次投稿数上限のヘルパー関数
+-- [2026-08-28 本部長修正] 適用順序の訂正
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.family_board_posts_daily_limit()
-RETURNS INT
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT 5;
-$$;
-
-COMMENT ON FUNCTION public.family_board_posts_daily_limit() IS
-  '要件定義書07-14章「1日あたりの投稿数上限」。1人1日あたりの投稿数上限（企画部初期案）。将来見直す場合は本関数のみ書き換えれば良い（13章gratitude_weekly_allowance()と同じパターン）。';
-
-CREATE OR REPLACE FUNCTION public.family_board_posts_daily_used(p_author_member_id UUID, p_at TIMESTAMPTZ DEFAULT now())
-RETURNS INT
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT COUNT(*)::INT
-  FROM family_board_posts
-  WHERE author_member_id = p_author_member_id
-    AND (created_at AT TIME ZONE 'Asia/Tokyo')::date = (p_at AT TIME ZONE 'Asia/Tokyo')::date;
-$$;
-
-COMMENT ON FUNCTION public.family_board_posts_daily_used(UUID, TIMESTAMPTZ) IS
-  '指定メンバーが、指定時刻を含むJST暦日に投稿した件数（論理削除済みも含む）。35b章の日次上限チェック・35a章の残数参照RPCの両方で使用。';
-
-CREATE OR REPLACE FUNCTION public.my_family_board_posts_remaining_today()
-RETURNS INT
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT GREATEST(
-    public.family_board_posts_daily_limit() - public.family_board_posts_daily_used(current_family_member_id()),
-    0
-  );
-$$;
-
-COMMENT ON FUNCTION public.my_family_board_posts_remaining_today() IS
-  '呼び出し本人（current_family_member_id()）が今日まだ投稿できる残り件数。他メンバー分は取得できない（13e章と同じランキング防止の設計判断）。投稿フォームで「あと◯件」の表示・事前バリデーションに使う想定（API仕様.md参照。第2段階で使用）。';
-
-GRANT EXECUTE ON FUNCTION public.family_board_posts_daily_limit() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.family_board_posts_daily_used(UUID, TIMESTAMPTZ) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.my_family_board_posts_remaining_today() TO authenticated;
-
+-- 当初このファイルは設計書（スキーマ設計.sql）の章立て順（35a関数 → 35テーブル）を
+-- そのまま写していたため、**テーブルより先に、そのテーブルを参照する関数を作ろうとして
+-- 失敗した**。
+--     ERROR: relation "family_board_posts" does not exist (SQLSTATE 42P01)
+--     At statement: 2  CREATE OR REPLACE FUNCTION public.family_board_posts_daily_used(...)
+-- `LANGUAGE sql`の関数は作成時に本文が解析・検証されるため（`LANGUAGE plpgsql`と違い
+-- 実行時まで遅延されない）、参照先のテーブルが存在していなければならない。
+-- 設計書は「読み物としての章立て」であって「適用順序」ではない、という取り違えである。
+-- ここではテーブル → 関数 → トリガー → View の順に並べ替えた。設計書側の章番号
+-- （35 / 35a / 35b / 35c / 35d）は読みやすさのため変更していない。
+-- ------------------------------------------------------------
 
 -- ------------------------------------------------------------
 -- 35. CREATE TABLE
@@ -147,6 +111,57 @@ CREATE POLICY "family_board_posts_update_soft_delete" ON family_board_posts
 
 COMMENT ON TABLE family_board_posts IS
   '要件定義書07-14章「家族の書き込みボード」。保護者・子ども・みまもりメンバー全員が書き込める家族全体への自由記述掲示板。編集不可（削除して再投稿のみ）。論理削除（deleted_at/deleted_by_member_id）。SELECT RLSは削除済みを除外するため、削除された投稿はservice_role以外からは本文ごと見えなくなる。';
+
+
+-- ------------------------------------------------------------
+-- 35a. 日次投稿数上限のヘルパー関数
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.family_board_posts_daily_limit()
+RETURNS INT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT 5;
+$$;
+
+COMMENT ON FUNCTION public.family_board_posts_daily_limit() IS
+  '要件定義書07-14章「1日あたりの投稿数上限」。1人1日あたりの投稿数上限（企画部初期案）。将来見直す場合は本関数のみ書き換えれば良い（13章gratitude_weekly_allowance()と同じパターン）。';
+
+CREATE OR REPLACE FUNCTION public.family_board_posts_daily_used(p_author_member_id UUID, p_at TIMESTAMPTZ DEFAULT now())
+RETURNS INT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COUNT(*)::INT
+  FROM family_board_posts
+  WHERE author_member_id = p_author_member_id
+    AND (created_at AT TIME ZONE 'Asia/Tokyo')::date = (p_at AT TIME ZONE 'Asia/Tokyo')::date;
+$$;
+
+COMMENT ON FUNCTION public.family_board_posts_daily_used(UUID, TIMESTAMPTZ) IS
+  '指定メンバーが、指定時刻を含むJST暦日に投稿した件数（論理削除済みも含む）。35b章の日次上限チェック・35a章の残数参照RPCの両方で使用。';
+
+CREATE OR REPLACE FUNCTION public.my_family_board_posts_remaining_today()
+RETURNS INT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT GREATEST(
+    public.family_board_posts_daily_limit() - public.family_board_posts_daily_used(current_family_member_id()),
+    0
+  );
+$$;
+
+COMMENT ON FUNCTION public.my_family_board_posts_remaining_today() IS
+  '呼び出し本人（current_family_member_id()）が今日まだ投稿できる残り件数。他メンバー分は取得できない（13e章と同じランキング防止の設計判断）。投稿フォームで「あと◯件」の表示・事前バリデーションに使う想定（API仕様.md参照。第2段階で使用）。';
+
+GRANT EXECUTE ON FUNCTION public.family_board_posts_daily_limit() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.family_board_posts_daily_used(UUID, TIMESTAMPTZ) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.my_family_board_posts_remaining_today() TO authenticated;
 
 
 -- ------------------------------------------------------------
