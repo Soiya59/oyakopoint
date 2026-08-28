@@ -95,12 +95,10 @@ export default function ParentHomeScreen() {
   const myShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "🧹", label: "じぶんのお手伝い", path: "/parent/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
-    { emoji: "📔", label: "通帳", path: "/parent/points" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
-    { emoji: "🗄️", label: "コレクター棚", path: "/parent/collector-shelf" },
   ];
 
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [
@@ -109,8 +107,15 @@ export default function ParentHomeScreen() {
     { emoji: "🧺", label: "お手伝い", path: "/parent/chores" },
     // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
     { emoji: "🏆", label: "ごほうび", path: "/parent/rewards" },
-    { emoji: "👨‍👩‍👧‍👦", label: "家族", path: "/parent/family" },
-    { emoji: "⚙️", label: "設定", path: "/parent/settings" },
+    // [2026-08-29移動・本部長] 通帳とコレクター棚を「私の管理」から移した。
+    // 通帳（P16）はメンバー切り替えを持ち家族の誰の記録も見られる画面であり、
+    // コレクター棚（07-13-3章）は家族共有・永久保管の棚なので、どちらも
+    // 「自分だけのもの」ではなかった。ホーム上部の「じぶんのポイント」カードが
+    // 既に通帳への近道になっている点も踏まえた。
+    { emoji: "📔", label: "通帳", path: "/parent/points" },
+    { emoji: "🗄️", label: "コレクター棚", path: "/parent/collector-shelf" },
+    // [2026-08-29統合] 旧「家族」タイルと「設定」タイルを1つにまとめた（統合先はP14）。
+    { emoji: "⚙️", label: "設定", path: "/parent/family" },
   ];
   if (hasAnySupporter) {
     // ラベルが1行に収まらず折り返していたため短縮した（遷移先は変更なし）。
@@ -205,7 +210,7 @@ export default function ParentHomeScreen() {
 
       {/* [2026-08-26整理] 「わたしの」＝保護者が参加者として使うもの、
           「かぞくの管理」＝管理者として使うもの。上のconst定義のコメント参照。 */}
-      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしの</Text>
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>私の管理</Text>
       <View style={styles.grid}>
         {myShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>

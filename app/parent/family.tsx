@@ -9,7 +9,7 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { fetchFamilyInvites, removeMember, revokeFamilyInvite, updateMemberDisplayName } from "@/data/api";
+import { fetchFamilyInvites, removeMember, revokeFamilyInvite, updateFamilyName, updateMemberDisplayName } from "@/data/api";
 import type { FamilyInvite } from "@/types/domain";
 
 /** 表示名の最大文字数（MemberAvatarの頭文字表示・木の内訳表示が崩れない長さ）。 */
@@ -39,7 +39,7 @@ const NAME_MAX_LENGTH = 12;
  */
 export default function FamilyScreen() {
   const { state, refresh } = useAppData();
-  const { client } = useSession();
+  const { client, parentMember, logoutParent } = useSession();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
@@ -127,6 +127,85 @@ export default function FamilyScreen() {
     void refresh();
   };
 
+  // ============================================================
+  // [2026-08-29統合・本部長／軽微変更ルート] 旧P17「設定」の中身をこの画面へ移した。
+  //
+  // ユーザーの「設定に家族をいれてもよいかも」という提案に対し、本部長から
+  // **向きが逆**であると指摘した。設定には「家族を削除する」という不可逆な操作が
+  // あり、家族管理には招待コード・PIN設定という日常的に開く操作がある。
+  // よく使うものを、めったに使わない危険な画面の下に埋めることになるため、
+  // 設定を家族へ入れる形にした（ユーザー同意済み）。
+  // ホームのメニュータイルは「⚙️ 設定」1つに統合し、「家族」タイルは廃止した。
+  // ============================================================
+  const me = parentMember;
+  const [processing, setProcessing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [familyName, setFamilyName] = useState(state.family.name);
+  // 既存のsavingName（メンバー表示名の保存中フラグ）と衝突するため別名にしている。
+  const [savingFamilyName, setSavingFamilyName] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const saveFamilyName = async () => {
+    const trimmed = familyName.trim();
+    if (!trimmed || trimmed === state.family.name) return;
+    setSavingFamilyName(true);
+    setNameError(null);
+    setNameSaved(false);
+    const res = await updateFamilyName(client, state.family.id, trimmed);
+    setSavingFamilyName(false);
+    if (!res.ok) {
+      setNameError(res.error.message);
+      return;
+    }
+    await refresh();
+    setNameSaved(true);
+  };
+
+  const doLogout = async () => {
+    await logoutParent();
+    router.replace("/");
+  };
+
+  const doLeaveFamily = async () => {
+    if (!me) return;
+    setProcessing(true);
+    setErrorMessage(null);
+    const res = await removeMember(me.id, "soft_remove");
+    setProcessing(false);
+    if (!res.ok) {
+      setErrorMessage(
+        res.error.code === "owner_cannot_soft_remove"
+          ? "オーナーは先にオーナー権限を委譲するか、家族を削除してください"
+          : res.error.message
+      );
+      return;
+    }
+    await logoutParent();
+    router.replace("/");
+  };
+
+  /**
+   * [破壊的操作についての事前記録] remove-member の mode:"delete_family" を呼ぶ。
+   * families行のDELETE（ON DELETE CASCADEで家族の全データが連動削除される）という
+   * 不可逆な操作であり、実際に呼び出すと元に戻せない。
+   * 画面側は2段階の確認（ボタン押下→確認表示→確定）を必須にする。
+   * （旧app/parent/settings.tsxから移設。開発部CLAUDE.md「破壊的なDB操作は実行前に記録する」）
+   */
+  const doDeleteFamily = async () => {
+    if (!me) return;
+    setProcessing(true);
+    setErrorMessage(null);
+    const res = await removeMember(me.id, "delete_family");
+    setProcessing(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    await logoutParent();
+    router.replace("/");
+  };
+
   const revokeInvite = async (inviteId: string) => {
     setRevokingId(inviteId);
     const res = await revokeFamilyInvite(client, inviteId);
@@ -140,7 +219,7 @@ export default function FamilyScreen() {
 
   return (
     <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>家族管理</Text>
+      <Text style={theme.typography.parentTitle}>設定</Text>
 
       <Card style={{ marginTop: theme.spacing.s4 }}>
         <Text style={theme.typography.parentCaption}>招待コード</Text>
@@ -278,12 +357,85 @@ export default function FamilyScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={() => router.push("/parent/child-profile")}
       />
+
+      {/* ============================================================
+          [2026-08-29統合] 旧P17「設定」の内容。上のコメント参照。
+          家族の日常運用（招待コード・メンバー・PIN）を上に、家族名の変更と
+          不可逆な操作（家族から抜ける・家族を削除する）を下に置く。
+          ============================================================ */}
+      <View style={styles.settingsDivider} />
+
+      <Text style={[theme.typography.parentBodyMedium, styles.settingsHeading]}>家族の設定</Text>
+
+      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>家族名</Text>
+      <TextInput
+        value={familyName}
+        onChangeText={(t) => {
+          setFamilyName(t);
+          setNameSaved(false);
+        }}
+        maxLength={100}
+        style={[theme.typography.parentBody, styles.nameInput, { marginTop: theme.spacing.s2 }]}
+      />
+      {nameError && <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{nameError}</Text>}
+      {nameSaved && !nameError && (
+        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }}>変更しました</Text>
+      )}
+      <AppButton
+        label={savingFamilyName ? "保存中…" : "家族名を保存する"}
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s3 }}
+        onPress={saveFamilyName}
+        disabled={savingFamilyName || !familyName.trim() || familyName.trim() === state.family.name}
+      />
+
+      <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
+        <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
+        <AppButton
+          label={processing ? "処理中…" : "家族から抜ける"}
+          variant="secondary"
+          onPress={doLeaveFamily}
+          disabled={processing}
+        />
+        {me?.is_owner ? (
+          confirmingDelete ? (
+            <View style={{ gap: theme.spacing.s2 }}>
+              <Text style={{ color: theme.colors.statusBlocking }}>
+                本当に「{state.family.name}」を削除しますか？この操作は取り消せません（すべてのお手伝い・完了報告・ごほうび履歴が削除されます）。
+              </Text>
+              <AppButton
+                label={processing ? "削除中…" : "本当に削除する"}
+                variant="danger"
+                onPress={doDeleteFamily}
+                disabled={processing}
+              />
+              <AppButton label="キャンセル" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={processing} />
+            </View>
+          ) : (
+            <AppButton label="家族を削除する" variant="danger" onPress={() => setConfirmingDelete(true)} disabled={processing} />
+          )
+        ) : null}
+      </View>
+
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
+        「家族を削除する」はオーナーにのみ表示されます。
+      </Text>
+
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  settingsDivider: {
+    marginTop: theme.spacing.s8,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+  },
+  settingsHeading: {
+    marginTop: theme.spacing.s6,
+    color: theme.colors.brandPrimaryStrong,
+  },
   nameInput: {
     borderWidth: 1,
     borderColor: theme.colors.neutralBorder,
