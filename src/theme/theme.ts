@@ -12,7 +12,14 @@ export const colors = {
   brandPrimaryStrong: "#059669",
   brandPrimarySoft: "#ECFDF5",
 
-  neutralBg: "#FAFAFA",
+  // [2026-08-29変更・本部長／軽微変更ルート] #FAFAFA（完全な無彩色グレー）→ 温色寄りの
+  // オフホワイト。ユーザーの実機所感「少し色合いが無機質な感じ」への対応。
+  // 保護者向け画面は07-4章「淡々とした記録」の方針どおり彩度を抑えた結果、
+  // 背景・カード・枠線・文字がすべて無彩色になり、色が付いているのは絵文字だけという
+  // 状態になっていた。方針そのものは変えず、背景の1トークンだけを紙のような温かみのある
+  // 白へ寄せる（R251 G249 B244）。白いカード（neutralSurface #FFFFFF）との差も
+  // わずかに大きくなるため、カードの輪郭も掴みやすくなる。
+  neutralBg: "#FBF9F4",
   neutralSurface: "#FFFFFF",
   neutralBorder: "#E5E5E5",
   neutralTextPrimary: "#171717",
