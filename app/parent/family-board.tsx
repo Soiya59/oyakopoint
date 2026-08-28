@@ -8,7 +8,7 @@ import { useAppData } from "@/data/store";
 import { useFamilyBoardHistory, useFamilyBoardRemainingToday } from "@/hooks/useFamilyBoard";
 
 /**
- * P32 家族の書き込み（投稿履歴一覧、保護者）
+ * P32 家族の掲示板（投稿履歴一覧、保護者）
  * 参照: 主要画面ワイヤーフレーム.md 22.2節、要件定義書07-14章
  *
  * [2026-08-28新設・第1段階「見る側」のみ] P7ホームの「今週のできごと」カード
@@ -60,7 +60,7 @@ export default function ParentFamilyBoardScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
-      <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>家族の書き込み</Text>
+      <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>家族の掲示板</Text>
 
       {showToast && (
         <View style={styles.toast}>

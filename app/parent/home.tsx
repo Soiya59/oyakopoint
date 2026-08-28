@@ -24,7 +24,7 @@ import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
  */
 export default function ParentHomeScreen() {
   const { state, memberPoints } = useAppData();
-  // [2026-08-28改訂・家族の書き込みボード07-14章第1段階] 「今週のできごと」カードを
+  // [2026-08-28改訂・家族の書き込みボード07-14章第1段階] 「家族の掲示板」カード（旧「今週のできごと」）を
   // `useWeeklyDigest`（まとめメッセージ専用）から`useFamilyHomeCard`
   // （family_home_card View、書き込み優先・無ければまとめメッセージ）へ置き換えた。
   // `useWeeklyDigest`自体は削除していない（src/hooks/useFamilyBoard.ts冒頭の
@@ -35,10 +35,10 @@ export default function ParentHomeScreen() {
   const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
   const cardMessage =
     cardLoadState === "error"
-      ? "今週のできごとは、また後で見てみてね"
+      ? "家族の掲示板は、また後で見てみてね"
       : cardLoadState === "loading"
       ? null
-      : card?.message ?? "今週のできごとは、また後で見てみてね";
+      : card?.message ?? "家族の掲示板は、また後で見てみてね";
   const cardAuthorName =
     card?.source === "board_post"
       ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
@@ -131,7 +131,7 @@ export default function ParentHomeScreen() {
       <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
         <Card style={{ marginTop: theme.spacing.s4 }}>
           <View style={styles.cardHeaderRow}>
-            <Text style={theme.typography.parentBodyMedium}>今週のできごと</Text>
+            <Text style={theme.typography.parentBodyMedium}>家族の掲示板</Text>
             {cardLoadState !== "error" && <Text style={theme.typography.parentBodyMedium}>›</Text>}
           </View>
           {cardMessage === null ? (

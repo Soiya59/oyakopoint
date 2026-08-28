@@ -8,7 +8,7 @@ import { useAppData } from "@/data/store";
 import { useFamilyBoardHistory, useFamilyBoardRemainingToday } from "@/hooks/useFamilyBoard";
 
 /**
- * S20 家族の書き込み（投稿履歴一覧、みまもりメンバー）
+ * S20 家族の掲示板（投稿履歴一覧、みまもりメンバー）
  * 参照: 主要画面ワイヤーフレーム.md 22.2節、要件定義書07-14章
  *
  * [2026-08-28新設・第1段階「見る側」のみ] S1ホームの「家族の書き込み」カードを
@@ -54,7 +54,7 @@ export default function SupporterFamilyBoardScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.supporterBody}>← もどる</Text>
       </Pressable>
-      <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>家族の書き込み</Text>
+      <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>家族の掲示板</Text>
 
       {showToast && (
         <View style={styles.toast}>

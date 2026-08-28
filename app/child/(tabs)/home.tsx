@@ -31,7 +31,7 @@ export default function ChildHomeScreen() {
   // 21.1節「残高表示のすぐ下、他の全リンクより上に配置」）。
   const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
     useGachaProgress(state.activeChildMemberId);
-  // [2026-08-28追加・家族の書き込みボード07-14章第1段階] 「かぞくのできごと」カード
+  // [2026-08-28追加・家族の書き込みボード07-14章第1段階] 「かぞくのけいじばん」カード
   // （主要画面ワイヤーフレーム.md 22.1.2節、C5新規）。07-8章の週次まとめメッセージは
   // 元々C5に無かった（大人向けの文体だったため対象外）が、07-14章により書き込み内容は
   // 家族自身の言葉になったため子ども向け画面にも表示できるようになった
@@ -40,10 +40,10 @@ export default function ChildHomeScreen() {
   const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
   const cardMessage =
     cardLoadState === "error"
-      ? "かぞくのできごとは、またあとでみてね"
+      ? "かぞくのけいじばんは、またあとでみてね"
       : cardLoadState === "loading"
       ? null
-      : card?.message ?? "かぞくのできごとは、またあとでみてね";
+      : card?.message ?? "かぞくのけいじばんは、またあとでみてね";
   const cardAuthorName =
     card?.source === "board_post"
       ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
@@ -121,7 +121,7 @@ export default function ChildHomeScreen() {
       <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>
         <Card tone="child" style={styles.familyBoardCard}>
           <View style={styles.cardHeaderRow}>
-            <Text style={theme.typography.childBody}>💬 かぞくのできごと</Text>
+            <Text style={theme.typography.childBody}>💬 かぞくのけいじばん</Text>
             {cardLoadState !== "error" && <Text style={theme.typography.childBody}>›</Text>}
           </View>
           {cardMessage === null ? (

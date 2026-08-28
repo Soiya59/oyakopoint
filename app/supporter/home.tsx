@@ -102,14 +102,14 @@ export default function SupporterHomeScreen() {
           カード内に表示する（22.1.3節状態一覧「通信エラー」行）。 */}
       {cardLoadState === "error" ? (
         <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={theme.typography.supporterBodyMedium}>家族の書き込み</Text>
+          <Text style={theme.typography.supporterBodyMedium}>家族の掲示板</Text>
           <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
         </Card>
       ) : (
         <Pressable onPress={() => router.push("/supporter/family-board")}>
           <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
             <View style={styles.cardHeaderRow}>
-              <Text style={theme.typography.supporterBodyMedium}>家族の書き込み</Text>
+              <Text style={theme.typography.supporterBodyMedium}>家族の掲示板</Text>
               <Text style={theme.typography.supporterBodyMedium}>›</Text>
             </View>
             {cardLoadState === "loading" ? (
