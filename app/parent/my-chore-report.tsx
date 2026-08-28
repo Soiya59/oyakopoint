@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
@@ -20,7 +19,7 @@ import { PG_ERRCODE } from "@/data/api";
  *   （主要画面ワイヤーフレーム.md 9.0決定2）
  * - 上限到達時の文言も達成トーンではなく簡潔な事実提示にする（9.2章状態一覧）
  */
-type ScreenState = "form" | "uploadingPhoto" | "sending" | "networkError" | "limitReached";
+type ScreenState = "form" | "sending" | "networkError" | "limitReached";
 
 export default function ParentMyChoreReportScreen() {
   const { choreId } = useLocalSearchParams<{ choreId: string }>();
@@ -29,7 +28,6 @@ export default function ParentMyChoreReportScreen() {
   const chore = state.chores.find((c) => c.id === choreId);
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
 
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>(
     chore && me && isChoreLimitReached(chore, me.id) ? "limitReached" : "form"
@@ -44,45 +42,13 @@ export default function ParentMyChoreReportScreen() {
     );
   }
 
-  const pickPhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
-    }
-  };
 
-  /**
-   * app/child/report.tsx（C6）と同一のアップロード順序・エラー処理方針を踏襲する
-   * （chore_completionsは追記専用ログでUPDATE経路が無いため、Storageアップロードを
-   * 先に行いphoto_urlをINSERTペイロードに含める。実装メモ.md 15.7章参照）。
-   */
   const send = async () => {
     if (isChoreLimitReached(chore, me.id)) {
       setScreenState("limitReached");
       return;
     }
 
-    let photoUrl: string | null = null;
-    if (photoUri) {
-      setScreenState("uploadingPhoto");
-      try {
-        const response = await fetch(photoUri);
-        const blob = await response.blob();
-        const path = `${chore.family_id}/${me.id}-${Date.now()}.jpg`;
-        const { error: uploadError } = await client.storage.from("chore-photos").upload(path, blob, {
-          contentType: "image/jpeg",
-        });
-        if (!uploadError) {
-          photoUrl = path;
-        } else {
-          console.warn("chore-photos upload failed, continuing without photo", uploadError);
-        }
-      } catch (e) {
-        console.warn("chore-photos upload threw, continuing without photo", e);
-      }
-    }
 
     setScreenState("sending");
     const result = await dispatch({
@@ -90,7 +56,6 @@ export default function ParentMyChoreReportScreen() {
       choreId: chore.id,
       reportedBy: me.id,
       note: note.trim() || null,
-      photoUrl,
     });
 
     if (!result.ok) {
@@ -164,25 +129,18 @@ export default function ParentMyChoreReportScreen() {
         記録すると +{chore.points}pt
       </Text>
 
-      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>写真（任意）</Text>
-      <Pressable onPress={pickPhoto} style={styles.photoBox}>
-        <Text style={theme.typography.parentBody}>{photoUri ? "写真を追加しました" : "写真を追加"}</Text>
-      </Pressable>
-
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>
       <TextInput value={note} onChangeText={setNote} multiline style={styles.noteInput} />
 
       <AppButton
         label={
-          screenState === "uploadingPhoto"
-            ? "写真をおくっています…"
-            : screenState === "sending"
+              screenState === "sending"
             ? "きろくしています…"
             : "きろくする"
         }
         fullWidth
-        loading={screenState === "sending" || screenState === "uploadingPhoto"}
-        disabled={screenState === "sending" || screenState === "uploadingPhoto"}
+        loading={screenState === "sending"}
+        disabled={screenState === "sending"}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={send}
       />
@@ -193,17 +151,6 @@ export default function ParentMyChoreReportScreen() {
 const styles = StyleSheet.create({
   backRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   centerBlock: { alignItems: "center", marginTop: theme.spacing.s8, marginBottom: theme.spacing.s6 },
-  photoBox: {
-    marginTop: theme.spacing.s2,
-    minHeight: theme.tapTarget.parent,
-    backgroundColor: theme.colors.neutralSurface,
-    borderRadius: theme.radius.parentMd,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: theme.spacing.s3,
-  },
   noteInput: {
     marginTop: theme.spacing.s2,
     minHeight: 72,

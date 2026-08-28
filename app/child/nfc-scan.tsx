@@ -73,7 +73,7 @@ export default function NfcScanScreen() {
       return;
     }
 
-    // API仕様.md 4a章手順3a「completionを作成」。photo_url/noteは付けない
+    // API仕様.md 4a章手順3a「completionを作成」。noteは付けない
     // （主要画面ワイヤーフレーム.md 7.0決定2、NFC経由では入力ステップ自体を表示しない）。
     // [変更] 2026-08-15改訂: requires_approvalによるpending/approved分岐は、承認フロー廃止
     // （chores.requires_approval列自体がスキーマ設計.sql v2.0で削除済み）に伴い撤廃した。
@@ -84,7 +84,6 @@ export default function NfcScanScreen() {
       choreId: chore.id,
       reportedBy: me.id,
       note: null,
-      photoUrl: null,
     });
 
     if (!result.ok) {

@@ -92,7 +92,6 @@ export type Action =
       choreId: string;
       reportedBy: string;
       note: string | null;
-      photoUrl: string | null;
     }
   | {
       type: "ADD_REACTION";
@@ -443,7 +442,6 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           const res = await api.reportCompletion(client, {
             chore_id: action.choreId,
             reported_by: action.reportedBy,
-            photo_url: action.photoUrl,
             note: action.note,
           });
           if (!res.ok) return { ok: false, error: res.error };
@@ -595,7 +593,7 @@ function reducer(state: State, action: Action): State {
         chore_emoji: chore.emoji,
         reported_by: action.reportedBy,
         points: chore.points,
-        photo_url: action.photoUrl,
+        photo_url: null,
         note: action.note,
         reported_at: now,
       };

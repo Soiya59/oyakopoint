@@ -494,17 +494,21 @@ export async function fetchMemberPoints(client: SupabaseClient, familyId: string
 // 書き込み系（API仕様.md 3a・4・4a・5・7章）
 // ============================================================
 
-/** API仕様.md 4章手順3: 完了報告の作成。family_id/points/chore_title/chore_emojiはDBトリガーが自動設定する。 */
+/**
+ * API仕様.md 4章手順3: 完了報告の作成。family_id/points/chore_title/chore_emojiはDBトリガーが自動設定する。
+ *
+ * [2026-08-29] 証拠写真機能の廃止（要件定義書04章・07-11章・07-12章、2026-08-24決定）に伴い
+ * photo_urlの送信をやめた。列自体は履歴保持のため残している。
+ */
 export async function reportCompletion(
   client: SupabaseClient,
-  input: { chore_id: string; reported_by: string; photo_url: string | null; note: string | null }
+  input: { chore_id: string; reported_by: string; note: string | null }
 ): Promise<ApiResult<ChoreCompletion>> {
   const { data, error } = await client
     .from("chore_completions")
     .insert({
       chore_id: input.chore_id,
       reported_by: input.reported_by,
-      photo_url: input.photo_url,
       note: input.note,
     })
     .select("*")

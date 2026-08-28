@@ -113,7 +113,6 @@ export default function SupporterActivityScreen() {
                 </View>
                 <View style={styles.cardMeta}>
                   <Text style={theme.typography.supporterCaption}>
-                    {c.photo_url ? "📷 写真あり ・ " : ""}
                     {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                   </Text>
                 </View>
@@ -167,11 +166,6 @@ export default function SupporterActivityScreen() {
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
                       {new Date(detailTarget.reported_at).toLocaleString("ja-JP")}
                     </Text>
-                    <View style={styles.photoPlaceholder}>
-                      <Text style={{ color: theme.colors.neutralTextSecondary }}>
-                        {detailTarget.photo_url ? "📷 写真プレビュー" : "写真の添付はありません"}
-                      </Text>
-                    </View>
                     {detailTarget.note ? (
                       <Text style={{ marginTop: theme.spacing.s2 }}>ひとことメモ: {detailTarget.note}</Text>
                     ) : null}
@@ -301,16 +295,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s4,
   },
   modalCard: { width: "100%", maxWidth: 420 },
-  photoPlaceholder: {
-    marginTop: theme.spacing.s3,
-    height: 140,
-    borderRadius: theme.radius.parentMd,
-    backgroundColor: theme.colors.neutralBg,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-  },
   stampGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

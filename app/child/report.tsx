@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
@@ -19,7 +18,7 @@ import { PG_ERRCODE } from "@/data/api";
  * 参照）。C14からの導線を含め撤回済みのため、この画面は通常の完了報告フォームのみを持つ。
  * 実装メモ.md 11章参照。
  */
-type ScreenState = "form" | "uploadingPhoto" | "sending" | "networkError" | "limitReached";
+type ScreenState = "form" | "sending" | "networkError" | "limitReached";
 
 export default function ChildReportScreen() {
   const { choreId } = useLocalSearchParams<{ choreId: string }>();
@@ -28,7 +27,6 @@ export default function ChildReportScreen() {
   const chore = state.chores.find((c) => c.id === choreId);
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
 
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>(
     chore && isChoreLimitReached(chore, me.id) ? "limitReached" : "form"
@@ -43,28 +41,14 @@ export default function ChildReportScreen() {
     );
   }
 
-  const pickPhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
-    }
-  };
 
   /**
    * API仕様.md 4章「完了報告」相当。
    * 手順2（写真添付・任意）: supabase.storage.from('chore-photos').upload(...)
-   * 手順3: supabase.from('chore_completions').insert({ chore_id, reported_by, photo_url, note })
+   * 手順3: supabase.from('chore_completions').insert({ chore_id, reported_by, note })
    *
-   * [設計判断の補完] 認証・データ管理設計書.md 5章のフォルダ構成
-   * （{family_id}/{completion_id}.jpg）は completion_id の発行（INSERT成功）後に
-   * しか決まらない一方、API仕様.md 4章の手順は「2. 写真添付→3. 完了報告作成」の順で
-   * 書かれている。またchore_completionsは子ども自身によるUPDATEを許すRLSポリシーが
-   * 無い追記専用ログ（9.6.1節参照）のため、INSERT後にphoto_urlだけ書き足すことはできない。
-   * そのため実装では、アップロード時のパスに completion_id の代わりに
-   * `{family_id}/{member_id}-{timestamp}.jpg` を使い、先にStorageへアップロードしてから
-   * そのパスをphoto_urlとしてINSERTペイロードに含める順序にした。
+   * [2026-08-29] 証拠写真機能の廃止（2026-08-24決定）により、写真アップロードの手順と
+   * 「アップロード失敗時は静かに写真無しで続行する」という設計はまるごと削除した。
    * Storageバケット `chore-photos` が未作成、またはアップロードに失敗した場合でも、
    * 写真無しで完了報告そのものは継続できるようにしている。
    *
@@ -81,25 +65,6 @@ export default function ChildReportScreen() {
       return;
     }
 
-    let photoUrl: string | null = null;
-    if (photoUri) {
-      setScreenState("uploadingPhoto");
-      try {
-        const response = await fetch(photoUri);
-        const blob = await response.blob();
-        const path = `${chore.family_id}/${me.id}-${Date.now()}.jpg`;
-        const { error: uploadError } = await client.storage.from("chore-photos").upload(path, blob, {
-          contentType: "image/jpeg",
-        });
-        if (!uploadError) {
-          photoUrl = path;
-        } else {
-          console.warn("chore-photos upload failed, continuing without photo", uploadError);
-        }
-      } catch (e) {
-        console.warn("chore-photos upload threw, continuing without photo", e);
-      }
-    }
 
     setScreenState("sending");
     const result = await dispatch({
@@ -107,7 +72,6 @@ export default function ChildReportScreen() {
       choreId: chore.id,
       reportedBy: me.id,
       note: note.trim() || null,
-      photoUrl,
     });
 
     if (!result.ok) {
@@ -185,17 +149,6 @@ export default function ChildReportScreen() {
         できたら +{chore.points}pt
       </Text>
 
-      <Pressable onPress={pickPhoto} style={styles.photoBox}>
-        {photoUri ? (
-          <Text style={theme.typography.childBody}>📷 しゃしんをつけました</Text>
-        ) : (
-          <>
-            <Text style={theme.typography.childBody}>📷 しゃしんをつける</Text>
-            <Text style={theme.typography.parentCaption}>（なくてもOK）</Text>
-          </>
-        )}
-      </Pressable>
-
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>ひとことメモ（にんい）</Text>
       <TextInput
         value={note}
@@ -207,16 +160,14 @@ export default function ChildReportScreen() {
 
       <AppButton
         label={
-          screenState === "uploadingPhoto"
-            ? "しゃしんをおくっています…"
-            : screenState === "sending"
+          screenState === "sending"
             ? "とどけています…"
             : "とどける ✋📮"
         }
         tone="child"
         fullWidth
-        loading={screenState === "sending" || screenState === "uploadingPhoto"}
-        disabled={screenState === "sending" || screenState === "uploadingPhoto"}
+        loading={screenState === "sending"}
+        disabled={screenState === "sending"}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={send}
       />
@@ -227,15 +178,6 @@ export default function ChildReportScreen() {
 const styles = StyleSheet.create({
   backRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   centerBlock: { alignItems: "center", marginTop: theme.spacing.s8 },
-  photoBox: {
-    marginTop: theme.spacing.s6,
-    minHeight: theme.tapTarget.childPrimary,
-    backgroundColor: theme.colors.neutralSurface,
-    borderRadius: theme.radius.childXl,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: theme.spacing.s4,
-  },
   noteInput: {
     marginTop: theme.spacing.s2,
     minHeight: 72,
