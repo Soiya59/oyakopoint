@@ -24,6 +24,7 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   Family,
+  FamilyBoardPost,
   FamilyBoardPostWithAuthor,
   FamilyDrawing,
   FamilyDrawingLineData,
@@ -1526,12 +1527,12 @@ export async function fetchLatestWeeklyFamilyDigest(
 
 // ============================================================
 // 13. 家族の書き込みボード（要件定義書07-14章、API仕様.md 13章、
-//     スキーマ設計.sql 35章、2026-08-28追加・第1段階「見る側」のみ）
+//     スキーマ設計.sql 35〜36章、2026-08-28追加）
 //
-// [2026-08-28追加] 第1段階は「見る」機能のみ。投稿（13.1章）・上限確認RPC
-// （13.2章 my_family_board_posts_remaining_today）・削除（13.5章）はDB側は
-// 今回のマイグレーションで作成済みだが、呼び出しクライアントコードは第2段階まで
-// 実装しない（本部長指示のスコープ）。
+// [2026-08-28追加] 第1段階は「見る」機能のみだった。
+// [2026-08-29追加・第2段階] 投稿（13.1章）・上限確認RPC（13.2章）・削除（13.5章、
+// 2026-08-29改訂＝RPC方式）を追加する。プッシュ通知（13.6章）は実装しない
+// （要件定義書08章「実装状況の記録・2026-08-28追加」、本部長指示）。
 // ============================================================
 
 /**
@@ -1580,4 +1581,73 @@ export async function fetchFamilyBoardPostsHistory(
     .range(range.from, range.to);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardPostWithAuthor[] };
+}
+
+/**
+ * API仕様.md 13.2章: 呼び出し本人が今日まだ投稿できる残り件数（0〜5）。
+ * `family_id`・`author_member_id`のいずれも引数に取らない（RPCがGUCから
+ * `current_family_member_id()`を読んで呼び出し本人に絞るため、familyIdが
+ * 未確定でも呼び出せる＝実装メモ.md 73.3章「入力が揃わないときにloadStateを
+ * 変えずreturnしない」の対象にそもそもならない設計）。
+ */
+export async function fetchMyFamilyBoardPostsRemainingToday(client: SupabaseClient): Promise<ApiResult<number>> {
+  const { data, error } = await client.rpc("my_family_board_posts_remaining_today");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as number };
+}
+
+/**
+ * API仕様.md 13.1章: 投稿する。
+ *
+ * [重要・2026-08-29修正] 13.1章の原文は「`author_member_id`はクライアントから
+ * 送る必要はない」としているが、これは本番検証で誤りだと判明した。
+ * `family_board_posts.author_member_id`列にはDB側のDEFAULTが無く（NOT NULL、
+ * デフォルト値なし）、かつBEFORE INSERTトリガー`family_board_posts_before_insert`
+ * （スキーマ設計.sql 35b章）が`NEW.author_member_id`を使って投稿者の`family_id`を
+ * 逆引きする実装になっている。RLSの`WITH CHECK`はBEFORE INSERTトリガーが
+ * `NEW`を確定させた**後**に評価されるため、`author_member_id`を送らずにINSERTすると、
+ * RLSに弾かれるより先にトリガー内の投稿者検索が空振りし、`23503`
+ * 「投稿者が見つからないか無効化されています」で必ず失敗する（本番のトランザクション内
+ * ＋ROLLBACKで実際に再現・修正双方を確認済み。開発部/成果物/実装メモ.md 81章参照）。
+ * したがって呼び出し側は自分自身の`member_id`を明示的に渡すこと。RLS
+ * `family_board_posts_insert_self`が`author_member_id = current_family_member_id()`を
+ * 引き続き強制するため、他人になりすましたINSERTは`42501`で拒否される（検証済み）。
+ * `family_id`・`created_at`は従来どおりクライアントから送る必要が無い
+ * （BEFORE INSERTトリガーがサーバー側で確定させる）。1日5件の上限に達している場合は
+ * `check_violation`（PG_ERRCODE.checkViolation）でINSERT自体が拒否される。
+ */
+export async function createFamilyBoardPost(
+  client: SupabaseClient,
+  body: string,
+  authorMemberId: string
+): Promise<ApiResult<FamilyBoardPost>> {
+  const { data, error } = await client
+    .from("family_board_posts")
+    .insert({ body, author_member_id: authorMemberId })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyBoardPost };
+}
+
+/**
+ * API仕様.md 13.5章（2026-08-29改訂＝RPC方式）: 削除（本人の5分以内取消・
+ * 保護者の是正削除）。
+ *
+ * [重要] 13.5章に旧記述として残る「直接UPDATEで`deleted_at`を埋める」方式は
+ * **使わないこと。** SELECTポリシー（`deleted_at IS NULL`で削除済みを隠す）と
+ * 論理削除UPDATEが両立せず、必ず`42501`（RLS違反）で拒否される（本番検証済み。
+ * 設計部/成果物/スキーマ設計.sql 36章、開発部/成果物/実装メモ.md 80.3章参照）。
+ * 直接UPDATEの経路自体（RLSポリシー`family_board_posts_update_soft_delete`）は
+ * 本番マイグレーション20260829020000で削除済みのため、直接UPDATEで書いても
+ * 「更新対象0件」または権限エラーになるだけで、原理的に成功しない。
+ *
+ * 権限判定（本人5分以内／保護者は時間制限なし／それ以外拒否）は35c章のBEFORE
+ * UPDATEトリガーがそのまま行う。本関数はRLSを迂回して同じ行に到達するための
+ * SECURITY DEFINER RPCラッパーを呼ぶだけで、判定ロジック自体は一切持たない。
+ */
+export async function deleteFamilyBoardPost(client: SupabaseClient, postId: string): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("delete_family_board_post", { p_post_id: postId });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
 }

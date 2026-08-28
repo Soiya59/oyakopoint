@@ -1,6 +1,8 @@
 /**
  * 家族の書き込みボード（要件定義書07-14章、API仕様.md 13章）向けデータ取得フック。
- * 2026-08-28追加・第1段階「見る側」のみ（投稿・削除は第2段階）。
+ * 2026-08-28追加・第1段階「見る側」のみ。
+ * 2026-08-29追加・第2段階: 投稿数残数取得（useFamilyBoardRemainingToday）・
+ * 削除/取消（useFamilyBoardHistory().removePost）を追加した。
  *
  * [E. useWeeklyDigestとの関係について（本部長指示に対応する判断）]
  * 既存の`useWeeklyDigest`（保護者ホームP7専用）は、07-8章の週次まとめメッセージ
@@ -36,7 +38,13 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
-import { fetchFamilyBoardPostsHistory, fetchFamilyHomeCard } from "@/data/api";
+import {
+  deleteFamilyBoardPost,
+  fetchFamilyBoardPostsHistory,
+  fetchFamilyHomeCard,
+  fetchMyFamilyBoardPostsRemainingToday,
+  PG_ERRCODE,
+} from "@/data/api";
 import type { FamilyBoardPostWithAuthor, FamilyHomeCard } from "@/types/domain";
 
 export type FamilyBoardLoadState = "loading" | "error" | "ready";
@@ -130,5 +138,86 @@ export function useFamilyBoardHistory(familyId: string) {
     setHasMore(res.data.length === PAGE_SIZE);
   }, [client, familyId, posts.length, loadingMore, hasMore]);
 
-  return { loadState, posts, hasMore, loadingMore, loadMore, reload: load };
+  // [2026-08-29追加・第2段階] 削除（本人の5分以内取消・保護者の是正削除）。
+  // API仕様.md 13.5章（2026-08-29改訂）のとおり、直接UPDATEではなく
+  // RPC `delete_family_board_post` 経由でのみ行う（設計部/成果物/スキーマ設計.sql
+  // 36章。直接UPDATEは`42501`で必ず拒否される、本番検証済み）。
+  //
+  // 「取消」（本人・確認ダイアログなし）と「削除」（保護者の是正・確認ダイアログあり）は
+  // 呼び出すRPC自体は同一で、権限判定（本人5分以内／保護者は無制限／それ以外拒否）は
+  // すべてサーバー側（BEFORE UPDATEトリガー）が行う。UI側の確認ダイアログの有無だけが
+  // 2つの操作の違いであるため、フック側は単一の`removePost`のみを公開する
+  // （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 22.4節）。
+  const [removingPostId, setRemovingPostId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ postId: string; code: string; message: string } | null>(null);
+
+  const removePost = useCallback(
+    async (postId: string): Promise<boolean> => {
+      setRemovingPostId(postId);
+      setActionError(null);
+      const res = await deleteFamilyBoardPost(client, postId);
+      setRemovingPostId(null);
+      if (!res.ok) {
+        setActionError({ postId, code: res.error.code, message: res.error.message });
+        // no_data_found（対象が既に無い）の場合は、次のreloadを待たずに一覧から
+        // 即時除去しておく（例: 別タブ・他メンバーの操作により既に削除済みだった場合）。
+        if (res.error.code === PG_ERRCODE.noDataFound) {
+          setPosts((prev) => prev.filter((p) => p.id !== postId));
+        }
+        return false;
+      }
+      // Eの教訓（投稿成功後の一覧更新忘れ）と対になる: 削除成功時も一覧を
+      // 古いままにしない。全件reloadではなく該当行をローカルで即時除去する
+      // （ページング位置・スクロール位置を崩さないため）。
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      return true;
+    },
+    [client]
+  );
+
+  return {
+    loadState,
+    posts,
+    hasMore,
+    loadingMore,
+    loadMore,
+    reload: load,
+    removingPostId,
+    actionError,
+    removePost,
+  };
+}
+
+/**
+ * API仕様.md 13.2章: 呼び出し本人が今日まだ投稿できる残り件数（0〜5）。
+ * 投稿履歴一覧（P32/C27/S20）の「投稿する」ボタン直下の残数表示・上限到達時の
+ * ブロック文言（主要画面ワイヤーフレーム.md 22.3.3節）に使う。
+ *
+ * `my_family_board_posts_remaining_today()`は引数を取らず`current_family_member_id()`
+ * で呼び出し本人に絞るため、familyIdの確定を待つ必要が無い（useFamilyHomeCard/
+ * useFamilyBoardHistoryと違い「入力が揃わないときにloadStateを変えずreturnする」
+ * 対象になるような入力自体が存在しない設計＝実装メモ.md 73.3章の教訓が
+ * そもそも当てはまらないケース）。
+ */
+export function useFamilyBoardRemainingToday() {
+  const { client } = useSession();
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
+
+  const load = useCallback(async () => {
+    setLoadState("loading");
+    const res = await fetchMyFamilyBoardPostsRemainingToday(client);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    setRemaining(res.data);
+    setLoadState("ready");
+  }, [client]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { remaining, loadState, reload: load };
 }
