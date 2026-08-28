@@ -135,7 +135,7 @@ export default function SupporterHomeScreen() {
         </Pressable>
       )}
 
-      <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>最近のようす</Text>
+      <Text style={[theme.typography.supporterBodyMedium, styles.sectionHeading]}>最近のようす</Text>
       <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
         {recent.length === 0 && (
           <Text style={[theme.typography.supporterBody, { color: theme.colors.neutralTextSecondary }]}>
@@ -160,11 +160,13 @@ export default function SupporterHomeScreen() {
         })}
       </View>
 
-      <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>メニュー</Text>
+      <Text style={[theme.typography.supporterBodyMedium, styles.sectionHeading]}>メニュー</Text>
       <View style={styles.grid}>
         {shortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
-            <Text style={{ fontSize: 28 }}>{s.emoji}</Text>
+            <View style={styles.tileEmojiCircle}>
+              <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+            </View>
             <Text style={theme.typography.supporterBody}>{s.label}</Text>
           </Pressable>
         ))}
@@ -187,6 +189,21 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.s3,
     marginTop: theme.spacing.s2,
+  },
+  // [2026-08-29追加・本部長] P7保護者ホームと同じ扱い（そちらのコメント参照）。
+  // みまもりメンバーの差し色はsupporterAccent系なので、円もそのソフト色を使う。
+  sectionHeading: {
+    marginTop: theme.spacing.s6,
+    marginBottom: theme.spacing.s2,
+    color: theme.colors.supporterAccent,
+  },
+  tileEmojiCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.supporterAccentSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
   gridItem: {
     width: "30%",

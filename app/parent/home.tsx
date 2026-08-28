@@ -180,9 +180,7 @@ export default function ParentHomeScreen() {
         </Card>
       </Pressable>
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        最近の報告
-      </Text>
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>最近の報告</Text>
       <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
         {recent.map((c) => {
           // [2026-08-16修正・本部長] ユーザーの実操作で、P7「最近の報告」プレビューに
@@ -211,7 +209,9 @@ export default function ParentHomeScreen() {
       <View style={styles.grid}>
         {myShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
-            <Text style={{ fontSize: 28 }}>{s.emoji}</Text>
+            <View style={styles.tileEmojiCircle}>
+              <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+            </View>
             <Text style={theme.typography.parentBody}>{s.label}</Text>
           </Pressable>
         ))}
@@ -221,7 +221,9 @@ export default function ParentHomeScreen() {
       <View style={styles.grid}>
         {familyShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
-            <Text style={{ fontSize: 28 }}>{s.emoji}</Text>
+            <View style={styles.tileEmojiCircle}>
+              <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+            </View>
             <Text style={theme.typography.parentBody}>{s.label}</Text>
           </Pressable>
         ))}
@@ -231,10 +233,19 @@ export default function ParentHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // [2026-08-29変更・本部長] セクション見出し。
+  // (a) 「わたしの」「かぞくの管理」はグレー、「最近の報告」だけ素のparentBodyMediumで黒、と
+  //     **同じ役割の見出しなのに色が揃っていなかった**（ユーザーの実機指摘で判明。意図した
+  //     使い分けではなく実装の行き違い）。3つとも本スタイルに統一した。
+  // (b) あわせて色をneutralTextSecondary（グレー）からbrandPrimaryStrongへ。保護者向け画面は
+  //     背景・カード・枠線・文字がすべて無彩色で「色が付いているのは絵文字だけ」という
+  //     状態だったため、見出しをブランド色にして画面に色を戻す（デザイントークン.md 1.2節の
+  //     2026-08-29改訂を参照）。07-4章「淡々とした記録」の方針は維持しており、
+  //     彩度を上げるのは見出しとメニュータイルの淡色に留めている。
   sectionHeading: {
     marginTop: theme.spacing.s6,
     marginBottom: theme.spacing.s2,
-    color: theme.colors.neutralTextSecondary,
+    color: theme.colors.brandPrimaryStrong,
   },
   cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   digestSkeleton: {
@@ -256,6 +267,18 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.s3,
     marginTop: theme.spacing.s2,
+  },
+  // [2026-08-29追加・本部長] メニュータイルの絵文字を淡いブランド色の円に載せる。
+  // 白いカードが9枚並ぶだけの見え方（ユーザー所感「少し色合いが無機質な感じ」）への対応。
+  // 2セクションで色を変える案もあったが、色に意味があると誤読されうるため
+  // （07-10章は色分けに個人の可視化という意味を与えている）、全タイル同一の淡色にした。
+  tileEmojiCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.brandPrimarySoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
   gridItem: {
     width: "30%",
