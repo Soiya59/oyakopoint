@@ -8,7 +8,6 @@ import GachaHomeWidget from "@/components/GachaHomeWidget";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import MemberAvatar from "@/components/MemberAvatar";
-import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
@@ -23,9 +22,10 @@ type LoadState = "loading" | "error" | "ready";
 export default function ChildHomeScreen() {
   const { state, memberPoints, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  // [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
-  // 20.6章決定7）。段階名のみを軽く添える（内訳・件数までは表示しない、C5行の設計）。
-  const { season: treeSeason } = useFamilyTreeSummary();
+  // [2026-08-23追加／2026-08-29削除] 家族の木ミニウィジェット（07-9章、20.6章決定7）で
+  // 段階名のみを軽く添えていたが、ラベルを「木」固定にしたため段階名が不要になった。
+  // C5でシーズン情報を使う箇所が他に無くなったので、useFamilyTreeSummary()の呼び出し
+  // （＝ホームを開くたびの追加の通信）ごと外している。段階名は遷移先のC20で見られる。
   // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
   // ワイヤーフレーム.md 21.0節決定1「特に子ども向け（C5）では最も目立つ専用カード」・
   // 21.1節「残高表示のすぐ下、他の全リンクより上に配置」）。
@@ -146,11 +146,12 @@ export default function ChildHomeScreen() {
       <View style={styles.shortcutRow}>
         {[
           { emoji: "👨‍👩‍👧‍👦", label: "かぞく", path: "/child/family-activity" },
-          {
-            emoji: "🌳",
-            label: theme.treeStages[treeSeason?.current_stage ?? 0].name,
-            path: "/child/family-tree",
-          },
+          // [2026-08-29変更・本部長] ラベルを段階名（種／芽／若木／花／実）から「木」固定へ。
+          // 「いまどこまで育ったか」をホームで見せる狙いで段階名を出していたが、実機では
+          // 「🌳 花」と表示され、**何のボタンなのかが分からない**とユーザーが指摘した
+          // （ボタンのラベルは行き先を示すもので、状態を示すものではない）。
+          // 段階名は遷移先のC20と、保護者ホームの木ウィジェットで引き続き確認できる。
+          { emoji: "🌳", label: "木", path: "/child/family-tree" },
           { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
           { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
         ].map((s2) => (
