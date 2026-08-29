@@ -58,14 +58,26 @@ export default function ChildHomeScreen() {
   const myPoints = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
 
   // [変更] 2026-08-15改訂: 承認フロー廃止によりc.status（審査待ち件数）は廃止された。
-  // 代わりに、自分の完了報告に直近24時間で届いた保護者リアクション件数を「お知らせ」として
-  // 表示する（主要画面ワイヤーフレーム.md 4章「新着リアクションあり」の考え方をC5ヘッダーにも
-  // 適用。催促ではなく届いたお知らせという位置づけ、デザイントークン.md 1.4節参照）。
+  // 代わりに、直近24時間で自分に届いたものの件数を「お知らせ」として表示する
+  // （主要画面ワイヤーフレーム.md 4章「新着リアクションあり」の考え方をC5ヘッダーにも適用。
+  // 催促ではなく届いたお知らせという位置づけ、デザイントークン.md 1.4節参照）。
+  //
+  // [2026-08-29修正・本部長] **感謝ポイントを数に入れていなかった。**
+  // ユーザーの指摘「感謝ポイントかリアクションをもらった時の通知のほうがよい」による。
+  // もらっても数字が動かず、押した先（きろく）にも出ないため、感謝ポイントは
+  // 受け取っても気づけない状態だった。リアクションと同じ扱いで数える。
   const myCompletionIds = new Set(state.completions.filter((c) => c.reported_by === me.id).map((c) => c.id));
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newReactionCount = state.reactions.filter(
-    (r) => myCompletionIds.has(r.completion_id) && new Date(r.created_at).getTime() >= oneDayAgoMs
-  ).length;
+  const newReactionCount =
+    state.reactions.filter(
+      (r) => myCompletionIds.has(r.completion_id) && new Date(r.created_at).getTime() >= oneDayAgoMs
+    ).length +
+    state.gratitude.filter(
+      (g) =>
+        g.recipient_id === me.id &&
+        g.revoked_at === null &&
+        new Date(g.created_at).getTime() >= oneDayAgoMs
+    ).length;
 
   // [2026-08-27修正・本部長] 実施済みの「単発」を一覧から外す。単発のchoreには「終わり」が
   // 無く、実施後も「✅ おわったよ」のまま永久に「きろくずみ」へ並び続けていた
@@ -98,7 +110,10 @@ export default function ChildHomeScreen() {
           <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
           <Text style={theme.typography.childBody}>{me.display_name}</Text>
         </Pressable>
-        <Pressable onPress={() => router.push("/child/history")}>
+        {/* [2026-08-29変更] 飛び先を「きろく」から「とどいたよ」（C29）へ。きろくには
+            リアクションしか出ず、感謝ポイントを数に入れると押しても何のことか分からなく
+            なるため、もらったものだけを1本にまとめた専用画面を用意した。 */}
+        <Pressable onPress={() => router.push("/child/inbox")}>
           <Text style={styles.notifBadge}>🔔{newReactionCount}</Text>
         </Pressable>
       </View>
