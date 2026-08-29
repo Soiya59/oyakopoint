@@ -36,6 +36,19 @@ export interface Category {
   sort_order: number;
 }
 
+// [新設・2026-08-30] 要件定義書07-15章「クエスト・ごほうびの登録者と最終編集者の記録」・
+// スキーマ設計.sql 37章・API仕様.md 3c章/7c章。PostgRESTのFK名指定JOIN
+// （例: `family_members!created_by(display_name, is_active)`）で取得する
+// 登録者・最終編集者の表示用の最小情報。
+// - JOIN自体を含まないクエリで取得した行では`creator`/`editor`キー自体が無い
+//   （型上はoptional=undefined）。
+// - JOINを含むクエリで取得しても、対象のcreated_by/updated_byがNULLであれば
+//   PostgRESTはnullを返す（要件定義書07-15章4章「記録なし」表示の判定に使う）。
+export interface FamilyMemberBrief {
+  display_name: string;
+  is_active: boolean;
+}
+
 export interface Chore {
   id: string;
   family_id: string;
@@ -68,6 +81,16 @@ export interface Chore {
   // 「自分専用choreの公開方針」参照）。
   created_by: string | null;
   scope: "family" | "personal";
+  // [追加・2026-08-30] 要件定義書07-15章、スキーマ設計.sql 37章。
+  // 07-15章2章が定める「編集」に該当するUPDATEが発生したときのみサーバー側で
+  // 記録される（`chores_before_write`トリガー）。一度も編集されていない行はNULL。
+  updated_by: string | null;
+  updated_at: string;
+  // 3c章のJOINクエリでのみ取得できる（fetchFamilyBundleが常にJOINするため
+  // 実際にはstate.chores経由なら常に取得できる。個別にJOIN無しでfetchした
+  // 場合はundefinedになりうる）。
+  creator?: FamilyMemberBrief | null;
+  editor?: FamilyMemberBrief | null;
 }
 
 // [削除] CompletionStatus型（pending/approved/rejected）はスキーマ設計.sql 5章の
@@ -145,6 +168,12 @@ export interface Reward {
   // is_shared_with_family相当の概念は無い（自分専用rewardは常に非公開のまま）。
   created_by: string | null;
   scope: "family" | "personal";
+  // [追加・2026-08-30] chores.updated_byと同じ設計（要件定義書07-15章、
+  // スキーマ設計.sql 37章、API仕様.md 7c章）。
+  updated_by: string | null;
+  updated_at: string;
+  creator?: FamilyMemberBrief | null;
+  editor?: FamilyMemberBrief | null;
 }
 
 export interface RewardRedemption {

@@ -39,6 +39,17 @@ export default function ChoresListScreen() {
   const active = managed.filter((c) => !isOneOffFinished(c));
   const finished = managed.filter((c) => isOneOffFinished(c));
 
+  // [2026-08-30追加] 要件定義書07-15章・主要画面ワイヤーフレーム.md 24章（決定1・
+  // 決定2・決定5）。「終わった単発のクエスト」折りたたみは対象にせず、有効な
+  // クエスト（active）のみを「わたしが登録」「かぞくが登録」の2グループに分ける
+  // （先に有効/終了で分け、有効な行だけをわたし/かぞくで分ける＝決定5）。
+  // 判定は created_by === 自分のfamily_member_id のみ（役割・人数に依存しない、
+  // 07-15章前提5）。登録者不明（created_by===null）・他の保護者の行は「かぞくが登録」
+  // 側に混ぜる（07-15章4章）。一覧の各行には登録者を示す表示を一切追加しない（決定1）。
+  const myMemberId = state.activeParentMemberId;
+  const mine = active.filter((c) => c.created_by === myMemberId);
+  const others = active.filter((c) => c.created_by !== myMemberId);
+
   const renderRow = (c: Chore, dimmed: boolean) => (
     <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
       <Card
@@ -67,7 +78,19 @@ export default function ChoresListScreen() {
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
 
-      {active.map((c) => renderRow(c, false))}
+      {mine.length > 0 && (
+        <View>
+          <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしが登録</Text>
+          {mine.map((c) => renderRow(c, false))}
+        </View>
+      )}
+
+      {others.length > 0 && (
+        <View>
+          <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
+          {others.map((c) => renderRow(c, false))}
+        </View>
+      )}
 
       {finished.length > 0 && (
         <View style={{ marginTop: theme.spacing.s6 }}>
@@ -94,4 +117,11 @@ export default function ChoresListScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   finishedToggle: { paddingVertical: theme.spacing.s2 },
+  // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.0節決定3。app/parent/home.tsxの
+  // sectionHeadingと同じスタイルを流用する（新規トークンを増やさない）。
+  sectionHeading: {
+    marginTop: theme.spacing.s6,
+    marginBottom: theme.spacing.s2,
+    color: theme.colors.brandPrimaryStrong,
+  },
 });

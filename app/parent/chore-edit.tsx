@@ -9,6 +9,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createChore, deleteChore, updateChore } from "@/data/api";
 import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
+import { toJstDateString } from "@/lib/calendarDates";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -194,6 +195,25 @@ export default function ChoreEditScreen() {
         {chore ? `${chore.emoji ?? "📝"} クエストを編集` : "クエストを新規登録"}
       </Text>
       <Text style={[theme.typography.parentBody, styles.purpose]}>chore作成・編集</Text>
+
+      {/* [2026-08-30追加] 登録者・最終編集者（要件定義書07-15章、主要画面ワイヤーフレーム.md
+          24.2節決定4）。既存のnfcCardと同種のCardで軽く囲み、フォームより手前・目的文の
+          直後に置く。新規作成モード（chore未定義）ではまだcreated_by/updated_byが
+          存在しないため表示しない。created_by/updated_byがNULL（または解決できない）場合は
+          「不明」ではなく「記録なし」と表示する（07-15章4章）。 */}
+      {chore && (
+        <Card style={styles.metaCard} tone="parent">
+          <Text style={[theme.typography.parentCaption, styles.metaLine, { color: theme.colors.neutralTextSecondary }]}>
+            登録: {chore.creator?.display_name ?? "記録なし"}
+          </Text>
+          <Text style={[theme.typography.parentCaption, styles.metaLine, { color: theme.colors.neutralTextSecondary }]}>
+            最終編集:{" "}
+            {chore.editor
+              ? `${chore.editor.display_name}・${toJstDateString(chore.updated_at).replace(/-/g, "/")}`
+              : "記録なし"}
+          </Text>
+        </Card>
+      )}
 
       {/* タイトル */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
@@ -476,6 +496,10 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: theme.colors.brandPrimaryStrong, fontWeight: "700", fontSize: 12 },
   purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+  // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.2節決定4。nfcCardと同種の
+  // Card枠（色は既定のneutralBorderのまま、強調色は使わない）。
+  metaCard: { marginTop: theme.spacing.s4 },
+  metaLine: { marginTop: theme.spacing.s1 },
   fieldLabel: { marginTop: theme.spacing.s4 },
   input: {
     marginTop: theme.spacing.s2,

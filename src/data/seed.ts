@@ -94,7 +94,10 @@ const MOCK_NFC_TOKENS = {
 // 補完する。実DB側もADD COLUMN DEFAULTで同様にバックフィルされる（後方互換、19章
 // コメント参照）。is_shared_with_family（可視性トグル）は4回目のスコープ変更により
 // 撤回されたため、ここでの補完対象からも外した。
-type LegacyChoreSeed = Omit<Chore, "created_by" | "scope">;
+// [2026-08-30追加] 要件定義書07-15章・スキーマ設計.sql 37章でChore型に
+// updated_by/updated_atが追加されたため、created_by/scopeと同じ理由で
+// モックシードにもデフォルト値（updated_by=null・updated_at=作成時刻と同一）を補完する。
+type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "updated_by" | "updated_at">;
 
 export const seedChores: Chore[] = (
   [
@@ -170,7 +173,13 @@ export const seedChores: Chore[] = (
     nfc_tag_id: MOCK_NFC_TOKENS.chore5,
   },
   ] satisfies LegacyChoreSeed[]
-).map((c) => ({ ...c, created_by: null, scope: "family" as const }));
+).map((c) => ({
+  ...c,
+  created_by: null,
+  scope: "family" as const,
+  updated_by: null,
+  updated_at: "2026-07-01T00:00:00+09:00",
+}));
 
 // [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止(スキーマ設計.sql 5章「[廃止]」)に伴い、
 // status/review_note/reviewed_by/reviewed_atを持つエントリから、確定済みの完了報告のみを
@@ -354,7 +363,9 @@ export const seedReactions: ChoreReaction[] = [
 // [2026-08-22追加] Chore型と同じ理由（19〜20章コメント参照）でReward型に
 // created_by/scopeが追加されたため、モックシードにもデフォルト値
 // （scope='family'・created_by=null）を補完する。
-type LegacyRewardSeed = Omit<Reward, "created_by" | "scope">;
+// [2026-08-30追加] Chore型と同じ理由（上記コメント参照）でReward型にも
+// updated_by/updated_atが追加されたため、モックシードにも同様の補完を行う。
+type LegacyRewardSeed = Omit<Reward, "created_by" | "scope" | "updated_by" | "updated_at">;
 
 export const seedRewards: Reward[] = (
   [
@@ -395,7 +406,13 @@ export const seedRewards: Reward[] = (
     is_active: true,
   },
   ] satisfies LegacyRewardSeed[]
-).map((r) => ({ ...r, created_by: null, scope: "family" as const }));
+).map((r) => ({
+  ...r,
+  created_by: null,
+  scope: "family" as const,
+  updated_by: null,
+  updated_at: "2026-07-01T00:00:00+09:00",
+}));
 
 export const seedRedemptions: RewardRedemption[] = [
   {

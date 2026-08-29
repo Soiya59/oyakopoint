@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
+import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createReward, deleteReward, updateReward } from "@/data/api";
+import { toJstDateString } from "@/lib/calendarDates";
 
 /**
  * P13 ごほうび登録・編集
@@ -112,6 +114,22 @@ export default function RewardEditScreen() {
       </Text>
       <Text style={[theme.typography.parentBody, styles.purpose]}>reward作成・編集</Text>
 
+      {/* [2026-08-30追加] 登録者・最終編集者（要件定義書07-15章、主要画面ワイヤーフレーム.md
+          24.2節決定4）。app/parent/chore-edit.tsxと全く同じ構成・分岐。 */}
+      {reward && (
+        <Card style={styles.metaCard} tone="parent">
+          <Text style={[theme.typography.parentCaption, styles.metaLine, { color: theme.colors.neutralTextSecondary }]}>
+            登録: {reward.creator?.display_name ?? "記録なし"}
+          </Text>
+          <Text style={[theme.typography.parentCaption, styles.metaLine, { color: theme.colors.neutralTextSecondary }]}>
+            最終編集:{" "}
+            {reward.editor
+              ? `${reward.editor.display_name}・${toJstDateString(reward.updated_at).replace(/-/g, "/")}`
+              : "記録なし"}
+          </Text>
+        </Card>
+      )}
+
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>名前（必須）</Text>
       <TextInput
         value={name}
@@ -206,6 +224,9 @@ export default function RewardEditScreen() {
 
 const styles = StyleSheet.create({
   purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+  // [2026-08-30追加] app/parent/chore-edit.tsxと同じスタイル。
+  metaCard: { marginTop: theme.spacing.s4 },
+  metaLine: { marginTop: theme.spacing.s1 },
   fieldLabel: { marginTop: theme.spacing.s4 },
   input: {
     marginTop: theme.spacing.s2,

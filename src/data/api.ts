@@ -327,14 +327,35 @@ export interface FamilyBundle {
   rewards: Reward[];
 }
 
+// [2026-08-30追加] 要件定義書07-15章「クエスト・ごほうびの登録者と最終編集者の記録」・
+// API仕様.md 3c章/7c章。chores/rewardsの既存GETに登録者・最終編集者の表示名を
+// 相乗りさせる（新しいAPI呼び出しを増やさない方針）。PostgRESTのFK名指定JOIN
+// （列名ヒント）で、created_by/updated_by それぞれの参照先family_members行を
+// 別名で取得する。対象がNULLの場合、PostgRESTはnullを返す
+// （要件定義書07-15章4章「記録なし」表示の判定に使う）。
+const CHORE_SELECT_WITH_CREATOR_EDITOR =
+  "*, creator:family_members!created_by(display_name, is_active), editor:family_members!updated_by(display_name, is_active)";
+const REWARD_SELECT_WITH_CREATOR_EDITOR =
+  "*, creator:family_members!created_by(display_name, is_active), editor:family_members!updated_by(display_name, is_active)";
+
 /** 家族の基本データ一式を取得する。RLSにより自分の家族の行のみが返る。 */
 export async function fetchFamilyBundle(client: SupabaseClient, familyId: string): Promise<ApiResult<FamilyBundle>> {
   const [familyRes, membersRes, categoriesRes, choresRes, rewardsRes] = await Promise.all([
     client.from("families").select("*").eq("id", familyId).single(),
     client.from("family_members").select("*").eq("family_id", familyId).order("created_at"),
     client.from("categories").select("*").eq("family_id", familyId).order("sort_order"),
-    client.from("chores").select("*").eq("family_id", familyId).eq("is_active", true).order("created_at"),
-    client.from("rewards").select("*").eq("family_id", familyId).eq("is_active", true).order("created_at"),
+    client
+      .from("chores")
+      .select(CHORE_SELECT_WITH_CREATOR_EDITOR)
+      .eq("family_id", familyId)
+      .eq("is_active", true)
+      .order("created_at"),
+    client
+      .from("rewards")
+      .select(REWARD_SELECT_WITH_CREATOR_EDITOR)
+      .eq("family_id", familyId)
+      .eq("is_active", true)
+      .order("created_at"),
   ]);
 
   if (familyRes.error) return { ok: false, error: fromPostgrestError(familyRes.error) };
