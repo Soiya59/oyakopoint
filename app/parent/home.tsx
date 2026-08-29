@@ -95,32 +95,26 @@ export default function ParentHomeScreen() {
   const myShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "🧹", label: "クエスト", path: "/parent/my-chores" },
     { emoji: "🎁", label: "ごほうび", path: "/parent/my-rewards" },
-    { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
+    // [2026-08-29] 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れて
+    // 「ト」が1文字だけ次行に残っていた（ユーザーの実機指摘）。意味の切れ目で明示的に
+    // 改行する。ラベル全体の文字サイズを下げる案もあったが、壊れていない他のタイルまで
+    // 小さくなるため採らなかった。
+    { emoji: "💌", label: "感謝\nポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
   ];
 
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [
+    // [2026-08-29並べ替え・本部長] 「私の管理」と同じ並び（クエスト → ごほうび → …）に
+    // 揃える（ユーザー指示）。同じものの管理側が、上のセクションと同じ列に来るため、
+    // 「自分がやる方」と「管理する方」を目で対応させやすい。
+    { emoji: "🧺", label: "クエスト\n（管理）", path: "/parent/chores" },
+    { emoji: "🏆", label: "ごほうび\n（管理）", path: "/parent/rewards" },
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
-    // 「（管理）」は明示的に改行する。自動折り返しだと「クエスト（管 / 理）」のように
-    // 括弧の途中で割れて読みにくかった（ユーザーの実機指摘）。
-    { emoji: "🧺", label: "クエスト\n（管理）", path: "/parent/chores" },
-    // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
-    // [2026-08-29変更・本部長] ラベルから「じぶんの」を外し、管理側に「（管理）」を付けた。
-    // セクション見出しが既に「私の管理」「かぞくの管理」と言っているため「じぶんの」は
-    // 重複しており、逆に管理側は同名（クエスト／ごほうび）で区別が付かなかった
-    // （ユーザーの実機指摘）。区別は接頭辞ではなく「（管理）」で付ける。
-    { emoji: "🏆", label: "ごほうび\n（管理）", path: "/parent/rewards" },
-    // [2026-08-29移動・本部長] 通帳とコレクター棚を「私の管理」から移した。
-    // 通帳（P16）はメンバー切り替えを持ち家族の誰の記録も見られる画面であり、
-    // コレクター棚（07-13-3章）は家族共有・永久保管の棚なので、どちらも
-    // 「自分だけのもの」ではなかった。ホーム上部の「じぶんのポイント」カードが
-    // 既に通帳への近道になっている点も踏まえた。
     { emoji: "📔", label: "通帳", path: "/parent/points" },
     { emoji: "🗄️", label: "コレクター棚", path: "/parent/collector-shelf" },
-    // [2026-08-29統合] 旧「家族」タイルと「設定」タイルを1つにまとめた（統合先はP14）。
     { emoji: "⚙️", label: "設定", path: "/parent/family" },
   ];
   if (hasAnySupporter) {
@@ -228,7 +222,7 @@ export default function ParentHomeScreen() {
         ))}
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくの管理</Text>
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>家族の管理</Text>
       <View style={styles.grid}>
         {familyShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
