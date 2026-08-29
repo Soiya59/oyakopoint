@@ -104,13 +104,15 @@ export default function ParentHomeScreen() {
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
-    { emoji: "🧺", label: "クエスト（管理）", path: "/parent/chores" },
+    // 「（管理）」は明示的に改行する。自動折り返しだと「クエスト（管 / 理）」のように
+    // 括弧の途中で割れて読みにくかった（ユーザーの実機指摘）。
+    { emoji: "🧺", label: "クエスト\n（管理）", path: "/parent/chores" },
     // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
     // [2026-08-29変更・本部長] ラベルから「じぶんの」を外し、管理側に「（管理）」を付けた。
     // セクション見出しが既に「私の管理」「かぞくの管理」と言っているため「じぶんの」は
     // 重複しており、逆に管理側は同名（クエスト／ごほうび）で区別が付かなかった
     // （ユーザーの実機指摘）。区別は接頭辞ではなく「（管理）」で付ける。
-    { emoji: "🏆", label: "ごほうび（管理）", path: "/parent/rewards" },
+    { emoji: "🏆", label: "ごほうび\n（管理）", path: "/parent/rewards" },
     // [2026-08-29移動・本部長] 通帳とコレクター棚を「私の管理」から移した。
     // 通帳（P16）はメンバー切り替えを持ち家族の誰の記録も見られる画面であり、
     // コレクター棚（07-13-3章）は家族共有・永久保管の棚なので、どちらも
@@ -221,7 +223,7 @@ export default function ParentHomeScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={theme.typography.parentBody}>{s.label}</Text>
+            <Text style={[theme.typography.parentBody, styles.tileLabel]}>{s.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -233,7 +235,7 @@ export default function ParentHomeScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={theme.typography.parentBody}>{s.label}</Text>
+            <Text style={[theme.typography.parentBody, styles.tileLabel]}>{s.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -281,6 +283,9 @@ const styles = StyleSheet.create({
   // 白いカードが9枚並ぶだけの見え方（ユーザー所感「少し色合いが無機質な感じ」）への対応。
   // 2セクションで色を変える案もあったが、色に意味があると誤読されうるため
   // （07-10章は色分けに個人の可視化という意味を与えている）、全タイル同一の淡色にした。
+  // 4列にしてタイル幅が狭くなった分、ラベルは中央揃えにする
+  // （「クエスト」＋「（管理）」のように改行を含む2行ラベルが、左寄せだとガタつくため）。
+  tileLabel: { textAlign: "center" },
   tileEmojiCircle: {
     width: 44,
     height: 44,
@@ -290,7 +295,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   gridItem: {
-    width: "30%",
+    // [2026-08-29変更・本部長] 3列→4列（ユーザー要望「4列を試したい」）。
+    // 以前4列を見送ったのは「じぶんのお手伝い」等のラベルが3列でも既に折り返して
+    // いたためだが、その後ラベルを短くした（「じぶんの」を外し、管理側は
+    // 「（管理）」を明示的に改行）ので4列でも読める見込みが立った。
+    // 4枚 × 22% = 88%、残り12%を3つの隙間（gap: s3）が使う。
+    width: "22%",
     minHeight: theme.tapTarget.parent + 20,
     alignItems: "center",
     justifyContent: "center",
