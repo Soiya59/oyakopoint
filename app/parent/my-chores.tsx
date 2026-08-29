@@ -152,9 +152,15 @@ export default function ParentMyChoresScreen() {
                 </View>
               </View>
             )}
+            {/* [2026-08-29変更・本部長] 見出しを「まだのクエスト」→「クエスト」に。
+                子ども側は「やることリスト」で、同じものを保護者と子どもで別の名前で
+                呼んでいた（ユーザーの実機指摘）。**区別したいのは「まいにち」かどうかだけ**
+                なので、まいにち以外は素の「クエスト」に統一した。
+                「きろくずみ」は分類ではなく状態（その日やり終えたか）なので別セクションのまま
+                残している（2026-08-20にユーザー依頼で分けた経緯があるため）。 */}
             {todo.length > 0 && (
               <View style={{ marginTop: theme.spacing.s4 }}>
-                <Text style={styles.sectionHeading}>まだのクエスト</Text>
+                <Text style={styles.sectionHeading}>クエスト</Text>
                 <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
                   {todo.map(renderRow)}
                 </View>

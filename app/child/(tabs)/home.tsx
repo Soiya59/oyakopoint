@@ -233,7 +233,7 @@ export default function ChildHomeScreen() {
               )}
               {todo.length > 0 && (
                 <>
-                  <Text style={[theme.typography.childBody, styles.sectionHeading]}>やることリスト</Text>
+                  <Text style={[theme.typography.childBody, styles.sectionHeading]}>クエスト</Text>
                   <View style={styles.grid}>{todo.map(renderCard)}</View>
                 </>
               )}
