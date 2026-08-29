@@ -22,7 +22,12 @@ export default function RewardsListScreen() {
         <Text style={theme.typography.parentTitle}>ごほうび管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/reward-edit")} />
       </View>
-      {state.rewards.map((r) => (
+      {/* [2026-08-29修正・本部長] 家族共有（scope='family'）のみ。理由は
+          app/parent/chores.tsx の同じ修正のコメントを参照（みまもりメンバーの自分専用の
+          ごほうびは保護者が編集・削除できないのに一覧へ出ていた）。 */}
+      {state.rewards
+        .filter((r) => r.scope === "family")
+        .map((r) => (
         <Pressable key={r.id} onPress={() => router.push({ pathname: "/parent/reward-edit", params: { id: r.id } })}>
           <Card style={{ marginTop: theme.spacing.s3, flexDirection: "row", justifyContent: "space-between" }}>
             <Text>

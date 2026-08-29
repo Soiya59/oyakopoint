@@ -24,8 +24,20 @@ export default function ChoresListScreen() {
   const { state, isOneOffFinished } = useAppData();
   const [finishedOpen, setFinishedOpen] = useState(false);
 
-  const active = state.chores.filter((c) => !isOneOffFinished(c));
-  const finished = state.chores.filter((c) => isOneOffFinished(c));
+  // [2026-08-29修正・本部長／軽微変更ルート] 家族共有（scope='family'）のみを対象にする。
+  //
+  // 本画面は2026-08-15時点、まだ「自分専用」という概念が無かった頃に作られており、
+  // 8/22にみまもりメンバーと `scope='personal'` を追加した際にここを見直していなかった。
+  // その結果、**保護者が編集も削除もできないもの（みまもりメンバーの自分専用クエスト）が
+  // 管理一覧に並んでいた**。ユーザーが「jijiを消しても消えない」と実機で発見した件の
+  // 根本原因がこれで、RLS（chores_write_personal_by_creator＝作成者本人のみ）は正しく、
+  // 一覧側が管理できないものまで見せていたのが誤りだった。
+  //
+  // みまもりメンバーの登録内容は専用画面「👀 みまもりの記録」（P25）で引き続き見られるため、
+  // ここから外しても情報は失われない。役割を「管理するもの＝ここ／見るもの＝P25」に分ける。
+  const managed = state.chores.filter((c) => c.scope === "family");
+  const active = managed.filter((c) => !isOneOffFinished(c));
+  const finished = managed.filter((c) => isOneOffFinished(c));
 
   const renderRow = (c: Chore, dimmed: boolean) => (
     <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
