@@ -108,27 +108,34 @@ export default function ParentHomeScreen() {
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
   ];
 
-  const familyShortcuts: ShortcutItem[] = [
-    // [2026-08-29並べ替え・本部長] 「私の管理」と同じ並び（クエスト → ごほうび → …）に
-    // 揃える（ユーザー指示）。同じものの管理側が、上のセクションと同じ列に来るため、
-    // 「自分がやる方」と「管理する方」を目で対応させやすい。
-    { emoji: "🧺", label: "クエスト\n（管理）", path: "/parent/chores" },
-    { emoji: "🏆", label: "ごほうび\n（管理）", path: "/parent/rewards" },
-    { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
-    { emoji: "📅", label: "きろく", path: "/parent/history" },
-    { emoji: "📔", label: "通帳", path: "/parent/points" },
-        // [2026-08-29] 「コレクター棚」→「コレクション」（ユーザー指示）。6文字なので4列
-    // （タイル幅75px）では本文サイズ15pxのままだと折り返して「棚」が1文字残る形になる。
-    // このタイルだけ12pxに落として1行に収める（6×12=72px < 75px）。
-    // 「感謝ポイント」は意味の切れ目で改行したが、「コレクション」は途中で切ると
-    // 語が壊れるため、こちらは縮める方を選んだ。
-    { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
-    { emoji: "⚙️", label: "設定", path: "/parent/family" },
-  ];
-  if (hasAnySupporter) {
-    // ラベルが1行に収まらず折り返していたため短縮した（遷移先は変更なし）。
-    familyShortcuts.push({ emoji: "👀", label: "みまもりの記録", path: "/parent/supporter-chores" });
-  }
+  // [2026-08-29並べ替え・本部長] 並び順はユーザー指示。
+  // クエスト → ごほうび は「私の管理」と同じ列に来るよう先頭に置き、
+  // 続けて日々見るもの（コレクション・完了報告・きろく・通帳）、
+  // 最後に設定という並びにしている。
+  // 「みまもりの記録」は家族に有効なsupporterがいる場合のみ表示するが、
+  // 以前のようにpush（＝末尾追加）ではなく、指定された位置（通帳と設定の間）へ
+  // 差し込む必要があるため、条件付きの要素をfilterで落とす形にした。
+  const familyShortcuts: ShortcutItem[] = (
+    [
+      // 「（管理）」は明示的に改行する。自動折り返しだと「クエスト（管 / 理）」のように
+      // 括弧の途中で割れて読みにくかった（ユーザーの実機指摘）。
+      { emoji: "🧺", label: "クエスト\n（管理）", path: "/parent/chores" },
+      { emoji: "🏆", label: "ごほうび\n（管理）", path: "/parent/rewards" },
+      // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す。
+      // このタイルだけ12pxに落として1行に収める（6×12=72px < 75px）。
+      { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
+      { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
+      { emoji: "📅", label: "きろく", path: "/parent/history" },
+      { emoji: "📔", label: "通帳", path: "/parent/points" },
+      // 画面一覧・遷移図.md P25「家族にみまもりメンバーが1人もいない場合は導線自体を
+      // 表示しない」。ラベルは1行に収まらず折り返していたため短縮済み（遷移先は変更なし）。
+      hasAnySupporter
+        ? { emoji: "👀", label: "みまもりの記録", path: "/parent/supporter-chores" }
+        : null,
+      // [2026-08-29統合] 旧「家族」タイルと「設定」タイルを1つにまとめた（統合先はP14）。
+      { emoji: "⚙️", label: "設定", path: "/parent/family" },
+    ] as (ShortcutItem | null)[]
+  ).filter((x): x is ShortcutItem => x !== null);
 
   return (
     <Screen tone="parent">
