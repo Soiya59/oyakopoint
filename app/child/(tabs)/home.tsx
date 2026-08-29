@@ -152,7 +152,7 @@ export default function ChildHomeScreen() {
             path: "/child/family-tree",
           },
           { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
-          { emoji: "🗄️", label: "だな", path: "/child/collector-shelf" },
+          { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
         ].map((s2) => (
           <Pressable key={s2.path} onPress={() => router.push(s2.path as never)} style={styles.shortcutItem}>
             <Text style={styles.shortcutEmoji}>{s2.emoji}</Text>

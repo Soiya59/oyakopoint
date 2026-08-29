@@ -22,6 +22,9 @@ import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
  * 直近24時間の「新着」件数（催促ではなくお知らせという位置づけ）を表示する。
  * あわせて実施履歴カレンダー（P18、要件定義書07-3章）への「きろく」ショートカットを追加した。
  */
+/** メニュータイル1枚。labelSizeは、4列の幅(75px)に収まらないラベルだけ個別に縮めるために使う。 */
+type ShortcutItem = { emoji: string; label: string; path: string; labelSize?: number };
+
 export default function ParentHomeScreen() {
   const { state, memberPoints } = useAppData();
   // [2026-08-28改訂・家族の書き込みボード07-14章第1段階] 「家族の掲示板」カード（旧「今週のできごと」）を
@@ -92,7 +95,7 @@ export default function ParentHomeScreen() {
   // 「ごほうび（管理）」と「じぶんのごほうび（自分が交換する）」が隣り合って
   // 取り違えやすくなっていた（🎁の絵文字が2項目で重複してもいた）。
   // 立場ごとに分けることで、一度に見る数が5〜6個に収まる。
-  const myShortcuts: { emoji: string; label: string; path: string }[] = [
+  const myShortcuts: ShortcutItem[] = [
     { emoji: "🧹", label: "クエスト", path: "/parent/my-chores" },
     { emoji: "🎁", label: "ごほうび", path: "/parent/my-rewards" },
     // [2026-08-29] 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れて
@@ -105,7 +108,7 @@ export default function ParentHomeScreen() {
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
   ];
 
-  const familyShortcuts: { emoji: string; label: string; path: string }[] = [
+  const familyShortcuts: ShortcutItem[] = [
     // [2026-08-29並べ替え・本部長] 「私の管理」と同じ並び（クエスト → ごほうび → …）に
     // 揃える（ユーザー指示）。同じものの管理側が、上のセクションと同じ列に来るため、
     // 「自分がやる方」と「管理する方」を目で対応させやすい。
@@ -114,7 +117,12 @@ export default function ParentHomeScreen() {
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
     { emoji: "📔", label: "通帳", path: "/parent/points" },
-    { emoji: "🗄️", label: "コレクター棚", path: "/parent/collector-shelf" },
+        // [2026-08-29] 「コレクター棚」→「コレクション」（ユーザー指示）。6文字なので4列
+    // （タイル幅75px）では本文サイズ15pxのままだと折り返して「棚」が1文字残る形になる。
+    // このタイルだけ12pxに落として1行に収める（6×12=72px < 75px）。
+    // 「感謝ポイント」は意味の切れ目で改行したが、「コレクション」は途中で切ると
+    // 語が壊れるため、こちらは縮める方を選んだ。
+    { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
     { emoji: "⚙️", label: "設定", path: "/parent/family" },
   ];
   if (hasAnySupporter) {
@@ -217,7 +225,9 @@ export default function ParentHomeScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={[theme.typography.parentBody, styles.tileLabel]}>{s.label}</Text>
+            <Text style={[theme.typography.parentBody, styles.tileLabel, s.labelSize ? { fontSize: s.labelSize } : null]}>
+              {s.label}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -229,7 +239,9 @@ export default function ParentHomeScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={[theme.typography.parentBody, styles.tileLabel]}>{s.label}</Text>
+            <Text style={[theme.typography.parentBody, styles.tileLabel, s.labelSize ? { fontSize: s.labelSize } : null]}>
+              {s.label}
+            </Text>
           </Pressable>
         ))}
       </View>
