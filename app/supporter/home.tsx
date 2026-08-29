@@ -70,6 +70,8 @@ export default function SupporterHomeScreen() {
     { emoji: "🎯", label: "じぶんのクエスト", path: "/supporter/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
+    // [2026-08-29追加] とどいたもの（S22）。P34と同じ扱い。
+    { emoji: "💌", label: "とどいたもの", path: "/supporter/inbox" },
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章
     // 「S1みまもりホーム内（既存のショートカットグリッドに1枠追加）」）。→S14。
     { emoji: "🌿", label: "家族の木", path: "/supporter/family-tree" },

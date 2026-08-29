@@ -104,6 +104,9 @@ export default function ParentHomeScreen() {
     // 小さくなるため採らなかった。
     { emoji: "💌", label: "感謝\nポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
+    // [2026-08-29追加] とどいたもの（P34）。自分が受け取ったスタンプ・コメント・感謝を
+    // まとめて見る画面。「私の管理」に置くのは、家族の運営ではなく自分あてのものだから。
+    { emoji: "💌", label: "とどいた\nもの", path: "/parent/inbox" },
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
   ];
