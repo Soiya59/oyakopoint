@@ -6,7 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { createPersonalReward, deactivateReward, updatePersonalReward } from "@/data/api";
+import { createPersonalReward, deleteReward, updatePersonalReward } from "@/data/api";
 
 /**
  * S9 自分専用のごほうび登録・編集（みまもりメンバー）
@@ -72,7 +72,7 @@ export default function SupporterRewardEditScreen() {
   const remove = async () => {
     if (!reward) return;
     setDeleting(true);
-    const res = await deactivateReward(client, reward.id);
+    const res = await deleteReward(client, reward.id);
     setDeleting(false);
     if (!res.ok) {
       setErrorMessage(res.error.message);

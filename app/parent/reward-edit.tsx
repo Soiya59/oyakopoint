@@ -6,7 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { createReward, updateReward } from "@/data/api";
+import { createReward, deleteReward, updateReward } from "@/data/api";
 
 /**
  * P13 ごほうび登録・編集
@@ -37,6 +37,8 @@ export default function RewardEditScreen() {
 
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const validate = (): string | null => {
     if (!name.trim()) return "名前を入力してください";
@@ -44,6 +46,20 @@ export default function RewardEditScreen() {
     const costNum = Number(costText);
     if (!Number.isInteger(costNum) || costNum < 1) return "コストは1以上の整数で入力してください";
     return null;
+  };
+
+  const remove = async () => {
+    if (!reward) return;
+    setDeleting(true);
+    setErrorMessage(null);
+    const res = await deleteReward(client, reward.id);
+    setDeleting(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    await refresh();
+    router.replace("/parent/rewards");
   };
 
   const save = async () => {
@@ -146,6 +162,42 @@ export default function RewardEditScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={save}
       />
+
+      {/* [2026-08-29追加・本部長／軽微変更ルート] ごほうびの削除。ユーザー要望
+          「ごほうびにおいても削除できるようにしてほしい」。クエストの削除と同じ扱いで、
+          完全削除（DELETE）だが交換履歴とポイントは残る（src/data/api.ts deleteReward参照）。
+          取り消せないため、家族削除・クエスト削除と同じ画面内2段階確認にする。 */}
+      {isEditMode && reward && (
+        <View style={{ marginTop: theme.spacing.s8 }}>
+          {confirmingDelete ? (
+            <View style={{ gap: theme.spacing.s2 }}>
+              <Text style={{ color: theme.colors.statusBlocking }}>
+                「{reward.name}」を削除しますか？取り消せません。
+              </Text>
+              <Text style={theme.typography.parentCaption}>
+                これまでの交換の記録とポイントはそのまま残ります。
+              </Text>
+              <Text style={theme.typography.parentCaption}>
+                ただし通帳に残る過去の交換の絵文字は、{reward.emoji ?? "🎁"} ではなく 🎁 に変わります。
+              </Text>
+              <AppButton
+                label={deleting ? "削除中…" : "本当に削除する"}
+                variant="danger"
+                onPress={remove}
+                disabled={deleting}
+              />
+              <AppButton label="やめる" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={deleting} />
+            </View>
+          ) : (
+            <AppButton
+              label="このごほうびを削除する"
+              variant="danger"
+              onPress={() => setConfirmingDelete(true)}
+              disabled={saving || deleting}
+            />
+          )}
+        </View>
+      )}
 
       <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
     </Screen>

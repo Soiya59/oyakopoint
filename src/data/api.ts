@@ -898,6 +898,30 @@ export async function deactivateReward(client: SupabaseClient, rewardId: string)
   return { ok: true, data: null };
 }
 
+/**
+ * ごほうび（reward）の完全削除。2026-08-29のユーザー要望「ごほうびにおいても削除できる
+ * ようにしてほしい」への対応（軽微変更ルート）。クエストの deleteChore と対になる。
+ *
+ * [破壊的操作についての事前記録・開発部CLAUDE.md「破壊的なDB操作は実行前に記録する」]
+ * rewardsの行をDELETEする。取り消せない。ただし**交換履歴とポイントは失われない**。
+ * 本番のFK定義を確認済み:
+ *  - `reward_redemptions.reward_id` は ON DELETE SET NULL（CASCADEではない）
+ *  - `reward_redemptions` は交換時点の `reward_name` と `cost` を行に保持している
+ *
+ * **クエスト削除との違い**: `chore_completions` は絵文字も保存しているが、
+ * `reward_redemptions` に emoji 列は無い（実装メモ.md 6.1章の設計判断）。そのため
+ * ごほうびを削除すると、**過去の交換履歴の絵文字が元の絵文字ではなく🎁になる**
+ * （src/data/store.tsx buildLedgers のフォールバック）。名前・ポイント・日付は残る。
+ *
+ * 権限は既存RLSが担保する（`rewards_write_family_by_parent` /
+ * `rewards_write_personal_by_creator` はいずれも FOR ALL のためDELETEも同条件で許可）。
+ */
+export async function deleteReward(client: SupabaseClient, rewardId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("rewards").delete().eq("id", rewardId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
 // ============================================================
 // 感謝ポイント（API仕様.md 7a章、スキーマ設計.sql 13〜14章）
 // [2026-08-16新設] 要件定義書.md v0.6 07-5章対応。全メンバー間（保護者⇄保護者、
