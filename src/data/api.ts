@@ -574,8 +574,23 @@ export async function redeemReward(
  * はいずれも FOR ALL のため、DELETEも同じ条件で許可される）。
  */
 export async function deleteChore(client: SupabaseClient, choreId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("chores").delete().eq("id", choreId);
+  // [2026-08-29修正・本部長] `.select("id")` を付けて**実際に消えた行**を受け取る。
+  // これが無いと、RLSで1行もマッチしなかった場合にPostgRESTがエラーを返さないため、
+  // 「何も消えていないのに成功」になる（ユーザーが実機で「jijiを消しても消えない」と発見）。
+  // 具体的には、みまもりメンバーが作った scope='personal' のクエストは
+  // `chores_write_personal_by_creator`（作成者本人のみ）の対象で、保護者は削除できない。
+  const { data, error } = await client.from("chores").delete().eq("id", choreId).select("id");
   if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: "not_deleted",
+        message:
+          "このクエストは削除できませんでした。みまもりメンバーが自分用に登録したクエストは、登録した本人だけが削除できます。",
+      },
+    };
+  }
   return { ok: true, data: null };
 }
 
@@ -917,8 +932,19 @@ export async function deactivateReward(client: SupabaseClient, rewardId: string)
  * `rewards_write_personal_by_creator` はいずれも FOR ALL のためDELETEも同条件で許可）。
  */
 export async function deleteReward(client: SupabaseClient, rewardId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("rewards").delete().eq("id", rewardId);
+  // deleteChore と同じ理由で `.select("id")` を付ける（上のコメント参照）。
+  const { data, error } = await client.from("rewards").delete().eq("id", rewardId).select("id");
   if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: "not_deleted",
+        message:
+          "このごほうびは削除できませんでした。みまもりメンバーが自分用に登録したごほうびは、登録した本人だけが削除できます。",
+      },
+    };
+  }
   return { ok: true, data: null };
 }
 
