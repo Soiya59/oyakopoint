@@ -93,8 +93,8 @@ export default function ParentHomeScreen() {
   // 取り違えやすくなっていた（🎁の絵文字が2項目で重複してもいた）。
   // 立場ごとに分けることで、一度に見る数が5〜6個に収まる。
   const myShortcuts: { emoji: string; label: string; path: string }[] = [
-    { emoji: "🧹", label: "じぶんのクエスト", path: "/parent/my-chores" },
-    { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
+    { emoji: "🧹", label: "クエスト", path: "/parent/my-chores" },
+    { emoji: "🎁", label: "ごほうび", path: "/parent/my-rewards" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
@@ -104,9 +104,13 @@ export default function ParentHomeScreen() {
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
-    { emoji: "🧺", label: "クエスト", path: "/parent/chores" },
+    { emoji: "🧺", label: "クエスト（管理）", path: "/parent/chores" },
     // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
-    { emoji: "🏆", label: "ごほうび", path: "/parent/rewards" },
+    // [2026-08-29変更・本部長] ラベルから「じぶんの」を外し、管理側に「（管理）」を付けた。
+    // セクション見出しが既に「私の管理」「かぞくの管理」と言っているため「じぶんの」は
+    // 重複しており、逆に管理側は同名（クエスト／ごほうび）で区別が付かなかった
+    // （ユーザーの実機指摘）。区別は接頭辞ではなく「（管理）」で付ける。
+    { emoji: "🏆", label: "ごほうび（管理）", path: "/parent/rewards" },
     // [2026-08-29移動・本部長] 通帳とコレクター棚を「私の管理」から移した。
     // 通帳（P16）はメンバー切り替えを持ち家族の誰の記録も見られる画面であり、
     // コレクター棚（07-13-3章）は家族共有・永久保管の棚なので、どちらも
