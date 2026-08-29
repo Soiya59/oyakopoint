@@ -7,6 +7,7 @@ import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
 import { ErrorState } from "@/components/StatusViews";
+import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -55,6 +56,8 @@ export default function SupporterHomeScreen() {
           minute: "2-digit",
         })
       : null;
+  // 右上のベル。直近24時間に自分へ届いたリアクション・感謝の件数（P7・C5と同じ数え方）。
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, Date.now() - 24 * 60 * 60 * 1000);
   const recent = [...state.completions]
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime())
     .slice(0, 3);
@@ -70,8 +73,6 @@ export default function SupporterHomeScreen() {
     { emoji: "🎯", label: "じぶんのクエスト", path: "/supporter/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
-    // [2026-08-29追加] とどいたもの（S22）。P34と同じ扱い。
-    { emoji: "💌", label: "とどいたもの", path: "/supporter/inbox" },
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章
     // 「S1みまもりホーム内（既存のショートカットグリッドに1枠追加）」）。→S14。
     { emoji: "🌿", label: "家族の木", path: "/supporter/family-tree" },
@@ -86,7 +87,13 @@ export default function SupporterHomeScreen() {
 
   return (
     <Screen tone="supporter">
-      <Text style={theme.typography.supporterTitle}>{state.family.name} の みまもり</Text>
+      {/* [2026-08-29変更] P7・C5と同じ、右上のベル。導線をメニュータイルから移した。 */}
+      <View style={styles.headerRow}>
+        <Text style={[theme.typography.supporterTitle, { flex: 1 }]}>{state.family.name} の みまもり</Text>
+        <Pressable onPress={() => router.push("/supporter/inbox")} hitSlop={8} style={styles.bellHit}>
+          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
+        </Pressable>
+      </View>
 
       <MyPointsCard tone="supporter" points={myPoints} />
 
@@ -178,6 +185,9 @@ export default function SupporterHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  bellHit: { minHeight: theme.tapTarget.supporterPrimary, justifyContent: "center", paddingLeft: theme.spacing.s2 },
+  notifBadge: { fontSize: 17, fontWeight: "700" },
   cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   digestSkeleton: {
     marginTop: theme.spacing.s2,

@@ -20,7 +20,7 @@ export default function SupporterInboxScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
 
-      <Text style={theme.typography.supporterTitle}>💌 とどいたもの</Text>
+      <Text style={theme.typography.supporterTitle}>🔔 とどいたもの</Text>
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
         家族から届いたスタンプ・コメント・感謝ポイント
       </Text>

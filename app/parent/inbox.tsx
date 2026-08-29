@@ -23,7 +23,7 @@ export default function ParentInboxScreen() {
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
 
-      <Text style={theme.typography.parentTitle}>💌 とどいたもの</Text>
+      <Text style={theme.typography.parentTitle}>🔔 とどいたもの</Text>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
         家族から届いたスタンプ・コメント・感謝ポイント
       </Text>

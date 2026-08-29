@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
+import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
@@ -73,6 +74,8 @@ export default function ParentHomeScreen() {
   // 1人以上いる場合のみメニューに表示する。
   const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+  // 右上のベル。直近24時間に自分へ届いたリアクション・感謝の件数（src/components/InboxPanel.tsx）。
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, oneDayAgoMs);
   const newCount = state.completions.filter(
     (c) => new Date(c.reported_at).getTime() >= oneDayAgoMs
   ).length;
@@ -104,9 +107,7 @@ export default function ParentHomeScreen() {
     // 小さくなるため採らなかった。
     { emoji: "💌", label: "感謝\nポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
-    // [2026-08-29追加] とどいたもの（P34）。自分が受け取ったスタンプ・コメント・感謝を
-    // まとめて見る画面。「私の管理」に置くのは、家族の運営ではなく自分あてのものだから。
-    { emoji: "💌", label: "とどいた\nもの", path: "/parent/inbox" },
+    // [2026-08-29] 「とどいたもの」はここのタイルから右上のベルへ移した（上のヘッダー参照）。
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「P7ホームのメニュー『コレクター棚』──▶P31」）。
   ];
@@ -142,7 +143,15 @@ export default function ParentHomeScreen() {
 
   return (
     <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>{state.family.name} の ホーム</Text>
+      {/* [2026-08-29変更] 「とどいたもの」への導線をメニュータイルから右上のベルへ移した
+          （ユーザー指示「子供と同じように右上にベルマークで表示してほしい」）。
+          子どもホーム（C5）と同じ位置・同じ数え方に揃える。 */}
+      <View style={styles.headerRow}>
+        <Text style={[theme.typography.parentTitle, { flex: 1 }]}>{state.family.name} の ホーム</Text>
+        <Pressable onPress={() => router.push("/parent/inbox")} hitSlop={8} style={styles.bellHit}>
+          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
+        </Pressable>
+      </View>
 
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
 
@@ -260,6 +269,9 @@ export default function ParentHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  bellHit: { minHeight: theme.tapTarget.parent, justifyContent: "center", paddingLeft: theme.spacing.s2 },
+  notifBadge: { fontSize: 16, fontWeight: "700" },
   // [2026-08-29変更・本部長] セクション見出し。
   // (a) 「わたしの」「かぞくの管理」はグレー、「最近の報告」だけ素のparentBodyMediumで黒、と
   //     **同じ役割の見出しなのに色が揃っていなかった**（ユーザーの実機指摘で判明。意図した

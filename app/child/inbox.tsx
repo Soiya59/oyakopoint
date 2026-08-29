@@ -21,7 +21,7 @@ export default function ChildInboxScreen() {
         <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
 
-      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s2 }]}>💌 とどいたよ</Text>
+      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s2 }]}>🔔 とどいたよ</Text>
       <Text style={[theme.typography.childBody, styles.sub]}>
         かぞくから もらった スタンプ・コメント・ありがとうポイント
       </Text>

@@ -46,6 +46,33 @@ export interface InboxPanelProps {
   memberId: string;
 }
 
+/**
+ * ホームのベル（🔔）に出す「直近に自分へ届いた件数」。
+ *
+ * [2026-08-29] 3ロールのホームが同じ数え方をするため、ここに1本化した。
+ * 以前は子どもホームだけがこの計算を持っており、しかも感謝ポイントが抜けていた（87章）。
+ * 未読ではなく「直近◯時間に届いた件数」である（既読の概念はアプリ全体に存在しない）。
+ */
+export function countRecentInbox(
+  state: {
+    completions: { id: string; reported_by: string }[];
+    reactions: { completion_id: string; created_at: string }[];
+    gratitude: { recipient_id: string; revoked_at: string | null; created_at: string }[];
+  },
+  memberId: string,
+  sinceMs: number
+): number {
+  if (!memberId) return 0;
+  const mine = new Set(state.completions.filter((c) => c.reported_by === memberId).map((c) => c.id));
+  const reactions = state.reactions.filter(
+    (r) => mine.has(r.completion_id) && new Date(r.created_at).getTime() >= sinceMs
+  ).length;
+  const gratitude = state.gratitude.filter(
+    (g) => g.recipient_id === memberId && g.revoked_at === null && new Date(g.created_at).getTime() >= sinceMs
+  ).length;
+  return reactions + gratitude;
+}
+
 export function InboxPanel({ tone, memberId }: InboxPanelProps) {
   const { state } = useAppData();
   const isChild = tone === "child";
