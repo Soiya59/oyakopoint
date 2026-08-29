@@ -67,7 +67,7 @@ export default function SupporterHomeScreen() {
 
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "👀", label: "かぞくのようす", path: "/supporter/activity" },
-    { emoji: "🎯", label: "じぶんのお手伝い", path: "/supporter/my-chores" },
+    { emoji: "🎯", label: "じぶんのクエスト", path: "/supporter/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章

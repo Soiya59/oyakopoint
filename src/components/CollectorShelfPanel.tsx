@@ -233,9 +233,14 @@ export function CollectorShelfPanel({
                             ? `「${selectedItem.drawing.artistName}」の絵`
                             : `「${selectedItem.drawing.artistName}」が描いた絵`}
                         </Text>
+                        {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
+                            絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
+                            （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
+                            だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
+                            日付と一緒に見つけた人も出す。 */}
                         <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
-                          {formatShortDate(selectedItem.drawnAt)}
-                          {isChild ? " こうかい" : " 公開"}
+                          {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                          {isChild ? "が みつけたよ" : "が獲得"}
                         </Text>
                       </View>
                     </View>

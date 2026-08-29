@@ -150,7 +150,7 @@ export default function FamilyActivityScreen() {
       {hasAnySupporter && (
         <Pressable onPress={() => router.push("/child/supporter-chores")}>
           <Text style={[theme.typography.childBody, styles.supporterLink]}>
-            👀 みまもりメンバーのおてつだいをみる →
+            👀 みまもりメンバーのクエストをみる →
           </Text>
         </Pressable>
       )}

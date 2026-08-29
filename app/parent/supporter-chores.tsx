@@ -47,7 +47,7 @@ export default function ParentSupporterChoresScreen() {
 
   return (
     <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>かぞくのみまもりメンバーのお手伝い</Text>
+      <Text style={theme.typography.parentTitle}>かぞくのみまもりメンバーのクエスト</Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -60,7 +60,7 @@ export default function ParentSupporterChoresScreen() {
       )}
 
       {loadState === "ready" && Object.keys(byCreator).length === 0 && (
-        <EmptyState emoji="🌱" title="まだ登録されているお手伝いがありません" />
+        <EmptyState emoji="🌱" title="まだ登録されているクエストがありません" />
       )}
 
       {loadState === "ready" && Object.keys(byCreator).length > 0 && (

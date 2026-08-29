@@ -114,7 +114,7 @@ export default function ApprovalsScreen() {
       )}
 
       {loadState === "ready" && completions.length === 0 && (
-        <EmptyState emoji="📮" title="まだ完了報告がありません。お手伝いがはじまると、ここに届きます" />
+        <EmptyState emoji="📮" title="まだ完了報告がありません。クエストがはじまると、ここに届きます" />
       )}
 
       {loadState === "ready" &&

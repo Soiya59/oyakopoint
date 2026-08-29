@@ -7,7 +7,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { createChore, updateChore } from "@/data/api";
+import { createChore, deleteChore, updateChore } from "@/data/api";
 import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
@@ -60,6 +60,13 @@ export default function ChoreEditScreen() {
   const [assignedTo, setAssignedTo] = useState<string | null>(chore?.assigned_to ?? null);
 
   const [saving, setSaving] = useState(false);
+  // [2026-08-29追加・本部長／軽微変更ルート] クエストの削除。ユーザー要望
+  // 「クエストの削除を可能とする」。完全削除（DELETE）だが完了履歴・ポイント・
+  // 家族の木・通帳は残る（src/data/api.ts deleteChore のコメント参照）。
+  // 取り消せないため、家族削除と同じ「1タップ目で確認表示→2タップ目で確定」の
+  // 画面内2段階確認にする（Alert.alert等はWeb版で挙動が不安定なため使わない）。
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -103,6 +110,20 @@ export default function ChoreEditScreen() {
       if (!Number.isInteger(limitNum) || limitNum < 1) return "1日の上限回数は1以上の整数で入力してください（空欄で無制限）";
     }
     return null;
+  };
+
+  const remove = async () => {
+    if (!chore) return;
+    setDeleting(true);
+    setErrorMessage(null);
+    const res = await deleteChore(client, chore.id);
+    setDeleting(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    await refresh();
+    router.replace("/parent/chores");
   };
 
   const save = async () => {
@@ -158,7 +179,7 @@ export default function ChoreEditScreen() {
   if (isEditMode && !chore) {
     return (
       <Screen tone="parent">
-        <Text style={theme.typography.parentBody}>お手伝いが見つかりませんでした</Text>
+        <Text style={theme.typography.parentBody}>クエストが見つかりませんでした</Text>
         <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s4 }} onPress={() => router.back()} />
       </Screen>
     );
@@ -170,7 +191,7 @@ export default function ChoreEditScreen() {
         <Text style={styles.badgeText}>P11</Text>
       </View>
       <Text style={theme.typography.parentTitle}>
-        {chore ? `${chore.emoji ?? "📝"} お手伝いを編集` : "お手伝いを新規登録"}
+        {chore ? `${chore.emoji ?? "📝"} クエストを編集` : "クエストを新規登録"}
       </Text>
       <Text style={[theme.typography.parentBody, styles.purpose]}>chore作成・編集</Text>
 
@@ -186,7 +207,7 @@ export default function ChoreEditScreen() {
 
       {/* 絵文字（任意・自由入力＋候補）
           [2026-08-23追加] 自由入力のみだと何を入れればいいか迷うとのフィードバックがあり、
-          よくあるお手伝い（勉強・掃除・お風呂等）を想定した候補チップを追加した。
+          よくあるクエスト（勉強・掃除・お風呂等）を想定した候補チップを追加した。
           チップは自由入力を補助するショートカットであり、選択肢を自由入力の代わりに
           するものではない（前回の「選択ではなく自分で決めたい」という要望とも矛盾しない）。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>絵文字（任意）</Text>
@@ -338,6 +359,40 @@ export default function ChoreEditScreen() {
             </>
           )}
         </Card>
+      )}
+
+      {isEditMode && chore && (
+        <View style={{ marginTop: theme.spacing.s8 }}>
+          {confirmingDelete ? (
+            <View style={{ gap: theme.spacing.s2 }}>
+              <Text style={{ color: theme.colors.statusBlocking }}>
+                「{chore.title}」を削除しますか？取り消せません。
+              </Text>
+              <Text style={theme.typography.parentCaption}>
+                これまでの記録・ポイント・家族の木はそのまま残ります。
+              </Text>
+              {chore.nfc_tag_id ? (
+                <Text style={theme.typography.parentCaption}>
+                  このクエストに登録したNFCタグは使えなくなります（タグの貼り直しが必要です）。
+                </Text>
+              ) : null}
+              <AppButton
+                label={deleting ? "削除中…" : "本当に削除する"}
+                variant="danger"
+                onPress={remove}
+                disabled={deleting}
+              />
+              <AppButton label="やめる" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={deleting} />
+            </View>
+          ) : (
+            <AppButton
+              label="このクエストを削除する"
+              variant="danger"
+              onPress={() => setConfirmingDelete(true)}
+              disabled={saving || deleting}
+            />
+          )}
+        </View>
       )}
 
       <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />

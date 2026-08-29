@@ -6,7 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { createPersonalChore, deactivateChore, updatePersonalChore } from "@/data/api";
+import { createPersonalChore, deleteChore, updatePersonalChore } from "@/data/api";
 
 /**
  * S6 自分専用のお手伝い登録・編集（みまもりメンバー）
@@ -15,7 +15,12 @@ import { createPersonalChore, deactivateChore, updatePersonalChore } from "@/dat
  * app/parent/chore-edit.tsx（P11）と同じ構成の基本項目フォームだが、以下が異なる。
  * - カテゴリー・担当（assigned_to）・NFCタグ登録は対象外（自分専用choreには存在しない
  *   概念、19章「自分専用choreにおけるassigned_toは自己指定」のためUIで選ばせる必要が無い）
- * - 削除ボタンを追加（編集時のみ。論理削除＝is_active=false）
+ * - 削除ボタンを追加（編集時のみ）
+ *
+ * [2026-08-29修正・本部長] 従来ここは表示が「削除」なのに実際は無効化（is_active=false）
+ * だった。保護者側に完全削除を実装するにあたり、**同じ言葉で違う挙動**という状態を残さない
+ * ため、こちらも完全削除に揃えた。完了履歴・ポイント・家族の木は残る
+ * （src/data/api.ts deleteChore のコメント参照）。
  *
  * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更（ユーザーの要望「いっしょに
  * やるというのはいらない」）により、「家族に共有する／しない」トグルは撤回した。
@@ -90,7 +95,7 @@ export default function SupporterChoreEditScreen() {
   const remove = async () => {
     if (!chore) return;
     setDeleting(true);
-    const res = await deactivateChore(client, chore.id);
+    const res = await deleteChore(client, chore.id);
     setDeleting(false);
     if (!res.ok) {
       setErrorMessage(res.error.message);
@@ -103,7 +108,7 @@ export default function SupporterChoreEditScreen() {
   if (isEditMode && !chore) {
     return (
       <Screen tone="supporter">
-        <Text style={theme.typography.supporterBody}>お手伝いが見つかりませんでした</Text>
+        <Text style={theme.typography.supporterBody}>クエストが見つかりませんでした</Text>
         <AppButton tone="supporter" label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s4 }} onPress={() => router.back()} />
       </Screen>
     );
@@ -112,7 +117,7 @@ export default function SupporterChoreEditScreen() {
   return (
     <Screen tone="supporter">
       <Text style={theme.typography.supporterTitle}>
-        {chore ? `${chore.emoji ?? "🎯"} お手伝いを編集` : "じぶんのお手伝いを新規登録"}
+        {chore ? `${chore.emoji ?? "🎯"} クエストを編集` : "じぶんのクエストを新規登録"}
       </Text>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
@@ -160,7 +165,7 @@ export default function SupporterChoreEditScreen() {
       )}
 
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-        ※ このお手伝いは家族みんなに見えます。完了報告や編集ができるのは自分だけです。
+        ※ このクエストは家族みんなに見えます。完了報告や編集ができるのは自分だけです。
       </Text>
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
@@ -177,7 +182,7 @@ export default function SupporterChoreEditScreen() {
       {chore && (
         <AppButton
           tone="supporter"
-          label={deleting ? "削除中…" : "このお手伝いを削除する"}
+          label={deleting ? "削除中…" : "このクエストを削除する"}
           variant="danger"
           disabled={saving || deleting}
           style={{ marginTop: theme.spacing.s3 }}

@@ -75,7 +75,7 @@ export const seedMembers: FamilyMember[] = [
 export const seedCategories: Category[] = [
   { id: "cat-1", family_id: "family-1", name: "せいかつ", color: "#A8D5BA", sort_order: 0 },
   { id: "cat-2", family_id: "family-1", name: "べんきょう", color: "#B4D4FF", sort_order: 1 },
-  { id: "cat-3", family_id: "family-1", name: "おてつだい", color: "#FFE5B4", sort_order: 2 },
+  { id: "cat-3", family_id: "family-1", name: "クエスト", color: "#FFE5B4", sort_order: 2 },
 ];
 
 // NFCタグのモック値。実機はexpo-crypto等のCrypto.randomUUID()で生成する想定

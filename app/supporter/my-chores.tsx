@@ -46,16 +46,16 @@ export default function SupporterMyChoresScreen() {
   return (
     <Screen tone="supporter">
       <View style={styles.header}>
-        <Text style={theme.typography.supporterTitle}>🎯 じぶんのお手伝い</Text>
+        <Text style={theme.typography.supporterTitle}>🎯 じぶんのクエスト</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
       </View>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したお手伝いは家族みんなに見えます。
+        ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したクエストは家族みんなに見えます。
       </Text>
 
       {myChores.length === 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <EmptyState emoji="🎯" title="まだじぶんのお手伝いが登録されていません" />
+          <EmptyState emoji="🎯" title="まだじぶんのクエストが登録されていません" />
         </View>
       )}
 
@@ -94,7 +94,7 @@ export default function SupporterMyChoresScreen() {
       {Object.keys(othersByCreator).length > 0 && (
         <>
           <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
-            かぞくのほかのみまもりメンバーのお手伝い
+            かぞくのほかのみまもりメンバーのクエスト
           </Text>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
             みんなの参考にどうぞ。ここから直接完了報告や編集はできません。

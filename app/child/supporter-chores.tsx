@@ -49,9 +49,9 @@ export default function SupporterChoresReferenceScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childHeadline}>👀 みまもりメンバーのおてつだい</Text>
+      <Text style={theme.typography.childHeadline}>👀 みまもりメンバーのクエスト</Text>
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        おじいちゃん・おばあちゃんたちの おてつだいを さんこうに してみよう
+        おじいちゃん・おばあちゃんたちの クエストを さんこうに してみよう
       </Text>
 
       {loadState === "loading" && (
@@ -65,7 +65,7 @@ export default function SupporterChoresReferenceScreen() {
       )}
 
       {loadState === "ready" && Object.keys(byCreator).length === 0 && (
-        <EmptyState tone="child" emoji="🌱" title="まだ とうろくされている おてつだいは ないよ" />
+        <EmptyState tone="child" emoji="🌱" title="まだ とうろくされている クエストは ないよ" />
       )}
 
       {loadState === "ready" && Object.keys(byCreator).length > 0 && (

@@ -63,7 +63,7 @@ export default function ParentMyChoresScreen() {
 
   return (
     <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>じぶんのお手伝い</Text>
+      <Text style={theme.typography.parentTitle}>じぶんのクエスト</Text>
 
       {/* 送信成功後の控えめな確認表示（1.5秒程度で自動的に消える。主要画面ワイヤーフレーム.md
           9.2章「新しい画面へは遷移せず、[P19]へ戻り控えめな確認表示」）。ScrollView内でも
@@ -87,9 +87,9 @@ export default function ParentMyChoresScreen() {
 
       {loadState === "ready" && myChores.length === 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <EmptyState emoji="🧺" title="じぶんの担当のお手伝いはまだ登録されていません" />
+          <EmptyState emoji="🧺" title="じぶんの担当のクエストはまだ登録されていません" />
           <AppButton
-            label="お手伝い管理で追加する"
+            label="クエスト管理で追加する"
             variant="secondary"
             style={{ marginTop: theme.spacing.s2 }}
             onPress={() => router.push("/parent/chore-edit")}
@@ -146,7 +146,7 @@ export default function ParentMyChoresScreen() {
           <>
             {daily.length > 0 && (
               <View style={{ marginTop: theme.spacing.s4 }}>
-                <Text style={[styles.sectionHeading, styles.dailySectionHeading]}>☀️ まいにちのお手伝い</Text>
+                <Text style={[styles.sectionHeading, styles.dailySectionHeading]}>☀️ まいにちのクエスト</Text>
                 <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
                   {daily.map(renderRow)}
                 </View>
@@ -154,7 +154,7 @@ export default function ParentMyChoresScreen() {
             )}
             {todo.length > 0 && (
               <View style={{ marginTop: theme.spacing.s4 }}>
-                <Text style={styles.sectionHeading}>まだのお手伝い</Text>
+                <Text style={styles.sectionHeading}>まだのクエスト</Text>
                 <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
                   {todo.map(renderRow)}
                 </View>

@@ -49,7 +49,7 @@ export default function ChoresListScreen() {
   return (
     <Screen tone="parent">
       <View style={styles.header}>
-        <Text style={theme.typography.parentTitle}>お手伝い管理</Text>
+        <Text style={theme.typography.parentTitle}>クエスト管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
 
@@ -60,7 +60,7 @@ export default function ChoresListScreen() {
           {/* 折りたたみ。既定は閉じておき、必要なときだけ開いて内容を確認・編集できるようにする。 */}
           <Pressable onPress={() => setFinishedOpen((v) => !v)} style={styles.finishedToggle} hitSlop={8}>
             <Text style={theme.typography.parentBodyMedium}>
-              {finishedOpen ? "▾" : "▸"} 終わった単発のお手伝い（{finished.length}）
+              {finishedOpen ? "▾" : "▸"} 終わった単発のクエスト（{finished.length}）
             </Text>
           </Pressable>
           {!finishedOpen && (

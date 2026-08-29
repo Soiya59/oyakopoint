@@ -37,7 +37,7 @@ export default function WelcomeScreen() {
         <Text style={styles.logo}>🌟</Text>
         <Text style={theme.typography.parentTitle}>おやこポイント</Text>
         <Text style={[theme.typography.parentBody, styles.subtitle]}>
-          おてつだいをがんばって、ポイントをためよう
+          クエストをがんばって、ポイントをためよう
         </Text>
       </View>
 

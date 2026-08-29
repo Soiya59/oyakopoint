@@ -36,8 +36,8 @@ export default function ParentMyChoreReportScreen() {
   if (!chore || !me) {
     return (
       <Screen tone="parent">
-        <Text style={theme.typography.parentBody}>お手伝いが見つかりませんでした</Text>
-        <AppButton label="じぶんのお手伝いへもどる" onPress={() => router.replace("/parent/my-chores")} />
+        <Text style={theme.typography.parentBody}>クエストが見つかりませんでした</Text>
+        <AppButton label="じぶんのクエストへもどる" onPress={() => router.replace("/parent/my-chores")} />
       </Screen>
     );
   }
@@ -90,7 +90,7 @@ export default function ParentMyChoreReportScreen() {
         <View style={styles.centerBlock}>
           <Text style={theme.typography.parentBodyMedium}>本日はすでに記録済みです</Text>
         </View>
-        <AppButton label="じぶんのお手伝いへもどる" fullWidth onPress={() => router.replace("/parent/my-chores")} />
+        <AppButton label="じぶんのクエストへもどる" fullWidth onPress={() => router.replace("/parent/my-chores")} />
       </Screen>
     );
   }

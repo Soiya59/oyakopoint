@@ -55,7 +55,7 @@ export default function InviteSupporterScreen() {
         }}
       >
         <Text style={theme.typography.parentBody}>
-          参加すると、家族のがんばりを見て、スタンプやコメントを送れるようになります。お手伝い・ごほうびの管理はできません。
+          参加すると、家族のがんばりを見て、スタンプやコメントを送れるようになります。クエスト・ごほうびの管理はできません。
         </Text>
       </View>
 

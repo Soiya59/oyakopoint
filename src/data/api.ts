@@ -552,6 +552,33 @@ export async function redeemReward(
 }
 
 /** API仕様.md 3a章手順3: NFCタグをchoreに紐づける */
+/**
+ * クエスト（chore）の完全削除。要件定義書07-14章…ではなく、2026-08-29のユーザー要望
+ * 「クエストの削除を可能とする」への対応（軽微変更ルート）。
+ *
+ * [破壊的操作についての事前記録・開発部CLAUDE.md「破壊的なDB操作は実行前に記録する」]
+ * choresの行をDELETEする。取り消せない。ただし**完了履歴・ポイント・家族の木・通帳は
+ * 一切失われない**。理由は次の2点で、本部長が本番のFK定義を確認済み。
+ *  - `chore_completions.chore_id` は ON DELETE SET NULL（CASCADEではない）
+ *  - `chore_completions` は完了時点の `chore_title` / `chore_emoji` / `points` を
+ *    行にスナップショットとして保持している
+ * 連動して消えるのは `chore_daily_flags`（ON DELETE CASCADE、「まいにち」の個人設定）のみ。
+ *
+ * 失われるもの:
+ *  - NFCタグとの結びつき。物理タグに書かれたトークンが宙に浮き、読み取っても
+ *    「見つかりません」になる（タグ値は解放されるので別のクエストに再登録はできる）
+ *  - 実施履歴カレンダーで過去の記録に付く「繰り返し系か」の印
+ *    （app/parent/history.tsx がクエスト側を引くため。記録自体は残る）
+ *
+ * 権限は既存RLSが担保する（`chores_write_family_by_parent` / `chores_write_personal_by_creator`
+ * はいずれも FOR ALL のため、DELETEも同じ条件で許可される）。
+ */
+export async function deleteChore(client: SupabaseClient, choreId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("chores").delete().eq("id", choreId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
 export async function setChoreNfcTag(
   client: SupabaseClient,
   choreId: string,

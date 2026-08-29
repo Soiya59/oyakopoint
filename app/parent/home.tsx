@@ -93,7 +93,7 @@ export default function ParentHomeScreen() {
   // 取り違えやすくなっていた（🎁の絵文字が2項目で重複してもいた）。
   // 立場ごとに分けることで、一度に見る数が5〜6個に収まる。
   const myShortcuts: { emoji: string; label: string; path: string }[] = [
-    { emoji: "🧹", label: "じぶんのお手伝い", path: "/parent/my-chores" },
+    { emoji: "🧹", label: "じぶんのクエスト", path: "/parent/my-chores" },
     { emoji: "🎁", label: "じぶんのごほうび", path: "/parent/my-rewards" },
     { emoji: "💌", label: "感謝ポイント", path: "/parent/gratitude" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
@@ -104,7 +104,7 @@ export default function ParentHomeScreen() {
   const familyShortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
-    { emoji: "🧺", label: "お手伝い", path: "/parent/chores" },
+    { emoji: "🧺", label: "クエスト", path: "/parent/chores" },
     // 「じぶんのごほうび」と🎁が重複していたため、管理側を🏆に変更した。
     { emoji: "🏆", label: "ごほうび", path: "/parent/rewards" },
     // [2026-08-29移動・本部長] 通帳とコレクター棚を「私の管理」から移した。

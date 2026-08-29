@@ -35,7 +35,7 @@ export default function ChildReportScreen() {
   if (!chore) {
     return (
       <Screen tone="child">
-        <Text style={theme.typography.childBody}>おてつだいが見つかりませんでした</Text>
+        <Text style={theme.typography.childBody}>クエストが見つかりませんでした</Text>
         <AppButton label="やることリストへもどる" tone="child" onPress={() => router.replace("/child/home")} />
       </Screen>
     );

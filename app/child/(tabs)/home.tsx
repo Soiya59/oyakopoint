@@ -226,7 +226,7 @@ export default function ChildHomeScreen() {
               {daily.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading, styles.dailySectionHeading]}>
-                    ☀️ まいにちのお手伝い
+                    ☀️ まいにちのクエスト
                   </Text>
                   <View style={styles.grid}>{daily.map(renderCard)}</View>
                 </>

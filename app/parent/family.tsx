@@ -401,7 +401,7 @@ export default function FamilyScreen() {
           confirmingDelete ? (
             <View style={{ gap: theme.spacing.s2 }}>
               <Text style={{ color: theme.colors.statusBlocking }}>
-                本当に「{state.family.name}」を削除しますか？この操作は取り消せません（すべてのお手伝い・完了報告・ごほうび履歴が削除されます）。
+                本当に「{state.family.name}」を削除しますか？この操作は取り消せません（すべてのクエスト・完了報告・ごほうび履歴が削除されます）。
               </Text>
               <AppButton
                 label={processing ? "削除中…" : "本当に削除する"}
