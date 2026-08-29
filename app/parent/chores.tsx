@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
@@ -48,6 +49,7 @@ export default function ChoresListScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <View style={styles.header}>
         <Text style={theme.typography.parentTitle}>クエスト管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
@@ -72,7 +74,7 @@ export default function ChoresListScreen() {
         </View>
       )}
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

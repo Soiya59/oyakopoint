@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList } from "@/components/FamilyTree";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
@@ -26,6 +27,7 @@ export default function SupporterFamilyTreeScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>家族の木</Text>
 
       {loadState === "loading" && (
@@ -71,7 +73,7 @@ export default function SupporterFamilyTreeScreen() {
         </Card>
       )}
 
-      <AppButton label="ホームへ戻る" tone="supporter" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" tone="supporter" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
   );
 }

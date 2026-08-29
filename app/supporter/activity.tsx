@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
@@ -84,6 +85,7 @@ export default function SupporterActivityScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>かぞくのようす</Text>
 
       {loadState === "loading" && <SkeletonList count={3} />}
@@ -145,7 +147,7 @@ export default function SupporterActivityScreen() {
           );
         })}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
 
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>

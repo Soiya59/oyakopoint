@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -45,6 +46,7 @@ export default function SupporterMyChoresScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <View style={styles.header}>
         <Text style={theme.typography.supporterTitle}>🎯 じぶんのクエスト</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
@@ -121,7 +123,7 @@ export default function SupporterMyChoresScreen() {
         </>
       )}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
   );
 }

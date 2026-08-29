@@ -6,6 +6,7 @@ import MemberAvatar from "@/components/MemberAvatar";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { WeekBar, MonthCalendar } from "@/components/HistoryCalendar";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
@@ -108,6 +109,7 @@ export default function ParentHistoryScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>きろく</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: theme.spacing.s3 }}>
@@ -239,7 +241,7 @@ export default function ParentHistoryScreen() {
       )}
 
       {/* [2026-08-16修正・本部長] P16・P8と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

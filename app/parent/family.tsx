@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
@@ -219,6 +220,7 @@ export default function FamilyScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>設定</Text>
 
       <Card style={{ marginTop: theme.spacing.s4 }}>
@@ -421,7 +423,7 @@ export default function FamilyScreen() {
         「家族を削除する」はオーナーにのみ表示されます。
       </Text>
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

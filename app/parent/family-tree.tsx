@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList } from "@/components/FamilyTree";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
@@ -30,6 +31,7 @@ export default function ParentFamilyTreeScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <View style={styles.headerRow}>
         <Text style={theme.typography.parentTitle}>家族の木</Text>
         <Text style={{ flex: 1 }} />
@@ -86,7 +88,7 @@ export default function ParentFamilyTreeScreen() {
         </Card>
       )}
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

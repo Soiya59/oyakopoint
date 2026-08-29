@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -35,6 +36,7 @@ export default function SupporterRewardRedeemScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>じぶんのごほうびと交換</Text>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         本人専用のごほうびです（家族共有のごほうびとは別のカタログです）
@@ -96,7 +98,7 @@ export default function SupporterRewardRedeemScreen() {
         </View>
       )}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
   );
 }

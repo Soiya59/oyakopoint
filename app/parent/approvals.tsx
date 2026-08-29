@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
@@ -102,6 +103,7 @@ export default function ApprovalsScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <View style={styles.header}>
         <Text style={theme.typography.parentTitle}>完了報告</Text>
         <Text style={{ color: theme.colors.neutralTextSecondary }}>新着{newCount}件</Text>
@@ -193,7 +195,7 @@ export default function ApprovalsScreen() {
         })}
 
       {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
 
       {/* P9 完了報告詳細・リアクション */}
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>

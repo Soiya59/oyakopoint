@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -47,6 +48,7 @@ export default function ParentSupporterChoresScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>かぞくのみまもりメンバーのクエスト</Text>
 
       {loadState === "loading" && (
@@ -114,7 +116,7 @@ export default function ParentSupporterChoresScreen() {
         みんなの参考にどうぞ。ここから直接完了報告・編集・交換はできません
       </Text>
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

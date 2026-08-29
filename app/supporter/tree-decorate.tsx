@@ -35,7 +35,7 @@ export default function SupporterTreeDecorateScreen() {
     return (
       <Screen tone="supporter">
         <Text style={theme.typography.supporterBody}>景品が見つかりませんでした</Text>
-        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
       </Screen>
     );
   }

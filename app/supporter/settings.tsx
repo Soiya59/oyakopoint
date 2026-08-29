@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { View } from "react-native";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useSession } from "@/lib/session";
@@ -46,6 +47,7 @@ export default function SupporterSettingsScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>設定</Text>
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
@@ -63,7 +65,7 @@ export default function SupporterSettingsScreen() {
         <Text style={{ marginTop: theme.spacing.s4, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
   );
 }

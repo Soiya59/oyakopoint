@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -23,6 +24,7 @@ export default function SupporterRewardsScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <View style={styles.header}>
         <Text style={theme.typography.supporterTitle}>🎯 じぶんのごほうび</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/reward-edit")} />
@@ -59,7 +61,7 @@ export default function SupporterRewardsScreen() {
         disabled={myRewards.length === 0}
         onPress={() => router.push("/supporter/reward-redeem")}
       />
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
   );
 }

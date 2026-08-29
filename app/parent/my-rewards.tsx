@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -47,6 +48,7 @@ export default function ParentMyRewardsScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>じぶんのごほうび</Text>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>いま {balance}pt</Text>
 
@@ -109,7 +111,7 @@ export default function ParentMyRewardsScreen() {
         </View>
       )}
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

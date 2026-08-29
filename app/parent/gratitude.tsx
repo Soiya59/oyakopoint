@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
@@ -100,6 +101,7 @@ export default function ParentGratitudeHubScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>感謝ポイント</Text>
 
       {toast && (
@@ -195,7 +197,7 @@ export default function ParentGratitudeHubScreen() {
             label="ホームへ戻る"
             variant="ghost"
             style={{ marginTop: theme.spacing.s6 }}
-            onPress={() => router.back()}
+            onPress={() => router.replace("/parent/home")}
           />
         </>
       )}

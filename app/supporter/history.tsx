@@ -6,6 +6,7 @@ import MemberAvatar from "@/components/MemberAvatar";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { WeekBar, MonthCalendar } from "@/components/HistoryCalendar";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
@@ -107,6 +108,7 @@ export default function SupporterHistoryScreen() {
 
   return (
     <Screen tone="supporter">
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>きろく</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: theme.spacing.s3 }}>
@@ -236,7 +238,7 @@ export default function SupporterHistoryScreen() {
         label="ホームへ戻る"
         variant="ghost"
         style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.back()}
+        onPress={() => router.replace("/supporter/home")}
       />
     </Screen>
   );

@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -63,6 +64,7 @@ export default function ParentMyChoresScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>じぶんのクエスト</Text>
 
       {/* 送信成功後の控えめな確認表示（1.5秒程度で自動的に消える。主要画面ワイヤーフレーム.md
@@ -183,7 +185,7 @@ export default function ParentMyChoresScreen() {
           「ホームへ戻る」ボタン（ghost variant・router.back()）のパターンをそのまま
           踏襲した。ワイヤーフレームには画面下部の戻る導線までは明記されていないが、
           既存の他の一覧画面との一貫性を優先した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }

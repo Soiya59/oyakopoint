@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -38,6 +39,7 @@ export default function ParentPointsScreen() {
 
   return (
     <Screen tone="parent">
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <View style={styles.headerRow}>
         <Text style={theme.typography.parentTitle}>ポイント通帳</Text>
         {/* [2026-08-16追加] 主要画面ワイヤーフレーム.md 4章ワイヤーフレーム（保護者ビューP16）
@@ -140,7 +142,7 @@ export default function ParentPointsScreen() {
       {/* [2026-08-16修正・本部長] ユーザーの実操作で、この画面（P16）にホームへ戻る手段が
           無いことが判明した（P8・P18にも同じ抜けがあり、あわせて修正した）。
           P10・P12・P14等の既存画面と同じ「ホームへ戻る」パターンを踏襲した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
 }
