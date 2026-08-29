@@ -181,12 +181,17 @@ export function pointsTierBackground(totalPoints: number): string {
 // 完全に一致させること（順序は不問、値の集合のみ一致していればよい）。
 export const drawingPalette = [
   { name: "くろ", value: "#2E2E2E" },
-  { name: "あか", value: "#E4572E" },
+  // [2026-08-29変更・本部長] #E4572E は色相13°でほぼ朱色。隣の「オレンジ」（28°）と
+  // 14°しか離れておらず、パレットの丸で見分けが付かないとユーザーが実機で指摘した。
+  // 色相0°の素直な赤にして、オレンジとの差を28°に広げる。
+  { name: "あか", value: "#DC2626" },
   { name: "オレンジ", value: "#F2913D" },
   { name: "きいろ", value: "#F5C518" },
   { name: "みどり", value: "#3FA34D" },
   { name: "あお", value: "#2F80ED" },
-  { name: "ピンク", value: "#E5449B" },
+  // 色相は元から330°でピンク寄りだったが、暗く濃いマゼンタのため赤の隣では
+  // 「濃い赤」に見えていた。色相はほぼ保ったまま明るくして、ピンクとして読ませる。
+  { name: "ピンク", value: "#FF6FB5" },
   { name: "むらさき", value: "#8B5CD6" },
 ] as const;
 
