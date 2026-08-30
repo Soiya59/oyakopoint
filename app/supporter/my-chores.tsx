@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import ReportCelebration from "@/components/ReportCelebration";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -44,7 +45,24 @@ export default function SupporterMyChoresScreen() {
   }, {});
   const creatorOf = (id: string) => state.members.find((m) => m.id === id);
 
+  // [2026-08-30追加・本部長] S7（app/supporter/chore-report.tsx）は報告成功後、
+  // 保護者側と同じく justChoreId/justTitle/justPoints を付けてこの画面へ戻していたが、
+  // **この画面がそのパラメータを一度も読んでいなかった**ため、みまもりメンバーは
+  // 報告しても何の確認表示も出ないままだった（保護者版P19にはバナーがあった）。
+  // お祝いポップアップの導入にあわせて、受け取り側を実装して差を解消する。
+  const params = useLocalSearchParams<{ justChoreId?: string; justTitle?: string; justPoints?: string }>();
+  const [celebration, setCelebration] = useState<{ title: string; points: string } | null>(null);
+
+  useEffect(() => {
+    if (params.justChoreId && params.justTitle && params.justPoints) {
+      setCelebration({ title: params.justTitle, points: params.justPoints });
+    }
+  }, [params.justChoreId, params.justTitle, params.justPoints]);
+
   return (
+    // お祝いポップアップをScreen（内部はScrollView）の外側に重ねる理由は
+    // app/parent/my-chores.tsx と同じ。
+    <View style={{ flex: 1 }}>
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <View style={styles.header}>
@@ -125,6 +143,17 @@ export default function SupporterMyChoresScreen() {
 
       <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
     </Screen>
+
+    {celebration && (
+      <ReportCelebration
+        tone="supporter"
+        title={celebration.title}
+        points={celebration.points}
+        memberId={state.activeParentMemberId}
+        onDismiss={() => setCelebration(null)}
+      />
+    )}
+    </View>
   );
 }
 

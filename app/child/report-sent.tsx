@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import Confetti from "@/components/Confetti";
+import GachaCelebrationHint from "@/components/GachaCelebrationHint";
 import theme from "@/theme/theme";
+import { useAppData } from "@/data/store";
 
 /**
  * C7 報告完了（送信済み）
@@ -18,9 +21,20 @@ import theme from "@/theme/theme";
  */
 export default function ReportSentScreen() {
   const { choreTitle, points } = useLocalSearchParams<{ choreTitle?: string; points?: string }>();
+  const { state } = useAppData();
+
+  // [2026-08-30追加・本部長] 3秒後に自動でやることリストへ戻る。
+  // 大人のお祝いポップアップが3秒で自分から消えるのと同じ扱いにするため
+  // （見せ方は役割ごとに変えるが、「押さなくても進む」というルールは共通にする）。
+  // ボタンは残してあるので、待たずに戻ることもできる。
+  useEffect(() => {
+    const t = setTimeout(() => router.replace("/child/home"), 3000);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <Screen tone="child">
+      <Confetti height={320} />
       <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
         <Text style={{ fontSize: 56 }}>🎉</Text>
         <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s4, textAlign: "center" }]}>
@@ -38,6 +52,14 @@ export default function ReportSentScreen() {
           おうちの人にもとどいたよ
         </Text>
       </View>
+
+      {/* [2026-08-30追加] ユーザーの構想「かざして、ガチャ5回がわかって、そのまま
+          同じ端末で引ける」に対応。取得できないときは何も出ない（お祝いの主役は
+          きろくできたことなので、ここでエラーは出さない）。 */}
+      <View style={{ marginTop: theme.spacing.s6, alignItems: "center" }}>
+        <GachaCelebrationHint tone="child" memberId={state.activeChildMemberId} />
+      </View>
+
       <AppButton
         label="やることリストへもどる"
         tone="child"

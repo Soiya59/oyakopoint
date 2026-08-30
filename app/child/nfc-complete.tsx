@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import Confetti from "@/components/Confetti";
+import GachaCelebrationHint from "@/components/GachaCelebrationHint";
 import theme from "@/theme/theme";
+import { useAppData } from "@/data/store";
 
 /**
  * C14 NFCタップ完了
@@ -36,12 +39,25 @@ export default function NfcCompleteScreen() {
     tagValue?: string;
   }>();
   const result = (params.result as ResultParam) ?? "notFound";
+  const { state } = useAppData();
 
   const goHome = () => router.replace("/child/home");
+
+  // [2026-08-30追加・本部長] 成功時のみ3秒後に自動でホーム（やることリスト）へ戻る。
+  // ユーザーの指定「NFC→演出→〇秒あとにホーム画面に自動で遷移」に対応。ホームには
+  // ガチャがあるので、そのまま引ける導線になる。
+  // 失敗系（タグ未登録・通信エラー等）は自動で戻さない。何が起きたか読む時間が要るうえ、
+  // 「もういちど」を押す前に画面が消えてしまうため。
+  useEffect(() => {
+    if (result !== "approved") return;
+    const t = setTimeout(goHome, 3000);
+    return () => clearTimeout(t);
+  }, [result]);
 
   if (result === "approved") {
     return (
       <Screen tone="child">
+        <Confetti height={340} />
         <View style={styles.centerBlock}>
           <Text style={styles.bigEmoji}>🌟🎉🌟</Text>
           <Text style={[theme.typography.childHeadline, styles.centerText, { marginTop: theme.spacing.s4 }]}>
@@ -51,6 +67,11 @@ export default function NfcCompleteScreen() {
             +{params.points}pt
           </Text>
         </View>
+
+        <View style={{ marginTop: theme.spacing.s6, alignItems: "center" }}>
+          <GachaCelebrationHint tone="child" memberId={state.activeChildMemberId} />
+        </View>
+
         <AppButton label="やることリストへもどる" tone="child" fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
       </Screen>
     );

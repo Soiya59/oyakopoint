@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import ReportCelebration from "@/components/ReportCelebration";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -39,11 +40,13 @@ export default function ParentMyChoresScreen() {
     return () => clearTimeout(t);
   }, []);
 
+  // [2026-08-30変更・本部長] 従来はここで1.5秒のタイマーを持ち、細い帯を出していた。
+  // お祝いポップアップ（ReportCelebration）へ差し替えたので、いつ閉じるかの管理は
+  // ポップアップ側へ移した（3秒で自動／×／背面タップ）。ここは合図を受け取るだけ。
+  // 該当行のハイライトは従来どおりお祝いと同時に消える（同じstateを見ているため）。
   useEffect(() => {
     if (params.justChoreId && params.justTitle && params.justPoints) {
       setSnackbar({ choreId: params.justChoreId, title: params.justTitle, points: params.justPoints });
-      const t = setTimeout(() => setSnackbar(null), 1500);
-      return () => clearTimeout(t);
     }
   }, [params.justChoreId, params.justTitle, params.justPoints]);
 
@@ -63,19 +66,14 @@ export default function ParentMyChoresScreen() {
   };
 
   return (
+    // [2026-08-30] お祝いポップアップはScreenの**外側**に置く。Screenの中身はScrollViewの
+    // 内側にあるため、そこへ絶対配置してもスクロール内容基準になってしまい、画面中央に
+    // 固定できない。ここでflex:1のViewを一枚かぶせ、その基準で全面に重ねる。
+    <View style={{ flex: 1 }}>
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>じぶんのクエスト</Text>
 
-      {/* 送信成功後の控えめな確認表示（1.5秒程度で自動的に消える。主要画面ワイヤーフレーム.md
-          9.2章「新しい画面へは遷移せず、[P19]へ戻り控えめな確認表示」）。ScrollView内でも
-          位置がずれないよう、絶対配置のスナックバーではなくインラインのバナーとして表現した
-          （設計書に固定位置の指定は無いため、Screenコンポーネントの構造に合わせた実装判断）。 */}
-      {snackbar && (
-        <View style={styles.snackbar}>
-          <Text style={styles.snackbarText}>きろくしました +{snackbar.points}pt</Text>
-        </View>
-      )}
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -187,6 +185,17 @@ export default function ParentMyChoresScreen() {
           既存の他の一覧画面との一貫性を優先した。 */}
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
+
+    {snackbar && (
+      <ReportCelebration
+        tone="parent"
+        title={snackbar.title}
+        points={snackbar.points}
+        memberId={state.activeParentMemberId}
+        onDismiss={() => setSnackbar(null)}
+      />
+    )}
+    </View>
   );
 }
 
@@ -200,13 +209,4 @@ const styles = StyleSheet.create({
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },
   chevron: { color: theme.colors.neutralTextSecondary, marginLeft: theme.spacing.s2, fontSize: 18 },
-  snackbar: {
-    marginTop: theme.spacing.s3,
-    backgroundColor: theme.colors.neutralTextPrimary,
-    borderRadius: theme.radius.parentMd,
-    paddingVertical: theme.spacing.s3,
-    paddingHorizontal: theme.spacing.s4,
-    alignItems: "center",
-  },
-  snackbarText: { color: "#FFFFFF", fontWeight: "600" },
 });
