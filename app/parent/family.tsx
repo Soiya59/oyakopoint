@@ -52,6 +52,13 @@ export default function FamilyScreen() {
   const [savingName, setSavingName] = useState(false);
 
   const activeMembers = state.members.filter((m) => m.is_active);
+  // 「こどもモードにする」で profile-select へ渡す子ども一覧。
+  // invite-lookup Edge Function が返す InviteLookupChild と同じ形に揃える
+  // （member_id / display_name / avatar_color）。
+  const childProfiles = activeMembers
+    .filter((m) => m.role === "child")
+    .map((m) => ({ member_id: m.id, display_name: m.display_name, avatar_color: m.avatar_color }));
+
   // supporterはfamily_members一覧（activeMembers）にすでに含まれる（accept_family_invite後）ため
   // 別枠での表示は不要。ここでは「まだ参加していない招待」（pending/revoked）のみ一覧する。
 
@@ -383,14 +390,31 @@ export default function FamilyScreen() {
 
           配置は「家族の設定」見出しより上＝不可逆な操作（家族から抜ける・削除する）
           から離した位置にしている。日常的に使う切り替えを、危険な操作の隣に置かない。 */}
+      {/* [2026-08-29修正・本部長] 招待コードの入力画面を飛ばす。
+          ユーザーの指摘「子供モードにするのあとにコードを入力する画面ある、いらないと思う」。
+          そのとおりで、**保護者は既に家族に所属しており、アプリが招待コードも子ども一覧も
+          手元に持っている**（state.family.invite_code / state.members）。トップ画面から
+          入る場合（未ログイン）はコード入力が要るが、この導線では不要だった。
+          invite-lookup の呼び出しごと省けるので、通信も1本減る。 */}
       <View style={styles.switchBox}>
         <AppButton
           label="👦 こどもモードにする"
           variant="secondary"
-          onPress={() => router.push("/child-auth/invite-code")}
+          disabled={childProfiles.length === 0}
+          onPress={() =>
+            router.push({
+              pathname: "/child-auth/profile-select",
+              params: {
+                inviteCode: state.family.invite_code,
+                childrenJson: JSON.stringify(childProfiles),
+              },
+            })
+          }
         />
         <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          ログアウトはされません。子どもの画面から「おうちの人にもどる」で戻れます。
+          {childProfiles.length === 0
+            ? "先に「子どもプロフィールを追加」から登録してください。"
+            : "ログアウトはされません。子どもの画面から「おうちの人にもどる」で戻れます。"}
         </Text>
       </View>
 
