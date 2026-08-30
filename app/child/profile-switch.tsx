@@ -64,7 +64,11 @@ export default function ProfileSwitchScreen() {
   };
 
   const logout = async () => {
-    await logoutChild();
+    // [2026-08-29] 同じ端末に保護者のログインが残っていれば、そこへ復帰する。
+    // 残っていなければ logoutChild 側が signedOut にするので、下の replace("/") で
+    // トップへ出る（従来どおり）。子ども同士の切り替え（selectProfile）では
+    // 復帰させてはいけないため、こちらだけ returnToParent を渡す。
+    await logoutChild({ returnToParent: true });
     router.replace("/");
   };
 
@@ -109,12 +113,25 @@ export default function ProfileSwitchScreen() {
         </View>
       )}
 
+      {/* [2026-08-29修正・本部長] 従来のラベルは「ログアウトする（保護者ログイン等は
+          トップから）」で、実際そのとおり必ずトップ画面へ戻されていた。
+          src/lib/session.tsx の logoutChild を修正し、**同じ端末に保護者のログインが
+          残っていればそのまま保護者へ戻る**ようにしたため、文言を実態に合わせる。
+          保護者でログインしたことがない端末では、従来どおりトップ画面へ出る。 */}
       <AppButton
-        label="ログアウトする（保護者ログイン等はトップから）"
+        label="おうちの人にもどる"
         variant="secondary"
         style={{ marginTop: theme.spacing.s8 }}
         onPress={logout}
       />
+      <Text
+        style={[
+          theme.typography.childBody,
+          { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary, textAlign: "center" },
+        ]}
+      >
+        おうちの人が このスマホで ログインしていないときは、さいしょのがめんに もどるよ
+      </Text>
     </Screen>
   );
 }

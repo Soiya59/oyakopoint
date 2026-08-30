@@ -50,7 +50,8 @@ interface SessionContextValue {
   refreshParentMember: () => Promise<void>;
   /** child-login成功後に呼び、SecureStoreへ保存しつつ子どもセッションへ切り替える。 */
   loginChild: (info: ChildSessionInfo) => Promise<void>;
-  logoutChild: () => Promise<void>;
+  /** returnToParent=true のときだけ、端末に残る保護者セッションへ復帰する（logoutChildの実装コメント参照）。 */
+  logoutChild: (options?: { returnToParent?: boolean }) => Promise<void>;
   logoutParent: () => Promise<void>;
 }
 
@@ -197,13 +198,52 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setStatus("child");
   }, []);
 
-  const logoutChild = useCallback(async () => {
+  /**
+   * 子どもセッションを終了する。
+   *
+   * [2026-08-29修正・本部長／軽微変更ルート] 従来は無条件で`signedOut`にしていたため、
+   * **同じ端末に保護者のログインが残っていても、必ずトップ画面へ戻され、
+   * 保護者はメールのリンクを踏み直す必要があった**（ユーザーの指摘
+   * 「親と子供の切り替えはめんどいよね？」）。
+   *
+   * 実際には `loginChild` も本関数も `supabase.auth.signOut()` を呼んでおらず、
+   * **保護者のSupabase Authセッションは端末に生き残っている**。
+   * 捨てていたのではなく、戻り先を見に行っていなかっただけだった。
+   *
+   * そこで、子どもセッションを消したあとに保護者セッションの有無を確認し、
+   * **残っていれば保護者（またはみまもりメンバー）として復帰する**。
+   * 残っていなければ従来どおり`signedOut`。
+   *
+   * [これは権限を緩めない] 復帰先は「その端末で既に認証済みだったセッション」であり、
+   * 新たに認証を通すわけではない。保護者でログインしたことのない端末では
+   * 戻り先が無いため、従来どおりトップ画面へ出る。
+   *
+   * [逆方向（保護者→子ども）は変更しない] 子どもアカウントへ入るには引き続きPINが要る。
+   * 未公開のお絵かき（`family_drawings`のRLSが`artist_member_id = 本人`で保護し、
+   * UIも「あなたの ひみつ（じぶんだけ みえるよ）」と明示している）の壁を、
+   * 利便性のために崩さないため。
+   */
+  const clearChildOnly = useCallback(async () => {
     childSessionRef.current = null;
     await clearChildSession();
     setChildSessionState(null);
     setChildClient(null);
-    setStatus("signedOut");
   }, []);
+
+  const logoutChild = useCallback(
+    async (options?: { returnToParent?: boolean }) => {
+      await clearChildOnly();
+      if (options?.returnToParent) {
+        // refreshParentMember は保護者セッションが無ければ自分でsignedOutにする。
+        await refreshParentMember();
+        return;
+      }
+      // 既定は従来どおり。子ども同士の切り替え（次のPIN入力までの一時的な未ログイン）や、
+      // 期限切れセッションの後始末では、保護者へ復帰させてはいけない。
+      setStatus("signedOut");
+    },
+    [clearChildOnly, refreshParentMember]
+  );
 
   const logoutParent = useCallback(async () => {
     await supabase.auth.signOut();
