@@ -367,6 +367,33 @@ export default function FamilyScreen() {
           ============================================================ */}
       <View style={styles.settingsDivider} />
 
+      {/* [2026-08-29追加・本部長／軽微変更ルート] 子どもモードへの切り替え。
+          ユーザーの指摘「保護者を一回ログアウトするってことかな」への対応。
+
+          直前に「子ども→保護者はログアウトせず戻れる」ようにしたが（実装メモ92章）、
+          **その逆向きの導線が存在しなかった**。ログイン済みの保護者がトップ画面へ行くと
+          `app/index.tsx` が即座に保護者ホームへ`replace`するため「こどもモードで使う」
+          ボタンには到達できず、保護者が子どもモードに入るには設定からログアウトする
+          しか手が無かった。そしてログアウトは`supabase.auth.signOut()`を呼ぶため
+          **保護者セッションが消え、92章の「戻る」機能が効かなくなる**。片道しか
+          直っていなかった。
+
+          ここから入れば`signOut()`を通らないので保護者セッションが端末に残り、
+          子ども画面の「おうちの人にもどる」で往復できる。
+
+          配置は「家族の設定」見出しより上＝不可逆な操作（家族から抜ける・削除する）
+          から離した位置にしている。日常的に使う切り替えを、危険な操作の隣に置かない。 */}
+      <View style={styles.switchBox}>
+        <AppButton
+          label="👦 こどもモードにする"
+          variant="secondary"
+          onPress={() => router.push("/child-auth/invite-code")}
+        />
+        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+          ログアウトはされません。子どもの画面から「おうちの人にもどる」で戻れます。
+        </Text>
+      </View>
+
       <Text style={[theme.typography.parentBodyMedium, styles.settingsHeading]}>家族の設定</Text>
 
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>家族名</Text>
@@ -434,6 +461,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutralBorder,
   },
+  switchBox: { marginTop: theme.spacing.s6, gap: theme.spacing.s2 },
   settingsHeading: {
     marginTop: theme.spacing.s6,
     color: theme.colors.brandPrimaryStrong,
