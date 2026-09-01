@@ -50,20 +50,43 @@
 --     実行するため、ROLLBACK漏れの危険をそもそも作らない方針とした。
 --     書き込み系ポリシーは「定義が変わっていないこと」の照合で代替している。
 --     挙動そのものの検証ではないため、**書き込みの正しさは保証しない**。
---   - **家族間（A層）の分離は検査していない。** 2つ目の家族が必要だが、
---     本番には家族が1つしかなく、テスト用の家族を本番に作らない方針のため。
---     Docker導入後にローカルDBで追加する。
 --   - **書いた検査しか通らない。** 「全部PASS＝安全」ではない。
+--
+-- [2026-09-01追加・開発部] A層（家族間の分離）を追加した（開発部/成果物/
+-- 実装メモ.md 105章）。96.5章で「家族が2つ以上ないと検査できない。本番には
+-- 家族が1つしかなく、テスト用の家族を本番に作らない方針のためDocker導入後に
+-- ローカルDBで追加する」と先送りしていたものの本実装。
+--   - ローカル（`supabase/seed.sql` を読み込んだ状態。`supabase db reset` /
+--     `supabase start` でのみ投入される）では、テスト家族が2つ存在するため
+--     A層が実際に実行される。
+--   - 本番（家族が1つしかない）では「家族が2つ以上あるか」を実行時に判定し、
+--     該当しないためA層は**SKIP**と表示される（FAILではない。正常な挙動）。
+--     判定方法・SKIPの実装はB層の直前のコメント、および各A層チェックの
+--     コメントを参照。
+--   - B層についても、対象ロールのメンバーが1人も存在しない環境（ローカルの
+--     空DB等）で `set_config` に空文字を渡してクラッシュしていた不具合を
+--     本改訂であわせて修正した（B層直前のコメント参照）。B層の各チェックの
+--     検査内容・期待値そのものは一切変更していない。
 --
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
---   npx supabase db query --linked "$(cat supabase/tests/rls_checks.sql)"
+--   npx supabase db query --linked -f supabase/tests/rls_checks.sql
+--
+-- ■ ローカルでの実行方法（A層も含めて全件検査する場合）
+--   1. `supabase start` または `supabase db reset` でローカルDBに
+--      `supabase/seed.sql`（テスト家族2件）を投入しておく。
+--   2. `docker exec -i supabase_db_<project>-app psql -U postgres -d postgres -q -f - < supabase/tests/rls_checks.sql`
+--      （`npx supabase db query` はローカル対象だと挙動が異なるため使わない。
+--      開発部/成果物/実装メモ.md 105章参照）
 --
 -- ■ FAILしたときの対応
 --   S3/S4がFAILしたら、それは「意図した変更」か「事故」かを必ず判断すること。
 --   意図した変更なら、このファイルのスナップショットを更新する（＝レビューの機会）。
 --   **FAILを消すためにスナップショットを更新するのは禁止。** それをやると、
 --   テストは「通すことが目的の形骸化した記録」に変わり、無いより悪くなる。
+--   SKIPはFAILではない（本番のA層など、検査対象がそもそも存在しない場合の
+--   正常な表示）。SKIPが出るべきでない環境（ローカルの全層検査時）でSKIPが
+--   出た場合は、ガード条件の判定ミスを疑うこと。
 -- ============================================================
 
 BEGIN;
@@ -222,77 +245,347 @@ SELECT 'C層', 'S4 authenticatedが実行できる関数44件が承認済みと�
 --
 -- 対象者はIDを直書きせず、実行時にロールで選ぶ。メンバーが入れ替わっても
 -- テストが陳腐化しないようにするため。
+--
+-- [2026-09-01改訂・開発部・実装メモ.md 105章] メンバーが1人もいない環境
+-- （ローカルの空DB等）でのガード追加。
+-- 従来は `SELECT set_config('t.child', (SELECT id::text FROM family_members
+-- WHERE role='child' ...), true)` を無条件に実行しており、対象ロールの
+-- メンバーが0人だと内側のSELECTがNULLを返し、`set_config('t.child', NULL,
+-- true)` の結果 `current_setting('t.child')` が**空文字列 ''**になる
+-- （NULLにはならない。実機で確認済み）。この空文字列がその後
+-- `json_build_object('family_member_id', '')` 経由で
+-- `current_family_member_id()` 内の `v_member_id_claim::uuid` キャストに渡り
+-- `invalid input syntax for type uuid: ""` でクラッシュしていた。
+-- 対策: `set_config` 自体を `WHERE EXISTS (...)` で対象ロールが実在する
+-- ときだけ実行するよう改める。存在しない場合は `t.child` 等のGUCが
+-- 一度も設定されず、`current_setting(..., true)` は（空文字列ではなく）
+-- 正真正銘の SQL NULL を返すため、`json_build_object` はJSONの null を
+-- 生成し、`current_family_member_id()` はクラッシュせずNULLを返す
+-- （キャストするNULLは常に安全。危険なのは空文字列のキャストだけ）。
+-- その上で、各チェックの期待値・実際の判定ロジック自体
+-- （「他人の未公開の絵が見えない」等）は一切変更せず、対象ロールが
+-- 存在しない場合にのみ結果を『SKIP』表示に切り替える分岐を追加した。
 -- ============================================================
 
-SELECT set_config('t.child',     (SELECT id::text FROM family_members WHERE role = 'child'     AND is_active ORDER BY created_at LIMIT 1), true);
-SELECT set_config('t.parent',    (SELECT id::text FROM family_members WHERE role = 'parent'    AND is_active ORDER BY created_at LIMIT 1), true);
-SELECT set_config('t.supporter', (SELECT id::text FROM family_members WHERE role = 'supporter' AND is_active ORDER BY created_at LIMIT 1), true);
+SELECT set_config('t.child', (SELECT id::text FROM family_members WHERE role = 'child' AND is_active ORDER BY created_at LIMIT 1), true)
+  WHERE EXISTS (SELECT 1 FROM family_members WHERE role = 'child' AND is_active);
+SELECT set_config('t.parent', (SELECT id::text FROM family_members WHERE role = 'parent' AND is_active ORDER BY created_at LIMIT 1), true)
+  WHERE EXISTS (SELECT 1 FROM family_members WHERE role = 'parent' AND is_active);
+SELECT set_config('t.supporter', (SELECT id::text FROM family_members WHERE role = 'supporter' AND is_active ORDER BY created_at LIMIT 1), true)
+  WHERE EXISTS (SELECT 1 FROM family_members WHERE role = 'supporter' AND is_active);
+
+-- [A層のガード用] 家族が2つ以上あるかを、まだ`SET LOCAL ROLE authenticated`に
+-- 切り替える前（＝管理者権限のこの時点）で1回だけ判定し、GUCへ結果を
+-- キャッシュしておく。**ここを`SET LOCAL ROLE authenticated`後に
+-- `(SELECT count(*) FROM families)`という形で毎回問い合わせる実装にすると、
+-- families テーブルのSELECTポリシー（families_select_own、
+-- `id = current_family_id()`）がなりすまし中の本人にも適用され、
+-- 常に「自分の家族1件」しか数えられず、ローカルでも家族が2つ以上あるのに
+-- 誤ってfalse（＝A層が常にSKIP）になってしまう（実際にこの実装ミスを
+-- ローカルで踏んでから気づき、修正した。開発部/成果物/実装メモ.md 105章）。
+SELECT set_config('t.multi_family', ((SELECT count(*) FROM families) >= 2)::text, true);
 
 
 -- ---------- 子どもの視点 ----------
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.child'))::text, true);
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.child', true))::text, true);
 
 -- B1. 他人の未公開のお絵かきが見えないこと。
 --     このアプリで最も機微な秘匿。「ガチャで当たるまで本人以外に見えない」が
 --     壊れると、子どもにとっての意味そのものが失われる。しかも無症状。
 INSERT INTO _r SELECT 'B層', 'B1 子ども: 他人の未公開の絵が見えない', '0',
-  count(*)::text, count(*) = 0
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにchildロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
 FROM family_drawings WHERE NOT is_published AND artist_member_id <> current_family_member_id();
 
 -- B2. PINハッシュが読めないこと。
 INSERT INTO _r SELECT 'B層', 'B2 子ども: PINテーブルが読めない', '0',
-  count(*)::text, count(*) = 0 FROM family_member_pins;
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにchildロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
+FROM family_member_pins;
 
 -- B3. 逆に厳しすぎないことの確認。家族のメンバーは見えなければ画面が壊れる。
 INSERT INTO _r SELECT 'B層', 'B3 子ども: 家族のメンバーは見える（過剰遮断でない）', '1件以上',
-  count(*)::text, count(*) > 0 FROM family_members;
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにchildロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*) > 0 ELSE NULL END
+FROM family_members;
 
 -- B4. 完了報告が見えること（同上）。
 INSERT INTO _r SELECT 'B層', 'B4 子ども: 家族の完了報告は見える（過剰遮断でない）', '1件以上',
-  count(*)::text, count(*) > 0 FROM chore_completions;
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにchildロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*) > 0 ELSE NULL END
+FROM chore_completions;
+
+-- ------------------------------------------------------------
+-- A層（子どもロール分）: family_drawings / chore_completions / family_members は
+-- 「特に重要なテーブル」として3ロールすべてで検査する（絞り方の理由は
+-- 保護者の視点ブロック冒頭のA層コメントを参照。ここでは子ども分のみ追加）。
+-- ------------------------------------------------------------
+INSERT INTO _r SELECT 'A層', 'A-child family_drawings: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM family_drawings WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A-child chore_completions: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM chore_completions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A-child family_members: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM family_members WHERE family_id <> current_family_id();
 
 RESET ROLE;
 
 
 -- ---------- 保護者の視点 ----------
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.parent'))::text, true);
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.parent', true))::text, true);
 
 -- B5. 保護者であっても、他人の未公開の絵は見えてはいけない。
 --     「保護者だから何でも見える」は、この機能に限っては誤り。
 INSERT INTO _r SELECT 'B層', 'B5 保護者: 他人の未公開の絵が見えない', '0',
-  count(*)::text, count(*) = 0
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにparentロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
 FROM family_drawings WHERE NOT is_published AND artist_member_id <> current_family_member_id();
 
 -- B6. 保護者でもPINハッシュは読めない（PIN再設定はEdge Function経由のみ）。
 INSERT INTO _r SELECT 'B層', 'B6 保護者: PINテーブルが読めない', '0',
-  count(*)::text, count(*) = 0 FROM family_member_pins;
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにparentロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
+FROM family_member_pins;
 
 -- B7. 保護者としての役割判定が正しく効いていること。
 INSERT INTO _r SELECT 'B層', 'B7 保護者: 保護者として判定される', 'true',
-  is_current_user_parent()::text, is_current_user_parent();
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN is_current_user_parent()::text ELSE 'SKIP（ローカルにparentロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL THEN is_current_user_parent() ELSE NULL END;
+
+-- ============================================================
+-- A層（保護者ロール分・代表ロール）: 家族間の分離
+--
+-- [2026-09-01新設・開発部・実装メモ.md 105章]
+-- 検査内容: 家族Aのメンバーとしてなりすました状態で、家族Bのデータが
+-- 1件も見えないこと。対象IDは直書きせず、「自分の家族以外
+-- （family_id <> current_family_id()）のデータが0件であること」という
+-- 形で実行時に判定する（B層と同じ「実在するデータを実行時に選ぶ」方針を
+-- 踏襲。テスト家族2件は `supabase/seed.sql` がローカルのみに投入する）。
+--
+-- [絞り方とその理由]
+--   RLSが有効な22テーブルのうち、gacha_preset_ornaments
+--   （全家族共通のグローバルカタログ。family_id列を持たず、両家族が
+--   同じ行を見えるのが正しい設計のため「他家族のデータが見えない」という
+--   検査自体が意味を持たない）を除いた21テーブルを対象にする。
+--   21テーブル全部を3ロール（保護者・こども・みまもり）でそれぞれ検査すると
+--   63件になり検査項目が肥大化するため、以下のように絞った。
+--     - 代表ロール（保護者）1つで21テーブルすべてを検査する
+--       （このブロック）。RLSポリシーの条件式自体はロールに関わらず
+--       同じ形（family_id = current_family_id()）で書かれているものが
+--       大半であり、代表1ロールでの検査でも「family_idによる分離が
+--       構造的に効いているか」は十分に確認できる。
+--     - 「特に重要な3テーブル」（family_drawings=秘匿性が最も高い、
+--       chore_completions=ポイントの原資となる会計データ、
+--       family_members=氏名等の個人識別情報）だけは、こども・みまもりの
+--       2ロールでも重ねて検査する（子どもの視点ブロック・みまもりの視点
+--       ブロックにそれぞれ追加）。理由: この3テーブルは、role別に条件式が
+--       枝分かれしているポリシーが実際に存在する
+--       （family_members_update_scoped等）ため、ロールによって挙動が
+--       異なる可能性を排除しきれない。
+--   （合計 21 + 3テーブル×2ロール + 過剰遮断でない確認1件 = 28件）
+--
+-- [「過剰に厳しくない」側の確認（96.3(3)の方針）]
+--   家族Aの保護者から、家族A自身のfamily_membersが見えることを確認する
+--   （A-guard-not-too-strict）。「他家族が見えない」だけを検査すると、
+--   仮にRLSが誤って自分の家族まで含めて全部隠す設定になっていても
+--   0件のままPASSしてしまい、検査として無意味になる（B3・B4と同じ発想）。
+--
+-- [ローカル/本番の分岐方法]
+--   `current_setting('t.multi_family', true) = 'true'` を都度の副問い合わせで判定する。
+--   本番は家族が1つしかないため常にfalseとなり、A層はすべてSKIP表示になる
+--   （FAILではない）。ローカルは `supabase/seed.sql` が2家族を投入するため
+--   trueになり、実際にチェックが走る。対象ロールのメンバー自体が
+--   存在しない場合（`current_setting('t.parent', true) IS NOT NULL` 等）も
+--   あわせてガードしている（B層と同じ理由）。
+-- ============================================================
+
+-- A-guard-not-too-strict. 家族Aの保護者から、自分の家族のメンバーは見える
+-- （他家族を隠すあまり自分の家族まで消えていないかの確認、96.3(3)の方針）。
+INSERT INTO _r SELECT 'A層', 'A-guard 保護者: 自分の家族のfamily_membersは見える（過剰遮断でない）', '1件以上',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) > 0 ELSE NULL END
+FROM family_members WHERE family_id = current_family_id();
+
+-- 以下21件、代表ロール（保護者）で「他家族の行が0件であること」を検査する。
+-- families のみ主キー列が `id`（他は `family_id`）であることに注意。
+-- family_member_pins / push_tokens は family_id 列を持たないため、
+-- family_members への JOIN 経由で他家族のメンバーの行かどうかを判定する。
+INSERT INTO _r SELECT 'A層', 'A01 保護者: categoriesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM categories WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A02 保護者: chore_completionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chore_completions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A03 保護者: chore_daily_flagsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chore_daily_flags WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A04 保護者: chore_reactionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chore_reactions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A05 保護者: choresに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chores WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A06 保護者: familiesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM families WHERE id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A07 保護者: family_board_postsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_board_posts WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A08 保護者: family_board_reactionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_board_reactions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A09 保護者: family_drawingsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_drawings WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A10 保護者: family_invitesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_invites WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A11 保護者: family_member_pinsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_member_pins fmp JOIN family_members fm ON fm.id = fmp.member_id WHERE fm.family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A12 保護者: family_membersに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_members WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A13 保護者: family_tree_decorationsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_tree_decorations WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A14 保護者: family_tree_seasonsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_tree_seasons WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A15 保護者: gacha_drawsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM gacha_draws WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A16 保護者: gacha_member_progressに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM gacha_member_progress WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A17 保護者: gratitude_pointsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM gratitude_points WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A18 保護者: push_tokensに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM push_tokens pt JOIN family_members fm ON fm.id = pt.member_id WHERE fm.family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A19 保護者: reward_redemptionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM reward_redemptions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A20 保護者: rewardsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM rewards WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A21 保護者: weekly_family_digestsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM weekly_family_digests WHERE family_id <> current_family_id();
+
+-- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
+-- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
+-- （代表ロールが保護者のため）。二重に記録すると同じ検査が名前だけ変えて
+-- 増えるだけなので、ここでは追加しない。
 
 RESET ROLE;
 
 
 -- ---------- みまもりメンバーの視点 ----------
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.supporter'))::text, true);
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.supporter', true))::text, true);
 
 -- B8. みまもりも他人の未公開の絵は見えない。
 INSERT INTO _r SELECT 'B層', 'B8 みまもり: 他人の未公開の絵が見えない', '0',
-  count(*)::text, count(*) = 0
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにsupporterロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
 FROM family_drawings WHERE NOT is_published AND artist_member_id <> current_family_member_id();
 
 -- B9. みまもりはPINハッシュを読めない。
 INSERT INTO _r SELECT 'B層', 'B9 みまもり: PINテーブルが読めない', '0',
-  count(*)::text, count(*) = 0 FROM family_member_pins;
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにsupporterロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN count(*) = 0 ELSE NULL END
+FROM family_member_pins;
 
 -- B10. みまもりは保護者ではない。ここがtrueになると、家族用クエスト・ごほうびの
 --      編集権限（rewards_write_family_by_parent 等）が丸ごと開いてしまう。
 INSERT INTO _r SELECT 'B層', 'B10 みまもり: 保護者として判定されない', 'false',
-  is_current_user_parent()::text, NOT is_current_user_parent();
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN is_current_user_parent()::text ELSE 'SKIP（ローカルにsupporterロールのメンバーが存在しない）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN NOT is_current_user_parent() ELSE NULL END;
+
+-- ------------------------------------------------------------
+-- A層（みまもりロール分）: 「特に重要な3テーブル」を重ねて検査する
+-- （絞り方の理由は保護者の視点ブロック冒頭のA層コメントを参照）。
+-- ------------------------------------------------------------
+INSERT INTO _r SELECT 'A層', 'A-supporter family_drawings: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM family_drawings WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A-supporter chore_completions: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM chore_completions WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A-supporter family_members: 他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM family_members WHERE family_id <> current_family_id();
 
 RESET ROLE;
 
@@ -300,7 +593,8 @@ RESET ROLE;
 -- ============================================================
 -- 結果
 -- ============================================================
-SELECT layer, name, expected, actual, CASE WHEN ok THEN 'PASS' ELSE '*** FAIL ***' END AS result
+SELECT layer, name, expected, actual,
+  CASE WHEN ok IS NULL THEN 'SKIP' WHEN ok THEN 'PASS' ELSE '*** FAIL ***' END AS result
 FROM _r ORDER BY layer, name;
 
 ROLLBACK;
