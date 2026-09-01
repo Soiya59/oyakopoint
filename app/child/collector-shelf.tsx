@@ -44,6 +44,7 @@ export default function ChildCollectorShelfScreen() {
         loadingSeasonIds={loadingSeasonIds}
         errorSeasonIds={errorSeasonIds}
         onExpandSeason={loadSeason}
+        members={state.members}
       />
     </Screen>
   );

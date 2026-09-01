@@ -19,10 +19,11 @@ import AppButton from "./AppButton";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual } from "./FamilyTree";
+import { MemberAvatar } from "./MemberAvatar";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot } from "@/data/api";
-import type { FamilyTreeSeason } from "@/types/domain";
+import type { FamilyMember, FamilyTreeSeason } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -44,6 +45,15 @@ export interface CollectorShelfPanelProps {
   loadingSeasonIds: Record<string, boolean>;
   errorSeasonIds: Record<string, boolean>;
   onExpandSeason: (season: FamilyTreeSeason) => void;
+
+  /**
+   * 色の凡例を作るために家族メンバー全員を受け取る（退会者を含む）。
+   * [2026-09-01追加・本部長] 統括から「コレクションに入ると誰がどの色か分からない」との
+   * 指摘があった。現在の木（P26/C20/S14）は「内訳を見る」のタップで誰の色かを辿れるが、
+   * 21.6節のとおり過去の木は読み取り専用でタップを持たないため、辿る手段が無かった。
+   * `state.members`は`is_active`で絞っていないため退会者も引ける（実装メモ99章）。
+   */
+  members: FamilyMember[];
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -70,6 +80,69 @@ function formatMonthLabel(dateOnly: string): string {
   return jstDate(dateOnly).toLocaleDateString("ja-JP", { month: "long" });
 }
 
+/**
+ * 過去の木の色の凡例。そのシーズンに報告した人だけを、木と同じ色丸で並べる。
+ *
+ * 回数は出さない。木の色丸は40スロットのreservoir sampling（20.0節決定3）を通るため、
+ * 木の上に見えている丸の数と実際の報告件数が一致せず、数字を添えると嘘になるため。
+ * 「誰がどの色か」という指摘に答えるには色と名前の対応だけで足りる。
+ *
+ * 並び順は`members`の順（`created_at`昇順で取得済み）で、決定5の内訳表示と揃えている。
+ * ただし決定5と違い、そのシーズンに報告が無い人は出さない（過去の木は当時の記録であり、
+ * 当時いなかった人・報告しなかった人を並べても凡例として意味を持たないため）。
+ */
+function PastTreeColorLegend({
+  dots,
+  members,
+  tone,
+}: {
+  dots: FamilyTreeCompletionDot[];
+  members: FamilyMember[];
+  tone: Tone;
+}) {
+  const isChild = tone === "child";
+  const captionStyle = captionStyleFor(tone);
+
+  const contributors = useMemo(() => {
+    const reporterIds = new Set(dots.map((d) => d.reported_by));
+    return members.filter((m) => reporterIds.has(m.id));
+  }, [dots, members]);
+
+  // 同じ色が複数人に割り当たっている場合は、色だけでは見分けられない旨を添える。
+  // パレットは8色しかなく、DB側のnext_member_avatar_colorも使い切ったら重複を許容する
+  // 設計のため、これは異常ではなく起こり得る状態である。
+  const duplicatedColors = useMemo(() => {
+    const seen = new Map<string, number>();
+    contributors.forEach((m) => {
+      if (m.avatar_color) seen.set(m.avatar_color, (seen.get(m.avatar_color) ?? 0) + 1);
+    });
+    return new Set(Array.from(seen.entries()).filter(([, n]) => n > 1).map(([c]) => c));
+  }, [contributors]);
+
+  if (contributors.length === 0) return null;
+
+  return (
+    <View style={styles.legendWrap}>
+      <Text style={[captionStyle, styles.legendHeading]}>{isChild ? "だれの いろ？" : "この月の色"}</Text>
+      <View style={styles.legendRows}>
+        {contributors.map((m) => (
+          <View key={m.id} style={styles.legendRow}>
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
+            <Text style={captionStyle}>{m.display_name}</Text>
+          </View>
+        ))}
+      </View>
+      {duplicatedColors.size > 0 && (
+        <Text style={[captionStyle, styles.legendNote]}>
+          {isChild
+            ? "おなじ いろの ひとが いるよ"
+            : "同じ色のメンバーがいるため、色だけでは見分けられません"}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export function CollectorShelfPanel({
   tone,
   collectedLoadState,
@@ -83,6 +156,7 @@ export function CollectorShelfPanel({
   loadingSeasonIds,
   errorSeasonIds,
   onExpandSeason,
+  members,
 }: CollectorShelfPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
@@ -301,7 +375,14 @@ export function CollectorShelfPanel({
                         />
                       )}
                       {!loadingSeasonIds[season.id] && !errorSeasonIds[season.id] && dotsBySeasonId[season.id] && (
-                        <TreeStageVisual stage={season.current_stage} dots={dotsBySeasonId[season.id]} />
+                        <>
+                          <TreeStageVisual stage={season.current_stage} dots={dotsBySeasonId[season.id]} />
+                          <PastTreeColorLegend
+                            dots={dotsBySeasonId[season.id]}
+                            members={members}
+                            tone={tone}
+                          />
+                        </>
                       )}
                     </View>
                   )}
@@ -348,6 +429,11 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 },
   detailEmoji: { fontSize: 40 },
   emptyWrap: { alignItems: "center", paddingVertical: theme.spacing.s6 },
+  legendWrap: { marginTop: theme.spacing.s3 },
+  legendHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
+  legendRows: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s1 },
+  legendNote: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
   emptyEmoji: { fontSize: 40, marginBottom: theme.spacing.s2 },
   emptyText: { textAlign: "center" },
   seasonHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

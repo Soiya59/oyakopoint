@@ -42,6 +42,7 @@ export default function SupporterCollectorShelfScreen() {
         loadingSeasonIds={loadingSeasonIds}
         errorSeasonIds={errorSeasonIds}
         onExpandSeason={loadSeason}
+        members={state.members}
       />
     </Screen>
   );
