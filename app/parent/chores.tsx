@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import { EmptyState } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
@@ -77,6 +78,15 @@ export default function ChoresListScreen() {
         <Text style={theme.typography.parentTitle}>クエスト管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
+
+      {/* [2026-09-02追加・本部長] クエストが0件のとき何も表示されない状態だった
+          （主要画面ワイヤーフレーム.md 24章が定めていた空状態が未実装。2026-09-01の
+          文書照合で発見）。統括判断「商用化の時に何かしらあったほうが良い」により実装。
+          新規の家族は必ず0件から始まるため、最初に開いた画面が無言だと次の一歩が
+          分からない（実装メモ110章）。 */}
+      {mine.length === 0 && others.length === 0 && finished.length === 0 && (
+        <EmptyState emoji="📝" title="まだクエストが登録されていません。「＋ 新規追加」から最初のクエストを作ってみましょう" />
+      )}
 
       {mine.length > 0 && (
         <View>

@@ -75,6 +75,14 @@ export default function ChildFamilyTreeScreen() {
               せんげつの木：{theme.treeStages[lastSeason.current_stage].name} {theme.treeStages[lastSeason.current_stage].emoji}
             </Text>
           )}
+          {/* [2026-09-02追加・本部長] P26と同じ導線を3ロールに（実装メモ110章）。 */}
+          {lastSeason && (
+            <Pressable onPress={() => router.push("/child/collector-shelf")} hitSlop={8}>
+              <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong }]}>
+                → コレクターだなで みる
+              </Text>
+            </Pressable>
+          )}
         </Card>
       )}
 

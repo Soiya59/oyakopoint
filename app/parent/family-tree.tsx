@@ -85,6 +85,16 @@ export default function ParentFamilyTreeScreen() {
               先月の木：{theme.treeStages[lastSeason.current_stage].name} {theme.treeStages[lastSeason.current_stage].emoji}
             </Text>
           )}
+          {/* [2026-09-02追加・本部長] 主要画面ワイヤーフレーム.md 20章（2026-08-25追記）が
+              定めていた「→ コレクター棚で見る」導線が未実装だった（2026-09-01の文書照合で
+              発見、統括決定で実装。実装メモ110章）。過去の木を見る唯一の入口案内。 */}
+          {lastSeason && (
+            <Pressable onPress={() => router.push("/parent/collector-shelf")} hitSlop={8}>
+              <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong }]}>
+                → コレクター棚で見る
+              </Text>
+            </Pressable>
+          )}
         </Card>
       )}
 
