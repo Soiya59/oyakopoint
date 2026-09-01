@@ -23,6 +23,13 @@ export default function SupporterSettingsScreen() {
   const { parentMember, logoutParent } = useSession();
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-01追加・本部長] 主要画面ワイヤーフレーム.md 16章は「家族から抜ける」に
+  // 確認モーダルを挟むと定めていたが、実装は**ボタン押下で即座に退会処理が走る**
+  // 状態だった（2026-09-01の文書照合で発見）。退会は取り返しがつかない操作なので、
+  // 家族削除・お絵かき削除と同じ「1タップ目で確認表示→2タップ目で確定」の
+  // 画面内2段階確認に揃える（Alert.alert等のネイティブダイアログはWeb版で
+  // 挙動が不安定なため使わない）。実装メモ107章。
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   const me = parentMember;
 
@@ -52,13 +59,34 @@ export default function SupporterSettingsScreen() {
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
         <AppButton tone="supporter" label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
-        <AppButton
-          tone="supporter"
-          label={processing ? "処理中…" : "家族から抜ける"}
-          variant="secondary"
-          onPress={doLeaveFamily}
-          disabled={processing}
-        />
+        {confirmingLeave ? (
+          <View style={{ gap: theme.spacing.s2 }}>
+            <Text style={theme.typography.supporterBody}>
+              家族から抜けますか？ 自分専用のクエスト・ごほうびの記録は見られなくなります。
+            </Text>
+            <AppButton
+              tone="supporter"
+              label={processing ? "処理中…" : "ほんとうに抜ける"}
+              onPress={doLeaveFamily}
+              disabled={processing}
+            />
+            <AppButton
+              tone="supporter"
+              label="やめる"
+              variant="ghost"
+              onPress={() => setConfirmingLeave(false)}
+              disabled={processing}
+            />
+          </View>
+        ) : (
+          <AppButton
+            tone="supporter"
+            label="家族から抜ける"
+            variant="secondary"
+            onPress={() => setConfirmingLeave(true)}
+            disabled={processing}
+          />
+        )}
       </View>
 
       {errorMessage && (
