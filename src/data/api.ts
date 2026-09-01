@@ -257,7 +257,23 @@ export async function removeMember(
  * （RLS: family_invites_insert_by_parentにより保護者のみ実行可）。
  */
 export async function createFamilyInvite(client: SupabaseClient, invitedEmail: string): Promise<ApiResult<FamilyInvite>> {
-  const token = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // [2026-09-01修正・本部長] 以前は crypto.randomUUID が使えない環境で
+  // `${Date.now()}-${Math.random()...}` にフォールバックしていた。招待トークンは
+  // 「知っていればみまもりメンバーとして家族に参加できる秘密情報」であり、
+  // Math.random() は暗号論的に安全ではなく推測されうる。認証・データ管理設計書
+  // 8.2章が「暗号論的に安全なランダムトークン」と定めている前提を満たさない
+  // 経路だったため、フォールバックを廃止して安全でない値を作れないようにした。
+  // 生成できない環境ではトークンを発行せずエラーを返す（実装メモ106章）。
+  const token = globalThis.crypto?.randomUUID?.();
+  if (!token) {
+    return {
+      ok: false,
+      error: {
+        code: "crypto_unavailable",
+        message: "この端末では安全な招待コードを作れませんでした。アプリを最新にするか、別の端末からお試しください",
+      },
+    };
+  }
   const { data, error } = await client
     .from("family_invites")
     .insert({ invited_email: invitedEmail.trim().toLowerCase(), token })
