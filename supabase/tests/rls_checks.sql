@@ -136,7 +136,8 @@ WITH expected(f) AS (VALUES
   ('accept_family_invite'),('chore_completions_before_insert'),('chore_reactions_before_insert'),
   ('chores_before_write'),('create_family_with_owner'),('current_family_id'),
   ('current_family_member_id'),('current_family_role'),('decorate_tree_with_gacha_prize'),
-  ('delete_family_board_post'),('draw_gacha'),('family_board_posts_before_insert'),
+  ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
+  ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
   ('family_board_posts_daily_used'),('family_drawings_before_insert'),('family_invite_lookup'),
   ('family_invites_before_insert'),('family_invites_before_update'),
@@ -161,7 +162,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数42件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数43件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

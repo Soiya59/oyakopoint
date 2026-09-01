@@ -20,7 +20,7 @@ import type { FamilyDrawingLineData } from "@/types/domain";
 export default function SupporterDrawingScreen() {
   const { state } = useAppData();
   const myId = state.activeParentMemberId;
-  const { loadState, unpublished, atLimit, reload, save, remove } = useMyDrawings(myId);
+  const { loadState, unpublished, atLimit, reload, save, remove, edit } = useMyDrawings(myId);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -31,6 +31,25 @@ export default function SupporterDrawingScreen() {
     setErrorMessage(null);
     setShowSavedSnackbar(false);
     const res = await save(lineData);
+    setSaving(false);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return false;
+    }
+    setShowSavedSnackbar(true);
+    return true;
+  };
+
+  /**
+   * API仕様.md 12.2a章「未公開の絵を編集する」。ガチャ競合時
+   * （`check_violation`、対象の絵がすでに公開されていた）もDBのメッセージを
+   * そのまま`errorMessage`に表示する（12.2a章「危険2」参照）。
+   */
+  const handleEditSave = async (drawingId: string, lineData: FamilyDrawingLineData): Promise<boolean> => {
+    setSaving(true);
+    setErrorMessage(null);
+    setShowSavedSnackbar(false);
+    const res = await edit(drawingId, lineData);
     setSaving(false);
     if (!res.ok) {
       setErrorMessage(res.error.message);
@@ -81,7 +100,9 @@ export default function SupporterDrawingScreen() {
             saveLabel="せーぶする"
             clearLabel="ぜんぶけす"
             undoLabel="ひとつ戻す"
+            editLabel="編集"
             onSave={handleSave}
+            onEditSave={handleEditSave}
             onDeleteRequest={handleDeleteRequest}
             deletingId={deletingId}
           />

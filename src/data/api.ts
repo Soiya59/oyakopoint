@@ -1349,6 +1349,35 @@ export async function deleteDrawing(client: SupabaseClient, drawingId: string): 
   return { ok: true, data: null };
 }
 
+/**
+ * API仕様.md 12.2a章「未公開の絵を編集する」（2026-09-01・統括決定「公開前の編集」）。
+ * SECURITY DEFINERのRPC `edit_unpublished_drawing()`（スキーマ設計.sql 38章）が
+ * 「対象が自分の未公開の絵であることを確認→削除→新しい線データでINSERT」を
+ * 1トランザクションで不可分に行い、成功時は新しい絵のidを返す。
+ *
+ * 起こりうるエラー（API仕様.md 11章）:
+ * - `no_data_found`（P0002）: 対象が存在しない、または自分の未公開の絵でない。
+ *   自分の未公開の絵一覧からのみ編集導線を出していれば通常は到達しない。
+ * - `check_violation`（23514）: (a) 編集中に他の家族のガチャで対象の絵が
+ *   先に公開された（このRPC固有のメッセージ「この絵はすでに家族に公開
+ *   されました。編集内容は保存されていません」が返る）。(b) 線データが
+ *   33b章の上限（線数・点数・バイト数・パレット）を超えている（createDrawingと
+ *   同じ検証。この場合は元の絵は削除されずそのまま残る）。
+ * いずれもDB側のRAISE EXCEPTIONメッセージをそのまま表示すればよい。
+ */
+export async function editUnpublishedDrawing(
+  client: SupabaseClient,
+  drawingId: string,
+  lineData: FamilyDrawingLineData
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("edit_unpublished_drawing", {
+    p_drawing_id: drawingId,
+    p_new_line_data: lineData,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
 // ============================================================
 // ガチャ（要件定義書07-13-1章、API仕様.md 12.1・12.3章）
 // [2026-08-26新設・第3段階] 対応するスキーマはスキーマ設計.sql 33a章
