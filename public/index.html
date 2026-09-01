@@ -14,6 +14,17 @@
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
+    <!--
+      [2026-09-02追加・本部長] PWA化（実装メモ109章）。NFCタグをかざしたとき
+      Androidが通知を経由するようになった件への対応。family-todoで実績のある
+      「manifest＋アイコンのみ・Service Workerなし」の最小構成を踏襲する
+      （SWを入れるとキャッシュ制御という別のリスクが増えるため入れない。
+      現行ChromeはSW無しでもインストール可能）。パスはGitHub Pagesの
+      baseUrl(/oyakopoint)前提の絶対パス。ローカルdev(8090)では404になるが無害。
+    -->
+    <link rel="manifest" href="/oyakopoint/manifest.json" />
+    <meta name="theme-color" content="#10B981" />
+    <link rel="apple-touch-icon" href="/oyakopoint/icon-192.png" />
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */

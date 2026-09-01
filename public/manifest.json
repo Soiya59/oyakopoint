@@ -1,0 +1,16 @@
+{
+  "name": "おやこポイント",
+  "short_name": "おやこポイント",
+  "description": "家族のクエストをポイントにして、ごほうびと交換できる家族向けアプリ",
+  "start_url": "/oyakopoint/",
+  "scope": "/oyakopoint/",
+  "display": "standalone",
+  "background_color": "#FBF9F4",
+  "theme_color": "#10B981",
+  "icons": [
+    { "src": "/oyakopoint/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/oyakopoint/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/oyakopoint/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/oyakopoint/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
