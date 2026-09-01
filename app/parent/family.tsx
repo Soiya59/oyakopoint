@@ -11,6 +11,7 @@ import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import {
+  PG_ERRCODE,
   fetchFamilyInvites,
   removeMember,
   revokeFamilyInvite,
@@ -208,7 +209,7 @@ export default function FamilyScreen() {
       // 25.1節「保存失敗」: パレットは開いたまま再試行できるよう、確認だけ閉じて戻す。
       setConfirmingColorChange(false);
       setColorError(
-        res.error.code === "23505"
+        res.error.code === PG_ERRCODE.uniqueViolation
           ? "この色は、ちょうど他の方が選んだため使えなくなりました。もう一度お試しください"
           : "変更できませんでした。もう一度お試しください"
       );
