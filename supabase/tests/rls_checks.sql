@@ -27,7 +27,7 @@
 -- 実測して確認する）。
 --
 -- ■ なぜ作ったか
--- 43本のRLSポリシー（2026-09-01時点。作成当初は41本）は、子どものデータを守っている
+-- 48本のRLSポリシー（2026-09-01時点。作成当初は41本）は、子どものデータを守っている
 -- 唯一の壁である。
 -- そしてRLSの不備は**エラーを出さない**。厳しすぎれば画面が空になって気づくが、
 -- 緩すぎれば「見えてはいけないものが、ただ見える」だけで無症状のまま残る。
@@ -68,6 +68,19 @@
 --     本改訂であわせて修正した（B層直前のコメント参照）。B層の各チェックの
 --     検査内容・期待値そのものは一切変更していない。
 --
+-- [2026-09-01再追加・開発部] NFCタグの人ごと化（新規テーブル`chore_nfc_tags`、
+-- 設計部/成果物/スキーマ設計.sql 39章・開発部/成果物/実装メモ.md 108章）に伴い、
+-- S1（22→23）・S3（43→48本、chore_nfc_tagsの5ポリシーを追加）・
+-- S4（44→47件、chore_nfc_tags_before_write・max_nfc_tags_per_chore_member・
+-- report_chore_completion_by_nfc_tagを追加）、A層にA22（保護者:
+-- chore_nfc_tagsに他家族の行が見えない）を追加した。既存の`chore_completions_
+-- insert_self`を含む既存ポリシー・関数は1本も変更していない（39.5章の設計判断
+-- どおり、代理報告はRLS緩和ではなく別RPCで実現したため）。マイグレーション
+-- `20260901200000_chore_nfc_tags_per_member.sql`は108章時点で**未適用**であり、
+-- 本ファイルの新規ハッシュはローカルDocker環境で実測済み（108章参照。96.5章
+-- 「FAILを消すためにスナップショットを更新してはならない」の遵守として、実測
+-- した上で記録している）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -102,8 +115,10 @@ GRANT INSERT ON _r TO authenticated;
 -- S1. RLSが有効なテーブル数。新しいテーブルを追加してRLSを付け忘れると減る。
 -- [2026-09-01更新] family_board_reactions（開発部/成果物/実装メモ.md 103章）の
 -- 追加により21→22。他のテーブルには変更が無い（下記S3差分確認と同じ103章参照）。
+-- [2026-09-01再更新] chore_nfc_tags（開発部/成果物/実装メモ.md 108章）の追加に
+-- より22→23。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '22', count(*)::text, count(*) = 22
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '23', count(*)::text, count(*) = 23
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -114,9 +129,10 @@ INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
 
--- S3. ポリシー43本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
+-- S3. ポリシー48本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
---     条件式変更。実装メモ.md 104章）。
+--     条件式変更。実装メモ.md 104章。2026-09-01再々更新、chore_nfc_tags
+--     （NFCタグの人ごと化、実装メモ.md 108章）の5ポリシーを追加。43→48本）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -125,6 +141,18 @@ WITH expected(t, p, c, h) AS (VALUES
   ('chore_completions','chore_completions_insert_self','INSERT','a53bedf571e4b0a3ac25020510e22ebb'),
   ('chore_completions','chore_completions_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chore_daily_flags','chore_daily_flags_own_rows','ALL','00e6fbca582d21a92747412aa943e2c2'),
+  -- [2026-09-01追加] chore_nfc_tags（NFCタグの人ごと化、設計部/成果物/スキーマ設計.sql
+  -- 39.4章、開発部/成果物/実装メモ.md 108章）。SELECTの条件式は
+  -- `(family_id = current_family_id())`のみであり、既存の多数のSELECTポリシー
+  -- （categories_select_same_family等）と文字通り同一のため、承認済み一覧から
+  -- ハッシュを引き写せる（104章の教訓）。INSERT/UPDATEの4本はいずれもEXISTSで
+  -- choresテーブルのscope・created_byを参照する新しい形の条件式であり、承認済み
+  -- 一覧に文字通り同一のものが無いため、ローカルDockerで実測した（108章参照）。
+  ('chore_nfc_tags','chore_nfc_tags_insert_family_by_parent','INSERT','c65f6bcf088e0509ebc68287eb3a2697'),
+  ('chore_nfc_tags','chore_nfc_tags_insert_personal_by_creator','INSERT','6573bb8d8e4ba72fe84636642dbc942b'),
+  ('chore_nfc_tags','chore_nfc_tags_revoke_family_by_parent','UPDATE','4363f0549d157159f7553c9de572d3f4'),
+  ('chore_nfc_tags','chore_nfc_tags_revoke_personal_by_creator','UPDATE','a299667c176e888b5d809f234cf7c088'),
+  ('chore_nfc_tags','chore_nfc_tags_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chore_reactions','chore_reactions_insert_scoped','INSERT','64b4f4d34c91a08ed214c412011c2725'),
   ('chore_reactions','chore_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
@@ -190,7 +218,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー43本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー48本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -198,7 +226,13 @@ SELECT 'C層', 'S3 ポリシー43本の定義が承認済みと一致',
 -- S4. authenticated（ログイン済み利用者）が実行できる関数の一覧。
 --     84章の事故は、ここから1つ消えたことで起きた。増えるほうも危険。
 WITH expected(f) AS (VALUES
-  ('accept_family_invite'),('chore_completions_before_insert'),('chore_reactions_before_insert'),
+  ('accept_family_invite'),('chore_completions_before_insert'),
+  -- [2026-09-01追加] chore_nfc_tags_before_write（NFCタグの人ごと化、設計部/成果物/
+  -- スキーマ設計.sql 39.3章、開発部/成果物/実装メモ.md 108章）。他のBEFORE INSERT/
+  -- UPDATEトリガー関数（chores_before_write等）と同じくSECURITY DEFINERではないため、
+  -- 新規関数作成時にauthenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動）。
+  ('chore_nfc_tags_before_write'),
+  ('chore_reactions_before_insert'),
   ('chores_before_write'),('create_family_with_owner'),('current_family_id'),
   ('current_family_member_id'),('current_family_role'),('decorate_tree_with_gacha_prize'),
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
@@ -219,8 +253,19 @@ WITH expected(f) AS (VALUES
   ('generate_weekly_family_digest'),('gratitude_daily_allowance'),('gratitude_points_before_insert'),
   ('gratitude_points_before_update'),('gratitude_points_daily_used'),('is_current_user_parent'),
   ('is_valid_drawing_line_data'),('join_family_with_invite_code'),('jst_week_start_date'),
+  -- [2026-09-01追加] max_nfc_tags_per_chore_member（NFCタグの人ごと化、設計部/成果物/
+  -- スキーマ設計.sql 39.3章、開発部/成果物/実装メモ.md 108章）。SECURITY DEFINERでは
+  -- ないLANGUAGE SQL関数のため、他の同種ヘルパー関数（max_unpublished_drawings_
+  -- per_member等）と同じくauthenticatedへEXECUTE権限が自動付与される。
+  ('max_nfc_tags_per_chore_member'),
   ('max_unpublished_drawings_per_member'),('my_family_board_posts_remaining_today'),
-  ('my_gratitude_giveable_balance'),('reward_redemptions_before_insert'),('rewards_before_write'),
+  ('my_gratitude_giveable_balance'),
+  -- [2026-09-01追加] report_chore_completion_by_nfc_tag（NFCタグの人ごと化・代理報告
+  -- RPC、設計部/成果物/スキーマ設計.sql 39.6〜39.7章、開発部/成果物/実装メモ.md 108章）。
+  -- draw_gacha()等と同じくSECURITY DEFINERであり、39.7章の方針どおりPUBLIC/anonから
+  -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('report_chore_completion_by_nfc_tag'),
+  ('reward_redemptions_before_insert'),('rewards_before_write'),
   ('set_updated_at')
 ),
 actual_f AS (
@@ -234,7 +279,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数44件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数47件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -531,6 +576,13 @@ INSERT INTO _r SELECT 'A層', 'A21 保護者: weekly_family_digestsに他家族�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM weekly_family_digests WHERE family_id <> current_family_id();
+
+-- [2026-09-01追加] A22 chore_nfc_tags（NFCタグの人ごと化、開発部/成果物/実装メモ.md
+-- 108章）。家族間で分離されるべき新規テーブルのため、既存のA01〜A21と同じ形で追加する。
+INSERT INTO _r SELECT 'A層', 'A22 保護者: chore_nfc_tagsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chore_nfc_tags WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する

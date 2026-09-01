@@ -93,6 +93,39 @@ export interface Chore {
   editor?: FamilyMemberBrief | null;
 }
 
+// [新設・2026-09-01] chore_nfc_tags（要件定義書07-2章「作り直し：タグの人ごと化」、
+// 設計部/成果物/スキーマ設計.sql 39.2章、開発部/成果物/実装メモ.md 108章）。
+// 「クエスト×メンバー」単位で発行するNFCタグ。旧`chores.nfc_tag_id`（1chore=1タグ）は
+// 凍結され、新規の読み書きはすべてこちらのテーブル経由になる。
+export interface ChoreNfcTag {
+  id: string;
+  family_id: string;
+  chore_id: string;
+  member_id: string; // タグの持ち主。report_chore_completion_by_nfc_tag()がこの名義で完了報告する
+  tag_value: string;
+  revoked_at: string | null; // null=有効
+  created_at: string;
+}
+
+// 発行済みタグ一覧（P11拡張モーダル・S6拡張）の表示用。持ち主の表示名を
+// FK名指定JOIN（`family_members!member_id(display_name)`）で埋め込んだもの。
+export interface ChoreNfcTagWithMember extends ChoreNfcTag {
+  member: { display_name: string } | null;
+}
+
+// API仕様.md 4a-2章手順2「代理報告RPC呼び出し」の返り値。
+// `report_chore_completion_by_nfc_tag()`が返すmember_id/member_display_nameは
+// タグの持ち主（＝報告者）であり、呼び出し本人と異なる場合がある（代理報告）。
+export interface ReportChoreCompletionByNfcTagResult {
+  completion_id: string;
+  chore_id: string;
+  chore_title: string;
+  chore_emoji: string;
+  points: number;
+  member_id: string;
+  member_display_name: string;
+}
+
 // [削除] CompletionStatus型（pending/approved/rejected）はスキーマ設計.sql 5章の
 // 承認フロー廃止に伴い廃止。chore_completionsは常に確定済みの完了報告のみを持つ。
 

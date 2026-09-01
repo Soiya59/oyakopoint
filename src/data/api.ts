@@ -22,6 +22,8 @@ import type {
   Category,
   Chore,
   ChoreCompletion,
+  ChoreNfcTag,
+  ChoreNfcTagWithMember,
   ChoreReaction,
   Family,
   FamilyBoardPost,
@@ -44,6 +46,7 @@ import type {
   GratitudePoint,
   MemberPoints,
   ReactionKind,
+  ReportChoreCompletionByNfcTagResult,
   Reward,
   RewardRedemption,
   StampKey,
@@ -660,6 +663,15 @@ export async function deleteChore(client: SupabaseClient, choreId: string): Prom
   return { ok: true, data: null };
 }
 
+/**
+ * [2026-09-01凍結・実装メモ.md 108章] 「1chore=1タグ」旧方式（chores.nfc_tag_id、
+ * API仕様.md 3a章）専用の関数。要件定義書07-2章「作り直し：タグの人ごと化」により
+ * 置き換わり（新方式は下記「NFCタグの人ごと化（chore_nfc_tags）」参照）、
+ * どちらの関数も呼び出し元が無くなった（設計部/成果物/スキーマ設計.sql 39.9章
+ * 「chores.nfc_tag_id列・インデックスは物理的に削除しない。新規の読み書きは
+ * 発生させない」）。関数自体も列と同様、不可逆な削除を避けるためコードを削除せず
+ * 残すが、新規のimport・呼び出しを追加しないこと。
+ */
 export async function setChoreNfcTag(
   client: SupabaseClient,
   choreId: string,
@@ -675,7 +687,7 @@ export async function setChoreNfcTag(
   return { ok: true, data: data as Chore };
 }
 
-/** API仕様.md 4a章手順2: トークンからchoreを特定（0件でもエラーにしない。maybeSingle） */
+/** [2026-09-01凍結] 上記と同じ理由で呼び出し元が無い。API仕様.md 4a章手順2相当（旧方式）。 */
 export async function findChoreByTag(client: SupabaseClient, tagValue: string): Promise<ApiResult<Chore | null>> {
   const { data, error } = await client
     .from("chores")
@@ -685,6 +697,79 @@ export async function findChoreByTag(client: SupabaseClient, tagValue: string): 
     .maybeSingle();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data as Chore | null) ?? null };
+}
+
+// ============================================================
+// NFCタグの人ごと化（chore_nfc_tags、要件定義書07-2章「作り直し：タグの人ごと化」、
+// 設計部/成果物/スキーマ設計.sql 39章、API仕様.md 3a-2章・4a-2章、
+// 開発部/成果物/実装メモ.md 108章）
+// ============================================================
+
+/** API仕様.md 3a-2章手順5: 発行済みタグ一覧（持ち主の表示名つき、有効なもののみ）。 */
+export async function fetchActiveChoreNfcTags(
+  client: SupabaseClient,
+  choreId: string
+): Promise<ApiResult<ChoreNfcTagWithMember[]>> {
+  const { data, error } = await client
+    .from("chore_nfc_tags")
+    .select("*, member:family_members!member_id(display_name)")
+    .eq("chore_id", choreId)
+    .is("revoked_at", null)
+    .order("created_at");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as ChoreNfcTagWithMember[]) ?? [] };
+}
+
+/**
+ * API仕様.md 3a-2章手順4: chore×memberにタグを紐づける。
+ * `family_id`は送らない（DBトリガーが対象クエストのfamily_idで強制補完する、39.3章）。
+ * 上限5枚到達時は`check_violation`（PG_ERRCODE.checkViolation）で拒否される。
+ */
+export async function createChoreNfcTag(
+  client: SupabaseClient,
+  input: { chore_id: string; member_id: string; tag_value: string }
+): Promise<ApiResult<ChoreNfcTag>> {
+  const { data, error } = await client
+    .from("chore_nfc_tags")
+    .insert({ chore_id: input.chore_id, member_id: input.member_id, tag_value: input.tag_value })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as ChoreNfcTag };
+}
+
+/**
+ * API仕様.md 3a-2章手順6: タグの解除（論理削除）。取消不可（un-revoke不可）。
+ * クライアントが送る`revoked_at`の値そのものはサーバー側が常に`now()`で上書きする
+ * （改ざん防止パターン、39.3章）ため、送る値自体はダミーの現在時刻でよい。
+ */
+export async function revokeChoreNfcTag(client: SupabaseClient, tagId: string): Promise<ApiResult<ChoreNfcTag>> {
+  const { data, error } = await client
+    .from("chore_nfc_tags")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", tagId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as ChoreNfcTag };
+}
+
+/**
+ * API仕様.md 4a-2章手順2: 代理報告RPC呼び出し。C13の裏側で1回だけ呼ぶ
+ * （事前のSELECTは行わない。主要画面ワイヤーフレーム.md 7.6.3節「本部長レビューで確定」）。
+ * 0行（`maybeSingle()`が`null`）は「タグ未登録／他家族／解除済み／削除済みクエスト」の
+ * いずれかであり、原因を区別しない（39.6章「0件への収束」）。上限到達時は`RAISE
+ * EXCEPTION`のため行データを返さず、`check_violation`エラーとして返る。
+ */
+export async function reportChoreCompletionByNfcTag(
+  client: SupabaseClient,
+  input: { tag_value: string; note?: string | null }
+): Promise<ApiResult<ReportChoreCompletionByNfcTagResult | null>> {
+  const { data, error } = await client
+    .rpc("report_chore_completion_by_nfc_tag", { p_tag_value: input.tag_value, p_note: input.note ?? null })
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as ReportChoreCompletionByNfcTagResult | null) ?? null };
 }
 
 /** API仕様.md 2b章手順1: 子どもプロフィール作成（保護者操作） */

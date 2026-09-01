@@ -17,9 +17,11 @@
 -- 目的:
 --   実装メモ.md 96.5章で「Docker導入後にローカルDBで追加する」と先送りしていた
 --   A層（家族間分離）のRLSテストを実施するため、ローカルにのみ存在する
---   「テスト家族」を2つ作り、RLSが有効な22テーブルのうち実データを入れられる
---   ものすべてに一通りのデータを投入する。supabase/tests/rls_checks.sql の
---   A層はこのデータの存在を前提に「家族が2つ以上あるか」で実行可否を判定する。
+--   「テスト家族」を2つ作り、RLSが有効な23テーブル（105章作成当初は22テーブル。
+--   NFCタグの人ごと化・実装メモ.md 108章でchore_nfc_tagsが追加された）のうち
+--   実データを入れられるものすべてに一通りのデータを投入する。
+--   supabase/tests/rls_checks.sql のA層はこのデータの存在を前提に
+--   「家族が2つ以上あるか」で実行可否を判定する。
 --
 -- 命名規則:
 --   - 実在の家族の名前（せいや・ちひろ・みどり 等）は一切使わない。
@@ -705,7 +707,24 @@ SELECT public.generate_weekly_family_digest(
 
 
 -- ============================================================
--- 22. 後片付け: なりすましJWTクレームを解除する
+-- 22. chore_nfc_tags（NFCタグの人ごと化、2026-09-01追加・実装メモ.md 108章）
+-- ============================================================
+-- [トリガー注意] chore_nfc_tags_before_write()（設計部/成果物/スキーマ設計.sql
+-- 39.3章）はJWTクレームに一切依存しない（current_family_member_id()を呼ばない）。
+-- chore_id/member_idから対象chore・memberを直接引いてfamily一致・personal
+-- scopeの持ち主一致・上限枚数を検証するだけのため、なりすましトリック
+-- （105.2(4)章）は不要で、postgres権限のまま素のINSERTでよい。
+INSERT INTO chore_nfc_tags (chore_id, member_id, tag_value) VALUES
+  ((SELECT id FROM _seed_ids WHERE key = 'a_chore1'), (SELECT id FROM _seed_ids WHERE key = 'a_child'), 'seed-a-tag-child-chore1'),
+  ((SELECT id FROM _seed_ids WHERE key = 'a_chore1'), (SELECT id FROM _seed_ids WHERE key = 'a_parent'), 'seed-a-tag-parent-chore1'),
+  ((SELECT id FROM _seed_ids WHERE key = 'a_chore_personal'), (SELECT id FROM _seed_ids WHERE key = 'a_supporter'), 'seed-a-tag-supporter-personal'),
+  ((SELECT id FROM _seed_ids WHERE key = 'b_chore1'), (SELECT id FROM _seed_ids WHERE key = 'b_child'), 'seed-b-tag-child-chore1'),
+  ((SELECT id FROM _seed_ids WHERE key = 'b_chore1'), (SELECT id FROM _seed_ids WHERE key = 'b_parent'), 'seed-b-tag-parent-chore1'),
+  ((SELECT id FROM _seed_ids WHERE key = 'b_chore_personal'), (SELECT id FROM _seed_ids WHERE key = 'b_supporter'), 'seed-b-tag-supporter-personal');
+
+
+-- ============================================================
+-- 23. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);
 
@@ -726,7 +745,8 @@ SELECT
   (SELECT count(*) FROM family_board_posts fbp WHERE fbp.family_id = f.id) AS board_posts,
   (SELECT count(*) FROM family_board_reactions fbr WHERE fbr.family_id = f.id) AS board_reactions,
   (SELECT count(*) FROM family_tree_seasons fts WHERE fts.family_id = f.id) AS tree_seasons,
-  (SELECT count(*) FROM weekly_family_digests wfd WHERE wfd.family_id = f.id) AS weekly_digests
+  (SELECT count(*) FROM weekly_family_digests wfd WHERE wfd.family_id = f.id) AS weekly_digests,
+  (SELECT count(*) FROM chore_nfc_tags cnt WHERE cnt.family_id = f.id) AS chore_nfc_tags
 FROM families f
 ORDER BY f.created_at;
 

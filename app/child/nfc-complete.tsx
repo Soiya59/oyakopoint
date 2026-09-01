@@ -1,131 +1,201 @@
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import Confetti from "@/components/Confetti";
-import GachaCelebrationHint from "@/components/GachaCelebrationHint";
+import GachaProgressDots from "@/components/GachaProgressDots";
 import theme from "@/theme/theme";
-import { useAppData } from "@/data/store";
+import { useSession } from "@/lib/session";
+import { useGachaProgress } from "@/hooks/useGacha";
 
 /**
- * C14 NFCタップ完了
- * 参照: 主要画面ワイヤーフレーム.md 7.3章、画面一覧・遷移図.md 3.7節
+ * C14 NFCタップ完了（3ロール共通）
+ * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 7.6.4節、画面一覧・遷移図.md 3.7節
  *
- * [2026-08-15改訂] 承認フロー廃止（要件定義書.md v0.5、スキーマ設計.sql v2.0で
- * chores.requires_approval列自体を削除）に伴い、旧「承認待ち」状態を削除した。
- * NFC経由の完了報告は常に「即時加点」の1状態のみになる（主要画面ワイヤーフレーム.md
- * 7.0決定1「NFC経由の完了報告は常に『即時加点』の1状態のみになる」参照）。
+ * [2026-09-01改訂・実装メモ.md 108章] NFCタグの人ごと化（要件定義書07-2章「作り直し：
+ * タグの人ごと化」）に伴う決定8「C14は『呼び出し本人のロールでトーンを出し分ける』
+ * 共通画面とし、保護者・みまもりメンバー用の新しい画面番号は起こさない」を実装した。
+ * 既存の物理タグのURLが`/child/nfc-scan`固定（変更不可）のため、この画面には
+ * 子ども・保護者・みまもりメンバーのいずれもたどり着く（`useSession().status`で
+ * ロールを判定してトーンのみ出し分ける。7.6.4節）。
  *
- * 状態: 即時加点（常に）／上限到達／タグ未登録・他家族のタグ／通信エラー の4状態。
- * 「取り消す」導線は持たない（主要画面ワイヤーフレーム.md 7.0決定4で撤回済み。
- * chore_completionsに子ども自身によるUPDATE/DELETEを許すRLSポリシーが存在しないため）。
- *
- * [2026-08-15改訂] 旧「あとで写真・メモをつける」リンクは撤回された
- * （主要画面ワイヤーフレーム.md 7.0決定5・7.4節【撤回】参照）。「取り消す」導線と
- * 全く同じ理由（chore_completionsに子ども自身によるUPDATEを許すRLSポリシーが
- * 存在しない）のため、即時加点状態は演出＋「やることリストへもどる」ボタンのみの
- * 1状態に戻した。実装メモ.md 11章参照。
+ * 状態: 即時加点・自分の記録／即時加点・代理報告／上限到達（自分・代理を区別しない）／
+ * タグ未登録等（0行）／通信エラー、の5状態（7.6.4節）。
  */
 type ResultParam = "approved" | "limitReached" | "notFound" | "networkError";
 
 export default function NfcCompleteScreen() {
   const params = useLocalSearchParams<{
     result?: string;
-    choreId?: string;
     choreTitle?: string;
     choreEmoji?: string;
     points?: string;
+    ownerMemberId?: string;
+    ownerDisplayName?: string;
+    isProxy?: string;
     tagValue?: string;
   }>();
   const result = (params.result as ResultParam) ?? "notFound";
-  const { state } = useAppData();
+  const { status } = useSession();
+  const tone = status === "child" ? "child" : status === "supporter" ? "supporter" : "parent";
+  const isChild = tone === "child";
+  const isSupporter = tone === "supporter";
+  const isProxy = params.isProxy === "1";
+  const ownerMemberId = params.ownerMemberId ?? null;
 
-  const goHome = () => router.replace("/child/home");
+  // 要件定義書07-2章判断事項1「完了画面に、タグ持ち主本人の『あと◯回でガチャ』を
+  // 表示することを必須要件とする」。持ち主（ownerMemberId）はタグを読み取った本人と
+  // 異なる場合がある（代理報告）ため、ホーム画面のガチャ表示（ログイン中の本人分）とは
+  // 別に、ここではRPCが返した持ち主のmember_idで改めて取得する。
+  const { loadState: gachaLoadState, remaining, canDrawNow } = useGachaProgress(
+    result === "approved" ? ownerMemberId ?? "" : ""
+  );
 
-  // [2026-08-30追加・本部長] 成功時のみ3秒後に自動でホーム（やることリスト）へ戻る。
-  // ユーザーの指定「NFC→演出→〇秒あとにホーム画面に自動で遷移」に対応。ホームには
-  // ガチャがあるので、そのまま引ける導線になる。
-  // 失敗系（タグ未登録・通信エラー等）は自動で戻さない。何が起きたか読む時間が要るうえ、
-  // 「もういちど」を押す前に画面が消えてしまうため。
+  const homePath = isChild ? "/child/home" : isSupporter ? "/supporter/home" : "/parent/home";
+  const goHome = () => router.replace(homePath);
+
+  // 主要画面ワイヤーフレーム.md 7.6.4節「演出タイムラインと自動遷移」: 即時加点状態
+  // （自分・代理いずれも）のみ3秒後に自動でホームへ戻る。画面タップでも即座に遷移する
+  // （下記Pressableのラッパー参照）。上限到達・エラー系には適用しない。
   useEffect(() => {
     if (result !== "approved") return;
     const t = setTimeout(goHome, 3000);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
+  const bodyStyle = isChild ? theme.typography.childBody : isSupporter ? theme.typography.supporterBody : theme.typography.parentBody;
+  const headlineStyle = isChild
+    ? theme.typography.childHeadline
+    : isSupporter
+    ? theme.typography.supporterTitle
+    : theme.typography.parentTitle;
+
   if (result === "approved") {
+    const gachaLine =
+      gachaLoadState === "ready"
+        ? canDrawNow
+          ? isChild
+            ? `🎰 ${params.ownerDisplayName}ちゃん、ガチャが ひけるよ！`
+            : `🎰 ${params.ownerDisplayName}さん、ガチャが引けます`
+          : isChild
+          ? `🎰 ${params.ownerDisplayName}ちゃん、あと${remaining}かいでガチャ！`
+          : `🎰 ${params.ownerDisplayName}さん、あと${remaining}回でガチャ`
+        : null;
+
     return (
-      <Screen tone="child">
-        <Confetti height={340} />
-        <View style={styles.centerBlock}>
-          <Text style={styles.bigEmoji}>🌟🎉🌟</Text>
-          <Text style={[theme.typography.childHeadline, styles.centerText, { marginTop: theme.spacing.s4 }]}>
-            「{params.choreTitle}」とどいたよ！
-          </Text>
-          <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
-            +{params.points}pt
-          </Text>
-        </View>
+      <Pressable style={{ flex: 1 }} onPress={goHome}>
+        <Screen tone={tone}>
+          {isChild && <Confetti height={340} />}
+          <View style={styles.centerBlock}>
+            {isProxy && (
+              <Text style={[headlineStyle, styles.centerText, { marginBottom: theme.spacing.s2 }]}>
+                {isChild
+                  ? `👤 ${params.ownerDisplayName}ちゃんの「${params.choreTitle}」`
+                  : `${params.ownerDisplayName}さんの記録として届きました`}
+              </Text>
+            )}
+            {isChild ? (
+              <>
+                <Text style={styles.bigEmoji}>🌟🎉🌟</Text>
+                <Text style={[headlineStyle, styles.centerText, { marginTop: theme.spacing.s4 }]}>
+                  {isProxy ? "とどいたよ！" : `「${params.choreTitle}」とどいたよ！`}
+                </Text>
+              </>
+            ) : (
+              <Text style={[headlineStyle, styles.centerText]}>「{params.choreTitle}」をきろくしました</Text>
+            )}
+            <Text style={[headlineStyle, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
+              +{params.points}pt
+            </Text>
+          </View>
 
-        <View style={{ marginTop: theme.spacing.s6, alignItems: "center" }}>
-          <GachaCelebrationHint tone="child" memberId={state.activeChildMemberId} />
-        </View>
+          {gachaLine && (
+            <View style={{ marginTop: theme.spacing.s6, alignItems: "center", gap: theme.spacing.s2 }}>
+              <GachaProgressDots remaining={remaining} size={isChild ? theme.gachaPlateSize.child : isSupporter ? theme.gachaPlateSize.supporter : theme.gachaPlateSize.parent} />
+              <Text style={[bodyStyle, { color: theme.colors.neutralTextSecondary }]}>{gachaLine}</Text>
+            </View>
+          )}
 
-        <AppButton label="やることリストへもどる" tone="child" fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
-      </Screen>
+          {isSupporter && (
+            <Text style={[theme.typography.supporterCaption, styles.centerText, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
+              今日もお疲れさまでした
+            </Text>
+          )}
+
+          <AppButton
+            label={isChild ? "やることリストへもどる" : "とじる"}
+            tone={tone}
+            fullWidth
+            style={{ marginTop: theme.spacing.s8 }}
+            onPress={goHome}
+          />
+        </Screen>
+      </Pressable>
     );
   }
 
   if (result === "limitReached") {
+    // 7.6.4節「上限到達で自分／代理を区別しない理由」: check_violationはRAISE
+    // EXCEPTIONのため行データを返せず、クエスト名・持ち主名のいずれも取得できない。
     return (
-      <Screen tone="child">
+      <Screen tone={tone}>
         <View style={styles.centerBlock}>
-          <Text style={styles.bigEmoji}>🌟✅🌟</Text>
-          <Text style={[theme.typography.childHeadline, styles.centerText, { marginTop: theme.spacing.s4 }]}>
-            きょうの「{params.choreTitle}」は{"\n"}もう たっぷりやったよ！
-          </Text>
-          <Text style={[theme.typography.childBody, styles.centerText, { marginTop: theme.spacing.s3 }]}>
-            またあした ためしてね
-          </Text>
+          {isChild ? (
+            <>
+              <Text style={styles.bigEmoji}>🌟✅🌟</Text>
+              <Text style={[headlineStyle, styles.centerText, { marginTop: theme.spacing.s4 }]}>
+                きょうは もう{"\n"}たっぷり がんばったね！
+              </Text>
+              <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s3 }]}>またあした ためしてね</Text>
+            </>
+          ) : (
+            <Text style={[headlineStyle, styles.centerText]}>今日はもう十分な回数、実施されています</Text>
+          )}
         </View>
-        <AppButton label="やることリストへもどる" tone="child" fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
+        <AppButton label={isChild ? "やることリストへもどる" : "とじる"} tone={tone} fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
       </Screen>
     );
   }
 
   if (result === "notFound") {
     return (
-      <Screen tone="child">
+      <Screen tone={tone}>
         <View style={styles.centerBlock}>
-          <Text style={styles.bigEmoji}>🤔📶</Text>
-          <Text style={[theme.typography.childHeadline, styles.centerText, { marginTop: theme.spacing.s4 }]}>
-            このタグは よみとれなかったよ
-          </Text>
-          <Text style={[theme.typography.childBody, styles.centerText, { marginTop: theme.spacing.s3 }]}>
-            おうちの人にきいてみてね
-          </Text>
+          {isChild ? (
+            <>
+              <Text style={styles.bigEmoji}>🤔📶</Text>
+              <Text style={[headlineStyle, styles.centerText, { marginTop: theme.spacing.s4 }]}>このタグは よみとれなかったよ</Text>
+              <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s3 }]}>おうちの人にきいてみてね</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[headlineStyle, styles.centerText]}>このタグは読み取れませんでした</Text>
+              <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s3 }]}>
+                登録されていないか、解除・削除済みのクエストのタグの可能性があります。
+              </Text>
+            </>
+          )}
         </View>
-        <AppButton label="やることリストへもどる" tone="child" fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
+        <AppButton label={isChild ? "やることリストへもどる" : "とじる"} tone={tone} fullWidth style={{ marginTop: theme.spacing.s8 }} onPress={goHome} />
       </Screen>
     );
   }
 
   // networkError
   return (
-    <Screen tone="child">
+    <Screen tone={tone}>
       <View style={styles.centerBlock}>
-        <Text style={theme.typography.childBody}>⚠ とどきませんでした…</Text>
-        <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>もういちど タグに近づけてね</Text>
+        <Text style={bodyStyle}>⚠ とどきませんでした…</Text>
+        <Text style={[bodyStyle, { marginTop: theme.spacing.s2 }]}>もういちど タグに近づけてね</Text>
       </View>
       <AppButton
         label="もういちど"
-        tone="child"
+        tone={tone}
         fullWidth
         style={{ marginTop: theme.spacing.s8 }}
-        onPress={() =>
-          router.replace({ pathname: "/child/nfc-scan", params: { tagValue: params.tagValue ?? "" } })
-        }
+        onPress={() => router.replace({ pathname: "/child/nfc-scan", params: { tagValue: params.tagValue ?? "" } })}
       />
     </Screen>
   );

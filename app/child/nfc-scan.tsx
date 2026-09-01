@@ -1,30 +1,41 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { PG_ERRCODE } from "@/data/api";
+import { useSession } from "@/lib/session";
+import { reportChoreCompletionByNfcTag, PG_ERRCODE } from "@/data/api";
 
 /**
  * C13 NFCタグ読み取り中
- * 参照: 主要画面ワイヤーフレーム.md 7.2章、画面一覧・遷移図.md 3.7節
+ * 参照: 主要画面ワイヤーフレーム.md 7.6.3節、画面一覧・遷移図.md 3.7節
  *
- * [2026-08-18改訂] 35章でWeb NFC APIによる本実装に切り替えた後は、この画面の
- * `tagValue`はAndroid OS標準のNFCタグディスパッチが物理タグのURL
- * （src/lib/nfc.ts の buildWebAppUrl参照）を開いた際にURLクエリパラメータとして
- * 渡ってくる（実機タップ時のみ到達する経路）。開発検証用のシミュレーション導線
- * （C5からのランダム選択ショートカット）は実機に不要なポイント付与を招くリスクが
- * あったため撤去した（本部長対応）。tagValue確定後の処理（chore特定→完了報告）は
- * API仕様.md 4a章の手順どおり、通常の完了報告と同じロジック
- * （findChoreByTag・isChoreLimitReached・REPORT_COMPLETIONアクション）を再利用する。
+ * [2026-09-01改訂・実装メモ.md 108章] NFCタグの人ごと化（要件定義書07-2章「作り直し：
+ * タグの人ごと化」）に伴い作り直した。旧実装は`findChoreByTag`（`chores.nfc_tag_id`、
+ * 1chore=1タグ）とREPORT_COMPLETIONアクション（`reported_by`=読み取った本人固定）の
+ * 2段階だったが、新方式は`report_chore_completion_by_nfc_tag()`RPC（設計部/成果物/
+ * スキーマ設計.sql 39.6章）を**1回だけ**呼ぶだけで完結する（事前のSELECTは行わない。
+ * 主要画面ワイヤーフレーム.md 7.6.3節「本部長レビューで確定」）。
+ *
+ * [3ロール共通・固有名詞を出さない] 既存の物理タグに書き込まれたURLは
+ * `/child/nfc-scan`で固定されており変更できない（src/lib/nfc.ts:68）ため、子ども・
+ * 保護者・みまもりメンバーのいずれがログイン中でもこの画面に到達する
+ * （app/child/_layout.tsxのガード解除、108章参照）。C13では「タグをよみとっています」
+ * の表示のみで、クエスト名・持ち主名等の固有名詞は一切出さない（7.6.3節）。
  */
 export default function NfcScanScreen() {
   const { tagValue } = useLocalSearchParams<{ tagValue?: string }>();
-  const { state, dispatch, findChoreByTag, isChoreLimitReached } = useAppData();
-  const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
+  const { state, refresh } = useAppData();
+  const { status, client } = useSession();
   const pulse = useRef(new Animated.Value(0.4)).current;
   const processedRef = useRef(false);
+
+  // 呼び出し本人のmember_id。子どもならactiveChildMemberId、保護者・みまもり
+  // メンバーならactiveParentMemberId（store.tsxのコメントどおり、いずれか一方のみが
+  // 非空になる設計）。
+  const myMemberId = status === "child" ? state.activeChildMemberId : state.activeParentMemberId;
+  const tone = status === "child" ? "child" : status === "supporter" ? "supporter" : "parent";
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -39,7 +50,7 @@ export default function NfcScanScreen() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      process();
+      void process();
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,67 +65,59 @@ export default function NfcScanScreen() {
       return;
     }
 
-    // API仕様.md 4a章手順2「トークンからchoreを特定」相当。
-    const chore = await findChoreByTag(tagValue);
-    if (!chore) {
-      // 手順3b: タグ未登録／他家族のタグ／削除済みchoreのタグ、いずれも同じ0件扱い
-      // （主要画面ワイヤーフレーム.md 7.0決定3。原因を区別しない）。
-      router.replace({ pathname: "/child/nfc-complete", params: { result: "notFound" } });
-      return;
-    }
+    // API仕様.md 4a-2章手順2「代理報告RPC呼び出し」。
+    const res = await reportChoreCompletionByNfcTag(client, { tag_value: tagValue, note: null });
 
-    // daily_limit判定は通常の完了報告（C6）と全く同じ isChoreLimitReached() を再利用する
-    // （要件定義書07-2章4「承認フロー・回数制限のロジックは分岐させない」）。
-    if (isChoreLimitReached(chore, me.id)) {
-      router.replace({
-        pathname: "/child/nfc-complete",
-        params: { result: "limitReached", choreId: chore.id, choreTitle: chore.title, choreEmoji: chore.emoji },
-      });
-      return;
-    }
-
-    // API仕様.md 4a章手順3a「completionを作成」。noteは付けない
-    // （主要画面ワイヤーフレーム.md 7.0決定2、NFC経由では入力ステップ自体を表示しない）。
-    // [変更] 2026-08-15改訂: requires_approvalによるpending/approved分岐は、承認フロー廃止
-    // （chores.requires_approval列自体がスキーマ設計.sql v2.0で削除済み）に伴い撤廃した。
-    // REPORT_COMPLETIONは常に確定済みの完了報告を作るため、C14の結果は常に"approved"（即時加点）
-    // の1種類のみになる（主要画面ワイヤーフレーム.md 7.3章参照）。
-    const result = await dispatch({
-      type: "REPORT_COMPLETION",
-      choreId: chore.id,
-      reportedBy: me.id,
-      note: null,
-    });
-
-    if (!result.ok) {
-      if (result.error.code === PG_ERRCODE.checkViolation) {
-        router.replace({
-          pathname: "/child/nfc-complete",
-          params: { result: "limitReached", choreId: chore.id, choreTitle: chore.title, choreEmoji: chore.emoji },
-        });
+    if (!res.ok) {
+      if (res.error.code === PG_ERRCODE.checkViolation) {
+        // 上限到達。RAISE EXCEPTIONのため行データを返さず、クエスト名・持ち主名の
+        // いずれも取得できない（自分・代理を区別しない汎用文言、7.6.4節）。
+        router.replace({ pathname: "/child/nfc-complete", params: { result: "limitReached" } });
       } else {
         router.replace({ pathname: "/child/nfc-complete", params: { result: "networkError", tagValue } });
       }
       return;
     }
 
+    if (!res.data) {
+      // タグ未登録／他家族／解除済み／削除済みクエストのタグ、いずれも単一の0件に
+      // 収束する（39.6章「0件への収束」）。
+      router.replace({ pathname: "/child/nfc-complete", params: { result: "notFound" } });
+      return;
+    }
+
+    // 家族データ（通帳・実施履歴等）を最新化しておく（通常の完了報告のdispatchが
+    // 内部で`await load()`するのと同じく、ホームへ戻ったときに反映されているように
+    // 遷移前に待つ）。
+    await refresh();
+
+    const isProxy = res.data.member_id !== myMemberId;
     router.replace({
       pathname: "/child/nfc-complete",
       params: {
         result: "approved",
-        choreId: chore.id,
-        choreTitle: chore.title,
-        choreEmoji: chore.emoji,
-        points: String(chore.points),
+        choreTitle: res.data.chore_title,
+        choreEmoji: res.data.chore_emoji,
+        points: String(res.data.points),
+        ownerMemberId: res.data.member_id,
+        ownerDisplayName: res.data.member_display_name,
+        isProxy: isProxy ? "1" : "0",
       },
     });
   };
 
   return (
-    <Screen tone="child">
+    <Screen tone={tone}>
       <View style={styles.center}>
         <Animated.Text style={[styles.icon, { opacity: pulse }]}>📶 · · ·</Animated.Text>
-        <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>タグをよみとっています</Text>
+        <Text
+          style={[
+            tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody,
+            { marginTop: theme.spacing.s4 },
+          ]}
+        >
+          タグをよみとっています…
+        </Text>
       </View>
     </Screen>
   );

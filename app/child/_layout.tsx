@@ -1,10 +1,18 @@
 import React, { useEffect } from "react";
-import { Slot, router } from "expo-router";
+import { Slot, router, usePathname } from "expo-router";
 import { View } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
 import theme from "@/theme/theme";
+
+// [2026-09-01追加・実装メモ.md 108章] NFCタグの人ごと化（要件定義書07-2章「作り直し：
+// タグの人ごと化」）により、C13/C14（このパス）には子ども以外（保護者・みまもり
+// メンバー）もログイン中の端末から到達しうるようになった。既存の物理タグに書き込んだ
+// URLは`/child/nfc-scan`で固定されており変更できない（src/lib/nfc.ts:68、UIUXデザイン部/
+// 成果物/主要画面ワイヤーフレーム.md 7.6.4節「移行の制約」）ため、この2画面だけ下記の
+// 「子どもセッション以外はトップへ戻す」ガードの対象から除外する。
+const NFC_PATHS_ANY_ROLE = ["/child/nfc-scan", "/child/nfc-complete"];
 
 /**
  * [2026-08-16追加・本部長] `app/child/`配下の各画面（C5等）は
@@ -32,13 +40,29 @@ import theme from "@/theme/theme";
  * 同様にトップ画面へ誘導するようガード条件を拡張した。
  * なお`src/data/store.tsx`のゲート（32章）により、この画面に到達する時点で
  * `session.status`は必ず解決済み（"loading"ではない）であることが保証されている。
+ *
+ * [2026-09-01追記・実装メモ.md 108章] 上記「`session.status`が`"child"`以外の場合も
+ * トップ画面へ誘導する」は、NFCタグの人ごと化（要件定義書07-2章「作り直し：タグの
+ * 人ごと化」）により`/child/nfc-scan`・`/child/nfc-complete`の2画面に限って撤回した
+ * （保護者・みまもりメンバーもこの2画面には到達できる必要があるため）。ファイル冒頭の
+ * `NFC_PATHS_ANY_ROLE`・`notChildSession`の分岐参照。それ以外の`/child/`配下の画面
+ * （C5等）は、このコメントの元の記述どおり`"child"`以外なら引き続きトップへ戻す。
  */
 export default function ChildLayout() {
   const { state } = useAppData();
   const { logoutChild, status } = useSession();
+  const pathname = usePathname();
+  const isNfcPath = NFC_PATHS_ANY_ROLE.includes(pathname);
   const me = state.members.find((m) => m.id === state.activeChildMemberId);
   const staleSession = Boolean(state.activeChildMemberId) && !me;
-  const notChildSession = status !== "child";
+  // NFCの2画面は、いずれかのロール（子ども・保護者・みまもりメンバー）でログイン
+  // 済みでありさえすれば通す。未ログイン（"signedOut"）・家族未所属
+  // （"parentNoFamily"）・復元中（"loading"）のときだけトップへ戻す
+  // （report_chore_completion_by_nfc_tag()自体がログイン必須のため、ここで弾いても
+  // 弾かなくてもRPC側で最終的に拒否されるが、画面が空のまま固まるのを避ける）。
+  const notChildSession = isNfcPath
+    ? status === "signedOut" || status === "parentNoFamily"
+    : status !== "child";
   const shouldRedirect = staleSession || notChildSession;
 
   useEffect(() => {
