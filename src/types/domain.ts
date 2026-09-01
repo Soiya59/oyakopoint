@@ -386,11 +386,13 @@ export interface FamilyBoardPost {
 
 /**
  * family_board_reactions テーブルの1行（要件定義書07-14章「リアクション（スタンプ）の
- * 追加」、スキーマ設計.sql該当章、開発部/成果物/実装メモ.md 103章）。
+ * 追加」、スキーマ設計.sql該当章、開発部/成果物/実装メモ.md 103章・104章）。
  * chore_reactionsと違いkind/comment_bodyは無い（スタンプ専用、コメントは対象外）。
- * SELECT RLS（family_board_reactions_select_own）が常に
- * `reactor_member_id = current_family_member_id()` を要求するため、クライアントが
- * 取得できる行は常に閲覧者自身が送った分だけになる（他メンバーの反応は取得されない）。
+ * [2026-09-01再改訂・104章] SELECT RLS（family_board_reactions_select_same_family）は
+ * `family_id = current_family_id()` のみを要求する（統括決定「一覧に他人の反応を
+ * 出してよい。LINEみたいに個数もわかる感じで」を受け、閲覧者自身の行のみ→家族全員の
+ * 行を返す形へ変更した）。したがってクライアントが取得できる行は家族内の全メンバーが
+ * 送った反応すべてになる。
  */
 export interface FamilyBoardReaction {
   id: string;
@@ -402,15 +404,44 @@ export interface FamilyBoardReaction {
 }
 
 /**
+ * 「だれが送ったか見る」モーダル（主要画面ワイヤーフレーム.md 22.2.1節「内訳の見せ方」）
+ * 用に、反応者の表示名・アバター色をネストした1行。fetchFamilyBoardReactionsForPost
+ * （src/data/api.ts）が返す形。
+ */
+export interface FamilyBoardReactionWithReactor {
+  id: string;
+  stamp_key: StampKey;
+  reactor_member_id: string;
+  created_at: string;
+  family_members: { display_name: string; avatar_color: string | null } | null;
+}
+
+/**
  * 投稿者の表示名・アバター色をネストした投稿1行（履歴一覧表示用）。API仕様.md 13.4章。
- * [2026-09-01追加] `my_reaction`は`family_board_reactions`をネストしたもの（PostgREST
- * embed）。上記RLSにより閲覧者自身の行のみが返るため、0件（未反応）または1件
- * （閲覧者が送信済みのスタンプ）のいずれかにしかならない。他者の反応の有無・件数・
- * 反応者は構造上ここに含まれない（主要画面ワイヤーフレーム.md 22.2.1節参照）。
+ * [2026-09-01再改訂・104章] `reactions`は`family_board_reactions`をネストしたもの
+ * （PostgREST embed）。上記RLSが家族全員の行を返すようになったため、この配列には
+ * 家族内の全メンバーが送った反応（0件以上）が含まれる。一覧側はこの配列を
+ * `stamp_key`ごとに集計して個数を出し、`reactor_member_id`が自分のものと一致する
+ * 行の有無で「自分は送信済みか」を判定する（主要画面ワイヤーフレーム.md 22.2.1節
+ * 「一覧での表示（LINE風・個数）」参照）。誰が押したかの氏名までは、この一覧取得の
+ * 埋め込みには含めず（一覧APIのペイロードを増やしすぎないため）、「だれが送ったか
+ * 見る」リンクをタップした時点で`fetchFamilyBoardReactionsForPost`により別途取得する
+ * （同節「内訳の見せ方」参照。データ取得方式は開発部の実装判断に委ねられている）。
  */
 export interface FamilyBoardPostWithAuthor extends FamilyBoardPost {
   family_members: { display_name: string; avatar_color: string | null } | null;
-  my_reaction: { stamp_key: StampKey }[];
+  reactions: { stamp_key: StampKey; reactor_member_id: string }[];
+}
+
+/**
+ * [2026-09-01追加・104章] `InboxPanel`（「とどいたもの」）向け、家族全体の
+ * `family_board_reactions`ログ1行に、対象投稿の本文・投稿者を埋め込んだもの。
+ * `fetchFamilyBoardReactionsLog`（src/data/api.ts）が返す形。対象投稿が
+ * 論理削除済み・取得不可の場合は`family_board_posts`がnullになる（InboxPanel側で
+ * nullを除外する）。
+ */
+export interface FamilyBoardReactionWithPostBody extends FamilyBoardReaction {
+  family_board_posts: { body: string; author_member_id: string } | null;
 }
 
 /** family_home_card View の source 列（スキーマ設計.sql 35d章）。 */

@@ -42,11 +42,12 @@ import {
   addFamilyBoardReaction,
   deleteFamilyBoardPost,
   fetchFamilyBoardPostsHistory,
+  fetchFamilyBoardReactionsForPost,
   fetchFamilyHomeCard,
   fetchMyFamilyBoardPostsRemainingToday,
   PG_ERRCODE,
 } from "@/data/api";
-import type { FamilyBoardPostWithAuthor, FamilyHomeCard, StampKey } from "@/types/domain";
+import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, FamilyHomeCard, StampKey } from "@/types/domain";
 
 export type FamilyBoardLoadState = "loading" | "error" | "ready";
 
@@ -176,9 +177,14 @@ export function useFamilyBoardHistory(familyId: string) {
     [client]
   );
 
-  // [2026-09-01追加・実装メモ.md 103章] 投稿へのスタンプリアクション（要件定義書
-  // 07-14章「リアクション（スタンプ）の追加」、主要画面ワイヤーフレーム.md 22.2.1節）。
-  // 取消不可のため「送る」操作のみを公開する（removePostと違い、逆方向の操作は無い）。
+  // [2026-09-01追加・実装メモ.md 103章／104章で改訂] 投稿へのスタンプリアクション
+  // （要件定義書07-14章「リアクション（スタンプ）の追加」、主要画面ワイヤーフレーム.md
+  // 22.2.1節）。取消不可のため「送る」操作のみを公開する（removePostと違い、逆方向の
+  // 操作は無い）。
+  // [104章] 「1人1投稿1スタンプ」→「1人1投稿につきスタンプの種類ごとに1個（4種類まで）」
+  // へ改訂されたため、`reactingReaction`は{postId, stampKey}のまま
+  // （送信中はそのスタンプだけを止め、同じ投稿の他のスタンプは押せる。22.2.1節
+  // 「押したあとの見え方」の「送信中（このスタンプ）」参照）。
   const [reactingReaction, setReactingReaction] = useState<{ postId: string; stampKey: StampKey } | null>(null);
   const [reactionError, setReactionError] = useState<{ postId: string; message: string } | null>(null);
 
@@ -199,22 +205,42 @@ export function useFamilyBoardHistory(familyId: string) {
         if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
           setPosts((prev) => prev.filter((p) => p.id !== postId));
         }
-        // unique_violation（同一投稿への二重送信）は、WITH CHECKにより既存の競合行は
-        // 必ず自分自身が送った行のはずである（reactor_member_id = 呼び出し本人が
-        // 強制されるため）。UI側の楽観的な表示だけでは実際に選ばれたスタンプの種類を
-        // 断定できないため、fabricateせずreload()で実際の状態を取り直す。
+        // unique_violation（同じ投稿・同じスタンプへの二重送信）は、UI側で既送信の
+        // スタンプへのタップを無効化しているため通常到達しないが、競合（別タブ・
+        // 別デバイスからのほぼ同時送信）で起こり得る。楽観的な加算をfabricateせず
+        // reload()で実際の状態（家族全員分の反応）を取り直す。
         if (res.error.code === PG_ERRCODE.uniqueViolation) {
           void load();
         }
         setReactionError({ postId, message: res.error.message });
         return false;
       }
-      // 全件reloadではなく該当投稿のmy_reactionだけをローカルで即時更新する
-      // （removePostと同じくページング位置・スクロール位置を崩さないため）。
-      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, my_reaction: [{ stamp_key: stampKey }] } : p)));
+      // [104章] 全件reloadではなく該当投稿のreactions配列に1件追加するだけで
+      // ローカル更新する（removePostと同じくページング位置・スクロール位置を
+      // 崩さないため）。旧仕様（103章）はmy_reactionを1件で置き換えていたが、
+      // 家族全員分を保持する配列になったため「追加」に変わる。
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, reactions: [...p.reactions, { stamp_key: stampKey, reactor_member_id: memberId }] }
+            : p
+        )
+      );
       return true;
     },
     [client, load]
+  );
+
+  // [2026-09-01追加・104章] 22.2.1節「内訳の見せ方（誰が押したか）」用。
+  // 「だれが送ったか見る」リンクをタップした時点で呼ばれる遅延取得（一覧取得時には
+  // 反応者の氏名を含めないため、この関数が唯一の取得経路になる）。
+  const viewReactorsForPost = useCallback(
+    async (postId: string): Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string }> => {
+      const res = await fetchFamilyBoardReactionsForPost(client, postId);
+      if (!res.ok) return { ok: false, message: res.error.message };
+      return { ok: true, data: res.data };
+    },
+    [client]
   );
 
   return {
@@ -230,6 +256,7 @@ export function useFamilyBoardHistory(familyId: string) {
     reactingReaction,
     reactionError,
     reactToPost,
+    viewReactorsForPost,
   };
 }
 

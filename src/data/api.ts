@@ -27,6 +27,8 @@ import type {
   FamilyBoardPost,
   FamilyBoardPostWithAuthor,
   FamilyBoardReaction,
+  FamilyBoardReactionWithPostBody,
+  FamilyBoardReactionWithReactor,
   FamilyDrawing,
   FamilyDrawingLineData,
   FamilyHomeCard,
@@ -1726,15 +1728,16 @@ export async function fetchFamilyHomeCard(
  * 既に本番稼働しており、`family_members!recipient_id(...)`/`family_members!sender_id(...)`
  * が有効であることを確認済み＝実装メモ.md 79章の検証を参照。同じ列名ヒント方式を踏襲した）。
  *
- * [2026-09-01追加・実装メモ.md 103章] `family_board_reactions`を`my_reaction`という
- * エイリアスでネストして取得する。**取得はするが画面に出さないのではなく、そもそも
- * 他者の行を取ってこない**（主要画面ワイヤーフレーム.md 22.2.1節「企画部の必須要件との
- * 整合」根拠4）。これはクライアント側のクエリ条件（例えば`.eq("reactor_member_id", ...)`
- * を書くこと）で実現しているのではなく、`family_board_reactions_select_own`という
- * RLSのSELECTポリシー自体が常に`reactor_member_id = current_family_member_id()`を
- * 要求するため、この埋め込みクエリがどんな条件で呼ばれても、PostgRESTが返す
- * `my_reaction`配列には閲覧者自身が送った行（0件または1件）しか現れない
- * （設計判断の詳細はマイグレーション本体のコメント参照）。
+ * [2026-09-01再改訂・実装メモ.md 104章] `family_board_reactions`を`reactions`という
+ * エイリアスでネストして取得する。**旧仕様（103章）は「他者の行をそもそも取ってこない」
+ * ことをRLSで保証していたが、統括決定「一覧に他人の反応を出してよい。LINEみたいに
+ * 個数もわかる感じで」を受け、この制限は撤回した。** `family_board_reactions_select_
+ * same_family`というRLSのSELECTポリシーが`family_id = current_family_id()`のみを
+ * 要求するようになったため、この埋め込みクエリは家族内の全メンバーが送った反応
+ * （0件以上）を返す。呼び出し側（useFamilyBoardHistory・FamilyBoardHistoryPanel）が
+ * `stamp_key`ごとに集計して個数を出し、`reactor_member_id`が自分のものと一致する行の
+ * 有無で「自分は送信済みか」を判定する（主要画面ワイヤーフレーム.md 22.2.1節「一覧での
+ * 表示（LINE風・個数）」参照。設計判断の詳細はマイグレーション本体のコメント参照）。
  */
 export async function fetchFamilyBoardPostsHistory(
   client: SupabaseClient,
@@ -1743,12 +1746,35 @@ export async function fetchFamilyBoardPostsHistory(
 ): Promise<ApiResult<FamilyBoardPostWithAuthor[]>> {
   const { data, error } = await client
     .from("family_board_posts")
-    .select("*, family_members!author_member_id(display_name, avatar_color), my_reaction:family_board_reactions(stamp_key)")
+    .select(
+      "*, family_members!author_member_id(display_name, avatar_color), reactions:family_board_reactions(stamp_key, reactor_member_id)"
+    )
     .eq("family_id", familyId)
     .order("created_at", { ascending: false })
     .range(range.from, range.to);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardPostWithAuthor[] };
+}
+
+/**
+ * [2026-09-01追加・実装メモ.md 104章] 主要画面ワイヤーフレーム.md 22.2.1節「内訳の
+ * 見せ方（誰が押したか）」用: ある投稿に届いた反応を、反応者の表示名・アバター色付きで
+ * 新しい順に取得する。「だれが送ったか見る」リンクをタップした一段階先でのみ呼ぶ
+ * （一覧取得〈fetchFamilyBoardPostsHistory〉には反応者の氏名を含めない設計、
+ * 上記コメント参照）。RLS（family_board_reactions_select_same_family）により、
+ * 対象投稿が同じ家族のものである限り家族全員分の反応が返る。
+ */
+export async function fetchFamilyBoardReactionsForPost(
+  client: SupabaseClient,
+  postId: string
+): Promise<ApiResult<FamilyBoardReactionWithReactor[]>> {
+  const { data, error } = await client
+    .from("family_board_reactions")
+    .select("id, stamp_key, reactor_member_id, created_at, family_members!reactor_member_id(display_name, avatar_color)")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithReactor[] };
 }
 
 /**
@@ -1822,19 +1848,20 @@ export async function deleteFamilyBoardPost(client: SupabaseClient, postId: stri
 
 /**
  * 要件定義書07-14章「リアクション（スタンプ）の追加」・主要画面ワイヤーフレーム.md
- * 22.2.1節: 投稿へのスタンプ送信（2026-09-01追加・実装メモ.md 103章）。
+ * 22.2.1節: 投稿へのスタンプ送信（2026-09-01追加・実装メモ.md 103章、104章で
+ * 「1人1投稿1スタンプ」→「1人1投稿につきスタンプの種類ごとに1個（4種類まで）」へ改訂）。
  *
  * `chore_reactions`の`addReaction`と同じ形（直接INSERT、確認ダイアログなしの
- * タップ即送信）。取消不可・自己リアクション不可・1人1投稿1スタンプまでの判定は
- * すべてDB側（BEFORE INSERTトリガー・一意制約・RLS）が行うため、本関数自体は
+ * タップ即送信）。取消不可・自己リアクション不可・スタンプの種類ごとに1個までの
+ * 判定はすべてDB側（BEFORE INSERTトリガー・一意制約・RLS）が行うため、本関数自体は
  * 判定ロジックを持たない。想定される失敗:
  *   - `foreign_key_violation`（23503）: 対象投稿が存在しないか、既に削除されている
  *     （論理削除された投稿へのリアクションはトリガー内のSELECTがRLSにより空振りする
  *     ため、この経路で拒否される。マイグレーション本体のコメント参照）
  *   - `check_violation`（23514）: 自分の投稿への自己リアクション（UI側でボタン自体を
  *     出さないため通常到達しないが、多重防御として存在する）
- *   - `unique_violation`（23505）: 同じ投稿に既に別タブ・別デバイス等で先にスタンプを
- *     送信済み（1人1投稿1スタンプの一意制約）
+ *   - `unique_violation`（23505）: 同じ投稿・同じスタンプに既に別タブ・別デバイス等で
+ *     先に送信済み（`(post_id, reactor_member_id, stamp_key)`の一意制約）
  * `family_id`・`created_at`はクライアントから送る必要が無い（BEFORE INSERTトリガーが
  * 対象投稿からサーバー側で確定させる、family_board_posts_before_insertと同じ設計）。
  */
@@ -1853,4 +1880,31 @@ export async function addFamilyBoardReaction(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as FamilyBoardReaction };
+}
+
+/**
+ * [2026-09-01追加・実装メモ.md 104章] 「とどいたもの」（`InboxPanel`）へ掲示板
+ * リアクションを合流させるための家族全体ログ取得。主要画面ワイヤーフレーム.md
+ * 22.2.2節「『とどいたもの』への掲示板リアクション受信表示」に対応する。
+ *
+ * `fetchReactions`（chore_reactions）・`fetchGratitudeLog`（gratitude_points）と
+ * 同じ「家族全体を取得し、呼び出し側〈InboxPanel〉が自分宛の分だけを
+ * client側でフィルタする」という既存パターンを踏襲する。対象投稿の`body`・
+ * `author_member_id`を`family_board_posts`から埋め込み取得する（22.2.2節「対象が
+ * 分かる一言＝投稿本文の先頭抜粋」の材料として使う）。埋め込みに`!inner`を使わない
+ * 通常のto-one embedのため、対象投稿が論理削除されRLSにより見えなくなった場合は
+ * `family_board_posts`側がnullになるだけで行自体は残る（呼び出し側がnullを
+ * 弾く設計、InboxPanel.tsx参照）。
+ */
+export async function fetchFamilyBoardReactionsLog(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<FamilyBoardReactionWithPostBody[]>> {
+  const { data, error } = await client
+    .from("family_board_reactions")
+    .select("*, family_board_posts(body, author_member_id)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithPostBody[] };
 }

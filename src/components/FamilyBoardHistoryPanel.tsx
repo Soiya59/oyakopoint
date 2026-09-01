@@ -10,11 +10,23 @@
  *     確認ダイアログあり、P32/S20のみ）の各リンク（22.4節）
  * [2026-09-01追加・第3段階・実装メモ.md 103章] 投稿へのスタンプリアクション
  * （要件定義書07-14章「リアクション（スタンプ）の追加」、22.0節決定8・22.2.1節）。
- *   - アクション行（取消/削除の行）に、自分以外の投稿にのみスタンプ4つを追加する。
- *     描画条件を`canCancel || canDelete`から`canCancel || canDelete || canReact`へ
- *     変更した（22.2.1節「アクション行の描画条件の見直し」）。
- *   - 一覧に表示するのは閲覧者自身が送ったかどうかだけ（`post.my_reaction`）。他者の
- *     反応の有無・件数・反応者は取得すらされない（RLS側で保証。src/data/api.ts参照）。
+ *   一覧に表示するのは閲覧者自身が送ったかどうかだけで、他者の反応の有無・件数は
+ *   取得すらしなかった（RLS側で保証）。
+ * [2026-09-01再改訂・第4段階・実装メモ.md 104章] 統括フィードバック「押しても相手に
+ * 伝わっていない。完了報告みたいに複数クリックできる感じでも良い。一覧に他人の反応を
+ * 出してよい。LINEみたいに個数もわかる感じで」を受け、第3段階の設計を作り直した
+ * （22.0節決定9・決定10、22.2.1節「一覧での表示（LINE風・個数）」）。
+ *   - スタンプの種類ごとに1個まで押せる（4種類すべて押せる）。押した後も4つ並んだまま
+ *     残す（縮小表示は撤回）。送信済みのスタンプは枠線・背景の強調のみで示す（✓は
+ *     付けない、22.2.1節「一覧での表示」参照）。
+ *   - 一覧には投稿ごとにスタンプの種類別の個数を表示する（LINE風）。0件は正方形の
+ *     箱（絵文字のみ）、1件以上はピル型（絵文字＋個数、2桁超は「9+」）。
+ *   - 自分の投稿には送信ボタンは出さないが、届いた反応（個数のみ）は読み取り専用の
+ *     テキストで表示する（枠のある箱ではなく、タップしても何も起きないプレーンな
+ *     テキスト。22.2.1節「自分の投稿での見え方」）。
+ *   - 反応が1件以上ある投稿には「だれが送ったか見る」リンクを出し、タップで軽量な
+ *     インライン展開（新規の詳細画面は作らない、22.0節決定8を維持）を開く。中身は
+ *     `onViewReactors`経由で遅延取得する（22.2.1節「内訳の見せ方」）。
  * プッシュ通知は実装しない（本部長指示、要件定義書08章参照）。
  */
 import React, { useState } from "react";
@@ -24,7 +36,7 @@ import Card from "./Card";
 import MemberAvatar from "./MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
-import type { FamilyBoardPostWithAuthor, StampKey } from "@/types/domain";
+import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -56,13 +68,18 @@ export interface FamilyBoardHistoryPanelProps {
    *  （権限判定はサーバー側のみが行うため、UI側は確認ダイアログの有無だけを分ける）。 */
   onRemovePost: (postId: string) => Promise<boolean>;
 
-  /** [2026-09-01追加・第3段階] ここから下はリアクション（スタンプ）用のprops。 */
-  /** 現在送信中のリアクション（1件のみ許可。連打・二重送信のUI側防止）。 */
+  /** [2026-09-01追加・第3段階、104章で複数種類対応] ここから下はリアクション
+   *  （スタンプ）用のprops。 */
+  /** 現在送信中のリアクション（1件のみ許可。同じ投稿の他のスタンプは送信可能）。 */
   reactingReaction: { postId: string; stampKey: StampKey } | null;
   /** 直近のリアクション送信でエラーになった場合の{postId, message}。 */
   reactionError: { postId: string; message: string } | null;
   /** リアクション送信の実処理（INSERT呼び出し）。タップ即送信（確認ダイアログなし）。 */
   onReact: (postId: string, stampKey: StampKey) => Promise<boolean>;
+  /** [2026-09-01追加・104章] 「だれが送ったか見る」を開いたときの遅延取得。 */
+  onViewReactors: (
+    postId: string
+  ) => Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string }>;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -89,9 +106,19 @@ function formatDateOnly(iso: string): string {
   return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
 }
 
+/** 22.2.1節「内訳の見せ方」＝3.2節P9「とどいたリアクション」の時刻表示（"8:10"）を流用。 */
+function formatTimeOnly(iso: string): string {
+  return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
 /** 削除確認モーダル（22.4節）に載せる本文の抜粋。 */
 function excerpt(body: string, max = 20): string {
   return body.length > max ? `${body.slice(0, max)}…` : body;
+}
+
+/** 22.2.1節「一覧での表示（LINE風・個数）」: 2桁超は「9+」に丸める。 */
+function countLabel(count: number): string {
+  return count > 9 ? "9+" : String(count);
 }
 
 /** 22.3.3節「投稿数上限（1日5件）到達時の案内」の文言（ロールごと）。 */
@@ -113,6 +140,19 @@ const CANCEL_LABEL: Record<Tone, string> = {
   supporter: "取消",
 };
 
+/** 22.2.1節「3ロールのトーン・文言」内訳リンクの文言。 */
+const VIEW_REACTORS_LABEL: Record<Tone, string> = {
+  parent: "だれが送ったか見る",
+  child: "だれが おくったか みる",
+  supporter: "だれが送ったか見る",
+};
+
+const REACTORS_CLOSE_LABEL: Record<Tone, string> = {
+  parent: "とじる",
+  child: "とじる",
+  supporter: "とじる",
+};
+
 /**
  * 削除/取消アクションのエラーメッセージ表示用。DBのRAISE EXCEPTIONメッセージ
  * （設計部/成果物/スキーマ設計.sql 35c章）はそのまま日本語の文として表示できる
@@ -130,13 +170,19 @@ function actionErrorText(tone: Tone, message: string): string {
 /**
  * 22.2.1節「3ロールのトーン・文言」。スタンプの視覚的な絵文字・アイコンは3ロール
  * 共通（theme.stampDefinitions）で、文言・アクセシビリティラベルのみ書き分ける。
+ * 未反応（count===0）のときのラベル。
  */
 function reactAccessibilityLabel(tone: Tone, stampLabel: string): string {
   return tone === "child" ? `${stampLabel} を おくる` : `${stampLabel} を送る`;
 }
 
-function sentAccessibilityLabel(tone: Tone, stampLabel: string): string {
-  return tone === "child" ? `${stampLabel} を おくったよ` : `${stampLabel} を送信済み`;
+/**
+ * [2026-09-01追加・104章] 個数付きスタンプのアクセシビリティラベル
+ * （22.2.1節「3ロールのトーン・文言」表）。count>0のときに使う（自分が送信済みか
+ * どうかに関わらず、人数を含めたラベルにする）。
+ */
+function countAccessibilityLabel(tone: Tone, stampLabel: string, count: number): string {
+  return tone === "child" ? `${stampLabel}・${count}にんが おくったよ` : `${stampLabel}・${count}人が送信済み`;
 }
 
 /** 22.2.1節「送信失敗の文言」。 */
@@ -163,13 +209,18 @@ function reactionErrorText(tone: Tone, message: string): string {
   return REACT_FAIL_TEXT[tone];
 }
 
-/** 22.2.1節「アクション行のレイアウト」: 子ども向けはタップターゲット基準（56dp相当）に
- *  合わせてやや大きく表示する。 */
+/**
+ * [2026-09-01改訂・104章] 22.2.1節「一覧での表示（LINE風・個数）」: 個数0件のスタンプは
+ * `stampBtn`と同じ正方形（幅＝高さ＝ロールごとのタップターゲット基準）。
+ * 保護者44dp／みまもりメンバー48dp／子ども56dp。
+ */
+const STAMP_BOX_SIZE: Record<Tone, number> = {
+  parent: theme.tapTarget.parent,
+  supporter: theme.tapTarget.supporterPrimary,
+  child: theme.tapTarget.child,
+};
+/** 子ども向けはタップターゲット基準に合わせて絵文字自体もやや大きく表示する。 */
 const STAMP_FONT_SIZE: Record<Tone, number> = { parent: 22, child: 27, supporter: 22 };
-/** hitSlopで実際のタップ可能領域を役割ごとのタップターゲット基準まで広げる
- *  （デザイントークン.md 3章: 保護者44dp／みまもりメンバー48dp推奨／子ども56dp）。
- *  見た目のフォントサイズより広い分をhitSlopで補う。 */
-const STAMP_HIT_SLOP: Record<Tone, number> = { parent: 11, child: 14, supporter: 13 };
 
 export function FamilyBoardHistoryPanel({
   tone,
@@ -188,6 +239,7 @@ export function FamilyBoardHistoryPanel({
   reactingReaction,
   reactionError,
   onReact,
+  onViewReactors,
 }: FamilyBoardHistoryPanelProps) {
   const isChild = tone === "child";
   const isParent = tone === "parent";
@@ -201,6 +253,13 @@ export function FamilyBoardHistoryPanel({
 
   // 22.4節: 保護者の是正削除のみ確認モーダルを挟む（本人の取消は挟まない）。
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // [2026-09-01追加・104章] 22.2.1節「内訳の見せ方」。1件のみ展開できる
+  // （confirmDeleteIdと同じ「1件ずつ」パターン）。
+  const [viewingReactorsId, setViewingReactorsId] = useState<string | null>(null);
+  const [reactorsLoading, setReactorsLoading] = useState(false);
+  const [reactorsError, setReactorsError] = useState<string | null>(null);
+  const [reactorsData, setReactorsData] = useState<FamilyBoardReactionWithReactor[]>([]);
 
   const isBlocked = remaining === 0;
 
@@ -216,6 +275,24 @@ export function FamilyBoardHistoryPanel({
   // 22.2.1節「押し間違いの扱い」: 確認ダイアログを挟まずタップ即送信する。
   const handleReact = async (postId: string, stampKey: StampKey) => {
     await onReact(postId, stampKey);
+  };
+
+  const handleToggleReactors = async (postId: string) => {
+    if (viewingReactorsId === postId) {
+      setViewingReactorsId(null);
+      return;
+    }
+    setViewingReactorsId(postId);
+    setReactorsData([]);
+    setReactorsError(null);
+    setReactorsLoading(true);
+    const res = await onViewReactors(postId);
+    setReactorsLoading(false);
+    if (!res.ok) {
+      setReactorsError(res.message);
+      return;
+    }
+    setReactorsData(res.data);
   };
 
   return (
@@ -278,10 +355,15 @@ export function FamilyBoardHistoryPanel({
             const rowError = actionError?.postId === post.id ? actionError.message : null;
             const isConfirming = confirmDeleteId === post.id;
 
-            // 22.2.1節「押したあとの見え方（状態定義）」。
-            const myStamp = post.my_reaction?.[0]?.stamp_key ?? null;
+            // [2026-09-01改訂・104章] `reactions`は家族全員分の反応
+            // （stamp_key・reactor_member_idのみ）。ここでスタンプ種別ごとに集計する。
+            const reactions = post.reactions ?? [];
+            const countFor = (key: StampKey) => reactions.filter((r) => r.stamp_key === key).length;
+            const mineFor = (key: StampKey) => reactions.some((r) => r.stamp_key === key && r.reactor_member_id === myMemberId);
+            const hasAnyReaction = reactions.length > 0;
             const isReactingThisPost = reactingReaction?.postId === post.id;
             const reactRowError = reactionError?.postId === post.id ? reactionError.message : null;
+            const isViewingReactors = viewingReactorsId === post.id;
 
             return (
               <Card key={post.id} tone={tone}>
@@ -328,76 +410,120 @@ export function FamilyBoardHistoryPanel({
                     </View>
                   </View>
                 ) : (
-                  (canCancel || canDelete || canReact) && (
-                    <View style={[styles.actionRow, styles.actionRowSpread]}>
-                      {canReact ? (
-                        myStamp ? (
-                          // 送信成功/既送: 選んだ1つのみ「✓」付きで残す（22.2.1節）。
-                          <View style={styles.stampRow}>
-                            <Text
-                              accessibilityLabel={sentAccessibilityLabel(
-                                tone,
-                                theme.stampDefinitions.find((s) => s.key === myStamp)?.label ?? ""
-                              )}
-                              style={[styles.stampEmoji, { fontSize: STAMP_FONT_SIZE[tone] }]}
-                            >
-                              {theme.stampDefinitions.find((s) => s.key === myStamp)?.emoji}✓
-                            </Text>
-                          </View>
-                        ) : (
+                  <>
+                    {(canCancel || canDelete || canReact || (isOwn && hasAnyReaction)) && (
+                      <View style={[styles.actionRow, styles.actionRowSpread]}>
+                        {canReact ? (
+                          // 他者の投稿: スタンプ4つ（個数付き、22.2.1節「一覧での表示」）。
                           <View style={styles.stampRow}>
                             {theme.stampDefinitions.map((s) => {
-                              const isThisStampSending = isReactingThisPost && reactingReaction?.stampKey === s.key;
+                              const key = s.key as StampKey;
+                              const count = countFor(key);
+                              const mine = mineFor(key);
+                              const isThisStampSending = isReactingThisPost && reactingReaction?.stampKey === key;
+                              const boxSizeStyle =
+                                count > 0
+                                  ? {
+                                      height: STAMP_BOX_SIZE[tone],
+                                      minWidth: STAMP_BOX_SIZE[tone],
+                                      paddingHorizontal: theme.spacing.s2,
+                                    }
+                                  : { width: STAMP_BOX_SIZE[tone], height: STAMP_BOX_SIZE[tone] };
                               return (
                                 <Pressable
                                   key={s.key}
-                                  disabled={isReactingThisPost}
-                                  onPress={() => void handleReact(post.id, s.key as StampKey)}
-                                  hitSlop={STAMP_HIT_SLOP[tone]}
-                                  accessibilityLabel={reactAccessibilityLabel(tone, s.label)}
-                                  style={styles.stampButton}
+                                  disabled={mine || isThisStampSending}
+                                  onPress={() => void handleReact(post.id, key)}
+                                  accessibilityLabel={
+                                    count > 0 ? countAccessibilityLabel(tone, s.label, count) : reactAccessibilityLabel(tone, s.label)
+                                  }
+                                  style={[styles.stampBox, boxSizeStyle, mine && styles.stampBoxSent]}
                                 >
                                   <Text
                                     style={[
                                       styles.stampEmoji,
                                       { fontSize: STAMP_FONT_SIZE[tone] },
-                                      isReactingThisPost && styles.stampEmojiSending,
-                                      isThisStampSending && styles.stampEmojiActive,
+                                      isThisStampSending && styles.stampEmojiSending,
                                     ]}
                                   >
                                     {s.emoji}
                                   </Text>
+                                  {count > 0 && <Text style={styles.stampCount}>{countLabel(count)}</Text>}
                                 </Pressable>
                               );
                             })}
                           </View>
-                        )
-                      ) : (
-                        <View />
-                      )}
+                        ) : isOwn && hasAnyReaction ? (
+                          // 自分の投稿: 読み取り専用の個数表示（枠なし、送信ボタンではない）。
+                          // 22.2.1節「自分の投稿での見え方」。
+                          <Text style={bodyStyle}>
+                            {theme.stampDefinitions
+                              .filter((s) => countFor(s.key as StampKey) > 0)
+                              .map((s) => `${s.emoji}${countLabel(countFor(s.key as StampKey))}`)
+                              .join(" ")}
+                          </Text>
+                        ) : (
+                          <View />
+                        )}
 
-                      {(canCancel || canDelete) && (
-                        <View style={styles.actionLinksRow}>
-                          {canCancel && (
-                            <Pressable onPress={() => void handleCancel(post.id)} disabled={isProcessing}>
-                              <Text style={styles.actionLink}>
-                                {isProcessing ? "…" : CANCEL_LABEL[tone]}
-                              </Text>
-                            </Pressable>
-                          )}
-                          {canDelete && (
-                            <Pressable
-                              onPress={() => setConfirmDeleteId(post.id)}
-                              disabled={isProcessing}
-                              style={{ marginLeft: canCancel ? theme.spacing.s4 : 0 }}
-                            >
-                              <Text style={styles.actionLink}>削除</Text>
-                            </Pressable>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  )
+                        {(canCancel || canDelete) && (
+                          <View style={styles.actionLinksRow}>
+                            {canCancel && (
+                              <Pressable onPress={() => void handleCancel(post.id)} disabled={isProcessing}>
+                                <Text style={styles.actionLink}>
+                                  {isProcessing ? "…" : CANCEL_LABEL[tone]}
+                                </Text>
+                              </Pressable>
+                            )}
+                            {canDelete && (
+                              <Pressable
+                                onPress={() => setConfirmDeleteId(post.id)}
+                                disabled={isProcessing}
+                                style={{ marginLeft: canCancel ? theme.spacing.s4 : 0 }}
+                              >
+                                <Text style={styles.actionLink}>削除</Text>
+                              </Pressable>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* [2026-09-01追加・104章] 22.2.1節「内訳の見せ方」。合計反応数が
+                        1件以上のときだけリンクを出す（0件の投稿には表示しない）。 */}
+                    {hasAnyReaction && (
+                      <Pressable onPress={() => void handleToggleReactors(post.id)} style={{ marginTop: theme.spacing.s1 }}>
+                        <Text style={styles.viewReactorsLink}>{VIEW_REACTORS_LABEL[tone]}</Text>
+                      </Pressable>
+                    )}
+
+                    {isViewingReactors && (
+                      <View style={styles.reactorsBlock}>
+                        {reactorsLoading ? (
+                          <Text style={captionStyle}>{isChild ? "よみこみちゅう…" : "読み込み中…"}</Text>
+                        ) : reactorsError ? (
+                          <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
+                            {isChild ? "うまく よみこめなかったよ" : "読み込みに失敗しました"}
+                          </Text>
+                        ) : (
+                          <View style={{ gap: theme.spacing.s1 }}>
+                            {reactorsData.map((r) => {
+                              const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
+                              return (
+                                <Text key={r.id} style={bodyStyle}>
+                                  {stampDef?.emoji} {r.family_members?.display_name ?? "?"}より「{stampDef?.label}」{" "}
+                                  <Text style={captionStyle}>{formatTimeOnly(r.created_at)}</Text>
+                                </Text>
+                              );
+                            })}
+                          </View>
+                        )}
+                        <Pressable onPress={() => setViewingReactorsId(null)} style={{ marginTop: theme.spacing.s2 }}>
+                          <Text style={styles.actionLink}>{REACTORS_CLOSE_LABEL[tone]}</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </>
                 )}
 
                 {rowError && !isConfirming && (
@@ -457,12 +583,36 @@ const styles = StyleSheet.create({
   actionLinksRow: { flexDirection: "row", alignItems: "center" },
   actionLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
   // 22.2.1節「アクション行のレイアウト」: スタンプ間の間隔はspace-2（8dp）以上。
-  stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
-  stampButton: { alignItems: "center", justifyContent: "center" },
+  stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, flexWrap: "wrap" },
+  // [2026-09-01改訂・104章] 完了報告（app/parent/approvals.tsx）のstampBtnと同じ
+  // 枠線つき・角丸の箱を踏襲する。個数0件は正方形（width/heightで指定）、
+  // 1件以上はピル型（height固定＋minWidthで内容に合わせて横に伸びる）。
+  stampBox: {
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralBg,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  // 送信済み（自分がこのスタンプを送った）: stampBtnSentと同じ強調配色。✓は付けない
+  // （22.2.1節「個数の右に追加で✓は付けない」）。
+  stampBoxSent: {
+    backgroundColor: theme.colors.brandPrimarySoft,
+    borderColor: theme.colors.brandPrimary,
+  },
   stampEmoji: {},
   // 送信中: タップしたスタンプを淡色表示にする（22.2.1節「押したあとの見え方」）。
   stampEmojiSending: { opacity: 0.4 },
-  stampEmojiActive: { opacity: 0.7 },
+  stampCount: { marginLeft: 2, fontSize: 12, fontWeight: "600", color: theme.colors.neutralTextPrimary },
+  viewReactorsLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline", fontSize: 12 },
+  reactorsBlock: {
+    marginTop: theme.spacing.s2,
+    paddingTop: theme.spacing.s2,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+  },
   confirmBlock: {
     marginTop: theme.spacing.s3,
     paddingTop: theme.spacing.s3,

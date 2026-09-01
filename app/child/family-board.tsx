@@ -41,6 +41,7 @@ export default function ChildFamilyBoardScreen() {
     reactingReaction,
     reactionError,
     reactToPost,
+    viewReactorsForPost,
   } = useFamilyBoardHistory(familyId);
   const { remaining } = useFamilyBoardRemainingToday();
 
@@ -70,6 +71,7 @@ export default function ChildFamilyBoardScreen() {
         reactingReaction={reactingReaction}
         reactionError={reactionError}
         onReact={(postId, stampKey) => reactToPost(postId, myMemberId, stampKey)}
+        onViewReactors={viewReactorsForPost}
       />
     </Screen>
   );

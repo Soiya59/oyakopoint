@@ -27,6 +27,7 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   DailySummaryEntry,
+  FamilyBoardReactionWithPostBody,
   FamilyMember,
   GratitudePoint,
   LedgerEntry,
@@ -72,6 +73,16 @@ export interface State {
    * 各画面がapi.fetchMyGratitudeGiveableBalance()を個別に呼ぶ）。
    */
   gratitude: GratitudePoint[];
+  /**
+   * [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのスタンプリアクション
+   * （family_board_reactions、要件定義書07-14章）の家族全体ログ（対象投稿の本文・
+   * 投稿者を埋め込み済み）。`InboxPanel`（「とどいたもの」）が、このうち
+   * `family_board_posts.author_member_id === 自分` の行だけを抜き出して
+   * 「掲示板の投稿に届いたリアクション」として表示する（主要画面ワイヤーフレーム.md
+   * 22.2.2節）。gratitudeと同じ「家族全体を取得し、閲覧側がclient側でフィルタする」
+   * パターン。
+   */
+  familyBoardReactions: FamilyBoardReactionWithPostBody[];
   /** 子ども向け画面で「いまログイン中」として扱うmember_id */
   activeChildMemberId: string;
   /** 保護者向け画面で「いま操作中」として扱うmember_id（リアクションのreacted_byに使う） */
@@ -263,6 +274,7 @@ const EMPTY_STATE: State = {
   rewards: [],
   redemptions: [],
   gratitude: [],
+  familyBoardReactions: [],
   activeChildMemberId: "",
   activeParentMemberId: "",
   dailyFlaggedChoreIds: [],
@@ -322,25 +334,36 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // activeParentMemberIdのどちらか一方だけが非空になる設計、上記参照）。
     const activeMemberId = activeChildMemberId || activeParentMemberId;
 
-    const [completionsRes, reactionsRes, redemptionsRes, memberPointsRes, gratitudeRes, dailySummaryRes, dailyFlagsRes] =
-      await Promise.all([
-        api.fetchCompletions(client, familyId),
-        api.fetchReactions(client, familyId),
-        api.fetchRedemptions(client, familyId),
-        api.fetchMemberPoints(client, familyId),
-        // [2026-08-16追加] 感謝ポイント家族全体ログ（P16/C8通帳への統合表示用、
-        // buildLedgers()のgratitudeReceivedLedger参照）。member_points View自体は
-        // 既にgratitude_points受領分を合算済み（スキーマ設計.sql 14章）のため、
-        // ここで再取得するのは通帳の履歴行表示用のみ。
-        api.fetchGratitudeLog(client, familyId),
-        client
-          .from("chore_completion_daily_summary")
-          .select("*")
-          .eq("family_id", familyId)
-          .gte("activity_date", windowStart)
-          .lte("activity_date", today),
-        api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
-      ]);
+    const [
+      completionsRes,
+      reactionsRes,
+      redemptionsRes,
+      memberPointsRes,
+      gratitudeRes,
+      familyBoardReactionsRes,
+      dailySummaryRes,
+      dailyFlagsRes,
+    ] = await Promise.all([
+      api.fetchCompletions(client, familyId),
+      api.fetchReactions(client, familyId),
+      api.fetchRedemptions(client, familyId),
+      api.fetchMemberPoints(client, familyId),
+      // [2026-08-16追加] 感謝ポイント家族全体ログ（P16/C8通帳への統合表示用、
+      // buildLedgers()のgratitudeReceivedLedger参照）。member_points View自体は
+      // 既にgratitude_points受領分を合算済み（スキーマ設計.sql 14章）のため、
+      // ここで再取得するのは通帳の履歴行表示用のみ。
+      api.fetchGratitudeLog(client, familyId),
+      // [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのリアクション
+      // 家族全体ログ（InboxPanel「とどいたもの」への合流用）。
+      api.fetchFamilyBoardReactionsLog(client, familyId),
+      client
+        .from("chore_completion_daily_summary")
+        .select("*")
+        .eq("family_id", familyId)
+        .gte("activity_date", windowStart)
+        .lte("activity_date", today),
+      api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
+    ]);
 
     if (!completionsRes.ok) {
       setLoadError(completionsRes.error.message);
@@ -367,6 +390,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
+    if (!familyBoardReactionsRes.ok) {
+      setLoadError(familyBoardReactionsRes.error.message);
+      setLoading(false);
+      return;
+    }
     if (dailySummaryRes.error) {
       setLoadError(dailySummaryRes.error.message);
       setLoading(false);
@@ -388,6 +416,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       rewards: bundleRes.data.rewards,
       redemptions: redemptionsRes.data,
       gratitude: gratitudeRes.data,
+      familyBoardReactions: familyBoardReactionsRes.data,
       activeChildMemberId,
       activeParentMemberId,
       dailyFlaggedChoreIds: dailyFlagsRes.data,
@@ -571,6 +600,8 @@ const initialState: State = {
   // ありません」の空状態から始まる。7a章APIはRPC/PostgREST直呼びのためモック実装
   // 〔dispatch経由〕には組み込んでいない。実装メモ.md参照）。
   gratitude: [],
+  // [2026-09-01追加・実装メモ.md 104章] gratitudeと同じ理由でモック実装では空配列。
+  familyBoardReactions: [],
   activeChildMemberId: "member-child-1",
   activeParentMemberId: "member-parent-1",
   dailyFlaggedChoreIds: [],

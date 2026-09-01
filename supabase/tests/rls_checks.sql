@@ -12,6 +12,20 @@
 -- ものであり、適用後に本ファイルを実際に実行して差分が0件であることを別途確認する
 -- 必要がある。103章参照）。他の項目（S2・S4の他関数・B層）には変更を加えていない。
 --
+-- [2026-09-01再更新・開発部] 統括フィードバック（掲示板リアクションをLINE風の
+-- 個数表示へ作り直す）を受け、supabase/migrations/
+-- 20260901180000_family_board_reactions_line_style.sql（開発部/成果物/実装メモ.md
+-- 104章）でSELECTポリシーを「閲覧者自身の行のみ」→「家族全員が読める」へ置き換えた
+-- （ポリシー名も`family_board_reactions_select_own`→
+-- `family_board_reactions_select_same_family`に改名。理由は104章・上記マイグレーション
+-- 本体のコメント参照）。これに伴いS3の該当1行のみを更新した。S1（22のまま。テーブル
+-- の追加・削除は無い）・S4（44のまま。関数の追加・削除は無い）は変更していない。
+-- 一意制約の張り替え（(post_id, reactor_member_id) →
+-- (post_id, reactor_member_id, stamp_key)）はRLS・関数のいずれにも影響しないため
+-- 本ファイルのスナップショットには現れない。104章時点では上記マイグレーションは
+-- **未適用**であり、S3の新ハッシュは推定値である（104章参照。適用後に本部長が
+-- 実測して確認する）。
+--
 -- ■ なぜ作ったか
 -- 43本のRLSポリシー（2026-09-01時点。作成当初は41本）は、子どものデータを守っている
 -- 唯一の壁である。
@@ -77,7 +91,9 @@ INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
 
--- S3. ポリシー43本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む）。
+-- S3. ポリシー43本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
+--     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
+--     条件式変更。実装メモ.md 104章）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -96,10 +112,19 @@ WITH expected(t, p, c, h) AS (VALUES
   ('family_board_posts','family_board_posts_insert_self','INSERT','28574b1aee58588a3134af369c0c701a'),
   ('family_board_posts','family_board_posts_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
   -- [2026-09-01追加] family_board_reactions（開発部/成果物/実装メモ.md 103章）。
-  -- SELECTはfamily_board_posts_insert_selfと同型（family_id一致＋本人一致）だが、
+  -- INSERTはfamily_board_posts_insert_selfと同型（family_id一致＋本人一致）だが、
   -- 列名がreactor_member_idである点が異なるためハッシュも異なる。
   ('family_board_reactions','family_board_reactions_insert_self','INSERT','b92ec48c10ddb918af378dc16afcfb45'),
-  ('family_board_reactions','family_board_reactions_select_own','SELECT','8b9c6df1d1c4b6d84e81fc62ebae3800'),
+  -- [2026-09-01再改訂] SELECTを「閲覧者自身の行のみ」→「家族全員が読める」へ変更した
+  -- ことに伴い、ポリシー名を`family_board_reactions_select_own`→
+  -- `family_board_reactions_select_same_family`に改名（実装メモ.md 104章）。
+  -- 条件式が`family_id = current_family_id()`のみになったため、同じ条件式を持つ
+  -- 他の多数のSELECTポリシー（例: chores_select_scoped・chore_completions_select_scoped
+  -- 等）と全く同じハッシュ`ba5f17c68a4ed3412761e44aff4d2f47`になる（実装メモ.md 104章、
+  -- 手計算の根拠として明記。この値は既存の複数の承認済みハッシュと文字通り同一の
+  -- SQL文から導かれるため、103章時点の逆算よりも確度が高い推定値ではあるが、
+  -- あくまで推定であり実測ではない）。
+  ('family_board_reactions','family_board_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_drawings','family_drawings_delete_own_unpublished','DELETE','b288307c791de3293dbe0464121e47b2'),
   ('family_drawings','family_drawings_insert_self','INSERT','d5df22021847ff4c6881807027f61ff4'),
   ('family_drawings','family_drawings_select_scoped','SELECT','10deb005fa63c8ea72d3cc971d7f672d'),

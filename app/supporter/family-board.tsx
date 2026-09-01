@@ -36,6 +36,7 @@ export default function SupporterFamilyBoardScreen() {
     reactingReaction,
     reactionError,
     reactToPost,
+    viewReactorsForPost,
   } = useFamilyBoardHistory(familyId);
   const { remaining, reload: reloadRemaining } = useFamilyBoardRemainingToday();
 
@@ -82,6 +83,7 @@ export default function SupporterFamilyBoardScreen() {
         reactingReaction={reactingReaction}
         reactionError={reactionError}
         onReact={(postId, stampKey) => reactToPost(postId, myMemberId, stampKey)}
+        onViewReactors={viewReactorsForPost}
       />
     </Screen>
   );

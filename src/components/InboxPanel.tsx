@@ -17,6 +17,16 @@
  *
  * 01章3原則に従い、累計・ランキング・「今月◯個もらった」等の集計は置かない。
  * 届いたものを、届いた順に見せるだけにする。
+ *
+ * [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのスタンプリアクション
+ * （`family_board_reactions`）を合流させる（主要画面ワイヤーフレーム.md 22.2.2節
+ * 「『とどいたもの』への掲示板リアクション受信表示」）。統括の指摘「押しても相手に
+ * 伝わっていない」への一次対応は一覧側のLINE風個数表示で行うが、一覧はカードを
+ * タップしないと開かないため、アプリを開いた瞬間に気づけるという通知としての
+ * 即時性は本パネルにしか無い価値として残る（企画部推奨・UIUXデザイン部実装）。
+ * `state.familyBoardReactions`（家族全体ログ）から、対象投稿の`author_member_id`が
+ * 自分と一致する行だけを抜き出す（既存のfromReactions/fromGratitudeと同じ
+ * client側フィルタのパターン）。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -52,12 +62,21 @@ export interface InboxPanelProps {
  * [2026-08-29] 3ロールのホームが同じ数え方をするため、ここに1本化した。
  * 以前は子どもホームだけがこの計算を持っており、しかも感謝ポイントが抜けていた（87章）。
  * 未読ではなく「直近◯時間に届いた件数」である（既読の概念はアプリ全体に存在しない）。
+ *
+ * [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのリアクションも
+ * 合算対象に加える（主要画面ワイヤーフレーム.md 22.2.2節「並び順・件数上限」
+ * 「ホームのベル（🔔）バッジの件数〈countRecentInbox〉にも同様に掲示板リアクションを
+ * 合算する対象として加える」）。
  */
 export function countRecentInbox(
   state: {
     completions: { id: string; reported_by: string }[];
     reactions: { completion_id: string; created_at: string }[];
     gratitude: { recipient_id: string; revoked_at: string | null; created_at: string }[];
+    familyBoardReactions: {
+      created_at: string;
+      family_board_posts: { author_member_id: string } | null;
+    }[];
   },
   memberId: string,
   sinceMs: number
@@ -70,7 +89,19 @@ export function countRecentInbox(
   const gratitude = state.gratitude.filter(
     (g) => g.recipient_id === memberId && g.revoked_at === null && new Date(g.created_at).getTime() >= sinceMs
   ).length;
-  return reactions + gratitude;
+  const boardReactions = state.familyBoardReactions.filter(
+    (r) => r.family_board_posts?.author_member_id === memberId && new Date(r.created_at).getTime() >= sinceMs
+  ).length;
+  return reactions + gratitude + boardReactions;
+}
+
+/**
+ * 主要画面ワイヤーフレーム.md 22.2.2節「対象が分かる一言」: 先頭20字程度＋超過時は
+ * 「…」を付ける（22.1節カード抜粋の40字より短くする。呼び出し側で「」による囲みを
+ * 行うため、ここでは中身の文字列のみを返す）。
+ */
+function boardPostExcerpt(body: string, max = 20): string {
+  return body.length > max ? `${body.slice(0, max)}…` : body;
 }
 
 export function InboxPanel({ tone, memberId }: InboxPanelProps) {
@@ -119,10 +150,29 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         choreLabel: null,
       }));
 
-    return [...fromReactions, ...fromGratitude].sort(
+    // [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのリアクション
+    // （主要画面ワイヤーフレーム.md 22.2.2節）。対象投稿が自分の投稿である行だけを
+    // 抜き出す。「対象が分かる一言」の位置（choreLabel）に投稿本文の先頭20字抜粋を
+    // 「」で囲んで入れる（同節「対象が分かる一言」）。コメント欄（body）は常に空
+    // （掲示板のリアクションはスタンプのみ、コメントを伴わない）。
+    const fromBoardReactions: InboxItem[] = state.familyBoardReactions
+      .filter((r) => r.family_board_posts?.author_member_id === memberId)
+      .map((r) => {
+        const stamp = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
+        return {
+          id: `board_reaction:${r.id}`,
+          fromMemberId: r.reactor_member_id,
+          at: r.created_at,
+          headline: stamp ? `${stamp.emoji} ${stamp.label}` : "💬 コメント",
+          body: null,
+          choreLabel: `「${boardPostExcerpt(r.family_board_posts?.body ?? "")}」`,
+        };
+      });
+
+    return [...fromReactions, ...fromGratitude, ...fromBoardReactions].sort(
       (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
     );
-  }, [memberId, state.completions, state.reactions, state.gratitude]);
+  }, [memberId, state.completions, state.reactions, state.gratitude, state.familyBoardReactions]);
 
   const formatWhen = (iso: string) => {
     const d = new Date(iso);
@@ -139,8 +189,8 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
           emoji="📭"
           title={
             isChild
-              ? "まだ なにも とどいていないよ。クエストを ほうこくすると、かぞくから とどくかも！"
-              : "まだ届いたものはありません。クエストを報告すると、家族から届くことがあります。"
+              ? "まだ なにも とどいていないよ。クエストを ほうこくしたり、かきこみを すると、かぞくから とどくかも！"
+              : "まだ届いたものはありません。クエストを報告したり、家族の書き込みをすると、家族から届くことがあります"
           }
         />
       </View>

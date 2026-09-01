@@ -10,6 +10,7 @@ import { useAppData } from "@/data/store";
 import MemberAvatar from "@/components/MemberAvatar";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
+import { countRecentInbox } from "@/components/InboxPanel";
 
 /**
  * C5 やることリスト（ホーム）（主要5画面のひとつ）
@@ -66,18 +67,13 @@ export default function ChildHomeScreen() {
   // ユーザーの指摘「感謝ポイントかリアクションをもらった時の通知のほうがよい」による。
   // もらっても数字が動かず、押した先（きろく）にも出ないため、感謝ポイントは
   // 受け取っても気づけない状態だった。リアクションと同じ扱いで数える。
-  const myCompletionIds = new Set(state.completions.filter((c) => c.reported_by === me.id).map((c) => c.id));
+  //
+  // [2026-09-01修正・実装メモ.md 104章] 独自に持っていた計算ロジックを
+  // `InboxPanel.countRecentInbox`（保護者/みまもり側と共通の1本化された計算）へ
+  // 差し替えた。これにより家族の書き込みボードへのリアクションも自動的に合算対象へ
+  // 加わる（主要画面ワイヤーフレーム.md 22.2.2節「並び順・件数上限」）。
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newReactionCount =
-    state.reactions.filter(
-      (r) => myCompletionIds.has(r.completion_id) && new Date(r.created_at).getTime() >= oneDayAgoMs
-    ).length +
-    state.gratitude.filter(
-      (g) =>
-        g.recipient_id === me.id &&
-        g.revoked_at === null &&
-        new Date(g.created_at).getTime() >= oneDayAgoMs
-    ).length;
+  const newReactionCount = countRecentInbox(state, me.id, oneDayAgoMs);
 
   // [2026-08-27修正・本部長] 実施済みの「単発」を一覧から外す。単発のchoreには「終わり」が
   // 無く、実施後も「✅ おわったよ」のまま永久に「きろくずみ」へ並び続けていた
