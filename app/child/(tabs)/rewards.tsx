@@ -24,7 +24,10 @@ export default function ChildRewardsScreen() {
 
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
-  const rewards = state.rewards.filter((r) => r.is_active);
+  // [2026-09-01修正・本部長] 保護者側（app/parent/my-rewards.tsx）と同じ不具合が
+  // 子ども側にもあった。みまもりメンバーの自分専用ごほうびが交換一覧に混ざる。
+  // 3ロールとも同時に直す（実装メモ106章）。
+  const rewards = state.rewards.filter((r) => r.is_active && r.scope === "family");
 
   return (
     <Screen tone="child">

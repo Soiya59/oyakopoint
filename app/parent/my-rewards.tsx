@@ -44,7 +44,11 @@ export default function ParentMyRewardsScreen() {
 
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
   const balance = me ? memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0 : 0;
-  const rewards = state.rewards.filter((r) => r.is_active);
+  // [2026-09-01修正・本部長] scopeで絞っていなかったため、**みまもりメンバーの
+  // 自分専用ごほうびが保護者の交換一覧に混ざっていた**（統括が実機で発見）。
+  // 実装メモ90章で管理一覧（P12）からは外したが、交換画面が漏れていた。
+  // 88・89・93・94章と同じ「片方だけ直して完了と判断する」パターン。
+  const rewards = state.rewards.filter((r) => r.is_active && r.scope === "family");
 
   return (
     <Screen tone="parent">
