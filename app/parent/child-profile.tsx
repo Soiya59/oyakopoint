@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
@@ -8,6 +8,7 @@ import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { createChildProfile, setChildPin } from "@/data/api";
+import { resolveAvatarColorOptions, hasNoSelectableColor } from "@/lib/avatarColorAvailability";
 
 /**
  * P15 子どもプロフィール追加・PIN設定
@@ -18,20 +19,48 @@ import { createChildProfile, setChildPin } from "@/data/api";
  * 手順1: PostgREST `family_members`へのINSERT（RLS: family_members_insert_by_parent）
  * 手順2: Edge Function `set-child-pin`でPINをbcryptハッシュ化して登録
  * （呼び出し元の保護者Auth JWTはsupabase.functions.invoke()が自動付与する）。
+ *
+ * [2026-09-01追加] 色の重複防止（主要画面ワイヤーフレーム.md 25.2節）。在籍中の
+ * 他メンバーが使っている色はグレーアウトし、タップすると「この色は、今〇〇さんが
+ * 使っています」を表示する（選択肢からは消さない）。判定は src/lib/avatarColorAvailability.ts
+ * の共通関数を使い、P14「設定」の色変更と同じロジックを共有する（実装メモ100章）。
  */
 type Step = "profile" | "pin" | "done";
 
 export default function ChildProfileScreen() {
   const { parentMember, client } = useSession();
-  const { refresh } = useAppData();
+  const { state, refresh } = useAppData();
   const [step, setStep] = useState<Step>("profile");
   const [displayName, setDisplayName] = useState("");
-  const [avatarColor, setAvatarColor] = useState<string>(theme.memberColorPalette[0].value);
+
+  // P15では対象本人がまだ存在しないため excludeMemberId は null（25.3節）。
+  const colorOptions = useMemo(
+    () => resolveAvatarColorOptions(theme.memberColorPalette, state.members, null),
+    [state.members]
+  );
+  const noSelectableColor = hasNoSelectableColor(colorOptions);
+  // デフォルト選択は先頭の色（25.2節）。ただし先頭の色が在籍中の他メンバーで
+  // 使用中の場合にそのまま初期選択すると、画面を開いた直後に何も操作せず
+  // 保存すると即座に重複が発生してしまうため、先頭から見て最初に選べる色を
+  // 初期値にする（全色使用中の場合のみ、そのまま先頭の色を初期値にする）。
+  const [avatarColor, setAvatarColor] = useState<string>(
+    () => colorOptions.find((c) => c.usedByName === null)?.value ?? theme.memberColorPalette[0].value
+  );
+  const [usedColorMessage, setUsedColorMessage] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdChildName, setCreatedChildName] = useState("");
   const [createdMemberId, setCreatedMemberId] = useState<string | null>(null);
+
+  const selectColor = (colorValue: string, usedByName: string | null) => {
+    if (usedByName) {
+      setUsedColorMessage(`この色は、今${usedByName}さんが使っています`);
+      return;
+    }
+    setUsedColorMessage(null);
+    setAvatarColor(colorValue);
+  };
 
   const submitProfile = async () => {
     if (!parentMember || !displayName.trim()) return;
@@ -86,17 +115,31 @@ export default function ChildProfileScreen() {
 
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>アバターカラー</Text>
           <View style={styles.colorGrid}>
-            {theme.memberColorPalette.map((c) => (
+            {colorOptions.map((c) => (
               <Pressable
                 key={c.value}
-                onPress={() => setAvatarColor(c.value)}
+                onPress={() => selectColor(c.value, c.usedByName)}
                 style={[
                   styles.colorSwatch,
-                  { backgroundColor: c.value, borderWidth: avatarColor === c.value ? 3 : 0 },
+                  {
+                    backgroundColor: c.value,
+                    borderWidth: avatarColor === c.value ? 3 : 0,
+                    opacity: c.usedByName ? 0.4 : 1,
+                  },
                 ]}
               />
             ))}
           </View>
+          {usedColorMessage && (
+            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+              {usedColorMessage}
+            </Text>
+          )}
+          {noSelectableColor && (
+            <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
+              今選べる色がありません。どなたかが家族を離れると、また選べるようになります。
+            </Text>
+          )}
           <View style={{ marginTop: theme.spacing.s3 }}>
             <MemberAvatar name={displayName || "?"} color={avatarColor} size={48} />
           </View>
@@ -108,7 +151,7 @@ export default function ChildProfileScreen() {
           <AppButton
             label={submitting ? "作成中…" : "つぎへ（PIN設定）"}
             loading={submitting}
-            disabled={submitting || !displayName.trim()}
+            disabled={submitting || !displayName.trim() || noSelectableColor}
             style={{ marginTop: theme.spacing.s6 }}
             onPress={submitProfile}
           />

@@ -45,6 +45,12 @@ export const colors = {
 } as const;
 
 // ---- 1.3 メンバーカラーパレット（avatar_color） ----
+// [2026-09-01拡張] 8色→10色。開発部/成果物/実装メモ.md 100章・
+// デザイントークン.md 1.3節（2026-09-01改訂）参照。統括判断
+// 「お絵かきパレットは増やさないが、メンバーカラーは増やしたい」を受けた拡張。
+// この配列の値・順序は、DB側 next_member_avatar_color()（supabase/migrations/
+// 20260901140000_expand_member_avatar_color_palette.sql）の色配列と必ず一致させること
+// （どちらか片方だけを直す失敗が実装メモ88・89・93・94章で繰り返されているため）。
 export const memberColorPalette = [
   { name: "ミントグリーン", value: "#A8D5BA" },
   { name: "ピーチ", value: "#FFE5B4" },
@@ -54,6 +60,8 @@ export const memberColorPalette = [
   { name: "レモン", value: "#FFF3B0" },
   { name: "コーラル", value: "#FFAFA3" },
   { name: "アクアミント", value: "#C2F0E8" },
+  { name: "ライム", value: "#C8E8A8" }, // [2026-09-01追加]
+  { name: "モーブ", value: "#F0C2EC" }, // [2026-09-01追加]
 ] as const;
 
 // ---- 4. アイコン・イラスト方針: 保護者リアクション（スタンプ4種） ----
@@ -162,6 +170,11 @@ export const treeColors = {
   sky: "#DCF0FB",
   sun: "#FFE3A3",
   cloud: "#FFFFFF",
+  // [2026-09-01追加] color-tree-flower-center（デザイントークン.md 1.8節）。
+  // 旧固定値#FFF3B0はメンバーカラー「レモン」と完全一致しており、花（stage3）の
+  // 花芯とレモン色メンバーの色丸が混同していた（実装メモ99.5章・100章）。
+  // FamilyTree.tsxはこの値を参照する形にし、ハードコードを持たない。
+  flowerCenter: "#E0A83E",
 } as const;
 
 // ---- 8章 実施履歴カレンダー: 日別セルの濃淡（GitHubヒートマップ的表現） ----

@@ -48,8 +48,13 @@ const DOT_SIZE = 13;
 // 「ガチャの景品（36pt）の表示ルール」）。大きさは「これは景品だ」という意味のみを
 // 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
 const PRIZE_DOT_SIZE = 36;
-/** 花（stage3）の花芯の色。個人色に染めない固定色（木の共有部分と同じ扱い）。 */
-const FLOWER_CENTER_COLOR = "#FFF3B0";
+/**
+ * 花（stage3）の花芯の色。個人色に染めない固定色（木の共有部分と同じ扱い）。
+ * [2026-09-01変更] 旧値`#FFF3B0`はメンバーカラー「レモン」と完全一致していたため、
+ * デザイントークン.md 1.8節の新規トークン`color-tree-flower-center`に差し替えた
+ * （theme.ts側の値を正とし、ここではハードコードしない。実装メモ100章）。
+ */
+const FLOWER_CENTER_COLOR = theme.treeColors.flowerCenter;
 
 /** 景品の識別リング（交換した本人のavatar_color、2pt実線）の太さ。 */
 const PRIZE_RING_WIDTH = 2;

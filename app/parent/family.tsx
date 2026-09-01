@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -10,8 +10,16 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { fetchFamilyInvites, removeMember, revokeFamilyInvite, updateFamilyName, updateMemberDisplayName } from "@/data/api";
+import {
+  fetchFamilyInvites,
+  removeMember,
+  revokeFamilyInvite,
+  updateFamilyName,
+  updateMemberAvatarColor,
+  updateMemberDisplayName,
+} from "@/data/api";
 import type { FamilyInvite } from "@/types/domain";
+import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
 
 /** 表示名の最大文字数（MemberAvatarの頭文字表示・木の内訳表示が崩れない長さ）。 */
 const NAME_MAX_LENGTH = 12;
@@ -50,6 +58,19 @@ export default function FamilyScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [savingName, setSavingName] = useState(false);
+
+  // [2026-09-01追加] 色を編集中のメンバーID。名前編集（editingId）とは独立した状態だが、
+  // 「同時に2つの編集を開かせない」（主要画面ワイヤーフレーム.md 25.1節）ため、
+  // 色の編集を開始する際は必ず名前編集も閉じる（逆も同様、下記startEditName参照）。
+  const [editingColorId, setEditingColorId] = useState<string | null>(null);
+  const [draftColor, setDraftColor] = useState<string | null>(null);
+  const [usedColorMessage, setUsedColorMessage] = useState<string | null>(null);
+  const [confirmingColorChange, setConfirmingColorChange] = useState(false);
+  const [savingColor, setSavingColor] = useState(false);
+  const [colorError, setColorError] = useState<string | null>(null);
+  // 保存成功後、カードを閉じたあとも数秒だけ「色を変更しました」を表示する
+  // （25.1節「保存成功」状態。全画面演出はしない控えめなインライン表示）。
+  const [colorSuccessId, setColorSuccessId] = useState<string | null>(null);
 
   const activeMembers = state.members.filter((m) => m.is_active);
   // 「こどもモードにする」で profile-select へ渡す子ども一覧。
@@ -110,6 +131,8 @@ export default function FamilyScreen() {
     setErrorMessage(null);
     setEditingId(memberId);
     setDraftName(currentName);
+    // 名前編集と色編集を同時に開かせない（25.1節）。
+    cancelEditColor();
   };
 
   const cancelEditName = () => {
@@ -133,6 +156,69 @@ export default function FamilyScreen() {
     }
     cancelEditName();
     void refresh();
+  };
+
+  // ============================================================
+  // [2026-09-01追加] メンバーカラーの変更（P14拡張、主要画面ワイヤーフレーム.md 25.1節）。
+  // ============================================================
+  const startEditColor = (memberId: string, currentColor: string | null) => {
+    setErrorMessage(null);
+    setColorError(null);
+    setUsedColorMessage(null);
+    setConfirmingColorChange(false);
+    setColorSuccessId(null);
+    setEditingColorId(memberId);
+    setDraftColor(currentColor ?? theme.memberColorPalette[0].value);
+    // 名前編集と色編集を同時に開かせない（25.1節）。
+    cancelEditName();
+  };
+
+  const cancelEditColor = () => {
+    setEditingColorId(null);
+    setDraftColor(null);
+    setUsedColorMessage(null);
+    setConfirmingColorChange(false);
+    setColorError(null);
+  };
+
+  const selectDraftColor = (colorValue: string, usedByName: string | null) => {
+    if (usedByName) {
+      setUsedColorMessage(`この色は、今${usedByName}さんが使っています`);
+      return;
+    }
+    setUsedColorMessage(null);
+    setDraftColor(colorValue);
+  };
+
+  /** 「保存」タップ。今の色と異なる場合のみ、保存前の軽い確認を挟む（25.0決定3）。 */
+  const requestSaveColor = (currentColor: string | null) => {
+    if (!draftColor || draftColor === currentColor) return; // 変更なしは何もしない
+    setColorError(null);
+    setConfirmingColorChange(true);
+  };
+
+  /** 確認モーダルの「変更する」タップ。実際の保存を行う。 */
+  const confirmSaveColor = async (memberId: string) => {
+    if (!draftColor) return;
+    setSavingColor(true);
+    setColorError(null);
+    const res = await updateMemberAvatarColor(client, memberId, draftColor);
+    setSavingColor(false);
+    if (!res.ok) {
+      // 25.1節「保存失敗」: パレットは開いたまま再試行できるよう、確認だけ閉じて戻す。
+      setConfirmingColorChange(false);
+      setColorError(
+        res.error.code === "23505"
+          ? "この色は、ちょうど他の方が選んだため使えなくなりました。もう一度お試しください"
+          : "変更できませんでした。もう一度お試しください"
+      );
+      return;
+    }
+    cancelEditColor();
+    setColorSuccessId(memberId);
+    void refresh();
+    // 数秒だけ表示して自動的に消す（25.1節「保存成功」）。
+    setTimeout(() => setColorSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
   };
 
   // ============================================================
@@ -242,8 +328,19 @@ export default function FamilyScreen() {
       )}
 
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
-        {activeMembers.map((m) => (
-          <Card key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 }}>
+        {activeMembers.map((m) => {
+          const isEditingColor = editingColorId === m.id;
+          const anyEditOpen = editingId !== null || editingColorId !== null;
+          const colorOptions = isEditingColor
+            ? resolveAvatarColorOptions(theme.memberColorPalette, state.members, m.id)
+            : [];
+          const noSelectableColor = isEditingColor && colorOptions.every((c) => c.usedByName !== null);
+          return (
+          <Card key={m.id} style={{ gap: theme.spacing.s3 }}>
+            {colorSuccessId === m.id && (
+              <Text style={{ color: theme.colors.brandPrimaryStrong }}>色を変更しました</Text>
+            )}
+            <View style={{ flexDirection: "row", alignItems: isEditingColor ? "flex-start" : "center", gap: theme.spacing.s3 }}>
             <MemberAvatar name={m.display_name} color={m.avatar_color} />
             <View style={{ flex: 1 }}>
               {editingId === m.id ? (
@@ -266,6 +363,68 @@ export default function FamilyScreen() {
                     <AppButton label="やめる" variant="ghost" onPress={cancelEditName} disabled={savingName} />
                   </View>
                 </>
+              ) : isEditingColor ? (
+                <>
+                  <Text style={theme.typography.parentBodyMedium}>新しい色を選んでください</Text>
+                  <View style={styles.colorGrid}>
+                    {colorOptions.map((c) => (
+                      <Pressable
+                        key={c.value}
+                        onPress={() => selectDraftColor(c.value, c.usedByName)}
+                        style={[
+                          styles.colorSwatch,
+                          {
+                            backgroundColor: c.value,
+                            borderWidth: draftColor === c.value ? 3 : 0,
+                            opacity: c.usedByName ? 0.4 : 1,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  {usedColorMessage && (
+                    <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+                      {usedColorMessage}
+                    </Text>
+                  )}
+                  {noSelectableColor && (
+                    <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
+                      今選べる色がありません。どなたかが家族を離れると、また選べるようになります。
+                    </Text>
+                  )}
+                  {colorError && (
+                    <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{colorError}</Text>
+                  )}
+                  {confirmingColorChange ? (
+                    <>
+                      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
+                        色を変えると、これまで木に記録した色も、新しい色に変わります。よろしいですか？
+                      </Text>
+                      <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
+                        <AppButton
+                          label={savingColor ? "変更しています…" : "変更する"}
+                          onPress={() => confirmSaveColor(m.id)}
+                          disabled={savingColor}
+                        />
+                        <AppButton
+                          label="やめる"
+                          variant="ghost"
+                          onPress={() => setConfirmingColorChange(false)}
+                          disabled={savingColor}
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s3 }}>
+                      <AppButton
+                        label="保存"
+                        onPress={() => requestSaveColor(m.avatar_color)}
+                        disabled={!draftColor || draftColor === m.avatar_color || noSelectableColor}
+                      />
+                      <AppButton label="やめる" variant="ghost" onPress={cancelEditColor} />
+                    </View>
+                  )}
+                </>
               ) : (
                 <>
                   <Text style={theme.typography.parentBodyMedium}>{m.display_name}</Text>
@@ -281,14 +440,22 @@ export default function FamilyScreen() {
                 </>
               )}
             </View>
-            {editingId !== m.id && (
+            {editingId !== m.id && !isEditingColor && (
               <View style={{ gap: theme.spacing.s2 }}>
                 {/* 名前変更は役割を問わず保護者が全員に対して行える（RLS側も同条件）。 */}
                 <AppButton
                   label="名前を変更"
                   variant="secondary"
                   onPress={() => startEditName(m.id, m.display_name)}
-                  disabled={processingId !== null || editingId !== null}
+                  disabled={processingId !== null || anyEditOpen}
+                />
+                {/* [2026-09-01追加] 色の変更（主要画面ワイヤーフレーム.md 25.1節）。
+                    名前変更と同じく役割を問わず保護者が全員に対して行える。 */}
+                <AppButton
+                  label="色を変更"
+                  variant="secondary"
+                  onPress={() => startEditColor(m.id, m.avatar_color)}
+                  disabled={processingId !== null || anyEditOpen}
                 />
                 {m.role === "child" && (
                   <>
@@ -304,13 +471,13 @@ export default function FamilyScreen() {
                           params: { memberId: m.id, displayName: m.display_name },
                         })
                       }
-                      disabled={processingId !== null || editingId !== null}
+                      disabled={processingId !== null || anyEditOpen}
                     />
                     <AppButton
                       label={processingId === m.id ? "処理中…" : "退会させる"}
                       variant="secondary"
                       onPress={() => removeChild(m.id)}
-                      disabled={processingId !== null || editingId !== null}
+                      disabled={processingId !== null || anyEditOpen}
                     />
                   </>
                 )}
@@ -322,13 +489,15 @@ export default function FamilyScreen() {
                     label={processingId === m.id ? "処理中…" : "退会させる"}
                     variant="secondary"
                     onPress={() => removeSupporter(m.id)}
-                    disabled={processingId !== null || editingId !== null}
+                    disabled={processingId !== null || anyEditOpen}
                   />
                 )}
               </View>
             )}
+            </View>
           </Card>
-        ))}
+          );
+        })}
       </View>
 
       {/* [2026-08-22追加] みまもりメンバー招待導線（P14拡張・P23・P24、要件定義書07-7章）。
@@ -497,5 +666,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.s3,
     paddingVertical: theme.spacing.s2,
     backgroundColor: theme.colors.neutralSurface,
+  },
+  // [2026-09-01追加] 色変更UI（P14拡張）。child-profile.tsx（P15）と同じ寸法・
+  // 見た目に揃える（25.0決定2「両画面とも同じ見せ方で統一する」）。
+  colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderColor: theme.colors.neutralTextPrimary,
   },
 });

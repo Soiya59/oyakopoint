@@ -406,6 +406,32 @@ export async function updateMemberDisplayName(
   return { ok: true, data: data as FamilyMember };
 }
 
+/**
+ * [2026-09-01追加] メンバーのアバターカラーを変更する（P14「設定」メンバーカード拡張）。
+ * 参照: 主要画面ワイヤーフレーム.md 25章、開発部/成果物/実装メモ.md 100章。
+ *
+ * 権限は updateMemberDisplayName と同一で、既存のRLS `family_members_update_scoped`
+ *   family_id = current_family_id() AND (is_current_user_parent() OR id = current_family_member_id())
+ * がそのまま担保する（本部長がトリガー`family_members_before_update`は avatar_color を
+ * 制限していないことを確認済み）。DB側に色の一意制約は追加していない（既存データに
+ * 同色の在籍メンバーが存在するため）。「在籍中の他メンバーと同じ色は選べない」という
+ * 重複防止は画面側のみで行う（src/lib/avatarColorAvailability.ts）。
+ */
+export async function updateMemberAvatarColor(
+  client: SupabaseClient,
+  memberId: string,
+  avatarColor: string
+): Promise<ApiResult<FamilyMember>> {
+  const { data, error } = await client
+    .from("family_members")
+    .update({ avatar_color: avatarColor })
+    .eq("id", memberId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyMember };
+}
+
 export async function updateFamilyName(
   client: SupabaseClient,
   familyId: string,
