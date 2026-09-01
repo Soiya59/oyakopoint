@@ -4,14 +4,17 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
+import InviteVisibilityConsent, { JOIN_CONSENT_VERSION } from "@/components/InviteVisibilityConsent";
 import theme from "@/theme/theme";
-import { acceptFamilyInvite, familyInviteLookup, signInWithEmail } from "@/data/api";
+import { acceptFamilyInvite, familyInviteLookup, signInWithEmail, PG_ERRCODE } from "@/data/api";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 import { useSession } from "@/lib/session";
 
 /**
  * S0 招待プレビュー・参加確認（みまもりメンバー）
- * 参照: 画面一覧・遷移図.md 2.5節S0・3.11節、API仕様.md 2d章、認証・データ管理設計書.md 8.2〜8.5章
+ * 参照: 画面一覧・遷移図.md 2.5節S0・3.11節、API仕様.md 2d章・2f章、
+ * 認証・データ管理設計書.md 8.2〜8.5章、UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 26.5節
  *
  * P6「招待プレビュー・参加確認」（保護者の参加）とほぼ同じ構成だが、以下が異なる。
  * - ロール表示は「みまもりメンバーとして参加します」という編集不可のラベル固定
@@ -22,6 +25,12 @@ import { useSession } from "@/lib/session";
  *   メールアドレス入力→マジックリンク送信の導線を出し、認証完了後に同じ画面へ戻ってきた
  *   ときに表示名入力＋参加確定ボタンを出す2段階構成にした（画面数を増やさない設計判断。
  *   設計書はS0を1画面として定義しており、この2段階の出し分けは実装判断）。
+ *
+ * [2026-09-02改訂] 招待受諾フローにおける可視範囲の説明と同意取得（要件定義書.md
+ * 06章）に伴い、「役割（変更できません）」カードの直後、表示名入力欄の前に
+ * InviteVisibilityConsent（role="supporter"、3項目版。aの感謝メッセージ本文は
+ * 対象外）を追加した。チェックが入るまで「参加を確定する」ボタンをdisabledにし、
+ * 常時キャプションで理由を示す（26.3節）。
  */
 export default function JoinSupporterScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
@@ -37,6 +46,7 @@ export default function JoinSupporterScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -95,19 +105,29 @@ export default function JoinSupporterScreen() {
   };
 
   const confirmJoin = async () => {
-    if (!token || !displayName.trim()) return;
+    if (!token || !displayName.trim() || !consentChecked) return;
     setSubmitting(true);
     setSubmitError(null);
-    const res = await acceptFamilyInvite(token, displayName.trim());
+    const res = await acceptFamilyInvite(token, displayName.trim(), JOIN_CONSENT_VERSION);
     if (!res.ok) {
       setSubmitting(false);
       setSubmitError(
-        res.error.code === "insufficient_privilege"
+        res.error.code === PG_ERRCODE.insufficientPrivilege
           ? "この招待は別のメールアドレス宛てです。招待されたメールアドレスでログインし直してください"
-          : res.error.code === "no_data_found"
+          : res.error.code === PG_ERRCODE.noDataFound
           ? "招待が見つかりません"
-          : res.error.code === "check_violation"
-          ? "この招待はすでに確定済み、または有効期限が切れています"
+          : res.error.code === PG_ERRCODE.checkViolation
+          ? // check_violationは「招待がすでに確定・期限切れ」と「同意版数が
+            // 古い」（スキーマ設計.sql 40.5章）の2種類がありSQLSTATEだけでは
+            // 区別できないため、DB側のRAISE EXCEPTIONメッセージ本文で判別する。
+            // [2026-09-02修正] 従来はres.error.code === "check_violation"という
+            // 可読名の文字列比較になっており、実際に返るSQLSTATE（23514、
+            // PG_ERRCODE.checkViolation）と一致せず常にfalseだった（このthen節が
+            // 一度も実行されず、常にelseのres.error.messageへ落ちていた）。今回
+            // 3種類目のcheck_violation原因が増えたのを機に修正した。
+            res.error.message.includes("アプリが古い")
+            ? res.error.message
+            : "この招待はすでに確定済み、または有効期限が切れています"
           : res.error.message
       );
       return;
@@ -154,6 +174,8 @@ export default function JoinSupporterScreen() {
 
       {status === "parentNoFamily" ? (
         <>
+          <InviteVisibilityConsent role="supporter" checked={consentChecked} onChange={setConsentChecked} />
+
           <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s6 }]}>あなたの表示名（ニックネーム）</Text>
           <TextInput
             value={displayName}
@@ -177,10 +199,19 @@ export default function JoinSupporterScreen() {
             tone="supporter"
             label={submitting ? "参加中…" : "参加を確定する"}
             loading={submitting}
-            disabled={submitting || !displayName.trim()}
+            disabled={submitting || !displayName.trim() || !consentChecked}
             style={{ marginTop: theme.spacing.s6 }}
             onPress={confirmJoin}
           />
+          {/* 26.3節: disabled状態の理由を常時表示するキャプション（ポップアップ等は出さない） */}
+          <Text
+            style={[
+              theme.typography.supporterCaption,
+              { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+            ]}
+          >
+            内容を確認してチェックを入れると、参加できます
+          </Text>
         </>
       ) : emailSent ? (
         <View style={{ marginTop: theme.spacing.s6 }}>

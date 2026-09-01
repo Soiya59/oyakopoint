@@ -81,6 +81,21 @@
 -- 「FAILを消すためにスナップショットを更新してはならない」の遵守として、実測
 -- した上で記録している）。
 --
+-- [2026-09-02追加・開発部] 招待受諾フローにおける可視範囲の説明と同意取得
+-- （新規テーブル`join_consents`、設計部/成果物/スキーマ設計.sql 40章・開発部/
+-- 成果物/実装メモ.md 111章）に伴い、S1（23→24）・S3（48→50本、join_consents
+-- のSELECT2本を追加）・S4（47→48件、current_join_consent_versionを追加。
+-- join_family_with_invite_code/accept_family_inviteは3引数の新シグネチャに
+-- 差し替わったが、S4は関数名のみを見る照合のため件数上は動かない）、A層に
+-- A23（保護者: join_consentsに他家族の行が見えない）を追加した。
+-- `join_family_with_invite_code(text, text)`・`accept_family_invite(text, text)`
+-- の旧2引数シグネチャは本マイグレーションでDROP FUNCTIONされ、
+-- `pg_get_function_identity_arguments`で3引数の新シグネチャのみが残って
+-- いることをローカルで確認済み（実装メモ.md 111章）。マイグレーション
+-- `20260902010000_join_visibility_consent.sql`は111章時点で**未適用**であり、
+-- 本ファイルの新規ハッシュはローカルDocker環境で実測済み（96.5章の遵守として、
+-- 実測した上で記録している）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -117,8 +132,10 @@ GRANT INSERT ON _r TO authenticated;
 -- 追加により21→22。他のテーブルには変更が無い（下記S3差分確認と同じ103章参照）。
 -- [2026-09-01再更新] chore_nfc_tags（開発部/成果物/実装メモ.md 108章）の追加に
 -- より22→23。
+-- [2026-09-02再更新] join_consents（開発部/成果物/実装メモ.md 111章）の追加に
+-- より23→24。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '23', count(*)::text, count(*) = 23
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '24', count(*)::text, count(*) = 24
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -129,10 +146,13 @@ INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
 
--- S3. ポリシー48本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
+-- S3. ポリシー50本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
 --     条件式変更。実装メモ.md 104章。2026-09-01再々更新、chore_nfc_tags
 --     （NFCタグの人ごと化、実装メモ.md 108章）の5ポリシーを追加。43→48本）。
+--     2026-09-02再々々更新、join_consents（招待受諾フローの可視範囲説明と同意
+--     取得、設計部/成果物/スキーマ設計.sql 40章・実装メモ.md 111章）のSELECT
+--     2本を追加。48→50本。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -193,6 +213,17 @@ WITH expected(t, p, c, h) AS (VALUES
   ('gratitude_points','gratitude_points_insert_self','INSERT','dbc7880686f5a4383314d24a9ba591ab'),
   ('gratitude_points','gratitude_points_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gratitude_points','gratitude_points_update_revoke_by_sender','UPDATE','5cc6c5f5c30e0d1ecae492e233a49ac1'),
+  -- [2026-09-02追加] join_consents（招待受諾フローにおける可視範囲の説明と同意
+  -- 取得、設計部/成果物/スキーマ設計.sql 40.4章、開発部/成果物/実装メモ.md
+  -- 111章）。INSERT/UPDATE/DELETEポリシーは1本も定義しない設計（40.4章、書込みは
+  -- SECURITY DEFINER関数のみに閉じる）。join_consents_select_by_parentの条件式
+  -- `(family_id = current_family_id()) AND is_current_user_parent()`は
+  -- family_invites_select_by_parentと文字通り同一のため、ハッシュも同一の値を
+  -- 引き写せる（104章の教訓）。join_consents_select_ownの条件式
+  -- `family_member_id = current_family_member_id()`は承認済み一覧に文字通り
+  -- 同一のものが無い新しい形であり、ローカルDockerで実測した（111章参照）。
+  ('join_consents','join_consents_select_by_parent','SELECT','a64bcea5635a1759018a24e6bf16edc5'),
+  ('join_consents','join_consents_select_own','SELECT','a81cabc4ac6fc746a840a3457e019f8e'),
   ('push_tokens','push_tokens_delete_self','DELETE','d2d83fd3535d0c4e22eba82950957a4e'),
   ('push_tokens','push_tokens_insert_self','INSERT','bf39c4ff3a8b4f2b96611ea9d852daae'),
   ('push_tokens','push_tokens_select_self','SELECT','d2d83fd3535d0c4e22eba82950957a4e'),
@@ -218,7 +249,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー48本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー50本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -234,7 +265,14 @@ WITH expected(f) AS (VALUES
   ('chore_nfc_tags_before_write'),
   ('chore_reactions_before_insert'),
   ('chores_before_write'),('create_family_with_owner'),('current_family_id'),
-  ('current_family_member_id'),('current_family_role'),('decorate_tree_with_gacha_prize'),
+  ('current_family_member_id'),('current_family_role'),
+  -- [2026-09-02追加] current_join_consent_version（招待受諾フローにおける可視範囲の
+  -- 説明と同意取得、設計部/成果物/スキーマ設計.sql 40.5章、開発部/成果物/実装メモ.md
+  -- 111章）。max_unpublished_drawings_per_member等の既存の定数取得用ヘルパー関数と
+  -- 同じくLANGUAGE SQLでSECURITY DEFINERではないため、新規関数作成時にauthenticatedへ
+  -- のEXECUTE権限が自動付与される（34.5章の既知の挙動）。明示的なREVOKEは行っていない。
+  ('current_join_consent_version'),
+  ('decorate_tree_with_gacha_prize'),
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
@@ -279,7 +317,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数47件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数48件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -583,6 +621,20 @@ INSERT INTO _r SELECT 'A層', 'A22 保護者: chore_nfc_tagsに他家族の行�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM chore_nfc_tags WHERE family_id <> current_family_id();
+
+-- [2026-09-02追加] A23 join_consents（招待受諾フローにおける可視範囲の説明と
+-- 同意取得、設計部/成果物/スキーマ設計.sql 40.10章・開発部/成果物/実装メモ.md
+-- 111章）。家族間で分離されるべき新規テーブルのため、既存のA01〜A22と同じ形で
+-- 追加する。子ども・みまもりロール分の代表チェック（family_drawings/
+-- chore_completions/family_membersの3テーブル）への追加は不要（40.10章の判断。
+-- 子どもはjoin_family_with_invite_code/accept_family_inviteのいずれも呼び出せ
+-- ないため本テーブルへのアクセスパターンを検査する意味が無く、みまもりの
+-- 「自分の行しか見えない」懸念はjoin_consents_select_ownの存在だけで自明に
+-- 満たされ、他家族分離の懸念とは性質が異なるため）。
+INSERT INTO _r SELECT 'A層', 'A23 保護者: join_consentsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM join_consents WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する

@@ -724,7 +724,26 @@ INSERT INTO chore_nfc_tags (chore_id, member_id, tag_value) VALUES
 
 
 -- ============================================================
--- 23. 後片付け: なりすましJWTクレームを解除する
+-- 23. join_consents（招待受諾フローの可視範囲説明への同意記録。2026-09-02追加・
+--     開発部/成果物/実装メモ.md 111章）
+-- ============================================================
+-- [トリガー注意] join_consentsにはBEFORE INSERTトリガーが無く、INSERT用のRLS
+-- ポリシーも一切定義されていない（設計部/成果物/スキーマ設計.sql 40.4章。
+-- 本番ではjoin_family_with_invite_code/accept_family_inviteの内部からのみ
+-- 書き込まれる）。本ファイルはpostgres（スーパーユーザー）権限で実行される
+-- ためRLSはバイパスされ、素のINSERTで直接書き込める。RPCを経由しない直接
+-- INSERTだが、A23（他家族の行が見えないこと）を検査するためのデータとしては
+-- これで十分（A層はSELECT結果のみを見る）。
+-- 実運用でこの家族のメンバーが実際にRPC経由で参加したときの同意記録を模して、
+-- 各家族の保護者1名につき1行、current_join_consent_version()の現行値（1）で
+-- 投入する。
+INSERT INTO join_consents (family_id, family_member_id, consent_version) VALUES
+  ((SELECT id FROM _seed_ids WHERE key = 'fam_a'), (SELECT id FROM _seed_ids WHERE key = 'a_parent'), 1),
+  ((SELECT id FROM _seed_ids WHERE key = 'fam_b'), (SELECT id FROM _seed_ids WHERE key = 'b_parent'), 1);
+
+
+-- ============================================================
+-- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);
 
@@ -746,7 +765,8 @@ SELECT
   (SELECT count(*) FROM family_board_reactions fbr WHERE fbr.family_id = f.id) AS board_reactions,
   (SELECT count(*) FROM family_tree_seasons fts WHERE fts.family_id = f.id) AS tree_seasons,
   (SELECT count(*) FROM weekly_family_digests wfd WHERE wfd.family_id = f.id) AS weekly_digests,
-  (SELECT count(*) FROM chore_nfc_tags cnt WHERE cnt.family_id = f.id) AS chore_nfc_tags
+  (SELECT count(*) FROM chore_nfc_tags cnt WHERE cnt.family_id = f.id) AS chore_nfc_tags,
+  (SELECT count(*) FROM join_consents jc WHERE jc.family_id = f.id) AS join_consents
 FROM families f
 ORDER BY f.created_at;
 

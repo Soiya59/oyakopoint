@@ -182,11 +182,26 @@ export async function createFamilyWithOwner(familyName: string, displayName: str
   return { ok: true, data: data as string };
 }
 
-/** API仕様.md 2a章 手順3: supabase.rpc('join_family_with_invite_code', ...) */
-export async function joinFamilyWithInviteCode(inviteCode: string, displayName: string): Promise<ApiResult<string>> {
+/**
+ * API仕様.md 2f章手順③: supabase.rpc('join_family_with_invite_code', ...)
+ * [2026-09-02改訂] 招待受諾フローにおける可視範囲の説明と同意取得（要件定義書.md
+ * 06章、スキーマ設計.sql 40章）に伴い、2引数から3引数（p_consent_version追加）へ
+ * 改訂した。呼び出し元（P6・app/onboarding/join-preview.tsx）は
+ * InviteVisibilityConsent（src/components/InviteVisibilityConsent.tsx）が
+ * エクスポートするJOIN_CONSENT_VERSIONを渡すこと。DB側の
+ * current_join_consent_version()（スキーマ設計.sql 40.5章）と一致しない場合、
+ * check_violation（「アプリが古い可能性があります…」）で拒否される（40.5章）。
+ * 旧2引数版はスキーマ設計.sql 40.7章でDROP FUNCTION済みのため呼び出し不可。
+ */
+export async function joinFamilyWithInviteCode(
+  inviteCode: string,
+  displayName: string,
+  consentVersion: number
+): Promise<ApiResult<string>> {
   const { data, error } = await supabase.rpc("join_family_with_invite_code", {
     p_invite_code: inviteCode,
     p_display_name: displayName,
+    p_consent_version: consentVersion,
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as string };
@@ -323,15 +338,23 @@ export async function familyInviteLookup(token: string): Promise<ApiResult<Famil
 }
 
 /**
- * API仕様.md 2d章手順5: 参加確定。roleは引数に含まれず、常に招待発行時に保護者が
+ * API仕様.md 2f章手順③': 参加確定。roleは引数に含まれず、常に招待発行時に保護者が
  * 固定した値がそのまま使われる（06章・07-7章「参加者本人が自己申告でロールを
  * 選べる設計にはしない」）。マジックリンク認証完了後（auth.uid()が存在する状態）に
  * 呼ぶため、常にデフォルトの`supabase`クライアントを使う。
+ * [2026-09-02改訂] joinFamilyWithInviteCodeと同様、2引数から3引数
+ * （p_consent_version追加）へ改訂した。呼び出し元（S0・
+ * app/onboarding/join-supporter.tsx）はJOIN_CONSENT_VERSIONを渡すこと。
  */
-export async function acceptFamilyInvite(token: string, displayName: string): Promise<ApiResult<string>> {
+export async function acceptFamilyInvite(
+  token: string,
+  displayName: string,
+  consentVersion: number
+): Promise<ApiResult<string>> {
   const { data, error } = await supabase.rpc("accept_family_invite", {
     p_token: token,
     p_display_name: displayName,
+    p_consent_version: consentVersion,
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as string };
