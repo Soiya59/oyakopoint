@@ -30,6 +30,14 @@ interface DrawingBoardProps {
   errorMessage: string | null;
   /** 「せーぶする」（保護者・みまもりメンバー）/「とっておく」（子ども）。 */
   saveLabel: string;
+  /**
+   * 「ひとつ もどす」ボタンの文言。
+   * [2026-09-01追加・本部長] デザイントークン.md 1.9節は当初「消す操作は『ぜんぶけす』
+   * 1つのみ（1ストロークごとのUndoはMVPに含めない）」としていたが、これは実際に描く前の
+   * 予防的な線引きだった。統括が実機で使ったうえで「戻るボタンが欲しい」と判断したため
+   * 追加する（実装メモ101章）。全消しは取り返しがつかないため、1本だけ戻せる価値が大きい。
+   */
+  undoLabel: string;
   /** 「ぜんぶけす」/「ぜんぶ けす」。 */
   clearLabel: string;
   /** 保存成功時に呼ばれる。成功したらtrueを返すこと（成功時のみキャンバスをクリアするため）。 */
@@ -48,6 +56,7 @@ export function DrawingBoard({
   errorMessage,
   saveLabel,
   clearLabel,
+  undoLabel,
   onSave,
   onDeleteRequest,
   deletingId,
@@ -74,6 +83,9 @@ export function DrawingBoard({
   };
 
   const clearAll = () => setLines([]);
+
+  /** 直前の1本だけ取り消す。保存前のキャンバス上の操作なので、DBには一切触れない。 */
+  const undoLastStroke = () => setLines((prev) => prev.slice(0, -1));
 
   const handleSave = async () => {
     if (lines.length === 0) return;
@@ -151,6 +163,15 @@ export function DrawingBoard({
       {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
 
       <View style={styles.actionRow}>
+        {/* 「ひとつ もどす」を「ぜんぶけす」の左に置く。取り返しのつく操作を先に、
+            全部消える操作を後に並べ、誤って全消しを押す事故を減らす。 */}
+        <AppButton
+          label={undoLabel}
+          tone={tone}
+          variant="secondary"
+          onPress={undoLastStroke}
+          disabled={saving || lines.length === 0}
+        />
         <AppButton
           label={clearLabel}
           tone={tone}

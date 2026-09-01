@@ -80,6 +80,7 @@ export default function SupporterDrawingScreen() {
             errorMessage={errorMessage}
             saveLabel="せーぶする"
             clearLabel="ぜんぶけす"
+            undoLabel="ひとつ戻す"
             onSave={handleSave}
             onDeleteRequest={handleDeleteRequest}
             deletingId={deletingId}

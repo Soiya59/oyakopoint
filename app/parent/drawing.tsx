@@ -81,6 +81,7 @@ export default function ParentDrawingScreen() {
             errorMessage={errorMessage}
             saveLabel="せーぶする"
             clearLabel="ぜんぶけす"
+            undoLabel="ひとつ戻す"
             onSave={handleSave}
             onDeleteRequest={handleDeleteRequest}
             deletingId={deletingId}
