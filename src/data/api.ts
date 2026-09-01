@@ -26,6 +26,7 @@ import type {
   Family,
   FamilyBoardPost,
   FamilyBoardPostWithAuthor,
+  FamilyBoardReaction,
   FamilyDrawing,
   FamilyDrawingLineData,
   FamilyHomeCard,
@@ -1724,6 +1725,16 @@ export async function fetchFamilyHomeCard(
  * `sender_id`/`recipient_id`の2列で`family_members`を参照する全く同じ形で
  * 既に本番稼働しており、`family_members!recipient_id(...)`/`family_members!sender_id(...)`
  * が有効であることを確認済み＝実装メモ.md 79章の検証を参照。同じ列名ヒント方式を踏襲した）。
+ *
+ * [2026-09-01追加・実装メモ.md 103章] `family_board_reactions`を`my_reaction`という
+ * エイリアスでネストして取得する。**取得はするが画面に出さないのではなく、そもそも
+ * 他者の行を取ってこない**（主要画面ワイヤーフレーム.md 22.2.1節「企画部の必須要件との
+ * 整合」根拠4）。これはクライアント側のクエリ条件（例えば`.eq("reactor_member_id", ...)`
+ * を書くこと）で実現しているのではなく、`family_board_reactions_select_own`という
+ * RLSのSELECTポリシー自体が常に`reactor_member_id = current_family_member_id()`を
+ * 要求するため、この埋め込みクエリがどんな条件で呼ばれても、PostgRESTが返す
+ * `my_reaction`配列には閲覧者自身が送った行（0件または1件）しか現れない
+ * （設計判断の詳細はマイグレーション本体のコメント参照）。
  */
 export async function fetchFamilyBoardPostsHistory(
   client: SupabaseClient,
@@ -1732,7 +1743,7 @@ export async function fetchFamilyBoardPostsHistory(
 ): Promise<ApiResult<FamilyBoardPostWithAuthor[]>> {
   const { data, error } = await client
     .from("family_board_posts")
-    .select("*, family_members!author_member_id(display_name, avatar_color)")
+    .select("*, family_members!author_member_id(display_name, avatar_color), my_reaction:family_board_reactions(stamp_key)")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false })
     .range(range.from, range.to);
@@ -1807,4 +1818,39 @@ export async function deleteFamilyBoardPost(client: SupabaseClient, postId: stri
   const { error } = await client.rpc("delete_family_board_post", { p_post_id: postId });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
+}
+
+/**
+ * 要件定義書07-14章「リアクション（スタンプ）の追加」・主要画面ワイヤーフレーム.md
+ * 22.2.1節: 投稿へのスタンプ送信（2026-09-01追加・実装メモ.md 103章）。
+ *
+ * `chore_reactions`の`addReaction`と同じ形（直接INSERT、確認ダイアログなしの
+ * タップ即送信）。取消不可・自己リアクション不可・1人1投稿1スタンプまでの判定は
+ * すべてDB側（BEFORE INSERTトリガー・一意制約・RLS）が行うため、本関数自体は
+ * 判定ロジックを持たない。想定される失敗:
+ *   - `foreign_key_violation`（23503）: 対象投稿が存在しないか、既に削除されている
+ *     （論理削除された投稿へのリアクションはトリガー内のSELECTがRLSにより空振りする
+ *     ため、この経路で拒否される。マイグレーション本体のコメント参照）
+ *   - `check_violation`（23514）: 自分の投稿への自己リアクション（UI側でボタン自体を
+ *     出さないため通常到達しないが、多重防御として存在する）
+ *   - `unique_violation`（23505）: 同じ投稿に既に別タブ・別デバイス等で先にスタンプを
+ *     送信済み（1人1投稿1スタンプの一意制約）
+ * `family_id`・`created_at`はクライアントから送る必要が無い（BEFORE INSERTトリガーが
+ * 対象投稿からサーバー側で確定させる、family_board_posts_before_insertと同じ設計）。
+ */
+export async function addFamilyBoardReaction(
+  client: SupabaseClient,
+  input: { post_id: string; reactor_member_id: string; stamp_key: StampKey }
+): Promise<ApiResult<FamilyBoardReaction>> {
+  const { data, error } = await client
+    .from("family_board_reactions")
+    .insert({
+      post_id: input.post_id,
+      reactor_member_id: input.reactor_member_id,
+      stamp_key: input.stamp_key,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyBoardReaction };
 }

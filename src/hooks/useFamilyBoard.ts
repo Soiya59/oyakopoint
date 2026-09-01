@@ -39,13 +39,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import {
+  addFamilyBoardReaction,
   deleteFamilyBoardPost,
   fetchFamilyBoardPostsHistory,
   fetchFamilyHomeCard,
   fetchMyFamilyBoardPostsRemainingToday,
   PG_ERRCODE,
 } from "@/data/api";
-import type { FamilyBoardPostWithAuthor, FamilyHomeCard } from "@/types/domain";
+import type { FamilyBoardPostWithAuthor, FamilyHomeCard, StampKey } from "@/types/domain";
 
 export type FamilyBoardLoadState = "loading" | "error" | "ready";
 
@@ -175,6 +176,47 @@ export function useFamilyBoardHistory(familyId: string) {
     [client]
   );
 
+  // [2026-09-01追加・実装メモ.md 103章] 投稿へのスタンプリアクション（要件定義書
+  // 07-14章「リアクション（スタンプ）の追加」、主要画面ワイヤーフレーム.md 22.2.1節）。
+  // 取消不可のため「送る」操作のみを公開する（removePostと違い、逆方向の操作は無い）。
+  const [reactingReaction, setReactingReaction] = useState<{ postId: string; stampKey: StampKey } | null>(null);
+  const [reactionError, setReactionError] = useState<{ postId: string; message: string } | null>(null);
+
+  const reactToPost = useCallback(
+    async (postId: string, memberId: string, stampKey: StampKey): Promise<boolean> => {
+      setReactingReaction({ postId, stampKey });
+      setReactionError(null);
+      const res = await addFamilyBoardReaction(client, {
+        post_id: postId,
+        reactor_member_id: memberId,
+        stamp_key: stampKey,
+      });
+      setReactingReaction(null);
+      if (!res.ok) {
+        // 22.2.1節「対象投稿が削除済み」: 対象投稿がトリガー内のSELECTで見つからず
+        // foreign_key_violationになった場合は、次のreloadを待たずに一覧からその投稿を
+        // 即時除去する（removePostのno_data_found処理と同じ考え方）。
+        if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
+          setPosts((prev) => prev.filter((p) => p.id !== postId));
+        }
+        // unique_violation（同一投稿への二重送信）は、WITH CHECKにより既存の競合行は
+        // 必ず自分自身が送った行のはずである（reactor_member_id = 呼び出し本人が
+        // 強制されるため）。UI側の楽観的な表示だけでは実際に選ばれたスタンプの種類を
+        // 断定できないため、fabricateせずreload()で実際の状態を取り直す。
+        if (res.error.code === PG_ERRCODE.uniqueViolation) {
+          void load();
+        }
+        setReactionError({ postId, message: res.error.message });
+        return false;
+      }
+      // 全件reloadではなく該当投稿のmy_reactionだけをローカルで即時更新する
+      // （removePostと同じくページング位置・スクロール位置を崩さないため）。
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, my_reaction: [{ stamp_key: stampKey }] } : p)));
+      return true;
+    },
+    [client, load]
+  );
+
   return {
     loadState,
     posts,
@@ -185,6 +227,9 @@ export function useFamilyBoardHistory(familyId: string) {
     removingPostId,
     actionError,
     removePost,
+    reactingReaction,
+    reactionError,
+    reactToPost,
   };
 }
 

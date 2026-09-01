@@ -3,8 +3,18 @@
 --
 -- [2026-08-31作成・本部長]
 --
+-- [2026-09-01更新・開発部] 家族の書き込みボードへのリアクション（スタンプ）新設
+-- （supabase/migrations/20260901160000_family_board_reactions.sql、開発部/成果物/
+-- 実装メモ.md 103章）に伴い、S1（21→22）・S3（41→43本、family_board_reactionsの
+-- SELECT/INSERT各1本を追加）・S4（43→44件、family_board_reactions_before_insertを
+-- 追加）のスナップショットを更新した。上記マイグレーションは103章時点では**未適用**
+-- （96.5章のとおりFAILを消すための更新ではなく、意図した変更を先取りして記録した
+-- ものであり、適用後に本ファイルを実際に実行して差分が0件であることを別途確認する
+-- 必要がある。103章参照）。他の項目（S2・S4の他関数・B層）には変更を加えていない。
+--
 -- ■ なぜ作ったか
--- 41本のRLSポリシーは、子どものデータを守っている唯一の壁である。
+-- 43本のRLSポリシー（2026-09-01時点。作成当初は41本）は、子どものデータを守っている
+-- 唯一の壁である。
 -- そしてRLSの不備は**エラーを出さない**。厳しすぎれば画面が空になって気づくが、
 -- 緩すぎれば「見えてはいけないものが、ただ見える」だけで無症状のまま残る。
 -- 目視・手動操作では原理的に発見できないため、機械で照査する。
@@ -53,8 +63,10 @@ GRANT INSERT ON _r TO authenticated;
 -- ============================================================
 
 -- S1. RLSが有効なテーブル数。新しいテーブルを追加してRLSを付け忘れると減る。
+-- [2026-09-01更新] family_board_reactions（開発部/成果物/実装メモ.md 103章）の
+-- 追加により21→22。他のテーブルには変更が無い（下記S3差分確認と同じ103章参照）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '21', count(*)::text, count(*) = 21
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '22', count(*)::text, count(*) = 22
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -65,7 +77,7 @@ INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
 
--- S3. ポリシー41本の一覧と中身の照合。
+-- S3. ポリシー43本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -83,6 +95,11 @@ WITH expected(t, p, c, h) AS (VALUES
   ('families','families_update_by_parent','UPDATE','e5f50b299119f3b60ec261510beff957'),
   ('family_board_posts','family_board_posts_insert_self','INSERT','28574b1aee58588a3134af369c0c701a'),
   ('family_board_posts','family_board_posts_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
+  -- [2026-09-01追加] family_board_reactions（開発部/成果物/実装メモ.md 103章）。
+  -- SELECTはfamily_board_posts_insert_selfと同型（family_id一致＋本人一致）だが、
+  -- 列名がreactor_member_idである点が異なるためハッシュも異なる。
+  ('family_board_reactions','family_board_reactions_insert_self','INSERT','b92ec48c10ddb918af378dc16afcfb45'),
+  ('family_board_reactions','family_board_reactions_select_own','SELECT','8b9c6df1d1c4b6d84e81fc62ebae3800'),
   ('family_drawings','family_drawings_delete_own_unpublished','DELETE','b288307c791de3293dbe0464121e47b2'),
   ('family_drawings','family_drawings_insert_self','INSERT','d5df22021847ff4c6881807027f61ff4'),
   ('family_drawings','family_drawings_select_scoped','SELECT','10deb005fa63c8ea72d3cc971d7f672d'),
@@ -125,7 +142,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー41本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー43本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -139,7 +156,14 @@ WITH expected(f) AS (VALUES
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
-  ('family_board_posts_daily_used'),('family_drawings_before_insert'),('family_invite_lookup'),
+  ('family_board_posts_daily_used'),
+  -- [2026-09-01追加] family_board_reactions_before_insert（開発部/成果物/実装メモ.md
+  -- 103章）。他のBEFORE INSERTトリガー関数（chore_reactions_before_insert等）と同じく
+  -- SECURITY DEFINERではないため、本プロジェクトの既知の挙動（34.5章）により新規関数
+  -- 作成時にauthenticatedへEXECUTE権限が自動付与される。明示的なREVOKEは行っていない
+  -- （既存の同種トリガー関数と同じ扱い）ため、この一覧にも追加する。
+  ('family_board_reactions_before_insert'),
+  ('family_drawings_before_insert'),('family_invite_lookup'),
   ('family_invites_before_insert'),('family_invites_before_update'),
   ('family_member_pins_before_write'),('family_members_before_update'),('family_tree_seasons_bump'),
   ('family_tree_stage_for_count'),('gacha_drawing_weight'),('gacha_member_progress_bump'),
@@ -162,7 +186,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数43件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数44件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

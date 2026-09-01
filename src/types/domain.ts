@@ -384,9 +384,33 @@ export interface FamilyBoardPost {
   deleted_by_member_id: string | null;
 }
 
-/** 投稿者の表示名・アバター色をネストした投稿1行（履歴一覧表示用）。API仕様.md 13.4章。 */
+/**
+ * family_board_reactions テーブルの1行（要件定義書07-14章「リアクション（スタンプ）の
+ * 追加」、スキーマ設計.sql該当章、開発部/成果物/実装メモ.md 103章）。
+ * chore_reactionsと違いkind/comment_bodyは無い（スタンプ専用、コメントは対象外）。
+ * SELECT RLS（family_board_reactions_select_own）が常に
+ * `reactor_member_id = current_family_member_id()` を要求するため、クライアントが
+ * 取得できる行は常に閲覧者自身が送った分だけになる（他メンバーの反応は取得されない）。
+ */
+export interface FamilyBoardReaction {
+  id: string;
+  family_id: string;
+  post_id: string;
+  reactor_member_id: string;
+  stamp_key: StampKey;
+  created_at: string;
+}
+
+/**
+ * 投稿者の表示名・アバター色をネストした投稿1行（履歴一覧表示用）。API仕様.md 13.4章。
+ * [2026-09-01追加] `my_reaction`は`family_board_reactions`をネストしたもの（PostgREST
+ * embed）。上記RLSにより閲覧者自身の行のみが返るため、0件（未反応）または1件
+ * （閲覧者が送信済みのスタンプ）のいずれかにしかならない。他者の反応の有無・件数・
+ * 反応者は構造上ここに含まれない（主要画面ワイヤーフレーム.md 22.2.1節参照）。
+ */
 export interface FamilyBoardPostWithAuthor extends FamilyBoardPost {
   family_members: { display_name: string; avatar_color: string | null } | null;
+  my_reaction: { stamp_key: StampKey }[];
 }
 
 /** family_home_card View の source 列（スキーマ設計.sql 35d章）。 */

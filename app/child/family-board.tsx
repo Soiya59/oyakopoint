@@ -38,6 +38,9 @@ export default function ChildFamilyBoardScreen() {
     removingPostId,
     actionError,
     removePost,
+    reactingReaction,
+    reactionError,
+    reactToPost,
   } = useFamilyBoardHistory(familyId);
   const { remaining } = useFamilyBoardRemainingToday();
 
@@ -64,6 +67,9 @@ export default function ChildFamilyBoardScreen() {
         removingPostId={removingPostId}
         actionError={actionError}
         onRemovePost={removePost}
+        reactingReaction={reactingReaction}
+        reactionError={reactionError}
+        onReact={(postId, stampKey) => reactToPost(postId, myMemberId, stampKey)}
       />
     </Screen>
   );
