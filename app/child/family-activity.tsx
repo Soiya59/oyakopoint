@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
-import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 
 /**
  * かぞくのがんばり（子ども向け、双方向リアクション・子→親方向）
@@ -120,9 +120,7 @@ export default function FamilyActivityScreen() {
                 </Text>
               </View>
               <Text style={styles.dateLabel}>
-                {formatDateShort(toJstDateString(c.reported_at))}
-                {" "}
-                {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                {formatDateTimeShort(c.reported_at)}
               </Text>
               <View style={styles.stampRow}>
                 {theme.stampDefinitions.map((s) => {
@@ -171,9 +169,7 @@ export default function FamilyActivityScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>{member?.display_name}が きろくしたよ</Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {formatDateShort(toJstDateString(detailTarget.reported_at))}
-                      {" "}
-                      {new Date(detailTarget.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                      {formatDateTimeShort(detailTarget.reported_at)}
                     </Text>
 
                     <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>とどいたリアクション</Text>

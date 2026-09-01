@@ -9,6 +9,7 @@ import MyPointsCard from "@/components/MyPointsCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
@@ -227,9 +228,16 @@ export default function ParentHomeScreen() {
                   {member?.display_name} {c.chore_emoji} {c.chore_title}
                 </Text>
               </View>
-              <Text style={{ color: theme.colors.neutralTextSecondary }}>
-                +{c.points}pt
-              </Text>
+              {/* [2026-09-01追加・本部長] いつの報告か画面から分からなかったため、
+                  P8と同じ「M/D HH:MM」書式で右側に添える。 */}
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ color: theme.colors.neutralTextSecondary }}>
+                  +{c.points}pt
+                </Text>
+                <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+                  {formatDateTimeShort(c.reported_at)}
+                </Text>
+              </View>
             </Card>
           );
         })}

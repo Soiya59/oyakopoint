@@ -102,3 +102,33 @@ export function formatDateShort(dateStr: string): string {
   const [, m, d] = dateStr.split("-").map(Number);
   return `${m}/${d}`;
 }
+
+/**
+ * ISO日時から「HH:MM」を作る（JST固定）。
+ * [2026-09-01追加・本部長] 各画面が `toLocaleTimeString("ja-JP", ...)` を直に呼んでおり、
+ * 端末のタイムゾーンに依存していた。本ファイル冒頭の方針（日付計算はJSTで一貫させる）から
+ * 外れるため、時刻もここに集約する。
+ */
+export function formatTimeShort(isoString: string | Date): string {
+  const date = typeof isoString === "string" ? new Date(isoString) : isoString;
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
+/** ISO日時から「M/D HH:MM」を作る（JST固定）。一覧カードの既定書式。 */
+export function formatDateTimeShort(isoString: string | Date): string {
+  return `${formatDateShort(toJstDateString(isoString))} ${formatTimeShort(isoString)}`;
+}
+
+/**
+ * ISO日時から「YYYY年M月D日 HH:MM」を作る（JST固定）。詳細画面用。
+ * 一覧は年を省いて「M/D HH:MM」だが、詳細は1件を確かめる場面なので年まで出す。
+ */
+export function formatDateTimeFullJp(isoString: string | Date): string {
+  const [y, m, d] = toJstDateString(isoString).split("-").map(Number);
+  return `${y}年${m}月${d}日 ${formatTimeShort(isoString)}`;
+}

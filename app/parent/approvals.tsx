@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { formatDateTimeFullJp, formatDateTimeShort } from "@/lib/calendarDates";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
@@ -159,7 +160,7 @@ export default function ApprovalsScreen() {
                 </View>
                 <View style={styles.cardMeta}>
                   <Text style={theme.typography.parentCaption}>
-                    {new Date(c.reported_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}{" "}
+                    {formatDateTimeShort(c.reported_at)}{" "}
                     {isChildCard ? "とどいた" : "きろくした"}
                   </Text>
                 </View>
@@ -217,7 +218,7 @@ export default function ApprovalsScreen() {
                       {member?.display_name} さんから ・ +{detailTarget.points}pt
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {new Date(detailTarget.reported_at).toLocaleString("ja-JP")}{" "}
+                      {formatDateTimeFullJp(detailTarget.reported_at)}{" "}
                       {isChildCard ? "とどいた" : "きろくした"}
                     </Text>
                     {detailTarget.note ? (

@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
@@ -162,7 +163,13 @@ export default function SupporterHomeScreen() {
                     {member?.display_name} {c.chore_emoji} {c.chore_title}
                   </Text>
                 </View>
-                <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>
+                {/* [2026-09-01追加・本部長] P7と同じ理由・同じ書式。S2一覧とも揃える。 */}
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>
+                  <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
+                    {formatDateTimeShort(c.reported_at)}
+                  </Text>
+                </View>
               </Card>
             </Pressable>
           );
