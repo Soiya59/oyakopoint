@@ -75,7 +75,7 @@ export default function SupporterMyChoresScreen() {
 
       {myChores.length === 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <EmptyState emoji="🎯" title="まだじぶんのクエストが登録されていません" />
+          <EmptyState emoji="🎯" title="まだクエストが登録されていません" />
         </View>
       )}
 

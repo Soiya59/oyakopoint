@@ -60,7 +60,7 @@ export default function SupporterRewardConfirmScreen() {
         <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>（いま {balance}pt）</Text>
         <AppButton
           tone="supporter"
-          label="じぶんのごほうびへもどる"
+          label="ごほうびへもどる"
           style={{ marginTop: theme.spacing.s6 }}
           onPress={() => router.replace("/supporter/reward-redeem")}
         />

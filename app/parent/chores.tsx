@@ -165,7 +165,7 @@ export default function ChoresListScreen() {
           <Card>
             <Text style={theme.typography.parentBodyMedium}>👀 みまもりのクエスト →</Text>
             <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-              みまもりメンバーが自分用に登録しているクエストを見られます。
+              みまもりメンバーが登録しているクエストを見られます。
             </Text>
           </Card>
         </Pressable>

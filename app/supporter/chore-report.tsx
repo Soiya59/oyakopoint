@@ -37,7 +37,7 @@ export default function SupporterChoreReportScreen() {
     return (
       <Screen tone="supporter">
         <Text style={theme.typography.supporterBody}>クエストが見つかりませんでした</Text>
-        <AppButton tone="supporter" label="じぶんのクエストへもどる" onPress={() => router.replace("/supporter/my-chores")} />
+        <AppButton tone="supporter" label="クエストへもどる" onPress={() => router.replace("/supporter/my-chores")} />
       </Screen>
     );
   }
@@ -87,7 +87,7 @@ export default function SupporterChoreReportScreen() {
         <View style={styles.centerBlock}>
           <Text style={theme.typography.supporterBodyMedium}>本日はすでに記録済みです</Text>
         </View>
-        <AppButton tone="supporter" label="じぶんのクエストへもどる" fullWidth onPress={() => router.replace("/supporter/my-chores")} />
+        <AppButton tone="supporter" label="クエストへもどる" fullWidth onPress={() => router.replace("/supporter/my-chores")} />
       </Screen>
     );
   }

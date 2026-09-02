@@ -94,7 +94,7 @@ export default function SupporterRewardEditScreen() {
   return (
     <Screen tone="supporter">
       <Text style={theme.typography.supporterTitle}>
-        {reward ? `${reward.emoji ?? "🎁"} ごほうびを編集` : "じぶんのごほうびを新規登録"}
+        {reward ? `${reward.emoji ?? "🎁"} ごほうびを編集` : "ごほうびを新規登録"}
       </Text>
       {/* [2026-08-23改訂] 「ごほうびも家族に見せたい」というユーザー要望を受け、
           choreと同じく家族公開に変更した（rewards_select_scoped、family_id一致のみ）。

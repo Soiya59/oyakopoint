@@ -19,6 +19,12 @@ export default function RewardsListScreen() {
   // app/parent/chores.tsx の同じ修正のコメントを参照（みまもりメンバーの自分専用の
   // ごほうびは保護者が編集・削除できないのに一覧へ出ていた）。
   const managed = state.rewards.filter((r) => r.scope === "family");
+  // [2026-09-02追加・統括指示] みまもりメンバーのごほうびへの導線。統括の指摘
+  // 「クエストは見守りのクエストに飛べるけど、ご褒美は飛べない」。P25画面は
+  // クエストとごほうびの両方を出すのに、入口がクエスト管理（P10）にしか
+  // なかった（2026-09-02、本部長がP10側だけに導線を付けたため）。
+  // 表示条件はP10側と同じ（みまもりメンバーがいる家庭のみ）。
+  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
 
   // [2026-08-30追加] 要件定義書07-15章・主要画面ワイヤーフレーム.md 24章（決定1・
   // 決定2）。「わたしが登録」「かぞくが登録」の2グループに分ける。判定は
@@ -61,6 +67,21 @@ export default function RewardsListScreen() {
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
           {others.map(renderRow)}
         </View>
+      )}
+
+      {hasAnySupporter && (
+        <Pressable
+          onPress={() => router.push("/parent/supporter-chores")}
+          style={{ marginTop: theme.spacing.s6 }}
+          hitSlop={8}
+        >
+          <Card>
+            <Text style={theme.typography.parentBodyMedium}>🎁 みまもりのごほうび →</Text>
+            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
+              みまもりメンバーが登録しているごほうびを見られます。
+            </Text>
+          </Card>
+        </Pressable>
       )}
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />

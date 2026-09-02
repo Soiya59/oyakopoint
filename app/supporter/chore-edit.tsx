@@ -225,7 +225,7 @@ export default function SupporterChoreEditScreen() {
   return (
     <Screen tone="supporter">
       <Text style={theme.typography.supporterTitle}>
-        {chore ? `${chore.emoji ?? "🎯"} クエストを編集` : "じぶんのクエストを新規登録"}
+        {chore ? `${chore.emoji ?? "🎯"} クエストを編集` : "クエストを新規登録"}
       </Text>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>

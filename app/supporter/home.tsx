@@ -71,8 +71,8 @@ export default function SupporterHomeScreen() {
 
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "👀", label: "かぞくのようす", path: "/supporter/activity" },
-    { emoji: "🎯", label: "じぶんのクエスト", path: "/supporter/my-chores" },
-    { emoji: "🎁", label: "じぶんのごほうび", path: "/supporter/rewards" },
+    { emoji: "🎯", label: "クエスト", path: "/supporter/my-chores" },
+    { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章
     // 「S1みまもりホーム内（既存のショートカットグリッドに1枠追加）」）。→S14。

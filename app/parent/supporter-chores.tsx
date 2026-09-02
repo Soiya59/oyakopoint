@@ -89,7 +89,7 @@ export default function ParentSupporterChoresScreen() {
 
       {loadState === "ready" && Object.keys(rewardsByCreator).length > 0 && (
         <>
-          <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>🎁 みんなのごほうび</Text>
+          <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>🎁 みまもりのごほうび</Text>
           <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s3 }}>
             {Object.entries(rewardsByCreator).map(([creatorId, rewards]) => {
               const creator = creatorOf(creatorId);

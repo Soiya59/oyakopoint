@@ -33,7 +33,7 @@ export default function SupporterRewardsScreen() {
 
       {myRewards.length === 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <EmptyState emoji="🎁" title="まだじぶんのごほうびが登録されていません" />
+          <EmptyState emoji="🎁" title="まだごほうびが登録されていません" />
         </View>
       )}
 
@@ -56,7 +56,7 @@ export default function SupporterRewardsScreen() {
 
       <AppButton
         tone="supporter"
-        label="じぶんのごほうびと交換する"
+        label="ごほうびと交換する"
         style={{ marginTop: theme.spacing.s6 }}
         disabled={myRewards.length === 0}
         onPress={() => router.push("/supporter/reward-redeem")}
