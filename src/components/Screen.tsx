@@ -1,6 +1,6 @@
 import React from "react";
 import { ScrollView, StyleSheet, View, ViewStyle } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import theme from "@/theme/theme";
 
 interface ScreenProps {
@@ -30,17 +30,32 @@ export function Screen({ children, scroll = true, tone = "parent", style, conten
   // 個別コンポーネント側でsupporterAccentを使う設計とした（tone="child"のような全画面着色はしない）。
   const bg = tone === "child" ? theme.colors.brandPrimarySoft : theme.colors.neutralBg;
   const Container = scroll ? ScrollView : View;
+  // [2026-09-02修正・本部長] 画面下端の余白が足りず、いちばん下の行が
+  // 端末のナビゲーションバー（Androidのジェスチャーバー）に接していた。
+  // 統括が家族の木の「週ごとのきろく」を実機で見て発見（8/3週の行が下端に
+  // 貼り付いていた）。原因は2つあり、両方に対処する。
+  //  (1) SafeAreaView の edges から "bottom" を意図的に外している
+  //      （背景色を画面下端まで伸ばすため。この意図は維持する）ので、
+  //      端末の下端インセットぶんの余白がどこにも入っていなかった
+  //  (2) 固定の paddingBottom が s8（32）しかなく、行が詰まって見えた
+  // (1) は useSafeAreaInsets() で明示的に足す。ただしWeb版（GitHub Pages を
+  // Chrome で開く現在の運用）では env(safe-area-inset-bottom) が 0 を返すため
+  // これだけでは解決せず、(2) の固定値も 32 → 64 に広げる。
+  const insets = useSafeAreaInsets();
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["top", "left", "right"]}>
       <Container
         style={scroll ? styles.scroll : [styles.flex, styles.outer]}
         contentContainerStyle={scroll ? styles.scrollOuter : undefined}
       >
-        <View style={[styles.content, !scroll && styles.flex, contentStyle]}>{children}</View>
+        <View style={[styles.content, !scroll && styles.flex, { paddingBottom: BASE_BOTTOM_PADDING + insets.bottom }, contentStyle]}>{children}</View>
       </Container>
     </SafeAreaView>
   );
 }
+
+/** 画面下端の基本余白。端末の下端インセットをこれに足して使う（上のコメント参照）。 */
+const BASE_BOTTOM_PADDING = theme.spacing.s8 * 2;
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -52,7 +67,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 480,
     padding: theme.spacing.s4,
-    paddingBottom: theme.spacing.s8,
+    // paddingBottom は描画時に BASE_BOTTOM_PADDING + 下端インセットで上書きする
   },
 });
 
