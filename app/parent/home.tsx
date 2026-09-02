@@ -73,7 +73,6 @@ export default function ParentHomeScreen() {
   // （参考一覧）」への導線。画面一覧・遷移図.md P25行「家族にみまもりメンバーが
   // 1人もいない場合は導線自体を表示しない」に対応し、家族に有効なsupporterが
   // 1人以上いる場合のみメニューに表示する。
-  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
   // 右上のベル。直近24時間に自分へ届いたリアクション・感謝の件数（src/components/InboxPanel.tsx）。
   const inboxCount = countRecentInbox(state, state.activeParentMemberId, oneDayAgoMs);
@@ -129,14 +128,20 @@ export default function ParentHomeScreen() {
       // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す。
       // このタイルだけ12pxに落として1行に収める（6×12=72px < 75px）。
       { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
+      // [2026-09-02追加・統括指示] 家族の木のタイル。上部にミニウィジェットがあるが、
+      // 統括は「基本的には下にスクロールしてタップしている」ため、タイル側にも導線が要る。
+      // 置き場所は統括指定で「コレクションの右」。コレクション（過去の木）と
+      // 家族の木（今の木）が隣り合い、関連が読み取りやすい並びになる。
+      { emoji: "🌿", label: "家族の木", path: "/parent/family-tree" },
       { emoji: "📋", label: "完了報告", path: "/parent/approvals" },
       { emoji: "📅", label: "きろく", path: "/parent/history" },
       { emoji: "📔", label: "通帳", path: "/parent/points" },
-      // 画面一覧・遷移図.md P25「家族にみまもりメンバーが1人もいない場合は導線自体を
-      // 表示しない」。ラベルは1行に収まらず折り返していたため短縮済み（遷移先は変更なし）。
-      hasAnySupporter
-        ? { emoji: "👀", label: "みまもりの記録", path: "/parent/supporter-chores" }
-        : null,
+      // [2026-09-02・統括指示] 「みまもりの記録」タイルはここから撤去し、P10クエスト管理の
+      // 中へ移した。統括の指摘「見守りの記録は見守りのクエストの内容だから、（名前が）
+      // あっていない」。実際にこの画面が出すのは「かぞくのみまもりメンバーのクエスト」
+      // 一覧であり、記録ではなくクエストである。クエストの話はクエスト管理に置くのが自然。
+      // 副次的な効果として、タイルが常に8枠（4×2）で揃うようになった（従来はみまもり
+      // メンバーがいない家庭で7枠になり歯抜けだった）。空いた枠には家族の木を入れている。
       // [2026-08-29統合] 旧「家族」タイルと「設定」タイルを1つにまとめた（統合先はP14）。
       { emoji: "⚙️", label: "設定", path: "/parent/family" },
     ] as (ShortcutItem | null)[]
@@ -245,7 +250,7 @@ export default function ParentHomeScreen() {
 
       {/* [2026-08-26整理] 「わたしの」＝保護者が参加者として使うもの、
           「かぞくの管理」＝管理者として使うもの。上のconst定義のコメント参照。 */}
-      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>私の管理</Text>
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>じぶんのこと</Text>
       <View style={styles.grid}>
         {myShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>
@@ -259,7 +264,7 @@ export default function ParentHomeScreen() {
         ))}
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>家族の管理</Text>
+      <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>家族のこと</Text>
       <View style={styles.grid}>
         {familyShortcuts.map((s) => (
           <Pressable key={s.path} onPress={() => router.push(s.path as never)} style={styles.gridItem}>

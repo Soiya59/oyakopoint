@@ -42,6 +42,13 @@ export default function ChoresListScreen() {
   // みまもりメンバーの登録内容は専用画面「👀 みまもりの記録」（P25）で引き続き見られるため、
   // ここから外しても情報は失われない。役割を「管理するもの＝ここ／見るもの＝P25」に分ける。
   const managed = state.chores.filter((c) => c.scope === "family");
+  // [2026-09-02追加・統括指示] みまもりメンバーのクエストへの導線をこの画面に置く。
+  // 従来は保護者ホームに「みまもりの記録」タイルとして独立していたが、統括の指摘
+  // 「見守りの記録は見守りのクエストの内容だから、（名前が）あっていない」のとおり、
+  // 中身は記録ではなくクエスト一覧である。クエストの話はクエスト管理に集める。
+  // 表示条件は従来のタイルと同じ（画面一覧・遷移図.md P25「家族にみまもりメンバーが
+  // 1人もいない場合は導線自体を表示しない」）。
+  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const active = managed.filter((c) => !isOneOffFinished(c));
   const finished = managed.filter((c) => isOneOffFinished(c));
 
@@ -144,6 +151,24 @@ export default function ChoresListScreen() {
           )}
           {finishedOpen && finished.map((c) => renderRow(c, true))}
         </View>
+      )}
+
+      {/* [2026-09-02追加・統括指示] みまもりメンバーのクエスト一覧（P25）への導線。
+          保護者ホームの「みまもりの記録」タイルをここへ移した。中身は記録ではなく
+          クエスト一覧なので、クエストの話はこの画面に集める。 */}
+      {hasAnySupporter && (
+        <Pressable
+          onPress={() => router.push("/parent/supporter-chores")}
+          style={{ marginTop: theme.spacing.s6 }}
+          hitSlop={8}
+        >
+          <Card>
+            <Text style={theme.typography.parentBodyMedium}>👀 みまもりのクエスト →</Text>
+            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
+              みまもりメンバーが自分用に登録しているクエストを見られます。
+            </Text>
+          </Card>
+        </Pressable>
       )}
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
