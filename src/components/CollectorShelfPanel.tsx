@@ -314,6 +314,16 @@ export function CollectorShelfPanel({
                             ? `「${selectedItem.drawing.artistName}」の絵`
                             : `「${selectedItem.drawing.artistName}」が描いた絵`}
                         </Text>
+                        {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
+                            主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
+                            直後に、独立した1行のラベル付き表示として追加する。無い絵は
+                            この行自体が無い（プレースホルダは出さない）。 */}
+                        {selectedItem.drawing.title && (
+                          <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                            {isChild ? "だいめい：" : "題名："}
+                            {selectedItem.drawing.title}
+                          </Text>
+                        )}
                         {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
                             絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
                             （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ

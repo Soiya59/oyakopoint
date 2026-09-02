@@ -26,10 +26,10 @@ export default function ChildDrawingScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const handleSave = async (lineData: FamilyDrawingLineData): Promise<boolean> => {
+  const handleSave = async (lineData: FamilyDrawingLineData, title: string | null): Promise<boolean> => {
     setSaving(true);
     setErrorMessage(null);
-    const res = await save(lineData);
+    const res = await save(lineData, title);
     setSaving(false);
     if (!res.ok) {
       setErrorMessage(res.error.message);
@@ -45,10 +45,14 @@ export default function ChildDrawingScreen() {
    * そのまま`errorMessage`に表示する（12.2a章「危険2」参照。ひらがな中心の
    * 文言指定はデザイントークン.md 2章に従いDB側メッセージをそのまま使う）。
    */
-  const handleEditSave = async (drawingId: string, lineData: FamilyDrawingLineData): Promise<boolean> => {
+  const handleEditSave = async (
+    drawingId: string,
+    lineData: FamilyDrawingLineData,
+    title: string | null
+  ): Promise<boolean> => {
     setSaving(true);
     setErrorMessage(null);
-    const res = await edit(drawingId, lineData);
+    const res = await edit(drawingId, lineData, title);
     setSaving(false);
     if (!res.ok) {
       setErrorMessage(res.error.message);

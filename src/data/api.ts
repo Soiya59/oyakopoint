@@ -1471,14 +1471,20 @@ export async function fetchMyDrawings(client: SupabaseClient, memberId: string):
  * PG_ERRCODE.checkViolation）で拒否される。クライアント側でも同じ上限（
  * theme.drawingLimits）で事前にボタンを無効化し、通常この経路のエラーには
  * 到達しない設計だが、DB側を最終防衛線として保つ（開発部CLAUDE.md/API仕様.md 12.2章）。
+ *
+ * [2026-09-02追加] `title`（お絵かきの題名、要件定義書07-13-2a章）。任意
+ * 入力のため、未入力（呼び出し側でtrim後0文字になったもの含む）は必ず
+ * `null`を渡すこと。空文字列`''`を送るとchk_family_drawings_title制約
+ * （trim後1〜20字）に違反しINSERT自体が拒否される（API仕様.md 12.2節）。
  */
 export async function createDrawing(
   client: SupabaseClient,
-  lineData: FamilyDrawingLineData
+  lineData: FamilyDrawingLineData,
+  title: string | null
 ): Promise<ApiResult<FamilyDrawing>> {
   const { data, error } = await client
     .from("family_drawings")
-    .insert({ line_data: lineData })
+    .insert({ line_data: lineData, title })
     .select("*")
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
@@ -1511,17 +1517,25 @@ export async function deleteDrawing(client: SupabaseClient, drawingId: string): 
  *   先に公開された（このRPC固有のメッセージ「この絵はすでに家族に公開
  *   されました。編集内容は保存されていません」が返る）。(b) 線データが
  *   33b章の上限（線数・点数・バイト数・パレット）を超えている（createDrawingと
- *   同じ検証。この場合は元の絵は削除されずそのまま残る）。
+ *   同じ検証。この場合は元の絵は削除されずそのまま残る）。(c) 題名が
+ *   trim後20字を超えている、または空白のみ等trim後0字（42.1・42.4章。
+ *   同じく元の絵は削除されずそのまま残る）。
  * いずれもDB側のRAISE EXCEPTIONメッセージをそのまま表示すればよい。
+ *
+ * [2026-09-02追加] `p_new_title`が第3引数として必須になった（スキーマ設計.sql
+ * 42.4章。旧2引数版はDROP FUNCTIONで廃止済み）。DEFAULT値は無いため、
+ * 題名を変えない場合も既存の値をそのまま渡すこと（未入力にする場合は`null`）。
  */
 export async function editUnpublishedDrawing(
   client: SupabaseClient,
   drawingId: string,
-  lineData: FamilyDrawingLineData
+  lineData: FamilyDrawingLineData,
+  title: string | null
 ): Promise<ApiResult<string>> {
   const { data, error } = await client.rpc("edit_unpublished_drawing", {
     p_drawing_id: drawingId,
     p_new_line_data: lineData,
+    p_new_title: title,
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as string };
@@ -1765,7 +1779,12 @@ export interface CollectedGachaDraw {
   /** ガチャを引いて獲得した人（07-13-3章「引いた人のものではなく家族のもの」だが、獲得の記録として表示する）。 */
   collectorName: string;
   presetOrnament: { display_name: string; emoji: string | null } | null;
-  drawing: { line_data: FamilyDrawingLineData; artistName: string } | null;
+  /**
+   * [2026-09-02追加] `title`はAPI仕様.md 12.4章「お絵かきの題名」。すでに
+   * 公開済みの絵のみを対象にした一覧のため（gacha_draws経由）表示してよい。
+   * 無い場合はnull（UI側は表示欄自体を出さない。07-13-2a章）。
+   */
+  drawing: { line_data: FamilyDrawingLineData; artistName: string; title: string | null } | null;
 }
 
 /**
@@ -1786,7 +1805,7 @@ export async function fetchFamilyCollectedGachaDraws(
       "id, drawn_at, prize_kind, " +
         "collector:family_members!member_id(display_name), " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data," +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title," +
         "artist:family_members!artist_member_id(display_name))"
     )
     .eq("family_id", familyId)
@@ -1798,7 +1817,11 @@ export async function fetchFamilyCollectedGachaDraws(
     prize_kind: GachaPrizeKind;
     collector: { display_name: string } | null;
     preset_ornament: { display_name: string; emoji: string | null } | null;
-    prize_drawing: { line_data: FamilyDrawingLineData; artist: { display_name: string } | null } | null;
+    prize_drawing: {
+      line_data: FamilyDrawingLineData;
+      title: string | null;
+      artist: { display_name: string } | null;
+    } | null;
   }[];
   return {
     ok: true,
@@ -1809,7 +1832,11 @@ export async function fetchFamilyCollectedGachaDraws(
       collectorName: r.collector?.display_name ?? "だれか",
       presetOrnament: r.preset_ornament,
       drawing: r.prize_drawing
-        ? { line_data: r.prize_drawing.line_data, artistName: r.prize_drawing.artist?.display_name ?? "だれか" }
+        ? {
+            line_data: r.prize_drawing.line_data,
+            artistName: r.prize_drawing.artist?.display_name ?? "だれか",
+            title: r.prize_drawing.title,
+          }
         : null,
     })),
   };

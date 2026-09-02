@@ -13,9 +13,15 @@
  * だけで、部分編集ではない。サムネイルの「なおす」「編集」（editLabel、呼び出し
  * 側から渡す）を押すと該当の絵の線データがキャンバスに読み込まれ、保存すると
  * `onEditSave`が呼ばれる。
+ *
+ * [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、主要画面ワイヤーフレーム.md
+ * 21.5a節・21.0節決定12〜19）。入力欄は8色パレット直下・保存ボタン直上に3ロール共通で
+ * 配置する。ラベル・プレースホルダ・カウンター表示の有無はtoneで書き分ける
+ * （決定12〜14）。送信直前に前後の空白をトリムし、トリム後0文字なら`null`として
+ * 送る（決定15、DrawingBoard内で行う）。
  */
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
 import DrawingCanvas, { DrawingThumbnail } from "./DrawingCanvas";
@@ -54,17 +60,22 @@ interface DrawingBoardProps {
    * API仕様.md 12.2a章・実装メモ.md 102章]
    */
   editLabel: string;
-  /** 保存成功時に呼ばれる。成功したらtrueを返すこと（成功時のみキャンバスをクリアするため）。 */
-  onSave: (lineData: FamilyDrawingLineData) => Promise<boolean>;
+  /**
+   * 保存成功時に呼ばれる。成功したらtrueを返すこと（成功時のみキャンバスをクリアするため）。
+   * [2026-09-02追加] 第2引数`title`は前後の空白をトリム済み・トリム後0文字なら
+   * `null`にした状態で渡される（本コンポーネント内で行う。決定15）。
+   */
+  onSave: (lineData: FamilyDrawingLineData, title: string | null) => Promise<boolean>;
   /**
    * 未公開の絵の編集保存リクエスト（本人・未公開の絵のみ編集可）。
-   * `edit_unpublished_drawing()`（スキーマ設計.sql 38章）を呼ぶ想定。成功したら
+   * `edit_unpublished_drawing()`（スキーマ設計.sql 42.4章）を呼ぶ想定。成功したら
    * trueを返すこと（成功時のみキャンバスをクリアし編集モードを終えるため）。
    * ガチャ競合で編集が破棄された場合（`check_violation`）も含め、失敗時は
    * `errorMessage`にDBのメッセージをそのまま表示すればよい（呼び出し側で
    * `res.error.message`をそのまま渡す。API仕様.md 12.2a章「危険2」参照）。
+   * [2026-09-02追加] 第3引数`title`はonSaveと同じくトリム済み・0文字ならnull。
    */
-  onEditSave: (drawingId: string, lineData: FamilyDrawingLineData) => Promise<boolean>;
+  onEditSave: (drawingId: string, lineData: FamilyDrawingLineData, title: string | null) => Promise<boolean>;
   /** 未公開の絵の削除リクエスト（描き直したい場合の導線、本人のみ・未公開のみ削除可）。 */
   onDeleteRequest: (drawingId: string) => void;
   /** 削除処理中のdrawing id（ボタンの二重押下防止・ローディング表示用）。 */
@@ -96,9 +107,23 @@ export function DrawingBoard({
   // nullなら「新規に描いている」状態、idがあれば「その絵をなおしている」状態。
   const [editingId, setEditingId] = useState<string | null>(null);
   const isEditing = editingId !== null;
+  // [2026-09-02追加] お絵かきの題名（21.5a節）。入力欄の生の文字列をそのまま保持し、
+  // トリム・null化は送信直前（handleSave）でのみ行う（決定15）。
+  const [title, setTitle] = useState<string>("");
 
-  const bodyStyle =
-    tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
+  const isChildTone = tone === "child";
+  const bodyStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
+  const captionStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
+
+  // [2026-09-02追加] 21.0節決定12・13、21.5a節「3ロールの入力欄文言（確定版）」。
+  const titleLabel = isChildTone ? "えの なまえ（にんい）" : "題名（任意）";
+  const titlePlaceholder = isChildTone ? "たとえば「ねこちゃん」" : "例：休日の公園";
+  // 決定14: 子ども向け（C24）はカウンター数字を一切表示しない。保護者・
+  // みまもりメンバー向け（P30/S18）は「◯/20」カウンターを表示し、残り5字で
+  // color-status-pendingに切り替える（22.3節と同型）。
+  const showTitleCounter = !isChildTone;
+  const titleRemaining = theme.drawingLimits.maxTitleLength - title.length;
+  const titleNearLimit = titleRemaining <= theme.drawingLimits.titleWarningThreshold;
 
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
     setLines((prev) => {
@@ -123,32 +148,44 @@ export function DrawingBoard({
    * 未公開の絵の編集を始める（API仕様.md 12.2a章）。対象の絵の線データを
    * そのままキャンバスへ読み込む。DBには一切触れない（保存を押すまでは
    * 「キャンバス上の下書き」のまま）。
+   * [2026-09-02追加] 題名入力欄にも既存の題名（無ければ空欄）を初期表示する
+   * （21.5a節・決定19）。
    */
   const startEdit = (drawing: FamilyDrawing) => {
     setConfirmingDeleteId(null);
     setEditingId(drawing.id);
     setLines(drawing.line_data.lines);
     setColor(drawing.line_data.lines[drawing.line_data.lines.length - 1]?.c ?? theme.drawingPalette[0].value);
+    setTitle(drawing.title ?? "");
   };
 
   /** 編集を保存せずにやめる。読み込んだ内容はキャンバスから消え、元の絵はDB上そのまま残る。 */
   const cancelEdit = () => {
     setEditingId(null);
     setLines([]);
+    setTitle("");
   };
 
   const handleSave = async () => {
     if (lines.length === 0) return;
+    // [2026-09-02追加] 送信直前に前後の空白をトリムし、トリム後0文字なら
+    // 題名なし（null）として送る（3ロール共通、決定15）。
+    const trimmedTitle = title.trim();
+    const titleToSend = trimmedTitle.length > 0 ? trimmedTitle : null;
     if (isEditing && editingId) {
-      const ok = await onEditSave(editingId, { v: 1, lines });
+      const ok = await onEditSave(editingId, { v: 1, lines }, titleToSend);
       if (ok) {
         setLines([]);
         setEditingId(null);
+        setTitle("");
       }
       return;
     }
-    const ok = await onSave({ v: 1, lines });
-    if (ok) setLines([]);
+    const ok = await onSave({ v: 1, lines }, titleToSend);
+    if (ok) {
+      setLines([]);
+      setTitle("");
+    }
   };
 
   /**
@@ -162,6 +199,10 @@ export function DrawingBoard({
    *
    * [2026-09-01追加] サムネイルごとに「けす」の隣へ編集導線（editLabel）を追加した。
    * 編集は同時に1枚のみ（isEditing中は全サムネイルの編集・削除ボタンを無効化する）。
+   *
+   * [2026-09-02追加] 題名があるサムネイルにのみ、サムネイル下へ1行のキャプションとして
+   * 題名を表示する（21.0節決定18・21.5節）。無い場合はキャプション行自体を出さない
+   * （07-13-2a章「（だいめいなし）等のプレースホルダは採用しない」）。
    */
   const renderMyDrawings = (hint: string) => (
     <>
@@ -171,6 +212,11 @@ export function DrawingBoard({
         {unpublished.map((d) => (
           <View key={d.id} style={styles.thumbWrap}>
             <DrawingThumbnail lineData={d.line_data} size={72} />
+            {d.title && (
+              <Text style={[captionStyle, styles.thumbCaption]} numberOfLines={1}>
+                {d.title}
+              </Text>
+            )}
             {confirmingDeleteId === d.id ? (
               <View style={styles.confirmRow}>
                 <Pressable
@@ -247,6 +293,35 @@ export function DrawingBoard({
           <View style={styles.paletteWrap}>
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
           </View>
+
+          {/* [2026-09-02追加] お絵かきの題名（21.5a節）。8色パレット直下・保存ボタン直上に
+              常設し、ストロークの有無で出し入れしない（実装の分岐を増やさないため）。
+              題名の有無は保存ボタンの活性・非活性に一切関与しない（決定13、任意項目）。 */}
+          <View style={styles.titleWrap}>
+            <Text style={bodyStyle}>{titleLabel}</Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder={titlePlaceholder}
+              maxLength={theme.drawingLimits.maxTitleLength}
+              editable={!saving}
+              style={styles.titleInput}
+            />
+            {showTitleCounter && (
+              <Text
+                style={[
+                  captionStyle,
+                  styles.titleCounter,
+                  {
+                    color: titleNearLimit ? theme.colors.statusPending : theme.colors.neutralTextSecondary,
+                    fontWeight: titleRemaining === 0 ? "700" : "400",
+                  },
+                ]}
+              >
+                {title.length}/{theme.drawingLimits.maxTitleLength}
+              </Text>
+            )}
+          </View>
         </>
       )}
 
@@ -295,6 +370,19 @@ export function DrawingBoard({
 
 const styles = StyleSheet.create({
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
+  // [2026-09-02追加] お絵かきの題名入力欄（21.5a節）。
+  titleWrap: { marginTop: theme.spacing.s4 },
+  titleInput: {
+    marginTop: theme.spacing.s1,
+    backgroundColor: theme.colors.neutralSurface,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    padding: theme.spacing.s3,
+  },
+  titleCounter: { marginTop: theme.spacing.s1, textAlign: "right" },
+  // サムネイル下の題名キャプション（決定18）。
+  thumbCaption: { maxWidth: 72, textAlign: "center" },
   actionRow: { flexDirection: "row", marginTop: theme.spacing.s4, gap: theme.spacing.s3 },
   saveButton: { flex: 1 },
   limitCard: { alignItems: "center", backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },

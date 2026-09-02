@@ -42,9 +42,14 @@ export function useMyDrawings(memberId: string) {
   const unpublished = drawings.filter((d) => !d.is_published);
   const atLimit = unpublished.length >= theme.drawingLimits.maxUnpublished;
 
+  /**
+   * [2026-09-02追加] `title`は要件定義書07-13-2a章「お絵かきの題名」。呼び出し側
+   * （DrawingBoard）が送信直前に前後の空白をトリムし、トリム後0文字なら`null`を
+   * 渡す（UIUXデザイン部21.0節決定15）。
+   */
   const save = useCallback(
-    async (lineData: FamilyDrawingLineData): Promise<DrawingActionResult> => {
-      const res = await createDrawing(client, lineData);
+    async (lineData: FamilyDrawingLineData, title: string | null): Promise<DrawingActionResult> => {
+      const res = await createDrawing(client, lineData, title);
       if (!res.ok) return { ok: false, error: res.error };
       await load();
       return { ok: true };
@@ -69,8 +74,8 @@ export function useMyDrawings(memberId: string) {
    * 12.2a章「編集後のcreated_at・未公開一覧の並び順への影響」参照）。
    */
   const edit = useCallback(
-    async (drawingId: string, lineData: FamilyDrawingLineData): Promise<DrawingActionResult> => {
-      const res = await editUnpublishedDrawing(client, drawingId, lineData);
+    async (drawingId: string, lineData: FamilyDrawingLineData, title: string | null): Promise<DrawingActionResult> => {
+      const res = await editUnpublishedDrawing(client, drawingId, lineData, title);
       if (!res.ok) return { ok: false, error: res.error };
       await load();
       return { ok: true };

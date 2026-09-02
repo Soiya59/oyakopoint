@@ -220,6 +220,12 @@ export const drawingLimits = {
   maxPointsPerLine: 300, // p配列は[x,y]の組なので要素数は最大600
   maxTotalPoints: 3000,
   maxBytes: 20480,
+  // [2026-09-02追加] お絵かきの題名（07-13-2a章）。chk_family_drawings_title
+  // （スキーマ設計.sql 42.1章）と一致させる単一の定義箇所。
+  maxTitleLength: 20,
+  // 主要画面ワイヤーフレーム.md 21.0節決定14: 保護者・みまもりメンバー向けの
+  // 「◯/20」カウンターは残り5字（15字入力時点）でcolor-status-pendingに切り替える。
+  titleWarningThreshold: 5,
 } as const;
 
 // ---- 1.10 ガチャのアクセントカラー・景品カタログ（`color-gacha-*`、2026-08-26追加、07-13-1章対応） ----

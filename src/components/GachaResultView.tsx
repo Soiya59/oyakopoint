@@ -88,13 +88,22 @@ export function GachaResultView({ tone, result, onDecorate, onGoToShelf }: Gacha
 
   if (result.kind === "family_drawing" && result.drawing) {
     const artistName = result.drawing.family_members?.display_name ?? "だれか";
+    // [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、主要画面ワイヤーフレーム.md
+    // 21.0節決定16）。既存の一文の「ひみつの絵」／「絵」部分だけを題名（『』囲み）に
+    // 置き換える。新しい行・新しいUI要素は追加しない。題名が無ければ既存文言のまま。
+    const title = result.drawing.title;
+    const prizeText = isChild
+      ? title
+        ? `「${artistName}」の『${title}』でした！`
+        : `「${artistName}」の ひみつの絵 でした！`
+      : title
+      ? `「${artistName}」が描いた『${title}』です`
+      : `「${artistName}」が描いた絵です`;
     return (
       <View style={styles.container}>
         <Text style={headlineStyle}>{isChild ? "🎉 ひみつが あいたよ！" : "景品が届きました"}</Text>
         <DrawingThumbnail lineData={result.drawing.line_data} size={120} />
-        <Text style={[bodyStyle, styles.prizeName]}>
-          {isChild ? `「${artistName}」の ひみつの絵 でした！` : `「${artistName}」が描いた絵です`}
-        </Text>
+        <Text style={[bodyStyle, styles.prizeName]}>{prizeText}</Text>
         <AppButton label={decorateLabel} tone={tone} fullWidth style={styles.button} onPress={onDecorate} />
       </View>
     );

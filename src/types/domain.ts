@@ -353,6 +353,13 @@ export interface FamilyDrawing {
   is_published: boolean;
   published_at: string | null;
   created_at: string;
+  /**
+   * [2026-09-02追加] 要件定義書07-13-2a章「お絵かきの題名」。任意入力
+   * （NULL許容）・上限20字（chk_family_drawings_title、スキーマ設計.sql
+   * 42.1章）。付けられるのは作成者本人のみ。公開済みの絵はDBレベルで
+   * title含め一切変更できない（42.3章）。
+   */
+  title: string | null;
 }
 
 // [新設・2026-08-26・第3段階] ガチャ（要件定義書07-13-1章、スキーマ設計.sql

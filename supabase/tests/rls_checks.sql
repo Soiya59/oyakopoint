@@ -96,6 +96,17 @@
 -- 本ファイルの新規ハッシュはローカルDocker環境で実測済み（96.5章の遵守として、
 -- 実測した上で記録している）。
 --
+-- [2026-09-02再追加・開発部] お絵かきの題名（タイトル）（family_drawingsへの
+-- 列追加`title`、設計部/成果物/スキーマ設計.sql 42章・開発部/成果物/実装メモ.md
+-- 118章）に伴い、S1（24のまま。新規テーブルを追加していない）・S3（50本の
+-- まま。新しいCREATE POLICYを追加していない。既存のfamily_drawings_*3本の
+-- 条件式も一切変更していない）はいずれも±0。S4は`edit_unpublished_drawing`が
+-- 2引数→3引数に改訂され旧シグネチャはDROP FUNCTIONされたが、S4は関数名のみを
+-- 見る照合のため件数上は動かない（48件のまま。42.6章の申し送りどおり、
+-- `pg_get_function_identity_arguments`で引数まで別途確認する必要がある。
+-- 開発部/成果物/実装メモ.md 118章で確認済み）。マイグレーション
+-- `20260902030000_drawing_title.sql`は118章時点で**未適用**である。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
