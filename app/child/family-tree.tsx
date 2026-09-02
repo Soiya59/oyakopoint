@@ -5,7 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
-import { TreeStageVisual, FamilyTreeBreakdownList } from "@/components/FamilyTree";
+import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import theme from "@/theme/theme";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
@@ -17,13 +17,25 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * 07-10章必須3条件（ソート禁止・勝者演出禁止・比較誘発コピー禁止）はP26と共通。
  */
 export default function ChildFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
   const count = season?.completion_count ?? 0;
   const next = theme.treeStages[stage + 1];
   const remaining = next ? next.threshold - count : null;
+
+  // [2026-09-02追加] 週ごとの記録。P26と同じデータ・同じ配置ルール（20.0節決定8・9）で、
+  // ひらがな・「しゅう」「かい」表記のみ子ども向けに書き分ける（20.1a節・20.4節）。
+  const weeklyItems = season
+    ? buildFamilyTreeWeeklyItems({
+        weeklyCounts,
+        seasonStart: season.season_start,
+        seasonEnd: season.season_end,
+        isChild: true,
+        useRelativeLabels: true,
+      })
+    : [];
 
   return (
     <Screen tone="child">
@@ -53,6 +65,15 @@ export default function ChildFamilyTreeScreen() {
             <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong }]}>
               もうすこしで「{next!.name}」になるよ{next!.emoji}
             </Text>
+          )}
+
+          {weeklyItems.length > 0 && (
+            <View style={{ width: "100%", marginTop: theme.spacing.s4 }}>
+              <Text style={[theme.typography.childBody, { marginBottom: theme.spacing.s2 }]}>
+                しゅうごとの きろく
+              </Text>
+              <FamilyTreeWeeklyList items={weeklyItems} countLabel="かい" />
+            </View>
           )}
 
           <Pressable onPress={() => setShowBreakdown((v) => !v)} style={{ marginTop: theme.spacing.s3 }}>

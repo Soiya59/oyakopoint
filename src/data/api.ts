@@ -39,6 +39,7 @@ import type {
   FamilyMember,
   FamilyTreeMemberBreakdown,
   FamilyTreeSeason,
+  FamilyTreeWeeklyCompletionCount,
   GachaDrawResult,
   GachaMemberProgressSummary,
   GachaPresetOrnament,
@@ -1287,6 +1288,27 @@ export async function fetchFamilyTreeMemberBreakdown(
   const rows = (data ?? []) as FamilyTreeMemberBreakdown[];
   // ソートしない要件（07-10章必須条件1）を満たしつつ、表示順だけ登録順に揃える。
   return { ok: true, data: [...rows].sort((a, b) => (a.member_created_at < b.member_created_at ? -1 : 1)) };
+}
+
+/**
+ * API仕様.md 9.6章: 週ごとの記録（要件定義書07-9章新設節「週ごとの記録」、
+ * スキーマ設計.sql 41章 family_tree_weekly_completion_counts）。
+ * 進行中シーズン・過去シーズンのいずれも`seasonId`を渡すだけで同一クエリ形状で使える
+ * （9.6章「現在の木・過去の木のいずれも同一Viewを同一クエリ形状で使える」）。
+ * Viewは意図的にORDER BYを持たないため、呼び出し側で必ずweek_start昇順（時系列順）に
+ * 並べること。completion_countの多い順に並べ替えてはならない（20.1a節・9.6章2.）。
+ */
+export async function fetchFamilyTreeWeeklyCompletionCounts(
+  client: SupabaseClient,
+  seasonId: string
+): Promise<ApiResult<FamilyTreeWeeklyCompletionCount[]>> {
+  const { data, error } = await client
+    .from("family_tree_weekly_completion_counts")
+    .select("family_id, season_id, season_start, week_start, completion_count")
+    .eq("season_id", seasonId)
+    .order("week_start", { ascending: true });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as FamilyTreeWeeklyCompletionCount[] };
 }
 
 /**

@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import { EmptyState } from "@/components/StatusViews";
+import ChoreSuggestionsModal from "@/components/ChoreSuggestionsModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
@@ -24,6 +25,10 @@ import type { Chore } from "@/types/domain";
 export default function ChoresListScreen() {
   const { state, isOneOffFinished } = useAppData();
   const [finishedOpen, setFinishedOpen] = useState(false);
+  // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
+  // 27.1・27.2節）。P10の空状態限定で開くモーダル。選択するとP11へプレフィル遷移する
+  // だけで、モーダル側にDB書き込みは一切発生しない。
+  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
 
   // [2026-08-29修正・本部長／軽微変更ルート] 家族共有（scope='family'）のみを対象にする。
   //
@@ -85,8 +90,30 @@ export default function ChoresListScreen() {
           新規の家族は必ず0件から始まるため、最初に開いた画面が無言だと次の一歩が
           分からない（実装メモ110章）。 */}
       {mine.length === 0 && others.length === 0 && finished.length === 0 && (
-        <EmptyState emoji="📝" title="まだクエストが登録されていません。「＋ 新規追加」から最初のクエストを作ってみましょう" />
+        <>
+          <EmptyState emoji="📝" title="まだクエストが登録されていません。「＋ 新規追加」から最初のクエストを作ってみましょう" />
+          {/* [2026-09-02追加] 要件定義書07-16章7.「クエストが1件でもある状態では表示しない」。
+              主要画面ワイヤーフレーム.md 27.1節どおり、EmptyState（変更なし）の直下に
+              セカンダリボタンとして追加する。 */}
+          <Text style={[theme.typography.parentBody, styles.suggestionsIntro]}>
+            迷ったら、おすすめから選んでみませんか？
+          </Text>
+          <AppButton
+            label="🔍 おすすめを見る"
+            variant="secondary"
+            onPress={() => setSuggestionsVisible(true)}
+          />
+        </>
       )}
+
+      <ChoreSuggestionsModal
+        visible={suggestionsVisible}
+        onClose={() => setSuggestionsVisible(false)}
+        onSelect={(s) => {
+          setSuggestionsVisible(false);
+          router.push({ pathname: "/parent/chore-edit", params: { recId: s.id } });
+        }}
+      />
 
       {mine.length > 0 && (
         <View>
@@ -127,6 +154,14 @@ export default function ChoresListScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   finishedToggle: { paddingVertical: theme.spacing.s2 },
+  // [2026-09-02追加] 主要画面ワイヤーフレーム.md 27.1節。既存EmptyStateの主役を保ち、
+  // おすすめ導線は補助的な位置づけ（27.4節トーン設計メモ）にとどめる。
+  suggestionsIntro: {
+    marginTop: theme.spacing.s4,
+    marginBottom: theme.spacing.s2,
+    textAlign: "center",
+    color: theme.colors.neutralTextSecondary,
+  },
   // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.0節決定3。app/parent/home.tsxの
   // sectionHeadingと同じスタイルを流用する（新規トークンを増やさない）。
   sectionHeading: {

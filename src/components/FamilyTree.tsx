@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TextStyle, View } from "react-native";
 import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot } from "@/data/api";
-import type { FamilyTreeMemberBreakdown } from "@/types/domain";
+import type { FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
+import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 
 /**
  * 家族の木の共通ビジュアル（P26/C20/S14の3画面から共有）。
@@ -767,6 +768,113 @@ export function FamilyTreeBreakdownList({
   );
 }
 
+/**
+ * 週ごとの記録（要件定義書07-9章新設節、20.1a節・21.0節決定11）。
+ *
+ * [ゼロ埋めの方針] Viewは0件の週を行として返さない設計判断（スキーマ設計.sql 41章
+ * 冒頭コメント「ゼロ埋めしない」）だが、UIUXデザイン部は20.1a節「0件の週：特別な強調・
+ * 非表示にせず、他の週と同じ書式でそのまま『◯回』と表示する」でゼロ埋め表示を選んだ
+ * （API仕様.md 9.6章がクライアント側での補完手順を明記済み）。本関数は
+ * シーズン開始週（`jst_week_start_date(season_start)`）から対象範囲の最終週まで
+ * 「あるべき週の一覧」を自前で列挙し、Viewの結果に無い週を0件として補う。
+ *
+ * [並び順・上限] 新しい週が先頭（20.1a節・決定9）、最大5週（20.1a節「上限」）。
+ * 端数週（シーズン開始が月曜以外の場合）も按分・補正せず実件数のみを表示する
+ * （07-9章「端数の週」）。
+ *
+ * [相対呼称] `useRelativeLabels=true`（現在の木、P26/C20/S14）のときのみ直近2週を
+ * 今週／先週（子どもはこんしゅう／せんしゅう）とし、3週目以降・過去の木
+ * （`useRelativeLabels=false`、21.0節決定11「過去シーズンは相対呼称が意味を持たない」）
+ * は常に`M/D週`（子どもは`M/Dしゅう`）で表す。
+ */
+export interface FamilyTreeWeeklyItem {
+  weekStart: string; // "YYYY-MM-DD"
+  count: number;
+  label: string;
+}
+
+export function buildFamilyTreeWeeklyItems({
+  weeklyCounts,
+  seasonStart,
+  seasonEnd,
+  isChild,
+  useRelativeLabels,
+  todayStr = getJstToday(),
+  maxWeeks = 5,
+}: {
+  weeklyCounts: FamilyTreeWeeklyCompletionCount[];
+  seasonStart: string;
+  seasonEnd: string | null;
+  isChild: boolean;
+  useRelativeLabels: boolean;
+  todayStr?: string;
+  maxWeeks?: number;
+}): FamilyTreeWeeklyItem[] {
+  const firstWeekStart = getJstWeekStartDate(seasonStart);
+  // season_endは排他的上限（reported_at < season_end）のため、シーズン最終日は
+  // season_endの前日（スキーマ設計.sql 41章のView定義と同じ境界の考え方）。
+  const lastWeekStart = seasonEnd
+    ? getJstWeekStartDate(addDaysToDateString(seasonEnd, -1))
+    : getJstWeekStartDate(todayStr);
+
+  const allWeekStarts: string[] = [];
+  let cursor = firstWeekStart;
+  // シーズンは暦月区切り（4〜5週）が前提のため実運用では数回のループで終わるが、
+  // 万一の異常データでの無限ループを避ける安全策として上限を設ける。
+  for (let guard = 0; cursor <= lastWeekStart && guard < 600; guard++) {
+    allWeekStarts.push(cursor);
+    cursor = addDaysToDateString(cursor, 7);
+  }
+
+  const countByWeek = new Map(weeklyCounts.map((w) => [w.week_start, w.completion_count]));
+  const withCounts = allWeekStarts.map((weekStart) => ({ weekStart, count: countByWeek.get(weekStart) ?? 0 }));
+  // 上限5週（20.1a節「上限」）: 最新の方から数えて5週分のみ残す。
+  const limited = withCounts.slice(-maxWeeks);
+  // 新しい週が先頭（決定9）。
+  const descending = [...limited].reverse();
+
+  const currentWeekStart = getJstWeekStartDate(todayStr);
+  const previousWeekStart = addDaysToDateString(currentWeekStart, -7);
+
+  return descending.map(({ weekStart, count }) => {
+    let label: string;
+    if (useRelativeLabels && weekStart === currentWeekStart) {
+      label = isChild ? "こんしゅう" : "今週";
+    } else if (useRelativeLabels && weekStart === previousWeekStart) {
+      label = isChild ? "せんしゅう" : "先週";
+    } else {
+      label = isChild ? `${formatDateShort(weekStart)}しゅう` : `${formatDateShort(weekStart)}週`;
+    }
+    return { weekStart, count, label };
+  });
+}
+
+export function FamilyTreeWeeklyList({
+  items,
+  countLabel = "回",
+  labelStyle,
+  countStyle,
+}: {
+  items: FamilyTreeWeeklyItem[];
+  countLabel?: string;
+  labelStyle?: TextStyle;
+  countStyle?: TextStyle;
+}) {
+  return (
+    <View style={{ width: "100%" }}>
+      {items.map((item) => (
+        <View key={item.weekStart} style={styles.weeklyRow}>
+          <Text style={[theme.typography.parentBody, labelStyle]}>{item.label}</Text>
+          <Text style={[theme.typography.parentBodyMedium, countStyle]}>
+            {item.count}
+            {countLabel}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   // 高さを固定し、下端（地面）を揃える。段階が上がっても画面がガタつかない。
   canvas: {
@@ -881,6 +989,9 @@ const styles = StyleSheet.create({
   },
   breakdownRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   breakdownName: { flex: 1 },
+  // [2026-09-02追加] 週ごとの記録（20.1a節）。矢印・棒グラフ・色分けを使わない
+  // 縦並びの数字リストのみ（決定9）。
+  weeklyRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: theme.spacing.s1 },
 });
 
 export default TreeStageVisual;

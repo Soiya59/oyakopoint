@@ -19,6 +19,7 @@ import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
 import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
+import { findChoreSuggestionById } from "@/data/choreSuggestions";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -53,22 +54,30 @@ type NfcModalStep = "list" | "selectMember" | "writing" | "writeFailed" | "unsup
 // 廃止」参照）。
 
 export default function ChoreEditScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, recId } = useLocalSearchParams<{ id?: string; recId?: string }>();
   const { state, refresh } = useAppData();
   const { client } = useSession();
   const isEditMode = !!id;
   const chore = isEditMode ? state.chores.find((c) => c.id === id) : undefined;
+
+  // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
+  // 27.0節決定5・27.3節）。P10のおすすめ集モーダルから遷移した場合のみ`recId`が付く。
+  // 新規作成モード（idパラメータ無し）のときだけ有効にする（編集モードでは無視する）。
+  const recommendation = !isEditMode && recId ? findChoreSuggestionById(recId) : undefined;
 
   // [重要] Reactのフック規則（同一コンポーネントインスタンスの全レンダーで同じ順番・同じ数の
   // フックを呼ぶ）を守るため、下記「編集モードなのにchoreが見つからない」場合の早期returnは
   // 必ずすべてのuseState呼び出しの後に置くこと（先頭付近に置くとレンダーによってフック呼び出し数が
   // 変わり、Reactが実行時エラーを投げる）。
   // ---- フォーム項目（スキーマ設計.sql 4章 chores参照） ----
-  const [title, setTitle] = useState(chore?.title ?? "");
-  const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? null);
-  const [pointsText, setPointsText] = useState(chore ? String(chore.points) : "");
+  const [title, setTitle] = useState(chore?.title ?? recommendation?.title ?? "");
+  const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? recommendation?.emoji ?? null);
+  const [pointsText, setPointsText] = useState(chore ? String(chore.points) : recommendation ? String(recommendation.points) : "");
   const [categoryId, setCategoryId] = useState<string | null>(chore?.category_id ?? null);
-  const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? false);
+  // [2026-09-02追加] 要件定義書07-16章4-1節「頻度→繰り返し設定の変換仕様」決定1〜3
+  // （2026-09-02改訂・本部長差し戻し対応）: おすすめはすべてis_repeatable=trueに変換し、
+  // daily_limitは未指定（空欄）のままにする（DBトリガーが保存時に1を補完する）。
+  const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? (recommendation ? true : false));
   const [dailyLimitText, setDailyLimitText] = useState(chore?.daily_limit != null ? String(chore.daily_limit) : "");
   const [assignedTo, setAssignedTo] = useState<string | null>(chore?.assigned_to ?? null);
 
@@ -291,6 +300,18 @@ export default function ChoreEditScreen() {
             {chore.editor
               ? `${chore.editor.display_name}・${toJstDateString(chore.updated_at).replace(/-/g, "/")}`
               : "記録なし"}
+          </Text>
+        </Card>
+      )}
+
+      {/* [2026-09-02追加] クエストのおすすめ集からのプレフィル表示（要件定義書07-16章
+          UIUX申し送り、主要画面ワイヤーフレーム.md 27.0節決定6・27.3節）。24.2節の
+          登録・最終編集Cardと表示条件が排他（chore有無で分岐）のため、同じCard
+          コンポーネント・同じ位置を流用する。編集モードでは表示しない。 */}
+      {!chore && recommendation && (
+        <Card style={styles.metaCard} tone="parent">
+          <Text style={theme.typography.parentBody}>
+            🍀 おすすめの「{recommendation.title}」をもとに入力しました。内容は自由に変えられます
           </Text>
         </Card>
       )}

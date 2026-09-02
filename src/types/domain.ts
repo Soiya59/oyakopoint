@@ -313,6 +313,19 @@ export interface FamilyTreeMemberBreakdown {
   completion_count: number;
 }
 
+/**
+ * family_tree_weekly_completion_counts Viewの1行（要件定義書07-9章「週ごとの記録」、
+ * API仕様.md 9.6章、スキーマ設計.sql 41章、2026-09-02追加）。家族全体合計のみで
+ * メンバー別内訳は持たない。0件の週は行として現れない（ゼロ埋めしない設計）。
+ */
+export interface FamilyTreeWeeklyCompletionCount {
+  family_id: string;
+  season_id: string;
+  season_start: string;
+  week_start: string; // "YYYY-MM-DD"（JST月曜0:00始まりの暦週の開始日）
+  completion_count: number;
+}
+
 // [新設・2026-08-26] お絵かき（要件定義書07-13-2章、スキーマ設計.sql 33b章
 // family_drawings、API仕様.md 12.2章）。ガチャ・コレクター棚・木への飾り付け
 // （07-13章の第3〜5段階）はここでは扱わない（第2段階のみの実装範囲。

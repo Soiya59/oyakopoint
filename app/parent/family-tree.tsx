@@ -5,7 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
-import { TreeStageVisual, FamilyTreeBreakdownList } from "@/components/FamilyTree";
+import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
@@ -21,13 +21,25 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * そのまま表示し、本画面側では一切ソートしない。
  */
 export default function ParentFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
   const count = season?.completion_count ?? 0;
   const next = theme.treeStages[stage + 1];
   const remaining = next ? next.threshold - count : null;
+
+  // [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節、20.0節決定8・9、20.1a節）。
+  // 常時表示・折りたたみなし。「内訳を見る」アコーディオンより手前に置く（決定8）。
+  const weeklyItems = season
+    ? buildFamilyTreeWeeklyItems({
+        weeklyCounts,
+        seasonStart: season.season_start,
+        seasonEnd: season.season_end,
+        isChild: false,
+        useRelativeLabels: true,
+      })
+    : [];
 
   return (
     <Screen tone="parent">
@@ -62,6 +74,15 @@ export default function ParentFamilyTreeScreen() {
             <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
               つぎの「{next!.name}」まで あと{remaining}回
             </Text>
+          )}
+
+          {weeklyItems.length > 0 && (
+            <View style={{ width: "100%", marginTop: theme.spacing.s4 }}>
+              <Text style={[theme.typography.parentBodyMedium, { marginBottom: theme.spacing.s2 }]}>
+                週ごとのきろく
+              </Text>
+              <FamilyTreeWeeklyList items={weeklyItems} countLabel="回" />
+            </View>
           )}
 
           <Pressable onPress={() => setShowBreakdown((v) => !v)} style={{ marginTop: theme.spacing.s3 }}>

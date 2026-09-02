@@ -5,7 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
-import { TreeStageVisual, FamilyTreeBreakdownList } from "@/components/FamilyTree";
+import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
@@ -19,11 +19,22 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * （デザイントークン.md 1.7節）。内訳の並び順・0件メンバーの扱いはP26/C20と完全に同一。
  */
 export default function SupporterFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
   const count = season?.completion_count ?? 0;
+
+  // [2026-09-02追加] 週ごとの記録。P26/C20と同じデータ・同じ配置ルール（20.0節決定8・9）。
+  const weeklyItems = season
+    ? buildFamilyTreeWeeklyItems({
+        weeklyCounts,
+        seasonStart: season.season_start,
+        seasonEnd: season.season_end,
+        isChild: false,
+        useRelativeLabels: true,
+      })
+    : [];
 
   return (
     <Screen tone="supporter">
@@ -51,6 +62,15 @@ export default function SupporterFamilyTreeScreen() {
           <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s1 }]}>
             今シーズン {count}回のきろく
           </Text>
+
+          {weeklyItems.length > 0 && (
+            <View style={{ width: "100%", marginTop: theme.spacing.s4 }}>
+              <Text style={[theme.typography.supporterBodyMedium, { marginBottom: theme.spacing.s2 }]}>
+                週ごとのきろく
+              </Text>
+              <FamilyTreeWeeklyList items={weeklyItems} countLabel="回" />
+            </View>
+          )}
 
           <Pressable onPress={() => setShowBreakdown((v) => !v)} style={{ marginTop: theme.spacing.s3 }}>
             <Text style={styles.linkText}>内訳を見る {showBreakdown ? "▲" : "▼"}</Text>

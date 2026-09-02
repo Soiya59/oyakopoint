@@ -14,10 +14,11 @@ import {
   fetchFamilyCollectedGachaDraws,
   fetchFamilyTreeCompletionDots,
   fetchFamilyTreeSeasonHistory,
+  fetchFamilyTreeWeeklyCompletionCounts,
   type CollectedGachaDraw,
   type FamilyTreeCompletionDot,
 } from "@/data/api";
-import type { FamilyTreeSeason } from "@/types/domain";
+import type { FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 
 export type CollectorShelfLoadState = "loading" | "error" | "ready";
 
@@ -79,17 +80,24 @@ export function usePastTreeSeasons(familyId: string) {
 
 /**
  * 「過去の木」区画で、シーズンカードを展開（「見る」）した瞬間に当該シーズンの
- * 木（色丸＋景品交換の反映）を取得する。一覧は`usePastTreeSeasons`の全件を
- * 一度に読み込まず、展開されたシーズンだけを都度取得する（21.6節ワイヤーフレーム
+ * 木（色丸＋景品交換の反映）と週ごとの記録を取得する。一覧は`usePastTreeSeasons`の
+ * 全件を一度に読み込まず、展開されたシーズンだけを都度取得する（21.6節ワイヤーフレーム
  * 「タップで展開し…読み取り専用のまま再現表示する」）。
  *
  * `fetchFamilyTreeCompletionDots`は`seasonStartIso`〜`seasonEndIso`（省略時は
  * 進行中扱い）を渡すだけで動くため、過去シーズン専用の新規APIは追加していない
  * （要件定義書07-13-7章「新規テーブルは不要」・本部長確認済みの再現方式）。
+ *
+ * [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節「過去の木への反映」、
+ * 主要画面ワイヤーフレーム.md 21.0節決定11「表示は季節カードの『見る』展開後の
+ * 同一ビューに含め、新しいタップ操作は追加しない」）。木の色丸取得と同じ
+ * `loadSeason`呼び出し（＝同じ「見る」タップ）に相乗りさせ、新規のタップ操作を
+ * 増やさない。
  */
 export function usePastTreeSeasonDots(familyId: string) {
   const { client } = useSession();
   const [dotsBySeasonId, setDotsBySeasonId] = useState<Record<string, FamilyTreeCompletionDot[]>>({});
+  const [weeklyBySeasonId, setWeeklyBySeasonId] = useState<Record<string, FamilyTreeWeeklyCompletionCount[]>>({});
   const [loadingSeasonIds, setLoadingSeasonIds] = useState<Record<string, boolean>>({});
   const [errorSeasonIds, setErrorSeasonIds] = useState<Record<string, boolean>>({});
 
@@ -102,17 +110,21 @@ export function usePastTreeSeasonDots(familyId: string) {
       // JST基準の暦月初日の日付のみを持つため、JSTの0時を明示してISOに変換する）。
       const seasonStartIso = new Date(`${season.season_start}T00:00:00+09:00`).toISOString();
       const seasonEndIso = season.season_end ? new Date(`${season.season_end}T00:00:00+09:00`).toISOString() : null;
-      const res = await fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso, seasonEndIso);
+      const [dotsRes, weeklyRes] = await Promise.all([
+        fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso, seasonEndIso),
+        fetchFamilyTreeWeeklyCompletionCounts(client, season.id),
+      ]);
       setLoadingSeasonIds((prev) => ({ ...prev, [season.id]: false }));
-      if (!res.ok) {
+      if (!dotsRes.ok || !weeklyRes.ok) {
         setErrorSeasonIds((prev) => ({ ...prev, [season.id]: true }));
         return;
       }
-      setDotsBySeasonId((prev) => ({ ...prev, [season.id]: res.data }));
+      setDotsBySeasonId((prev) => ({ ...prev, [season.id]: dotsRes.data }));
+      setWeeklyBySeasonId((prev) => ({ ...prev, [season.id]: weeklyRes.data }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [client, familyId, dotsBySeasonId, loadingSeasonIds]
   );
 
-  return { dotsBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason };
+  return { dotsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason };
 }

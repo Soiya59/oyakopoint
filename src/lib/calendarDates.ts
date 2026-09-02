@@ -50,6 +50,22 @@ export function getWeekdayMonFirst(dateStr: string): number {
 }
 
 /**
+ * 家族の木「週ごとの記録」（要件定義書07-9章新設節、20.1a節）向け。
+ * DB側の `jst_week_start_date()`（スキーマ設計.sql 13a章。JST月曜0:00始まりの暦週）と
+ * 完全に同じロジックをクライアント側で再現する（今週・先週の相対呼称ラベルを付けるため、
+ * 「今日を含む週の開始日」「先週の開始日」をクライアント側でも算出する必要がある）。
+ * `getWeekdayMonFirst`（0=月〜6=日）は既にISODOW-1と同じ値のため、そのまま流用する。
+ */
+export function getJstWeekStartDate(dateStr: string): string {
+  return addDaysToDateString(dateStr, -getWeekdayMonFirst(dateStr));
+}
+
+/** 現在時刻（JST基準）を含む週の開始日（月曜、"YYYY-MM-DD"）。 */
+export function getCurrentJstWeekStart(): string {
+  return getJstWeekStartDate(getJstToday());
+}
+
+/**
  * 月間カレンダー: 指定した年月（1-12）の週グリッドを返す（月曜始まり）。
  * 月初/月末の空白セルは null で埋める。family-todoのWeeklyStatus.tsxが持つ
  * 「月間カレンダーに展開」表現の元になるデータ構造。

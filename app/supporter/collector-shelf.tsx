@@ -20,7 +20,7 @@ export default function SupporterCollectorShelfScreen() {
   const familyId = state.family.id;
   const { loadState: collectedLoadState, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
   const { loadState: pastSeasonsLoadState, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
-  const { dotsBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason } = usePastTreeSeasonDots(familyId);
+  const { dotsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason } = usePastTreeSeasonDots(familyId);
 
   return (
     <Screen tone="supporter">
@@ -39,6 +39,7 @@ export default function SupporterCollectorShelfScreen() {
         pastSeasons={pastSeasons}
         onRetryPastSeasons={reloadPastSeasons}
         dotsBySeasonId={dotsBySeasonId}
+        weeklyBySeasonId={weeklyBySeasonId}
         loadingSeasonIds={loadingSeasonIds}
         errorSeasonIds={errorSeasonIds}
         onExpandSeason={loadSeason}

@@ -18,12 +18,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
-import { TreeStageVisual } from "./FamilyTree";
+import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
 import { MemberAvatar } from "./MemberAvatar";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot } from "@/data/api";
-import type { FamilyMember, FamilyTreeSeason } from "@/types/domain";
+import type { FamilyMember, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -42,6 +42,12 @@ export interface CollectorShelfPanelProps {
   onRetryPastSeasons: () => void;
 
   dotsBySeasonId: Record<string, FamilyTreeCompletionDot[]>;
+  /**
+   * [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節「過去の木への反映」、
+   * 主要画面ワイヤーフレーム.md 21.0節決定11）。dotsBySeasonIdと同じ「見る」展開の
+   * タイミングで取得され、同一ビュー内に表示する。
+   */
+  weeklyBySeasonId: Record<string, FamilyTreeWeeklyCompletionCount[]>;
   loadingSeasonIds: Record<string, boolean>;
   errorSeasonIds: Record<string, boolean>;
   onExpandSeason: (season: FamilyTreeSeason) => void;
@@ -153,6 +159,7 @@ export function CollectorShelfPanel({
   pastSeasons,
   onRetryPastSeasons,
   dotsBySeasonId,
+  weeklyBySeasonId,
   loadingSeasonIds,
   errorSeasonIds,
   onExpandSeason,
@@ -382,6 +389,30 @@ export function CollectorShelfPanel({
                             members={members}
                             tone={tone}
                           />
+                          {/* [2026-09-02追加] 週ごとの記録（21.0節決定11）。「見る」展開と
+                              同一ビュー内に表示し、新しいタップ操作は追加しない。過去シーズンは
+                              相対呼称が意味を持たないため全週`M/D週`表記に統一し（決定11）、
+                              季節カードごとの縦幅増加を抑えるためparentCaption相当（12pt）の
+                              小さめの文字で表示する（21.6節「縦幅への配慮」）。 */}
+                          {weeklyBySeasonId[season.id] && (
+                            <View style={{ marginTop: theme.spacing.s3 }}>
+                              <Text style={[captionStyle, styles.legendHeading]}>
+                                {isChild ? "しゅうごとの きろく" : "週ごとのきろく"}
+                              </Text>
+                              <FamilyTreeWeeklyList
+                                items={buildFamilyTreeWeeklyItems({
+                                  weeklyCounts: weeklyBySeasonId[season.id],
+                                  seasonStart: season.season_start,
+                                  seasonEnd: season.season_end,
+                                  isChild,
+                                  useRelativeLabels: false,
+                                })}
+                                countLabel={isChild ? "かい" : "回"}
+                                labelStyle={captionStyle}
+                                countStyle={captionStyle}
+                              />
+                            </View>
+                          )}
                         </>
                       )}
                     </View>

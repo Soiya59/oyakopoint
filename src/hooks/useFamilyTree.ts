@@ -14,9 +14,10 @@ import {
   fetchFamilyTreeCurrentSeason,
   fetchFamilyTreeMemberBreakdown,
   fetchFamilyTreeSeasonHistory,
+  fetchFamilyTreeWeeklyCompletionCounts,
   type FamilyTreeCompletionDot,
 } from "@/data/api";
-import type { FamilyTreeMemberBreakdown, FamilyTreeSeason } from "@/types/domain";
+import type { FamilyTreeMemberBreakdown, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 
 export type FamilyTreeLoadState = "loading" | "error" | "ready";
 
@@ -57,6 +58,10 @@ export function useFamilyTreeDetail() {
   const [breakdown, setBreakdown] = useState<FamilyTreeMemberBreakdown[]>([]);
   const [dots, setDots] = useState<FamilyTreeCompletionDot[]>([]);
   const [lastSeason, setLastSeason] = useState<FamilyTreeSeason | null>(null);
+  // [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節、API仕様.md 9.6章）。
+  // 週start昇順のまま保持し、並べ替えは表示側（FamilyTreeWeeklyList）に委ねる
+  // （Viewが意図的にORDER BYを持たないのと同じ理由で、ここでも多い順等には並べない）。
+  const [weeklyCounts, setWeeklyCounts] = useState<FamilyTreeWeeklyCompletionCount[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
@@ -75,14 +80,19 @@ export function useFamilyTreeDetail() {
       return;
     }
     let dotsResData: FamilyTreeCompletionDot[] = [];
+    let weeklyResData: FamilyTreeWeeklyCompletionCount[] = [];
     if (seasonRes.data) {
       const seasonStartIso = new Date(`${seasonRes.data.season_start}T00:00:00+09:00`).toISOString();
-      const dotsRes = await fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso);
-      if (!dotsRes.ok) {
+      const [dotsRes, weeklyRes] = await Promise.all([
+        fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso),
+        fetchFamilyTreeWeeklyCompletionCounts(client, seasonRes.data.id),
+      ]);
+      if (!dotsRes.ok || !weeklyRes.ok) {
         setLoadState("error");
         return;
       }
       dotsResData = dotsRes.data;
+      weeklyResData = weeklyRes.data;
     }
 
     // 20.0節決定6: 直近1シーズン分の最終形態のみ「先月の木」として一言添える
@@ -93,6 +103,7 @@ export function useFamilyTreeDetail() {
     setSeason(seasonRes.data);
     setBreakdown(breakdownRes.data);
     setDots(dotsResData);
+    setWeeklyCounts(weeklyResData);
     setLastSeason(mostRecentClosed);
     setLoadState("ready");
   }, [client, familyId]);
@@ -101,5 +112,5 @@ export function useFamilyTreeDetail() {
     void load();
   }, [load]);
 
-  return { loadState, season, breakdown, dots, lastSeason, reload: load };
+  return { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload: load };
 }
