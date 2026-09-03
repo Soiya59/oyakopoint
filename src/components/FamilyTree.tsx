@@ -4,7 +4,7 @@ import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot } from "@/data/api";
 import type { FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
-import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
+import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 
@@ -402,6 +402,17 @@ function pickTreeRegion(id: string, isPrize = false): TreeRegion {
  * 実（stage4）は「丸＋まっすぐの太いヘタ」だった旧形が13ptでは風船に見えていた
  * ため、りんご（本体＋軸＋葉）に作り直した。**小さいと本体の輪郭の凹凸は消える
  * ため、りんごらしさは葉の有無で担保する**（丸だけでは花・実の区別が付かない）。
+ *
+ * [2026-09-03再改訂・統括の実機レビュー] 上記で作った芽（双葉2枚）・若木（葉1枚）
+ * を統括が実機で見て2点指摘した。(1) 芽が「ちょうちょみたいになっている」
+ * （双葉の2枚を下端1点で接合し左右対称に描いたため、蝶の羽に見えた）。
+ * (2) 「背景が双葉だから、芽のときに1枚、若木で2枚は変」（芽の段階の背景の木
+ * そのものが双葉であり、印は双葉であるべきなのに若木側に葉が2枚残っていた）。
+ * **色丸は「その段階の木の姿」を表すという考え方に統一**し、種＝粒、芽＝双葉、
+ * 若木＝小さな木（幹＋雲形の樹冠。背景の若木の縮小版）、花＝花、実＝りんご、
+ * とした（デザイントークン.md「芽・若木の形の再設計」節、統括採択済み）。
+ * 芽は軸を足し開き角を±30°にして双葉として読めるようにし、若木は葉1枚をやめて
+ * 背景の若木と同じ「幹＋大小3円の樹冠」構成の縮小版に差し替えた。
  */
 const DOT_STROKE_COLOR = "rgba(0,0,0,0.16)";
 const DOT_STROKE_WIDTH = 1;
@@ -421,17 +432,34 @@ function StageDot({ color, size, stage }: { color: string; size: number; stage: 
     );
   }
   if (stage === 1) {
-    // 芽: 双葉（左右2枚）。アプリアイコンの葉パスの縮小流用（左）とその左右反転（右）。
+    // 芽: 双葉（軸＋左右2枚）。
+    // [2026-09-03再改訂・統括の実機レビュー] 旧実装（下端1点で接合し左右対称に
+    // 描いた双葉）は「ちょうちょみたいになっている」と指摘された。原因は
+    // 「軸が無い」「左右対称で閉じ気味」の2点。軸を足し、開き角を±30°にして
+    // 双葉として読めるようにした。葉はアプリアイコンの葉パス（候補B.html）を
+    // transformで配置する（座標を手計算して書き写すと転記ミスの元になるため。
+    // デザイントークン.md「芽・若木の形の再設計」節参照）。
     return (
       <Svg width={size} height={size} viewBox="0 0 100 100">
+        <SvgLine
+          x1={50}
+          y1={98}
+          x2={50}
+          y2={68}
+          stroke={theme.treeColors.trunk}
+          strokeWidth={5.5}
+          strokeLinecap="round"
+        />
         <SvgPath
-          d="M50 82 C30 83 16 68 17 44 C40 43 54 60 50 82 Z"
+          d="M0 0 C-44 2 -76 -30 -74 -84 C-22 -86 8 -48 0 0 Z"
+          transform="translate(50 72) rotate(-30) scale(0.52 0.52)"
           fill={color}
           stroke={DOT_STROKE_COLOR}
           strokeWidth={DOT_STROKE_WIDTH}
         />
         <SvgPath
-          d="M50 82 C70 83 84 68 83 44 C60 43 46 60 50 82 Z"
+          d="M0 0 C-44 2 -76 -30 -74 -84 C-22 -86 8 -48 0 0 Z"
+          transform="translate(50 72) rotate(30) scale(-0.52 0.52)"
           fill={color}
           stroke={DOT_STROKE_COLOR}
           strokeWidth={DOT_STROKE_WIDTH}
@@ -440,15 +468,24 @@ function StageDot({ color, size, stage }: { color: string; size: number; stage: 
     );
   }
   if (stage === 2) {
-    // 若木: 葉1枚。アプリアイコンの葉パスの拡大流用。
+    // 若木: 小さな木（幹＋雲形の樹冠）。
+    // [2026-09-03再改訂・統括の実機レビュー] 旧実装（葉1枚）は「背景が双葉なのに
+    // 芽が1枚・若木が2枚は変」と指摘された。色丸は「その段階の木の姿」を表す
+    // という考え方に統一し、若木は背景の若木（幹＋雲形の樹冠）の縮小版にした。
     return (
       <Svg width={size} height={size} viewBox="0 0 100 100">
-        <SvgPath
-          d="M78 85 C41 87 15 60 16 15 C60 13 85 45 78 85 Z"
-          fill={color}
-          stroke={DOT_STROKE_COLOR}
-          strokeWidth={DOT_STROKE_WIDTH}
+        <SvgLine
+          x1={50}
+          y1={96}
+          x2={50}
+          y2={58}
+          stroke={theme.treeColors.trunk}
+          strokeWidth={9}
+          strokeLinecap="round"
         />
+        <SvgCircle cx={36} cy={50} r={20} fill={color} stroke={DOT_STROKE_COLOR} strokeWidth={DOT_STROKE_WIDTH} />
+        <SvgCircle cx={64} cy={50} r={20} fill={color} stroke={DOT_STROKE_COLOR} strokeWidth={DOT_STROKE_WIDTH} />
+        <SvgCircle cx={50} cy={36} r={24} fill={color} stroke={DOT_STROKE_COLOR} strokeWidth={DOT_STROKE_WIDTH} />
       </Svg>
     );
   }
