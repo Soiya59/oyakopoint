@@ -389,37 +389,108 @@ function pickTreeRegion(id: string, isPrize = false): TreeRegion {
  *    比較は生まれない（大きさ・色は従来どおり変えていない）
  *
  * 色は従来どおり報告者のavatar_colorをそのまま使い、形だけが段階で変わる。
+ *
+ * [2026-09-03追加・下位3段階＋実の再設計] 統括「芽と若木の時も同じように変えることって
+ * できる？」を受け、`stage < 3`が「ただの丸」のまま残っていた欠落を埋めた。
+ * デザイントークン.md 1.8節「下位3段階（種・芽・若木）の色丸の形」・
+ * 「実（stage4）の形の再設計（2026-09-03・統括判断）」対応。
+ *   種＝粒（対称なレンズ形）、芽＝双葉（葉2枚）、若木＝葉1枚。
+ * 芽と若木の葉のパスは、2026-09-03に差し替えたアプリアイコン（実装メモ121章、
+ * `宣伝部/成果物/アプリアイコン/候補B.html`）の葉の曲線をそのまま流用している
+ * （拡大縮小と平行移動のみを適用し、曲線＝制御点の相対位置は変えていない）。
+ * アイコン→スプラッシュ→木の色丸の3箇所で同じ曲線が使われることになる。
+ * 実（stage4）は「丸＋まっすぐの太いヘタ」だった旧形が13ptでは風船に見えていた
+ * ため、りんご（本体＋軸＋葉）に作り直した。**小さいと本体の輪郭の凹凸は消える
+ * ため、りんごらしさは葉の有無で担保する**（丸だけでは花・実の区別が付かない）。
  */
+const DOT_STROKE_COLOR = "rgba(0,0,0,0.16)";
+const DOT_STROKE_WIDTH = 1;
+
 function StageDot({ color, size, stage }: { color: string; size: number; stage: number }) {
-  if (stage < 3) {
+  if (stage <= 0) {
+    // 種: 対称なレンズ形（粒）。
     return (
-      <View
-        style={[styles.dot, { backgroundColor: color, width: size, height: size, borderRadius: size / 2 }]}
-      />
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        <SvgPath
+          d="M50 18 C64 18 74 34 74 50 C74 66 64 82 50 82 C36 82 26 66 26 50 C26 34 36 18 50 18 Z"
+          fill={color}
+          stroke={DOT_STROKE_COLOR}
+          strokeWidth={DOT_STROKE_WIDTH}
+        />
+      </Svg>
     );
   }
-  const isFlower = stage === 3;
+  if (stage === 1) {
+    // 芽: 双葉（左右2枚）。アプリアイコンの葉パスの縮小流用（左）とその左右反転（右）。
+    return (
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        <SvgPath
+          d="M50 82 C30 83 16 68 17 44 C40 43 54 60 50 82 Z"
+          fill={color}
+          stroke={DOT_STROKE_COLOR}
+          strokeWidth={DOT_STROKE_WIDTH}
+        />
+        <SvgPath
+          d="M50 82 C70 83 84 68 83 44 C60 43 46 60 50 82 Z"
+          fill={color}
+          stroke={DOT_STROKE_COLOR}
+          strokeWidth={DOT_STROKE_WIDTH}
+        />
+      </Svg>
+    );
+  }
+  if (stage === 2) {
+    // 若木: 葉1枚。アプリアイコンの葉パスの拡大流用。
+    return (
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        <SvgPath
+          d="M78 85 C41 87 15 60 16 15 C60 13 85 45 78 85 Z"
+          fill={color}
+          stroke={DOT_STROKE_COLOR}
+          strokeWidth={DOT_STROKE_WIDTH}
+        />
+      </Svg>
+    );
+  }
+  if (stage === 3) {
+    // 花: 花びら5枚＋花芯（固定色）。既存のまま変更なし。
+    return (
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        {[0, 72, 144, 216, 288].map((deg) => (
+          <SvgCircle
+            key={deg}
+            cx={50 + 26 * Math.cos((deg - 90) * (Math.PI / 180))}
+            cy={50 + 26 * Math.sin((deg - 90) * (Math.PI / 180))}
+            r={22}
+            fill={color}
+          />
+        ))}
+        <SvgCircle cx={50} cy={50} r={15} fill={FLOWER_CENTER_COLOR} />
+      </Svg>
+    );
+  }
+  // 実（stage4以上）: りんご。本体（avatar_color）→軸（trunkと同じ固定色）→
+  // 葉（新規固定色fruitLeaf）の順に描く。旧「丸＋まっすぐの太いヘタ」形は置き換えた。
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
-      {isFlower ? (
-        <>
-          {[0, 72, 144, 216, 288].map((deg) => (
-            <SvgCircle
-              key={deg}
-              cx={50 + 26 * Math.cos((deg - 90) * (Math.PI / 180))}
-              cy={50 + 26 * Math.sin((deg - 90) * (Math.PI / 180))}
-              r={22}
-              fill={color}
-            />
-          ))}
-          <SvgCircle cx={50} cy={50} r={15} fill={FLOWER_CENTER_COLOR} />
-        </>
-      ) : (
-        <>
-          <SvgPath d="M50 6 C58 12 62 20 58 28 L42 28 C38 20 42 12 50 6 Z" fill={theme.treeColors.trunk} />
-          <SvgCircle cx={50} cy={60} r={38} fill={color} />
-        </>
-      )}
+      <SvgPath
+        d="M50 30 C70 20 92 32 92 56 C92 80 72 94 50 88 C28 94 8 80 8 56 C8 32 30 20 50 30 Z"
+        fill={color}
+        stroke={DOT_STROKE_COLOR}
+        strokeWidth={DOT_STROKE_WIDTH}
+      />
+      <SvgPath
+        d="M48 30 C49 20 52 13 57 9 C60 13 55 22 52 30 Z"
+        fill={theme.treeColors.trunk}
+        stroke={DOT_STROKE_COLOR}
+        strokeWidth={DOT_STROKE_WIDTH}
+      />
+      <SvgPath
+        d="M56 17 C72 3 94 10 90 22 C74 30 60 26 56 17 Z"
+        fill={theme.treeColors.fruitLeaf}
+        stroke={DOT_STROKE_COLOR}
+        strokeWidth={DOT_STROKE_WIDTH}
+      />
     </Svg>
   );
 }
@@ -929,18 +1000,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 3,
   },
   dotWrap: { position: "absolute" },
-  dot: {
-    position: "absolute",
-    width: DOT_SIZE,
-    height: DOT_SIZE,
-    borderRadius: DOT_SIZE / 2,
-    borderWidth: 1,
-    // [2026-08-24修正] 当初は白の縁取りにしていたが、メンバーカラーが
-    // パステル調（1.3節の8色）で葉の下地とも明度が近いため、白縁が色を
-    // 洗い流して全部が白っぽく見えてしまっていた。暗い半透明の縁に変更して
-    // 輪郭だけを締める（勝者演出ではなく単なる視認性確保）。
-    borderColor: "rgba(0,0,0,0.16)",
-  },
+  // [2026-09-03削除] `dot`（Viewのみの単色丸）はstage<3もSVG形状化した
+  // ため未使用になった（StageDot参照）。縁取り色`rgba(0,0,0,0.16)`は
+  // `DOT_STROKE_COLOR`としてStageDot側に残している。
   // [2026-08-26追加・第4段階] 景品（36pt）の円。識別リング（avatar_color）の内側に
   // 既製の飾りの絵文字、または家族の絵のサムネイル（DrawingThumbnail）を収める。
   prizeDot: {
