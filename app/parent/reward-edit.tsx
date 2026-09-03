@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -24,6 +24,13 @@ import { toJstDateString } from "@/lib/calendarDates";
  * 見にくいとユーザーが実機で発見したため追加した。候補から選ぶチップ形式を一度試したが、
  * ユーザーから「自分で決めたい、選択ではなく」との要望があり、自由入力（TextInput、
  * OS標準の絵文字キーボードを使う想定）に変更した。
+ *
+ * [2026-09-03追加・本部長] 保護者代理でのごほうび交換の入口（主要画面ワイヤーフレーム.md
+ * 5.5節、画面一覧・遷移図.md P13行）。編集モードかつ在籍中の子ども（role='child' &&
+ * is_active）が1人以上いる場合のみ、「保存する」ボタンの下・削除セクションの上に
+ * 「🎁 子どもの代わりに交換する」導線を出す。子どもが1人ならP36（保護者代理の交換確認）
+ * へ直行、2人以上ならP35（だれの代わりに交換するか選ぶ）を経由する（5.5.0決定2）。
+ * P12の各行の見た目は変更しない（24.1節決定5、5.5.0決定1との整合）。
  */
 export default function RewardEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -41,6 +48,11 @@ export default function RewardEditScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // [2026-09-03追加] 主要画面ワイヤーフレーム.md 5.5.1節。対象は在籍中の子どものみ
+  // （5.5節「背景」: 保護者自身の交換はP15、みまもりメンバーの自分専用ごほうびは
+  // reward_redemptions_insert_scopedポリシー上そもそも代理交換できない）。
+  const redeemableChildren = state.members.filter((m) => m.role === "child" && m.is_active);
 
   const validate = (): string | null => {
     if (!name.trim()) return "名前を入力してください";
@@ -180,6 +192,36 @@ export default function RewardEditScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={save}
       />
+
+      {/* [2026-09-03追加] 保護者代理でのごほうび交換の入口（主要画面ワイヤーフレーム.md
+          5.5.1節）。編集モード・家族共有（scope==='family'、この画面が扱うのは常に
+          家族共有のはずだが念のため確認する）・在籍中の子どもが1人以上、の3条件を
+          すべて満たすときのみ表示する。P12「🎮 みまもりのごほうび →」カードと同型
+          （見出し行＋説明キャプション）にし、押し間違い防止のため「保存する」
+          ボタンとは形を変える（5.5.1節）。 */}
+      {isEditMode && reward && reward.scope === "family" && redeemableChildren.length > 0 && (
+        <Pressable
+          onPress={() => {
+            if (redeemableChildren.length === 1) {
+              router.push({
+                pathname: "/parent/redeem-for-child-confirm",
+                params: { rewardId: reward.id, memberId: redeemableChildren[0].id },
+              });
+            } else {
+              router.push({ pathname: "/parent/redeem-for-child", params: { rewardId: reward.id } });
+            }
+          }}
+          style={{ marginTop: theme.spacing.s6 }}
+          hitSlop={8}
+        >
+          <Card>
+            <Text style={theme.typography.parentBodyMedium}>🎁 子どもの代わりに交換する →</Text>
+            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+              選んだお子さんの残高から交換します
+            </Text>
+          </Card>
+        </Pressable>
+      )}
 
       {/* [2026-08-29追加・本部長／軽微変更ルート] ごほうびの削除。ユーザー要望
           「ごほうびにおいても削除できるようにしてほしい」。クエストの削除と同じ扱いで、
