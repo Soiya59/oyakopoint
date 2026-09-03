@@ -107,6 +107,16 @@
 -- 開発部/成果物/実装メモ.md 118章で確認済み）。マイグレーション
 -- `20260902030000_drawing_title.sql`は118章時点で**未適用**である。
 --
+-- [2026-09-03追加・開発部] 完了報告の直後の取消（新規RPC`cancel_chore_completion`、
+-- 設計部/成果物/スキーマ設計.sql 43章・開発部/成果物/実装メモ.md 120章）に伴い、
+-- S1（24のまま。新規テーブルを追加していない）・S3（50本のまま。新しい
+-- CREATE POLICYを追加していない。`chore_completions`へのDELETEポリシーも
+-- 追加しない。既存ポリシーの条件式も一切変更していない）はいずれも±0。
+-- S4（48→49件、`cancel_chore_completion`をauthenticatedへ明示的にGRANT）。
+-- マイグレーション`20260903010000_cancel_chore_completion.sql`は120章時点で
+-- ローカルDocker環境に適用済み・実測済み（96.5章の遵守として、実測した上で
+-- 記録している）。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -268,7 +278,13 @@ SELECT 'C層', 'S3 ポリシー50本の定義が承認済みと一致',
 -- S4. authenticated（ログイン済み利用者）が実行できる関数の一覧。
 --     84章の事故は、ここから1つ消えたことで起きた。増えるほうも危険。
 WITH expected(f) AS (VALUES
-  ('accept_family_invite'),('chore_completions_before_insert'),
+  ('accept_family_invite'),
+  -- [2026-09-03追加] cancel_chore_completion（完了報告の直後の取消、設計部/成果物/
+  -- スキーマ設計.sql 43章、開発部/成果物/実装メモ.md 120章）。draw_gacha()等と同じく
+  -- SECURITY DEFINERであり、43.7章の方針どおりPUBLIC/anonから明示的にREVOKEした
+  -- うえでauthenticatedへ明示的にGRANTしている。
+  ('cancel_chore_completion'),
+  ('chore_completions_before_insert'),
   -- [2026-09-01追加] chore_nfc_tags_before_write（NFCタグの人ごと化、設計部/成果物/
   -- スキーマ設計.sql 39.3章、開発部/成果物/実装メモ.md 108章）。他のBEFORE INSERT/
   -- UPDATEトリガー関数（chores_before_write等）と同じくSECURITY DEFINERではないため、
@@ -328,7 +344,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数48件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数49件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

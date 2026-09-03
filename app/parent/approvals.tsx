@@ -9,7 +9,8 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { formatDateTimeFullJp, formatDateTimeShort } from "@/lib/calendarDates";
+import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
+import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
@@ -45,6 +46,19 @@ export default function ApprovalsScreen() {
   // コメント送信成功時にモーダルを閉じる処理を追加した。
   const [reactionError, setReactionError] = useState<string | null>(null);
 
+  // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 28.4節。
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelConfirmTarget, setCancelConfirmTarget] = useState<ChoreCompletion | null>(null);
+  const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+  // 1分の経過でリンクごと消すため、表示中は10秒間隔で再評価する（28.0節決定4）。
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
   // 自分（いま操作している保護者）のfamily_member_id。実接続時は
   // current_family_member_id()相当（session.parentMember.id）がstate.activeParentMemberIdに
   // すでに反映されている（src/data/store.tsx RealDataProviderImpl参照）。
@@ -78,6 +92,30 @@ export default function ApprovalsScreen() {
     setCommentDraft("");
     setReactionError(null);
     setDetailTarget(c);
+  };
+
+  // [2026-09-03追加] 28.4節「決定5」：自分の報告は確認なしで即取消、自分以外
+  // （子ども・配偶者）の報告は確認ダイアログを挟む。
+  const runCancel = async (completionId: string) => {
+    setCancelingId(completionId);
+    setCancelRowError(null);
+    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+    setCancelingId(null);
+    if (!result.ok) {
+      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
+      return;
+    }
+    setCancelConfirmTarget(null);
+    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.parent);
+    setTimeout(() => setCancelFlashMessage(null), 1500);
+  };
+
+  const handleCancelTap = (c: ChoreCompletion) => {
+    if (c.reported_by === myParentId) {
+      void runCancel(c.id);
+    } else {
+      setCancelConfirmTarget(c);
+    }
   };
 
   const sendComment = async () => {
@@ -158,12 +196,32 @@ export default function ApprovalsScreen() {
                     {c.chore_emoji} {c.chore_title} +{c.points}pt
                   </Text>
                 </View>
-                <View style={styles.cardMeta}>
+                <View style={[styles.cardMeta, styles.cardMetaRow]}>
                   <Text style={theme.typography.parentCaption}>
                     {formatDateTimeShort(c.reported_at)}{" "}
                     {isChildCard ? "とどいた" : "きろくした"}
                   </Text>
+                  {/* [2026-09-03追加] 28.4節。みまもりメンバーの自分専用chore完了報告
+                      （scope='personal'）には取消権限が無いためリンク自体を出さない。
+                      supporterの報告は常にpersonal-scopeのため（07-7章）role判定のみで足りる。 */}
+                  {!isSupporterCard && isWithinCancelWindow(c.reported_at) && (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleCancelTap(c);
+                      }}
+                      disabled={cancelingId === c.id}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.cancelLink}>{cancelingId === c.id ? "処理中…" : "取消"}</Text>
+                    </Pressable>
+                  )}
                 </View>
+                {cancelRowError?.id === c.id && (
+                  <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>
+                    {cancelRowError.message}
+                  </Text>
+                )}
                 {/* カード上のクイックスタンプ。タップで即座にchore_reactions insert（3.1章）。
                     自分自身の完了報告カードには表示しない。 */}
                 {!isOwnCard && (
@@ -195,8 +253,65 @@ export default function ApprovalsScreen() {
           );
         })}
 
+      {/* [2026-09-03追加] 28.4節「取消成功」のスナックバー相当（1.5秒で自動消滅）。 */}
+      {cancelFlashMessage && (
+        <Text style={[theme.typography.parentCaption, styles.cancelFlash]}>{cancelFlashMessage}</Text>
+      )}
+
       {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+
+      {/* [2026-09-03追加] 28.4節「確認モーダル（自分以外の報告を取り消す場合）」。
+          22.4節の削除確認モーダルと同じ構成・トーン。 */}
+      <Modal
+        visible={!!cancelConfirmTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCancelConfirmTarget(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Card style={styles.modalCard}>
+            {cancelConfirmTarget &&
+              (() => {
+                const member = memberOf(cancelConfirmTarget.reported_by);
+                return (
+                  <>
+                    <Text style={theme.typography.parentTitle}>
+                      {member?.display_name ?? "?"}さんの「{cancelConfirmTarget.chore_title}」の報告を取り消しますか？
+                    </Text>
+                    <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
+                      {formatDateTimeFullJp(cancelConfirmTarget.reported_at)} ・ +{cancelConfirmTarget.points}pt
+                    </Text>
+                    <Text style={{ marginTop: theme.spacing.s2 }}>
+                      取り消すと、たまったポイントや家族の木・ガチャの回数も1つ戻ります。元に戻せません。
+                    </Text>
+                    {cancelRowError?.id === cancelConfirmTarget.id && (
+                      <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
+                        {cancelRowError.message}
+                      </Text>
+                    )}
+                    <View style={styles.confirmButtonRow}>
+                      <AppButton
+                        variant="secondary"
+                        label="やめる"
+                        onPress={() => setCancelConfirmTarget(null)}
+                        disabled={cancelingId === cancelConfirmTarget.id}
+                        style={{ flex: 1, marginRight: theme.spacing.s2 }}
+                      />
+                      <AppButton
+                        variant="danger"
+                        label={cancelingId === cancelConfirmTarget.id ? "取り消しています…" : "取り消す"}
+                        onPress={() => void runCancel(cancelConfirmTarget.id)}
+                        disabled={cancelingId === cancelConfirmTarget.id}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </>
+                );
+              })()}
+          </Card>
+        </View>
+      </Modal>
 
       {/* P9 完了報告詳細・リアクション */}
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
@@ -336,6 +451,12 @@ const styles = StyleSheet.create({
   cardSupporterTint: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   cardMeta: { marginTop: theme.spacing.s2 },
+  // [2026-09-03追加] 28.4節。報告日時の右に取消リンクを置く。
+  cardMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  cancelRowError: { marginTop: 2, color: theme.colors.statusBlocking },
+  cancelFlash: { marginTop: theme.spacing.s3, textAlign: "center", color: theme.colors.neutralTextSecondary },
+  confirmButtonRow: { flexDirection: "row", marginTop: theme.spacing.s3 },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
   stampBtn: {
     width: theme.tapTarget.parent,

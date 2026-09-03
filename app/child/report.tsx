@@ -85,7 +85,10 @@ export default function ChildReportScreen() {
 
     router.replace({
       pathname: "/child/report-sent",
-      params: { choreTitle: chore.title, points: String(chore.points) },
+      // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/
+      // 成果物/主要画面ワイヤーフレーム.md 28.2節。取消リンクの対象を特定するため
+      // completionIdを渡す（dispatchがREPORT_COMPLETION成功時に返すid、store.tsx参照）。
+      params: { choreTitle: chore.title, points: String(chore.points), completionId: result.completionId ?? "" },
     });
   };
 

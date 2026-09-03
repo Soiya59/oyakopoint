@@ -9,7 +9,8 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { formatDateTimeFullJp, formatDateTimeShort } from "@/lib/calendarDates";
+import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
+import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
@@ -37,6 +38,18 @@ export default function SupporterActivityScreen() {
   const [sendingComment, setSendingComment] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
 
+  // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 28.6節。みまもりメンバーは自分の報告のみ取り消せ、
+  // 確認ダイアログは無い（常に本人操作のため。28.0節決定5）。
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
   const myId = state.activeParentMemberId;
 
   useEffect(() => {
@@ -60,6 +73,19 @@ export default function SupporterActivityScreen() {
     setCommentDraft("");
     setReactionError(null);
     setDetailTarget(c);
+  };
+
+  const runCancel = async (completionId: string) => {
+    setCancelingId(completionId);
+    setCancelRowError(null);
+    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+    setCancelingId(null);
+    if (!result.ok) {
+      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("supporter", result.error) });
+      return;
+    }
+    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.supporter);
+    setTimeout(() => setCancelFlashMessage(null), 1500);
   };
 
   const sendComment = async () => {
@@ -114,11 +140,31 @@ export default function SupporterActivityScreen() {
                     {c.chore_emoji} {c.chore_title} +{c.points}pt
                   </Text>
                 </View>
-                <View style={styles.cardMeta}>
+                <View style={[styles.cardMeta, styles.cardMetaRow]}>
                   <Text style={theme.typography.supporterCaption}>
                     {formatDateTimeShort(c.reported_at)}
                   </Text>
+                  {/* [2026-09-03追加] 28.6節。「じぶん」の行（報告から1分以内のみ）に
+                      「取消」リンクを追加する。他者の報告への取消権限は無い（07-7章）ため
+                      確認ダイアログは無い（常に本人操作、28.0節決定5）。 */}
+                  {isOwnCard && isWithinCancelWindow(c.reported_at) && (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        void runCancel(c.id);
+                      }}
+                      disabled={cancelingId === c.id}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.cancelLink}>{cancelingId === c.id ? "処理中…" : "取消"}</Text>
+                    </Pressable>
+                  )}
                 </View>
+                {cancelRowError?.id === c.id && (
+                  <Text style={[theme.typography.supporterCaption, styles.cancelRowError]}>
+                    {cancelRowError.message}
+                  </Text>
+                )}
                 {!isOwnCard && (
                   <View style={styles.stampRow}>
                     {theme.stampDefinitions.map((s) => {
@@ -147,6 +193,11 @@ export default function SupporterActivityScreen() {
             </Pressable>
           );
         })}
+
+      {/* [2026-09-03追加] 28.6節「取消成功」のスナックバー相当（1.5秒で自動消滅）。 */}
+      {cancelFlashMessage && (
+        <Text style={[theme.typography.supporterCaption, styles.cancelFlash]}>{cancelFlashMessage}</Text>
+      )}
 
       <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
 
@@ -273,6 +324,11 @@ const styles = StyleSheet.create({
   card: { marginTop: theme.spacing.s3 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   cardMeta: { marginTop: theme.spacing.s2 },
+  // [2026-09-03追加] 28.6節。
+  cardMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  cancelRowError: { marginTop: 2, color: theme.colors.statusBlocking },
+  cancelFlash: { marginTop: theme.spacing.s3, textAlign: "center", color: theme.colors.neutralTextSecondary },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
   stampBtn: {
     width: theme.tapTarget.supporterPrimary,

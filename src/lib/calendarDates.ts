@@ -148,3 +148,23 @@ export function formatDateTimeFullJp(isoString: string | Date): string {
   const [y, m, d] = toJstDateString(isoString).split("-").map(Number);
   return `${y}年${m}月${d}日 ${formatTimeShort(isoString)}`;
 }
+
+/**
+ * [2026-09-03追加] 完了報告の直後の取消（要件定義書07-17章、UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 28.0節決定4）向け。サーバー側RPC（cancel_chore_completion、
+ * スキーマ設計.sql 43.2章）と同じ「1分以内」判定をクライアント側でも行う（取消リンクの
+ * 表示・非表示の判定用）。ミリ秒差分そのものはタイムゾーンに依存しない値だが、時刻に
+ * 関わる計算は本ファイルに集約する既存方針（ファイル冒頭コメント）に合わせてここに置く。
+ * サーバー側は「ちょうど60秒」を許可側に含む（`>` の厳密比較）ため、ここも同じ`<=`で揃える。
+ */
+export const CANCEL_WINDOW_MS = 60_000;
+
+/** 報告時刻（ISO文字列）から現在までの経過ミリ秒。 */
+export function msSinceReported(reportedAtIso: string): number {
+  return Date.now() - new Date(reportedAtIso).getTime();
+}
+
+/** 報告から1分以内（サーバー側の`<= 1 minute`と同じ境界）かどうか。 */
+export function isWithinCancelWindow(reportedAtIso: string): boolean {
+  return msSinceReported(reportedAtIso) <= CANCEL_WINDOW_MS;
+}

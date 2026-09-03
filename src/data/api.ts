@@ -610,6 +610,35 @@ export async function reportCompletion(
   return { ok: true, data: data as ChoreCompletion };
 }
 
+/**
+ * API仕様.md 4d節「完了報告の直後の取消（誤操作リカバリ、1分以内）」。
+ * SECURITY DEFINERのRPC `cancel_chore_completion()`（スキーマ設計.sql 43章）が
+ * 権限・時間窓・ガチャ未消費・木への飾り付け未消費・残高非マイナス化を確認した
+ * うえで対象行を物理削除する。戻り値は「消えた完了報告」の確認情報のみで、
+ * 取消後の家族の木・ガチャ進捗の最新値は含まれない（4d節）。呼び出し側は
+ * 成功後、家族の木（9.1節）・ガチャ進捗（12.1節）を別途再取得すること。
+ *
+ * 起こりうるエラー（API仕様.md 11章、いずれもPG_ERRCODE経由で判定すること）:
+ * - `no_data_found`: 対象が存在しない、または他家族の完了報告。
+ * - `insufficient_privilege`: 対象クエストの区分に応じた権限が無い
+ *   （メッセージが2種類あるため、UI側は分岐せずDB側のメッセージをそのまま表示してよい）。
+ * - `check_violation`: 理由が複数ある（1分超過／ガチャ消費後／木の飾り付け済み／
+ *   残高マイナス化）。UI側はメッセージ本文に含まれるキーワードで理由を判別すること
+ *   （実装メモ.md 117.5章の教訓どおり、PG_ERRCODE.checkViolationとの比較が前提。
+ *   可読名の文字列比較はしないこと）。
+ */
+export async function cancelChoreCompletion(
+  client: SupabaseClient,
+  completionId: string
+): Promise<ApiResult<{ completion_id: string; chore_id: string | null; chore_title: string; reported_by: string; points: number }>> {
+  const { data, error } = await client.rpc("cancel_chore_completion", { p_completion_id: completionId }).single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: data as { completion_id: string; chore_id: string | null; chore_title: string; reported_by: string; points: number },
+  };
+}
+
 /** API仕様.md 5章: スタンプ／コメントのリアクション付与 */
 export async function addReaction(
   client: SupabaseClient,

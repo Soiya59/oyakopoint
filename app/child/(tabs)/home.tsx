@@ -11,6 +11,8 @@ import MemberAvatar from "@/components/MemberAvatar";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { isWithinCancelWindow } from "@/lib/calendarDates";
+import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 
 /**
  * C5 やることリスト（ホーム）（主要5画面のひとつ）
@@ -30,8 +32,12 @@ export default function ChildHomeScreen() {
   // [2026-08-26追加・第3段階] ガチャ「あと◯回」ウィジェット（07-13-1章、主要画面
   // ワイヤーフレーム.md 21.0節決定1「特に子ども向け（C5）では最も目立つ専用カード」・
   // 21.1節「残高表示のすぐ下、他の全リンクより上に配置」）。
-  const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
-    useGachaProgress(state.activeChildMemberId);
+  const {
+    loadState: gachaLoadState,
+    remaining: gachaRemaining,
+    canDrawNow: gachaCanDrawNow,
+    reload: reloadGachaProgress,
+  } = useGachaProgress(state.activeChildMemberId);
   // [2026-08-28追加・家族の書き込みボード07-14章第1段階] 「かぞくのけいじばん」カード
   // （主要画面ワイヤーフレーム.md 22.1.2節、C5新規）。07-8章の週次まとめメッセージは
   // 元々C5に無かった（大人向けの文体だったため対象外）が、07-14章により書き込み内容は
@@ -57,6 +63,45 @@ export default function ChildHomeScreen() {
 
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const myPoints = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
+
+  // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 28.5a節「さっき とどけた ほうこく」。統括決定B対応
+  // （C7の3秒自動遷移で戻ってきた先＝C5に受け皿を置く）。
+  // 1分の経過でリンクごと消すため、表示中は10秒間隔で再評価する（28.0節決定4。
+  // サーバー側でも同じ判定を行うため、厳密なリアルタイム性は不要）。
+  // cancelTick自体の値は使わない。setCancelTickを呼ぶこと自体が再レンダーの
+  // トリガーになり、下記のisWithinCancelWindow判定がその都度Date.now()で
+  // 再評価される（10秒ごとに1分経過した行を静かに非表示にするため）。
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const recentSelfCompletions = state.completions
+    .filter((c) => c.reported_by === me.id && isWithinCancelWindow(c.reported_at))
+    .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
+
+  const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+
+  const handleCancelRecentCompletion = async (completionId: string) => {
+    setCancelingCompletionId(completionId);
+    setCancelRowError(null);
+    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+    setCancelingCompletionId(null);
+    if (!result.ok) {
+      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("child", result.error) });
+      return;
+    }
+    // [実装メモ.md 120章] 取り消し後は木・ガチャの表示が変わるため、RPCが返さない
+    // 最新値を個別に再取得する（家族の木はC5に常設ウィジェットが無いため対象外。
+    // ガチャ「あと◯回」ウィジェットのみ再取得する）。
+    void reloadGachaProgress();
+    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.child);
+    setTimeout(() => setCancelFlashMessage(null), 1500);
+  };
 
   // [変更] 2026-08-15改訂: 承認フロー廃止によりc.status（審査待ち件数）は廃止された。
   // 代わりに、直近24時間で自分に届いたものの件数を「お知らせ」として表示する
@@ -117,6 +162,38 @@ export default function ChildHomeScreen() {
       <View style={styles.pointsRow}>
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>
       </View>
+
+      {/* [2026-09-03追加] 28.5a節「さっき とどけた ほうこく」。該当が無ければ
+          ブロックごと出さない（プレースホルダを出さない、不在を強調しない原則）。
+          残高表示の直後・ガチャウィジェットの直前に置く（既存の常設要素より
+          さらに一時性が高いため）。 */}
+      {recentSelfCompletions.length > 0 && (
+        <View style={styles.recentBlock}>
+          <Text style={[theme.typography.childBody, styles.recentHeading]}>さっき とどけた ほうこく</Text>
+          {recentSelfCompletions.map((c) => (
+            <View key={c.id} style={styles.recentRow}>
+              <View style={styles.recentRowMain}>
+                <Text style={theme.typography.childBody}>
+                  {c.chore_emoji} {c.chore_title} +{c.points}pt
+                </Text>
+                <Pressable
+                  onPress={() => handleCancelRecentCompletion(c.id)}
+                  disabled={cancelingCompletionId === c.id}
+                  hitSlop={8}
+                >
+                  <Text style={styles.recentCancelLink}>
+                    {cancelingCompletionId === c.id ? "とりけしています…" : "とりけす"}
+                  </Text>
+                </Pressable>
+              </View>
+              {cancelRowError?.id === c.id && (
+                <Text style={[theme.typography.childBody, styles.recentRowError]}>{cancelRowError.message}</Text>
+              )}
+            </View>
+          ))}
+          {cancelFlashMessage && <Text style={styles.recentFlash}>{cancelFlashMessage}</Text>}
+        </View>
+      )}
 
       <GachaHomeWidget
         tone="child"
@@ -268,6 +345,20 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   notifBadge: { fontSize: 16, fontWeight: "700" },
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
+  // [2026-09-03追加] 28.5a節「さっき とどけた ほうこく」。達成演出（紙吹雪等）は
+  // 持たせず、既存のカードと同系色にとどめる控えめなブロック（トーン設計メモ）。
+  recentBlock: {
+    marginTop: theme.spacing.s3,
+    backgroundColor: theme.colors.neutralSurface,
+    borderRadius: theme.radius.childXl,
+    padding: theme.spacing.s3,
+  },
+  recentHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s1 },
+  recentRow: { marginTop: theme.spacing.s1 },
+  recentRowMain: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  recentCancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  recentRowError: { marginTop: 2, color: theme.colors.brandPrimaryStrong },
+  recentFlash: { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
   familyBoardCard: { marginTop: theme.spacing.s3 },
   cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   digestSkeleton: {

@@ -103,6 +103,9 @@ export type Action =
       choreId: string;
       reportedBy: string;
       note: string | null;
+      /** [2026-09-03追加] モック実装専用。実接続時はDBが生成するidを使うため無視される
+       *  （下記RealDataProviderImplのREPORT_COMPLETION参照）。 */
+      completionId?: string;
     }
   | {
       type: "ADD_REACTION";
@@ -114,9 +117,17 @@ export type Action =
     }
   | { type: "REDEEM_REWARD"; rewardId: string; memberId: string }
   | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string }
-  | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean };
+  | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean }
+  /** [2026-09-03追加] 完了報告の直後の取消（要件定義書07-17章、API仕様.md 4d節）。 */
+  | { type: "CANCEL_COMPLETION"; completionId: string };
 
-export type DispatchResult = { ok: true } | { ok: false; error: ApiError };
+/**
+ * [2026-09-03改訂] REPORT_COMPLETION成功時のみ、生成された完了報告id（completionId）を
+ * 併せて返す。C7「報告完了」画面（app/child/report-sent.tsx）が、直後の取消
+ * （要件定義書07-17章）の対象を特定するために使う。他のアクションは従来どおり
+ * `{ ok: true }`のみ（completionIdはoptionalなので後方互換）。
+ */
+export type DispatchResult = { ok: true; completionId?: string } | { ok: false; error: ApiError };
 
 export interface DataContextValue {
   state: State;
@@ -475,6 +486,17 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           });
           if (!res.ok) return { ok: false, error: res.error };
           await load();
+          return { ok: true, completionId: res.data.id };
+        }
+
+        // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・API仕様.md 4d節。
+        case "CANCEL_COMPLETION": {
+          const res = await api.cancelChoreCompletion(client, action.completionId);
+          if (!res.ok) return { ok: false, error: res.error };
+          // RPCは取消後の家族の木・ガチャ進捗の最新値を返さない設計のため
+          // （API仕様.md 4d節）、呼び出し元の画面が個別にガチャ進捗等を再取得する
+          // （家族の木・完了報告一覧はload()の再取得で自動的に反映される）。
+          await load();
           return { ok: true };
         }
 
@@ -617,7 +639,9 @@ function reducer(state: State, action: Action): State {
       if (!chore) return state;
       const now = new Date().toISOString();
       const completion: ChoreCompletion = {
-        id: `completion-${Date.now()}`,
+        // [2026-09-03改訂] MockDataProviderImpl.dispatchが事前に採番したidを使う
+        // （C7が直後の取消の対象を特定できるようにするため。下記参照）。
+        id: action.completionId ?? `completion-${Date.now()}`,
         family_id: state.family.id,
         chore_id: chore.id,
         chore_title: chore.title,
@@ -629,6 +653,14 @@ function reducer(state: State, action: Action): State {
         reported_at: now,
       };
       return { ...state, completions: [completion, ...state.completions] };
+    }
+
+    // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」。モック実装では
+    // 権限・時間窓・ガチャ未消費等のRPC側チェック（スキーマ設計.sql 43章）を再現せず、
+    // 単純に該当行を取り除くのみとする（他のモックアクションと同じ簡略化方針。
+    // 実接続でのみ実際の業務ルールが働く）。
+    case "CANCEL_COMPLETION": {
+      return { ...state, completions: state.completions.filter((c) => c.id !== action.completionId) };
     }
 
     case "ADD_REACTION": {
@@ -732,6 +764,14 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
   const [state, dispatchRaw] = useReducer(reducer, initialState);
 
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
+    // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
+    // idを事前に採番してreducerへ渡し、そのまま呼び出し元へ返す（reducer内部で
+    // Date.now()採番すると呼び出し元からは取得できないため）。
+    if (action.type === "REPORT_COMPLETION") {
+      const completionId = `completion-${Date.now()}`;
+      dispatchRaw({ ...action, completionId });
+      return { ok: true, completionId };
+    }
     dispatchRaw(action);
     return { ok: true };
   }, []);
