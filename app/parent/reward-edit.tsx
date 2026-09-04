@@ -10,6 +10,14 @@ import { useSession } from "@/lib/session";
 import { createReward, deleteReward, updateReward } from "@/data/api";
 import { toJstDateString } from "@/lib/calendarDates";
 
+// [2026-09-04追加・統括判断] ごほうびの絵文字の候補チップ。
+// 上のコメントのとおり2026-08-20に「自分で決めたい、選択ではなく」との要望で自由入力へ
+// 戻した経緯があるが、2026-09-04に統括より「保護者ご褒美もお願いします」と指示があり
+// 追加する。チップは自由入力を置き換えるものではなくあくまで補助である（P11
+// app/parent/chore-edit.tsx が2026-08-23に同じ整理でチップを復活させた前例に従う）。
+// 並びは S9（app/supporter/reward-edit.tsx）と同一。実装メモ129章。
+const REWARD_EMOJI_SUGGESTIONS = ["🍰", "☕", "🛍️", "♨️", "🎬"];
+
 /**
  * P13 ごほうび登録・編集
  * 参照: 画面一覧・遷移図.md P13、API仕様.md 7章
@@ -159,6 +167,17 @@ export default function RewardEditScreen() {
         maxLength={8}
         style={[styles.input, styles.emojiInput]}
       />
+      <View style={styles.chipRow}>
+        {REWARD_EMOJI_SUGGESTIONS.map((e) => (
+          <Pressable
+            key={e}
+            onPress={() => setEmoji(e)}
+            style={[styles.chip, emoji === e && styles.chipSelected]}
+          >
+            <Text style={{ fontSize: 18 }}>{e}</Text>
+          </Pressable>
+        ))}
+      </View>
       <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
         Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
       </Text>
@@ -265,6 +284,18 @@ export default function RewardEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
   purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   // [2026-08-30追加] app/parent/chore-edit.tsxと同じスタイル。
   metaCard: { marginTop: theme.spacing.s4 },
