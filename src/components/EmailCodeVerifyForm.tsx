@@ -6,7 +6,7 @@ import { verifyEmailOtp, AUTH_ERRCODE, type ApiResult } from "@/data/api";
 
 /**
  * P3「メール送信完了」・S0「招待プレビュー・参加確認」未ログイン時状態の
- * コード入力欄（6桁コード方式、認証・データ管理設計書.md 10章、
+ * コード入力欄（数字コード方式・桁数は theme.emailOtpLength、認証・データ管理設計書.md 10章、
  * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 29章）を、
  * 決定6「見出し・説明文・エラー文言は共通」のとおり1つのコンポーネントに集約する。
  *
@@ -73,9 +73,9 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
   };
 
   const onChangeCode = (raw: string) => {
-    const digitsOnly = raw.replace(/[^0-9]/g, "").slice(0, 6);
+    const digitsOnly = raw.replace(/[^0-9]/g, "").slice(0, theme.emailOtpLength);
     setCode(digitsOnly);
-    if (digitsOnly.length === 6) {
+    if (digitsOnly.length === theme.emailOtpLength) {
       submit(digitsOnly);
     }
   };
@@ -114,10 +114,10 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
         value={code}
         onChangeText={onChangeCode}
         keyboardType="number-pad"
-        maxLength={6}
+        maxLength={theme.emailOtpLength}
         editable={!verifying}
         placeholder="000000"
-        accessibilityLabel="6桁の確認コード"
+        accessibilityLabel={`${theme.emailOtpLength}桁の確認コード`}
         style={{
           marginTop: theme.spacing.s4,
           borderWidth: 1,

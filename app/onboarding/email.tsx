@@ -50,7 +50,7 @@ export default function EmailInputScreen() {
     <Screen tone="parent">
       <Text style={theme.typography.parentTitle}>メールアドレスを入力</Text>
       <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
-        パスワードは不要です。届いたメールに書かれた6桁の数字を、次の画面で入力してログインします。
+        パスワードは不要です。届いたメールに書かれた{theme.emailOtpLength}桁の数字を、次の画面で入力してログインします。
       </Text>
 
       <View style={{ marginTop: theme.spacing.s6 }}>

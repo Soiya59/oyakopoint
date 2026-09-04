@@ -10,11 +10,11 @@ import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 
 /**
  * P3 メール送信完了
- * 参照: 認証・データ管理設計書.md 10章（6桁コード方式への切替、2026-09-04）、
+ * 参照: 認証・データ管理設計書.md 10章（数字コード方式への切替、2026-09-04）、
  * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 29.2章、
  * 開発部/成果物/実装メモ.md 128章
  *
- * [2026-09-04改訂] マジックリンク方式から6桁コード入力方式へ切替（統括の実機報告
+ * [2026-09-04改訂] マジックリンク方式から数字コード入力方式へ切替（統括の実機報告
  * 「iPhoneでGmailを登録して、Gmailをサファリで開くと『リンクが切れてます、もしくは
  * すでに使用されてます』と出る」への対応）。この画面はコード入力欄
  * （EmailCodeVerifyForm）を持ち、`verifyEmailOtp`成功後は`useSession()`の`status`が
@@ -48,7 +48,7 @@ export default function EmailSentScreen() {
       <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
         <Text style={{ fontSize: 48 }}>📩</Text>
         <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-          メールに届いた6桁の数字を{"\n"}入力してください
+          メールに届いた{theme.emailOtpLength}桁の数字を{"\n"}入力してください
         </Text>
       </View>
 

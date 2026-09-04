@@ -217,6 +217,13 @@ export const drawingPalette = [
 // スキーマ設計.sql 33b章（is_valid_drawing_line_data / max_unpublished_drawings_per_member）
 // と値を一致させること。DB側のCHECK制約が最終防衛線であり、ここでの値は
 // あくまでUX目的の事前ガード（DBエラーをユーザーに見せないため）にすぎない。
+// [2026-09-05追加・本部長] ログイン用コードの桁数。**Supabase側の設定と一致させる**
+// 単一の定義箇所。2026-09-04に6桁で実装したが、統括が実機で試したところ本番から
+// 届いたのは8桁だった（本番のSupabaseがEmail OTP Lengthを8で設定しており、
+// ダッシュボードに該当の設定項目が見当たらなかったためアプリ側を合わせる判断。
+// 実装メモ130章）。**Supabase側の桁数を変えたときは必ずここも変えること。**
+export const emailOtpLength = 8;
+
 export const drawingLimits = {
   canvasDiameter: 280,
   swatchSize: 56, // 1.9節「役割を問わず56dpにする理由」: 全ロール共通で56dp
@@ -266,6 +273,7 @@ export const theme = {
   treeStages,
   treeColors,
   drawingPalette,
+  emailOtpLength,
   drawingLimits,
   gachaColors,
   gachaPlateSize,

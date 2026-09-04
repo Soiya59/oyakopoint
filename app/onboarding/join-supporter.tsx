@@ -33,7 +33,7 @@ import { useSession } from "@/lib/session";
  * 対象外）を追加した。チェックが入るまで「参加を確定する」ボタンをdisabledにし、
  * 常時キャプションで理由を示す（26.3節）。
  *
- * [2026-09-04改訂] マジックリンク方式から6桁コード入力方式へ切替
+ * [2026-09-04改訂] マジックリンク方式から数字コード入力方式へ切替
  * （認証・データ管理設計書.md 10章、UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md
  * 29.3章、開発部/成果物/実装メモ.md 128章）。「メールを送りました。リンクをタップして
  * 戻ってきてください」だった`emailSent`状態を、EmailCodeVerifyForm（P3と共通、決定6）
@@ -238,7 +238,7 @@ export default function JoinSupporterScreen() {
       ) : emailSent ? (
         <View style={{ marginTop: theme.spacing.s6 }}>
           <Text style={[theme.typography.supporterTitle, { textAlign: "center" }]}>
-            メールに届いた6桁の数字を{"\n"}入力してください
+            メールに届いた{theme.emailOtpLength}桁の数字を{"\n"}入力してください
           </Text>
           <EmailCodeVerifyForm tone="supporter" email={email} onResend={resendCode} />
         </View>
