@@ -222,7 +222,9 @@ export const drawingPalette = [
 // 届いたのは8桁だった（本番のSupabaseがEmail OTP Lengthを8で設定しており、
 // ダッシュボードに該当の設定項目が見当たらなかったためアプリ側を合わせる判断。
 // 実装メモ130章）。**Supabase側の桁数を変えたときは必ずここも変えること。**
-export const emailOtpLength = 8;
+// [2026-09-05再修正] 統括がSupabaseの設定を8桁から6桁へ変更できたため、6桁に戻す。
+// 桁数の正は常に**本番のSupabaseの設定**であり、ローカルの config.toml ではない。
+export const emailOtpLength = 6;
 
 export const drawingLimits = {
   canvasDiameter: 280,
