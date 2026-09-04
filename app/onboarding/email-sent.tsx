@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
-import AppButton from "@/components/AppButton";
+import EmailCodeVerifyForm from "@/components/EmailCodeVerifyForm";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { signInWithEmail } from "@/data/api";
@@ -10,23 +10,24 @@ import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 
 /**
  * P3 メール送信完了
- * 参照: API仕様.md 1章手順2「リンク踏んでセッション確立（Supabase Auth SDKが自動処理）」
+ * 参照: 認証・データ管理設計書.md 10章（6桁コード方式への切替、2026-09-04）、
+ * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 29.2章、
+ * 開発部/成果物/実装メモ.md 128章
  *
- * [2026-08-15改訂] app/_layout.tsx の useMagicLinkListener() がディープリンクを
- * 検知して supabase.auth.exchangeCodeForSession() を呼ぶと、SessionProvider の
- * status が自動的に "parentNoFamily"（またはすでに家族所属済みなら "parent"）に
- * 変わる。この画面はその変化を検知して自動的に次へ進む。
+ * [2026-09-04改訂] マジックリンク方式から6桁コード入力方式へ切替（統括の実機報告
+ * 「iPhoneでGmailを登録して、Gmailをサファリで開くと『リンクが切れてます、もしくは
+ * すでに使用されてます』と出る」への対応）。この画面はコード入力欄
+ * （EmailCodeVerifyForm）を持ち、`verifyEmailOtp`成功後は`useSession()`の`status`が
+ * 自動的に"parentNoFamily"/"parent"に変わるのを検知する既存のuseEffectがそのまま
+ * 動く。`app/auth-callback.tsx`は一切経由しない（設計部10.3章）。
  *
- * [未検証・正直な申告] 本セッションでは実際のメール受信箱を開いてリンクをタップする
- * 操作までは確認していない（ブラウザ/メールクライアント操作ツールがこの実行環境に
- * 無いため）。ディープリンク受信〜exchangeCodeForSession〜status遷移のロジックは
- * 実装したが、実機/実ブラウザでの受信確認は実装メモ.md 15章「未検証」に記載する。
+ * [2026-08-15由来・経路として温存] app/_layout.tsx の useMagicLinkListener() が
+ * ディープリンクを検知するリンク経由の予備経路も、コードとは別に変更せず残っている
+ * （設計部10.4章。`auth-callback.tsx`を削除しない）。
  */
 export default function EmailSentScreen() {
   const { email, intent } = useLocalSearchParams<{ email?: string; intent?: string }>();
   const { status } = useSession();
-  const [resending, setResending] = useState(false);
-  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "parentNoFamily" || status === "parent") {
@@ -35,45 +36,23 @@ export default function EmailSentScreen() {
   }, [status, intent]);
 
   const resend = async () => {
-    if (!email) return;
-    setResending(true);
-    setResendMessage(null);
-    // [2026-08-16修正・本部長] app/onboarding/email.tsxと同じ理由でintentを
-    // redirectToへ明示的に埋め込む（再送時もjoin/createの区別を引き継ぐ必要があるため）。
+    if (!email) return { ok: false as const, error: { code: "no_email", message: "メールアドレスが分かりません" } };
+    // [2026-08-16由来] app/onboarding/email.tsxと同じ理由でintentをredirectToへ
+    // 明示的に埋め込む（emailRedirectToはリンク経由の予備経路のために残す、10.4章）。
     const redirectTo = buildAuthRedirectUrl(intent ?? "create");
-    const res = await signInWithEmail(email, redirectTo);
-    setResending(false);
-    setResendMessage(res.ok ? "再送しました" : res.error.message);
+    return signInWithEmail(email, redirectTo);
   };
 
   return (
     <Screen tone="parent">
       <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
         <Text style={{ fontSize: 48 }}>📩</Text>
-        <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>
-          メールを送信しました
-        </Text>
-        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary, textAlign: "center" }}>
-          {email || "入力されたアドレス"} 宛にログインリンクを送りました。メールを確認してリンクをタップしてください。
-        </Text>
-        <Text style={{ marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary, textAlign: "center" }}>
-          リンクをタップすると、この画面が自動的に次へ進みます。
+        <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
+          メールに届いた6桁の数字を{"\n"}入力してください
         </Text>
       </View>
 
-      {resendMessage && (
-        <Text style={{ marginTop: theme.spacing.s3, textAlign: "center", color: theme.colors.neutralTextSecondary }}>
-          {resendMessage}
-        </Text>
-      )}
-
-      <AppButton
-        label={resending ? "再送中…" : "再送する"}
-        variant="secondary"
-        loading={resending}
-        style={{ marginTop: theme.spacing.s8 }}
-        onPress={resend}
-      />
+      <EmailCodeVerifyForm tone="parent" email={email ?? ""} onResend={resend} />
     </Screen>
   );
 }

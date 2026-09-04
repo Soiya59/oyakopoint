@@ -137,6 +137,53 @@ export async function signInWithEmail(email: string, redirectTo: string): Promis
 }
 
 /**
+ * 認証・データ管理設計書.md 10.8章のエラー対応表に対応するGoTrueのerror_code定数。
+ * PostgrestErrorのSQLSTATE（PG_ERRCODE、上記参照）とは別物の文字列であり、
+ * `AuthApiError.code`に入る値。実装メモ.md 128章の実測で確認した内容:
+ * - `otpExpired`: コードが違う場合・期限切れの場合のいずれも**この同一の値**が
+ *   返る（HTTP 403）。ローカルSupabase（gotrue v2.195.0）で実際に確認済み
+ *   （正しいコードを検証→成功、存在しないコード"000000"を検証→otp_expired、
+ *   期限切れコードを検証→otp_expired、の3パターンをcurlで実測）。したがって
+ *   verifyEmailOtpの呼び出し側はこの値だけでは「コード誤り」「期限切れ」を
+ *   区別できない（設計部10.8章の指摘どおり、実装漏れではなく仕様）。
+ * - `overEmailSendRateLimit`: 「再送する」を連打した場合に返る（HTTP 429）。
+ *   ローカルで実測済み（`max_frequency`設定に基づき、1秒未満の間隔での連続送信で再現）。
+ * - `overRequestRateLimit`: `token_verifications`（IP単位、5分あたり30回）超過時に
+ *   返ると設計部10.9章が説明している値。**このコード自体はgotrueバイナリの文字列
+ *   抽出で実在を確認したが、ローカル環境では37回連続でverifyOtpを叩いても
+ *   429を再現できなかった**（ローカルCLIのレート制限実装が本番と異なる可能性がある。
+ *   正直な申告として記録する）。本番での実際の挙動は統括・本部長が別途確認することを推奨。
+ */
+export const AUTH_ERRCODE = {
+  otpExpired: "otp_expired",
+  overEmailSendRateLimit: "over_email_send_rate_limit",
+  overRequestRateLimit: "over_request_rate_limit",
+} as const;
+
+/**
+ * [2026-09-04新設] 認証・データ管理設計書.md 10.1章: signInWithEmailで送信した
+ * 6桁コードを検証してセッションを確立する。`type: "email"`は@supabase/auth-jsの
+ * EmailOtpTypeのうち新規サインアップ・既存ユーザーの再ログインの両方をカバーする値
+ * （node_modules/@supabase/auth-js/dist/module/lib/types.d.ts参照、設計部10.1章で
+ * 確認済み）。
+ *
+ * エラーの`code`にはPostgrestErrorのSQLSTATEではなく、AuthApiErrorが保持する
+ * GoTrueのerror_code文字列（AUTH_ERRCODE参照）を入れる。実装メモ117章の教訓
+ * （可読名の文字列比較をしない）を踏まえ、呼び出し側もAUTH_ERRCODEの定数と
+ * 比較すること。
+ */
+export async function verifyEmailOtp(email: string, code: string): Promise<ApiResult<null>> {
+  const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+  if (error) {
+    return {
+      ok: false,
+      error: { code: error.code ?? error.name, message: error.message, status: error.status },
+    };
+  }
+  return { ok: true, data: null };
+}
+
+/**
  * マジックリンクのリダイレクトURL（`?code=...`または`#access_token=...`）を
  * 受け取ってセッションを確立する。
  *

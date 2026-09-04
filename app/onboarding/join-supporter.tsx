@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
+import EmailCodeVerifyForm from "@/components/EmailCodeVerifyForm";
 import InviteVisibilityConsent, { JOIN_CONSENT_VERSION } from "@/components/InviteVisibilityConsent";
 import theme from "@/theme/theme";
 import { acceptFamilyInvite, familyInviteLookup, signInWithEmail, PG_ERRCODE } from "@/data/api";
@@ -22,8 +23,8 @@ import { useSession } from "@/lib/session";
  * - 家族名のプレビューは`family_invite_lookup` RPC（未ログインでも呼べる）で取得する
  * - 保護者の参加フロー（P5→P6、認証が先）とは順序が逆で、みまもりメンバーはこの画面に
  *   直接メールの招待リンク（token付き）から到達するため、未ログインの間は先に
- *   メールアドレス入力→マジックリンク送信の導線を出し、認証完了後に同じ画面へ戻ってきた
- *   ときに表示名入力＋参加確定ボタンを出す2段階構成にした（画面数を増やさない設計判断。
+ *   メールアドレス入力→コード送信の導線を出し、コード認証完了後に同じ画面のまま
+ *   表示名入力＋参加確定ボタンを出す2段階構成にした（画面数を増やさない設計判断。
  *   設計書はS0を1画面として定義しており、この2段階の出し分けは実装判断）。
  *
  * [2026-09-02改訂] 招待受諾フローにおける可視範囲の説明と同意取得（要件定義書.md
@@ -31,6 +32,14 @@ import { useSession } from "@/lib/session";
  * InviteVisibilityConsent（role="supporter"、3項目版。aの感謝メッセージ本文は
  * 対象外）を追加した。チェックが入るまで「参加を確定する」ボタンをdisabledにし、
  * 常時キャプションで理由を示す（26.3節）。
+ *
+ * [2026-09-04改訂] マジックリンク方式から6桁コード入力方式へ切替
+ * （認証・データ管理設計書.md 10章、UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md
+ * 29.3章、開発部/成果物/実装メモ.md 128章）。「メールを送りました。リンクをタップして
+ * 戻ってきてください」だった`emailSent`状態を、EmailCodeVerifyForm（P3と共通、決定6）
+ * を使ったコード入力状態に置き換えた。認証成功後は`status`が"parentNoFamily"に変わり、
+ * 画面遷移せずこのコンポーネントが再レンダリングされ、下の`status === "parentNoFamily"`
+ * 分岐がそのまま表示される（設計部10.3章）。
  */
 export default function JoinSupporterScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
@@ -102,6 +111,19 @@ export default function JoinSupporterScreen() {
       return;
     }
     setEmailSent(true);
+  };
+
+  /**
+   * [2026-09-04新設] EmailCodeVerifyFormの「再送する」から呼ぶ。emailSent状態への
+   * 遷移前後で使うsendMagicLinkとは異なり、この画面自身のsendingEmail/emailError状態は
+   * 一切触らない（EmailCodeVerifyFormが自分の再送状態を内部で管理するため）。
+   */
+  const resendCode = async () => {
+    if (!token) {
+      return { ok: false as const, error: { code: "no_token", message: "招待リンクが正しくありません" } };
+    }
+    const redirectTo = buildAuthRedirectUrl("join-supporter", { token });
+    return signInWithEmail(email.trim(), redirectTo);
   };
 
   const confirmJoin = async () => {
@@ -215,9 +237,10 @@ export default function JoinSupporterScreen() {
         </>
       ) : emailSent ? (
         <View style={{ marginTop: theme.spacing.s6 }}>
-          <Text style={theme.typography.supporterBody}>
-            {email} にログイン用のメールを送りました。メール内のリンクをタップしてこの画面に戻ってきてください。
+          <Text style={[theme.typography.supporterTitle, { textAlign: "center" }]}>
+            メールに届いた6桁の数字を{"\n"}入力してください
           </Text>
+          <EmailCodeVerifyForm tone="supporter" email={email} onResend={resendCode} />
         </View>
       ) : (
         <>
