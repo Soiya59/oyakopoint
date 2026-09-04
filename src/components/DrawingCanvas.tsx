@@ -13,10 +13,28 @@
  *   Expo Web export（GitHub Pages配信）でもマウスドラッグでの描画が動作する。
  */
 import React, { useRef, useState } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
+
+/**
+ * [2026-09-04対応・実装メモ126章] Web版（GitHub Pagesをモバイルブラウザで開く運用）で、
+ * キャンバス上で指を動かして線を引こうとすると、ブラウザが標準の縦スクロール操作だと
+ * 解釈してしまい画面が動く不具合への対処。CSSの`touch-action: none`をキャンバスの
+ * ルート要素に効かせ、ブラウザ側のタッチ→スクロール変換そのものを起こさせないようにする。
+ * react-native-web自身がScrollViewのスクロール無効化に同じ手法を使っている
+ * （node_modules/react-native-web/dist/exports/ScrollView/ScrollViewBase.js の
+ * `scrollDisabled`スタイルで`touchAction: 'none'`を使用しており、実行時にreact-native-webが
+ * このキーをそのままDOMのCSSへ渡すことを確認済み）ため、実行時の安全性は確認できている。
+ * ただし`'react-native'`の`ViewStyle`型には`touchAction`が定義されておらず、そのまま
+ * オブジェクトリテラルに書くとTSの型エラーになる。`as unknown as ViewStyle`で型だけを
+ * 逃がす（`@ts-expect-error`より、値自体に説明コメントを添えられるこちらを選んだ）。
+ * ネイティブ（iOS/Android実機。現状はWeb版運用のため未使用）ではこのキー自体が
+ * 意味を持たないためPlatform.OS==="web"のときだけ付与する。
+ */
+const webTouchActionNoneStyle: ViewStyle =
+  Platform.OS === "web" ? ({ touchAction: "none" } as unknown as ViewStyle) : {};
 
 const MIN_POINT_DISTANCE_PX = 4;
 
@@ -81,6 +99,16 @@ export function DrawingCanvas({
         !disabledRef.current && linesCountRef.current < theme.drawingLimits.maxLines,
       onMoveShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderGrant: (evt) => {
+        // Web版でのスクロール抑止の保険（主たる防御はwebTouchActionNoneStyle）。
+        // react-native-webの responder システムは document に touchstart/touchmove
+        // リスナーを{passive: true}指定無しで登録している
+        // （node_modules/react-native-web/dist/modules/useResponderEvents/ResponderSystem.js
+        // のattachListeners内`document.addEventListener(eventType, eventListener)`）が、
+        // Chrome等のブラウザはwindow/document直下のtouchstart/touchmoveリスナーを
+        // 既定でpassive扱いする仕様介入を持つため、実際にpreventDefault()が効くかは
+        // ブラウザ実装依存。効かせられなくても実害は無く（`touch-action: none`が
+        // 別途スクロールを止める）、これ以上は深追いしない方針とした。
+        evt.preventDefault?.();
         if (disabledRef.current || linesCountRef.current >= theme.drawingLimits.maxLines) return;
         const { locationX, locationY } = evt.nativeEvent;
         const [nx, ny] = toNormalized(locationX, locationY);
@@ -88,6 +116,7 @@ export function DrawingCanvas({
         setLivePoints([nx, ny]);
       },
       onPanResponderMove: (evt) => {
+        evt.preventDefault?.();
         if (disabledRef.current) return;
         const pts = currentPointsRef.current;
         if (pts.length === 0) return;
@@ -115,7 +144,14 @@ export function DrawingCanvas({
 
   return (
     <View
-      style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}
+      style={[
+        styles.circle,
+        { width: size, height: size, borderRadius: size / 2 },
+        // キャンバスの矩形の上でだけスクロールを止める。この`View`の外
+        // （題名入力欄・パレット・保存ボタン・過去の絵の一覧）にはこのスタイルを
+        // 付けないため、画面全体のスクロール（Screenのscroll=true）は従来どおり働く。
+        webTouchActionNoneStyle,
+      ]}
       {...panResponder.panHandlers}
     >
       <Svg width={size} height={size}>
