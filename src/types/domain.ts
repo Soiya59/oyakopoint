@@ -336,6 +336,12 @@ export interface FamilyDrawingLine {
   c: string;
   /** [x1,y1,x2,y2,...] のフラット配列。座標は0〜1000の整数（スキーマ設計.sql 33b章）。 */
   p: number[];
+  /**
+   * [2026-09-05追加] 線の太さ。`2`／`4`（既定）／`7`のいずれか（07-13-2章拡張、
+   * API仕様.md 12.2b節）。旧データ（2026-09-05より前に保存された線）には存在しない
+   * （`w?`は任意）。無い場合は`4`（ふつう）として扱うこと（UIUXデザイン部 決定25）。
+   */
+  w?: number;
 }
 
 /** family_drawings.line_data(JSONB)本体。`is_valid_drawing_line_data()`が検証する形式と一致させる。 */

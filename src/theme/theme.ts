@@ -233,7 +233,11 @@ export const drawingLimits = {
   maxLines: 150,
   maxPointsPerLine: 300, // p配列は[x,y]の組なので要素数は最大600
   maxTotalPoints: 3000,
-  maxBytes: 20480,
+  // [2026-09-05変更・実装メモ131章] 20480→21504（20KB→21KB）。線の太さ`w`の
+  // 追加分（1本あたり最大6byte×150本=最大900byte）を安全に吸収するための引き上げ。
+  // スキーマ設計.sql 44.4章・API仕様.md 12.2b節と一致させる単一の定義箇所。
+  // 「もっと描き込めるようにする」ための引き上げではない（線数・点数の上限は不変）。
+  maxBytes: 21504,
   // [2026-09-02追加] お絵かきの題名（07-13-2a章）。chk_family_drawings_title
   // （スキーマ設計.sql 42.1章）と一致させる単一の定義箇所。
   maxTitleLength: 20,
@@ -241,6 +245,20 @@ export const drawingLimits = {
   // 「◯/20」カウンターは残り5字（15字入力時点）でcolor-status-pendingに切り替える。
   titleWarningThreshold: 5,
 } as const;
+
+// ---- 線の太さ（3段階、2026-09-05追加、07-13-2章拡張） ----
+// 参照: デザイントークン.md「線の太さ（3段階）」・主要画面ワイヤーフレーム.md 21.5b節
+// 決定20（値）・決定22（表示用の点の直径）。値（2/4/7）はDB側is_valid_drawing_line_data()
+// の許可リスト（スキーマ設計.sql 44.5章 v_allowed_widths）と一致させること。
+export const drawingStrokeWidths = [
+  { value: 2, label: "ほそい", dotSize: 14 },
+  { value: 4, label: "ふつう", dotSize: 24 },
+  { value: 7, label: "ふとい", dotSize: 36 },
+] as const;
+
+// 決定23: 既定値は「ふつう」＝4pt（現行の固定値をそのまま踏襲）。決定25: `w`が
+// 存在しない旧データの表示フォールバック値も同じ4に揃える（単一の基準値にする）。
+export const defaultDrawingStrokeWidth = 4;
 
 // ---- 1.10 ガチャのアクセントカラー・景品カタログ（`color-gacha-*`、2026-08-26追加、07-13-1章対応） ----
 // 参照: デザイントークン.md 1.10節。「あと◯回でガチャ」の進捗表示・まわすボタン・
@@ -277,6 +295,8 @@ export const theme = {
   drawingPalette,
   emailOtpLength,
   drawingLimits,
+  drawingStrokeWidths,
+  defaultDrawingStrokeWidth,
   gachaColors,
   gachaPlateSize,
 } as const;

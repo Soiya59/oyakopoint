@@ -53,6 +53,12 @@ interface DrawingCanvasProps {
   size?: number;
   /** 選択中の色（8色パレットのHEXコードのいずれか）。 */
   color: string;
+  /**
+   * [2026-09-05追加] 選択中の太さ（`2`/`4`/`7`のいずれか、デザイントークン.md
+   * 「線の太さ（3段階）」・主要画面ワイヤーフレーム.md 21.5b節）。確定前のライブ
+   * プレビューと、これから確定する線（`onStrokeEnd`に渡す`w`）の両方に使う。
+   */
+  strokeWidth: number;
   /** すでに確定済みの線（0〜1000正規化座標）。 */
   lines: FamilyDrawingLine[];
   /** 1本描き終える（指を離す）たびに呼ばれる。1点しか無いタップは呼ばれない。 */
@@ -64,6 +70,7 @@ interface DrawingCanvasProps {
 export function DrawingCanvas({
   size = theme.drawingLimits.canvasDiameter,
   color,
+  strokeWidth,
   lines,
   onStrokeEnd,
   disabled = false,
@@ -71,6 +78,10 @@ export function DrawingCanvas({
   const [livePoints, setLivePoints] = useState<number[]>([]);
   const colorRef = useRef(color);
   colorRef.current = color;
+  // [2026-09-05追加] colorRefと同じ理由（下記PanResponderのコメント参照）で、
+  // 選択中の太さも最新値をrefで参照する。
+  const widthRef = useRef(strokeWidth);
+  widthRef.current = strokeWidth;
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const linesCountRef = useRef(lines.length);
@@ -90,7 +101,7 @@ export function DrawingCanvas({
     // DB側chk_family_drawings_line_data（33b章）はp配列2要素以上を要求する。
     // 1点だけのタップ（指を置いてすぐ離した）は線として保存しない。
     if (pts.length < 2) return;
-    onStrokeEnd({ c: colorRef.current, p: pts });
+    onStrokeEnd({ c: colorRef.current, p: pts, w: widthRef.current });
   };
 
   const panResponder = useRef(
@@ -162,7 +173,9 @@ export function DrawingCanvas({
             points={pointsToPolylineString(line.p, size)}
             fill="none"
             stroke={line.c}
-            strokeWidth={4}
+            // [2026-09-05変更] `line.w`（無ければ決定25のとおり4=ふつうへフォールバック）
+            // を使う。以前は固定4pt。
+            strokeWidth={line.w ?? theme.defaultDrawingStrokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -172,7 +185,8 @@ export function DrawingCanvas({
             points={pointsToPolylineString(livePoints, size)}
             fill="none"
             stroke={color}
-            strokeWidth={4}
+            // [2026-09-05変更] 描画中のライブプレビューも選択中の太さを反映する。
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
           />

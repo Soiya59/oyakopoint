@@ -26,7 +26,9 @@ import Card from "./Card";
 import AppButton from "./AppButton";
 import DrawingCanvas, { DrawingThumbnail } from "./DrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
+import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import theme from "@/theme/theme";
+import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -99,6 +101,9 @@ export function DrawingBoard({
 }: DrawingBoardProps) {
   const [lines, setLines] = useState<FamilyDrawingLine[]>([]);
   const [color, setColor] = useState<string>(theme.drawingPalette[0].value);
+  // [2026-09-05追加] 線の太さ（21.5b節）。決定23: 既定値は「ふつう」＝4pt。
+  // 色と同じく、ストロークの有無や選択中の色に関わらず常に3つとも選べる（常設）。
+  const [strokeWidth, setStrokeWidth] = useState<number>(theme.defaultDrawingStrokeWidth);
   // [設計判断] 削除は取り消せない操作のため、app/parent/settings.tsxの家族削除と同じ
   // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認パターンを踏襲する
   // （Alert.alert等のネイティブダイアログはWeb版で挙動が不安定なため使わない）。
@@ -125,6 +130,41 @@ export function DrawingBoard({
   const titleRemaining = theme.drawingLimits.maxTitleLength - title.length;
   const titleNearLimit = titleRemaining <= theme.drawingLimits.titleWarningThreshold;
 
+  // [2026-09-05追加] お絵かきの線・点数上限の通知（主要画面ワイヤーフレーム.md 21.5c節、
+  // API仕様.md 12.2b節・44.8章）。各再描画のたび（＝onStrokeEndでlinesが変わるたび、
+  // 決定27「ストロークが上限超過で破棄された場合も含む」）に現在の`lines`から
+  // 派生値を再計算する。3指標（線の本数・合計座標点数・バイト数）すべてを見る。
+  const totalPoints = lines.reduce((sum, l) => sum + l.p.length / 2, 0);
+  const approxBytes = estimateLineDataBytes(lines);
+  const linesRemaining = theme.drawingLimits.maxLines - lines.length;
+  const pointsRemaining = theme.drawingLimits.maxTotalPoints - totalPoints;
+  const bytesRemaining = theme.drawingLimits.maxBytes - approxBytes;
+  // 「もう描けない」（44.8.2章）: 線数・点数はちょうど上限に達した時点で次を追加
+  // できない（handleStrokeEndのガードと対称）。バイト数は線ごとの増分が一定でない
+  // ため、「最小構成の線1本すら追加できない残り」をもって上限到達とみなす
+  // （実装メモ131章「迷った点」参照。厳密な>21504ではなく、次の1本を追加できるかで
+  // 判定する44.8.2章の趣旨を、現在のlines配列だけから自己完結して評価できる形にした）。
+  const atMaxLines = linesRemaining <= 0;
+  const atMaxPoints = pointsRemaining <= 0;
+  const atMaxBytes = bytesRemaining < MIN_DRAWING_LINE_BYTES;
+  const atCapacity = atMaxLines || atMaxPoints || atMaxBytes;
+  // 「あと少し」（決定27・44.8.3章）: 各上限の残りが10%未満（線数<15、点数<300、
+  // バイト数<2150）。「もう描けない」は同時にこの条件も満たすため、表示側で
+  // atCapacityを優先すればよい（決定27の注記どおり）。
+  const nearCapacity =
+    linesRemaining < theme.drawingLimits.maxLines * 0.1 ||
+    pointsRemaining < theme.drawingLimits.maxTotalPoints * 0.1 ||
+    bytesRemaining < 2150;
+  // 決定28（もう描けない）・決定29（あと少し）の確定文言。P30/S18は同一文言
+  // （21.5節決定4と同じくキャンバス回りの部品・文言は保護者・みまもりメンバーで
+  // 分けない）。
+  const atCapacityText = isChildTone
+    ? "たくさん かいたね！このえは もう いっぱいだよ。とっておく を おしてね。すこし けしたいときは ひとつ もどす も つかえるよ"
+    : "たくさん描けました。これ以上は描き足せません。そのまま保存するか、「ひとつ戻す」で少し消せば続けて描けます";
+  const nearCapacityText = isChildTone
+    ? "もうすこしで いっぱいに なりそうだよ"
+    : "もうすぐ描き足せなくなります。区切りのよいところで保存すると安心です";
+
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
     setLines((prev) => {
       if (prev.length >= theme.drawingLimits.maxLines) return prev;
@@ -132,7 +172,12 @@ export function DrawingBoard({
       // 合計座標点数上限（33b章：3000点）に達する場合は、このストロークを追加しない
       // （DBのCHECK制約に頼らずクライアント側で先に止め、保存時のエラー表示を防ぐ）。
       if (totalPoints > theme.drawingLimits.maxTotalPoints) return prev;
-      return [...prev, line];
+      // [2026-09-05追加] バイト数上限（API仕様.md 12.2b節・44.8.2章「見積もりバイト数
+      // （次の1本を含めて計算）>21504」）。このストロークを加えた場合の見積もりが
+      // 上限を超えるなら追加しない。
+      const candidate = [...prev, line];
+      if (estimateLineDataBytes(candidate) > theme.drawingLimits.maxBytes) return prev;
+      return candidate;
     });
   };
 
@@ -155,7 +200,12 @@ export function DrawingBoard({
     setConfirmingDeleteId(null);
     setEditingId(drawing.id);
     setLines(drawing.line_data.lines);
-    setColor(drawing.line_data.lines[drawing.line_data.lines.length - 1]?.c ?? theme.drawingPalette[0].value);
+    const lastLine = drawing.line_data.lines[drawing.line_data.lines.length - 1];
+    setColor(lastLine?.c ?? theme.drawingPalette[0].value);
+    // [2026-09-05追加] 色の初期化（上記）と同じ考え方で、太さも直前に使っていた
+    // 値から始める。旧データ（wが無い）は決定23・25のとおり4（ふつう）へ
+    // フォールバックする。
+    setStrokeWidth(lastLine?.w ?? theme.defaultDrawingStrokeWidth);
     setTitle(drawing.title ?? "");
   };
 
@@ -288,10 +338,22 @@ export function DrawingBoard({
 
       {showCanvas && (
         <>
-          <DrawingCanvas color={color} lines={lines} onStrokeEnd={handleStrokeEnd} disabled={saving} />
+          <DrawingCanvas
+            color={color}
+            strokeWidth={strokeWidth}
+            lines={lines}
+            onStrokeEnd={handleStrokeEnd}
+            disabled={saving}
+          />
 
           <View style={styles.paletteWrap}>
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
+          </View>
+
+          {/* [2026-09-05追加] 線の太さ選択（21.5b節 決定22）。8色パレットの直下・
+              題名入力欄の直上に1行。見出し・説明文は付けない。 */}
+          <View style={styles.strokeWidthWrap}>
+            <DrawingStrokeWidthPicker selected={strokeWidth} onSelect={setStrokeWidth} disabled={saving} />
           </View>
 
           {/* [2026-09-02追加] お絵かきの題名（21.5a節）。8色パレット直下・保存ボタン直上に
@@ -325,7 +387,17 @@ export function DrawingBoard({
         </>
       )}
 
-      {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+      {/* [2026-09-05変更] 既存の通信エラー表示の余白を「共有ステータス欄」として拡張
+          （21.5c節 決定26）。通信エラー＞もう描けない＞あと少しの優先順位で1つだけ
+          出す。もう描けない・あと少しはキャンバスを描いている最中にのみ意味を持つ
+          ため、showCanvas（新規作成中・編集中）のときに限る。 */}
+      {errorMessage ? (
+        <Text style={styles.error}>{errorMessage}</Text>
+      ) : showCanvas && atCapacity ? (
+        <Text style={[bodyStyle, styles.atCapacity]}>{atCapacityText}</Text>
+      ) : showCanvas && nearCapacity ? (
+        <Text style={[captionStyle, styles.nearCapacity]}>{nearCapacityText}</Text>
+      ) : null}
 
       {showCanvas && (
         <View style={styles.actionRow}>
@@ -370,6 +442,8 @@ export function DrawingBoard({
 
 const styles = StyleSheet.create({
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
+  // [2026-09-05追加] 線の太さ選択（21.5b節）。パレットの下・題名入力欄の上。
+  strokeWidthWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   // [2026-09-02追加] お絵かきの題名入力欄（21.5a節）。
   titleWrap: { marginTop: theme.spacing.s4 },
   titleInput: {
@@ -408,6 +482,23 @@ const styles = StyleSheet.create({
   confirmRow: { alignItems: "center", gap: theme.spacing.s1, marginTop: theme.spacing.s1 },
   deleteConfirmText: { color: theme.colors.statusBlocking, textDecorationLine: "underline" },
   error: { marginTop: theme.spacing.s3, color: theme.colors.statusBlocking, textAlign: "center" },
+  // [2026-09-05追加] 上限到達の通知（21.5c節 決定26・28）。errorと同じ配置規則
+  // （marginTop s3・中央寄せ）を踏襲し、色とフォントウェイトのみ変える。
+  // シェイク・赤フラッシュ・自動消滅は使わない（デザイントークン.md 5章）。
+  atCapacity: {
+    marginTop: theme.spacing.s3,
+    color: theme.colors.brandPrimary,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  // 決定29: 「もう描けない」より一段控えめ（キャプションサイズ・color-status-pending・
+  // 通常ウェイト）にし、2つの状態を色・太さ・文字サイズの3点で区別する。
+  nearCapacity: {
+    marginTop: theme.spacing.s3,
+    color: theme.colors.statusPending,
+    fontWeight: "400",
+    textAlign: "center",
+  },
 });
 
 export default DrawingBoard;
