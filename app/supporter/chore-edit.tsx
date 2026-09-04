@@ -26,6 +26,12 @@ import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 // 「メンバー選択」ステップを完全に省略した簡易版のステップ構成にする。
 type NfcModalStep = "list" | "writing" | "writeFailed" | "unsupported";
 
+// [2026-09-04追加・実装メモ.md 127章] app/parent/chore-edit.tsxのCHORE_EMOJI_SUGGESTIONS
+// （2026-08-23追加）と同じ発想の候補チップだが、保護者側の候補（勉強・掃除等の家事）を
+// そのまま流用せず、みまもりメンバー自身の健康・習慣づくり用のクエストを想定した5個に
+// 差し替えた（UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 14.2.1節）。
+const SUPPORTER_CHORE_EMOJI_SUGGESTIONS = ["🚶", "💪", "🥗", "💧", "🧠"];
+
 /**
  * S6 自分専用のお手伝い登録・編集（みまもりメンバー）
  * 参照: 画面一覧・遷移図.md 2.5節S6、API仕様.md 3b章
@@ -239,6 +245,17 @@ export default function SupporterChoreEditScreen() {
         maxLength={8}
         style={[styles.input, styles.emojiInput]}
       />
+      <View style={styles.chipRow}>
+        {SUPPORTER_CHORE_EMOJI_SUGGESTIONS.map((e) => (
+          <Pressable
+            key={e}
+            onPress={() => setEmoji(e)}
+            style={[styles.chip, emoji === e && styles.chipSelected]}
+          >
+            <Text style={{ fontSize: 18 }}>{e}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>ポイント（1以上の整数）</Text>
       <TextInput

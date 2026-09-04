@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
@@ -12,6 +12,12 @@ import { createPersonalReward, deleteReward, updatePersonalReward } from "@/data
  * S9 自分専用のごほうび登録・編集（みまもりメンバー）
  * 参照: 画面一覧・遷移図.md 2.5節S9、API仕様.md 7b章
  */
+
+// [2026-09-04追加・実装メモ.md 127章] app/supporter/chore-edit.tsxの
+// SUPPORTER_CHORE_EMOJI_SUGGESTIONSと同じ発想の候補チップ。みまもりメンバー自身が
+// 自分へのごほうびとして交換するものを想定した5個にした（UIUXデザイン部/成果物/
+// 主要画面ワイヤーフレーム.md 14.2.1節）。
+const SUPPORTER_REWARD_EMOJI_SUGGESTIONS = ["🍰", "☕", "🛍️", "♨️", "🎬"];
 export default function SupporterRewardEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, refresh } = useAppData();
@@ -114,6 +120,17 @@ export default function SupporterRewardEditScreen() {
         maxLength={8}
         style={[styles.input, styles.emojiInput]}
       />
+      <View style={styles.chipRow}>
+        {SUPPORTER_REWARD_EMOJI_SUGGESTIONS.map((e) => (
+          <Pressable
+            key={e}
+            onPress={() => setEmoji(e)}
+            style={[styles.chip, emoji === e && styles.chipSelected]}
+          >
+            <Text style={{ fontSize: 18 }}>{e}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>コスト（1以上の整数）</Text>
       <TextInput
@@ -172,4 +189,18 @@ const styles = StyleSheet.create({
   },
   emojiInput: { width: 96, fontSize: 20, textAlign: "center" },
   textArea: { minHeight: 80, textAlignVertical: "top" },
+  // [2026-09-04追加・実装メモ.md 127章] app/supporter/chore-edit.tsxと同じ内容。
+  // このファイルにはchipRow/chip/chipSelectedが未定義だったため新設した。
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  chipSelected: { borderColor: theme.colors.supporterAccent, backgroundColor: theme.colors.supporterAccentSoft },
 });
