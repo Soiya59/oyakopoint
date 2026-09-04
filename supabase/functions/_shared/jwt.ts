@@ -53,7 +53,13 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
 // 同時に修正済み（current_family_id()等がfamily_member_idクレームがあっても
 // 都度is_activeを確認するようになった。スキーマ設計.sql 32章）。そのため
 // TTLを延ばしても、退会は既発行トークンに即座に反映される。
-const CHILD_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+// [2026-09-05変更・統括指示] 1週間から1か月へ延長する。統括「1週間から1カ月に
+// 延ばしたい」。上の2026-08-24の判断（退会が既発行トークンに即座に反映される
+// ようになっているため延長しても安全）はそのまま当てはまる。
+// なお保護者・みまもりメンバーは Supabase Auth 側の管理で、refresh token に
+// 期限が無く（config.toml の [auth.sessions] は無効のまま）実質無期限のため、
+// 今回は変更していない。統括の確認を経て「そのまま」で決着（本部長が確認）。
+const CHILD_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export interface ChildTokenClaims {
   familyId: string;
