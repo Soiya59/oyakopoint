@@ -9,6 +9,13 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import ReportCelebration from "@/components/ReportCelebration";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { isWithinCancelWindow } from "@/lib/calendarDates";
+import {
+  CANCEL_LABEL,
+  CANCEL_PROCESSING_TEXT,
+  CANCEL_SUCCESS_TEXT,
+  cancelCompletionErrorText,
+} from "@/lib/cancelChoreCompletion";
 
 /**
  * S5 自分専用のお手伝い一覧（みまもりメンバー）
@@ -28,7 +35,7 @@ import { useAppData } from "@/data/store";
  * よって作成者本人に限定される。
  */
 export default function SupporterMyChoresScreen() {
-  const { state, isChoreLimitReached, isOneOffFinished } = useAppData();
+  const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
@@ -44,6 +51,40 @@ export default function SupporterMyChoresScreen() {
     return acc;
   }, {});
   const creatorOf = (id: string) => state.members.find((m) => m.id === id);
+
+  // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 28.11節・28.11.2節「さっきの記録」。決定9のとおり
+  // P19（app/parent/my-chores.tsx）と完全に同一のロジック。データソースは
+  // state.completions（既に取得済み）のみで、新しい通信は発生させない。
+  // 1分の経過でリンクごと消すため、表示中は10秒間隔で再評価する（28.0節決定4）。
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const recentSelfCompletions = state.completions
+    .filter((c) => !!me && c.reported_by === me.id && isWithinCancelWindow(c.reported_at))
+    .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
+
+  const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+
+  // 新設ブロックに現れるのは常に自分自身の報告のみのため、確認ダイアログは挟まず
+  // 即時実行する（28.0節決定5・28.11節決定14）。
+  const handleCancelRecentCompletion = async (completionId: string) => {
+    setCancelingCompletionId(completionId);
+    setCancelRowError(null);
+    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+    setCancelingCompletionId(null);
+    if (!result.ok) {
+      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("supporter", result.error) });
+      return;
+    }
+    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.supporter);
+    setTimeout(() => setCancelFlashMessage(null), 1500);
+  };
 
   // [2026-08-30追加・本部長] S7（app/supporter/chore-report.tsx）は報告成功後、
   // 保護者側と同じく justChoreId/justTitle/justPoints を付けてこの画面へ戻していたが、
@@ -72,6 +113,41 @@ export default function SupporterMyChoresScreen() {
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したクエストは家族みんなに見えます。
       </Text>
+
+      {/* [2026-09-06追加] 28.11.2節「さっきの記録」。決定9のとおりP19と完全に同一の
+          設計。該当が無ければブロックごと出さない。既存の2段構成より上に置く（決定12）。 */}
+      {recentSelfCompletions.length > 0 && (
+        <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
+          <Text style={[theme.typography.supporterBodyMedium, styles.sectionHeading]}>さっきの記録</Text>
+          {recentSelfCompletions.map((c) => (
+            <Card key={c.id} tone="supporter" style={styles.recentRow}>
+              <View style={styles.recentRowMain}>
+                <Text style={{ fontSize: 20 }}>{c.chore_emoji}</Text>
+                <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
+                  {c.chore_title}
+                </Text>
+                <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
+                <Pressable
+                  onPress={() => handleCancelRecentCompletion(c.id)}
+                  disabled={cancelingCompletionId === c.id}
+                  hitSlop={8}
+                  style={{ marginLeft: theme.spacing.s3 }}
+                >
+                  <Text style={styles.cancelLink}>
+                    {cancelingCompletionId === c.id ? CANCEL_PROCESSING_TEXT.supporter : CANCEL_LABEL.supporter}
+                  </Text>
+                </Pressable>
+              </View>
+              {cancelRowError?.id === c.id && (
+                <Text style={[theme.typography.supporterCaption, styles.cancelRowError]}>
+                  {cancelRowError.message}
+                </Text>
+              )}
+            </Card>
+          ))}
+          {cancelFlashMessage && <Text style={styles.cancelFlash}>{cancelFlashMessage}</Text>}
+        </View>
+      )}
 
       {myChores.length === 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -166,4 +242,12 @@ const styles = StyleSheet.create({
   publicLabel: { color: theme.colors.neutralTextSecondary, fontSize: 12 },
   refRow: { backgroundColor: theme.colors.neutralSurface },
   refItem: { flexDirection: "row", alignItems: "center" },
+  // [2026-09-06追加] 28.11.2節「さっきの記録」。背景色は通常のカードと同系色にとどめ、
+  // 新着・警告を示す強い色は使わない（28.11.3節トーン設計メモ）。
+  sectionHeading: { color: theme.colors.neutralTextSecondary },
+  recentRow: {},
+  recentRowMain: { flexDirection: "row", alignItems: "center" },
+  cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  cancelRowError: { marginTop: theme.spacing.s1, color: theme.colors.statusBlocking },
+  cancelFlash: { textAlign: "center", color: theme.colors.neutralTextSecondary },
 });

@@ -9,6 +9,13 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import ReportCelebration from "@/components/ReportCelebration";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { isWithinCancelWindow } from "@/lib/calendarDates";
+import {
+  CANCEL_LABEL,
+  CANCEL_PROCESSING_TEXT,
+  CANCEL_SUCCESS_TEXT,
+  cancelCompletionErrorText,
+} from "@/lib/cancelChoreCompletion";
 
 /**
  * P19 じぶんのお手伝い一覧（保護者、要件定義書07-4章「親の完了報告」）
@@ -58,6 +65,41 @@ export default function ParentMyChoresScreen() {
     (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me?.id) && !isOneOffFinished(c)
   );
 
+  // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 28.11節・28.11.1節「さっきの記録」。統括の要望
+  // 「保護者もみまもりもクエストした後に子供と同じようにその画面から取り消すを
+  // 表示させてほしい」対応。C5（28.5a節）と完全に同一のロジック（決定11）。
+  // データソースはstate.completions（既に取得済み）のみで、新しい通信は発生させない。
+  // 1分の経過でリンクごと消すため、表示中は10秒間隔で再評価する（28.0節決定4）。
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const recentSelfCompletions = state.completions
+    .filter((c) => !!me && c.reported_by === me.id && isWithinCancelWindow(c.reported_at))
+    .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
+
+  const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+
+  // 新設ブロックに現れるのは常に自分自身の報告のみのため、確認ダイアログは挟まず
+  // 即時実行する（28.0節決定5・28.11節決定14）。
+  const handleCancelRecentCompletion = async (completionId: string) => {
+    setCancelingCompletionId(completionId);
+    setCancelRowError(null);
+    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+    setCancelingCompletionId(null);
+    if (!result.ok) {
+      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
+      return;
+    }
+    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.parent);
+    setTimeout(() => setCancelFlashMessage(null), 1500);
+  };
+
   // [2026-08-22追加] app/child/(tabs)/home.tsxと同じ理由・同じ仕組み（chore_daily_flags）。
   // 「まいにち」は個人設定のため、子ども・保護者それぞれが自分の画面から独立に設定できる。
   const toggleDaily = (choreId: string, flagged: boolean) => {
@@ -74,6 +116,40 @@ export default function ParentMyChoresScreen() {
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
       <Text style={theme.typography.parentTitle}>じぶんのクエスト</Text>
 
+      {/* [2026-09-06追加] 28.11.1節「さっきの記録」。該当が無ければブロックごと
+          出さない（不在を強調しない原則）。既存のセクションより上に置く（決定12）。 */}
+      {recentSelfCompletions.length > 0 && (
+        <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
+          <Text style={styles.sectionHeading}>さっきの記録</Text>
+          {recentSelfCompletions.map((c) => (
+            <Card key={c.id} style={styles.recentRow}>
+              <View style={styles.recentRowMain}>
+                <Text style={{ fontSize: 20 }}>{c.chore_emoji}</Text>
+                <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
+                  {c.chore_title}
+                </Text>
+                <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                <Pressable
+                  onPress={() => handleCancelRecentCompletion(c.id)}
+                  disabled={cancelingCompletionId === c.id}
+                  hitSlop={8}
+                  style={{ marginLeft: theme.spacing.s3 }}
+                >
+                  <Text style={styles.cancelLink}>
+                    {cancelingCompletionId === c.id ? CANCEL_PROCESSING_TEXT.parent : CANCEL_LABEL.parent}
+                  </Text>
+                </Pressable>
+              </View>
+              {cancelRowError?.id === c.id && (
+                <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>
+                  {cancelRowError.message}
+                </Text>
+              )}
+            </Card>
+          ))}
+          {cancelFlashMessage && <Text style={styles.cancelFlash}>{cancelFlashMessage}</Text>}
+        </View>
+      )}
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -209,4 +285,11 @@ const styles = StyleSheet.create({
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },
   chevron: { color: theme.colors.neutralTextSecondary, marginLeft: theme.spacing.s2, fontSize: 18 },
+  // [2026-09-06追加] 28.11.1節「さっきの記録」。背景色は通常のカードと同系色にとどめ、
+  // 新着・警告を示す強い色は使わない（28.11.3節トーン設計メモ）。
+  recentRow: {},
+  recentRowMain: { flexDirection: "row", alignItems: "center" },
+  cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  cancelRowError: { marginTop: theme.spacing.s1, color: theme.colors.statusBlocking },
+  cancelFlash: { textAlign: "center", color: theme.colors.neutralTextSecondary },
 });
