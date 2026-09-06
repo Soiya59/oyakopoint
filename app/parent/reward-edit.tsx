@@ -9,6 +9,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createReward, deleteReward, updateReward } from "@/data/api";
 import { toJstDateString } from "@/lib/calendarDates";
+import { findRewardSuggestionById } from "@/data/rewardSuggestions";
 
 // [2026-09-04追加・統括判断] ごほうびの絵文字の候補チップ。
 // 上のコメントのとおり2026-08-20に「自分で決めたい、選択ではなく」との要望で自由入力へ
@@ -41,15 +42,23 @@ const REWARD_EMOJI_SUGGESTIONS = ["🍰", "☕", "🛍️", "♨️", "🎬"];
  * P12の各行の見た目は変更しない（24.1節決定5、5.5.0決定1との整合）。
  */
 export default function RewardEditScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, recId } = useLocalSearchParams<{ id?: string; recId?: string }>();
   const { state, refresh } = useAppData();
   const { client } = useSession();
   const isEditMode = !!id;
   const reward = isEditMode ? state.rewards.find((r) => r.id === id) : undefined;
 
-  const [name, setName] = useState(reward?.name ?? "");
-  const [emoji, setEmoji] = useState<string | null>(reward?.emoji ?? null);
-  const [costText, setCostText] = useState(reward ? String(reward.cost) : "");
+  // [2026-09-06追加] ごほうびのおすすめ集（主要画面ワイヤーフレーム.md 31.0節決定7・
+  // 31.3節）。P12のおすすめ集モーダルから遷移した場合のみ`recId`が付く。新規作成モード
+  // （idパラメータ無し）のときだけ有効にする（編集モードでは無視する、app/parent/
+  // chore-edit.tsxの`recommendation`と同型）。
+  const recommendation = !isEditMode && recId ? findRewardSuggestionById(recId) : undefined;
+
+  const [name, setName] = useState(reward?.name ?? recommendation?.title ?? "");
+  const [emoji, setEmoji] = useState<string | null>(reward?.emoji ?? recommendation?.emoji ?? null);
+  const [costText, setCostText] = useState(
+    reward ? String(reward.cost) : recommendation ? String(recommendation.points) : ""
+  );
   const [description, setDescription] = useState(reward?.description ?? "");
 
   const [saving, setSaving] = useState(false);
@@ -150,6 +159,19 @@ export default function RewardEditScreen() {
         </Card>
       )}
 
+      {/* [2026-09-06追加] ごほうびのおすすめ集からのプレフィル表示（主要画面ワイヤー
+          フレーム.md 31.0節決定8・31.3節）。24.2節の登録・最終編集Cardと表示条件が
+          排他（reward有無で分岐）のため、同じCardコンポーネント・同じ位置を流用する
+          （app/parent/chore-edit.tsxの`recommendation`表示と同型）。編集モードでは
+          表示しない。 */}
+      {!reward && recommendation && (
+        <Card style={styles.metaCard} tone="parent">
+          <Text style={theme.typography.parentBody}>
+            🎁 おすすめの「{recommendation.title}」をもとに入力しました。内容は自由に変えられます
+          </Text>
+        </Card>
+      )}
+
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>名前（必須）</Text>
       <TextInput
         value={name}
@@ -182,7 +204,11 @@ export default function RewardEditScreen() {
         Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
       </Text>
 
-      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>コスト（1以上の整数）</Text>
+      {/* [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.0節決定6。プレフィル直後のみ、
+          「ポイントはめやすである」ことを軽い注記として重ねて伝える。 */}
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>
+        {recommendation ? "コスト（めやす。自由に変更できます）" : "コスト（1以上の整数）"}
+      </Text>
       <TextInput
         value={costText}
         onChangeText={(t) => setCostText(t.replace(/[^0-9]/g, ""))}

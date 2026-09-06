@@ -5,15 +5,27 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import { EmptyState } from "@/components/StatusViews";
+import RewardSuggestionsModal from "@/components/RewardSuggestionsModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
 /**
  * P12 ごほうび管理一覧（スタブ／簡易実装）
  * 参照: 画面一覧・遷移図.md P12、API仕様.md 7章
+ *
+ * [2026-09-06追加・本部長／主要画面ワイヤーフレーム.md 31.0節決定2] 24.1節が定める
+ * 空状態（`EmptyState`）が実装されておらず、0件時は見出しと「＋新規追加」ボタンだけが
+ * 残っていた（app/parent/chores.tsxは2026-09-02の27章対応時に実装済みだったが、
+ * P12側は着手されないまま残っていた文書と実装のズレ）。本節でP10と同じ形で実装し、
+ * その直下にごほうびのおすすめ集（31章）への導線を追加する。
  */
 export default function RewardsListScreen() {
   const { state } = useAppData();
+  // [2026-09-06追加] ごほうびのおすすめ集（主要画面ワイヤーフレーム.md 31.1・31.2節）。
+  // P12の空状態限定で開くモーダル。選択するとP13へプレフィル遷移するだけで、
+  // モーダル側にDB書き込みは一切発生しない（クエスト版と同型、app/parent/chores.tsx参照）。
+  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
 
   // [2026-09-03追加] 保護者代理でのごほうび交換（P36）成功後の完了スナックバー
   // （主要画面ワイヤーフレーム.md 5.5.0節決定5・5.5.4節）。app/parent/my-rewards.tsx
@@ -76,6 +88,35 @@ export default function RewardsListScreen() {
         </View>
       )}
 
+      {/* [2026-09-06追加・本部長／主要画面ワイヤーフレーム.md 31.0節決定2・24.1節]
+          ごほうびが0件のとき何も表示されない状態だった（P10側は2026-09-02に実装済み）。
+          既存文言「まだごほうびが登録されていません」はそのまま変更しない（決定2）。 */}
+      {mine.length === 0 && others.length === 0 && (
+        <>
+          <EmptyState emoji="🎁" title="まだごほうびが登録されていません。「＋ 新規追加」から最初のごほうびを作ってみましょう" />
+          {/* [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.1節。EmptyState（変更なし）の
+              直下にセカンダリボタンとして追加する（ごほうびが1件でもある状態では表示しない、
+              決定3）。 */}
+          <Text style={[theme.typography.parentBody, styles.suggestionsIntro]}>
+            迷ったら、おすすめから選んでみませんか？
+          </Text>
+          <AppButton
+            label="🎁 おすすめを見る"
+            variant="secondary"
+            onPress={() => setSuggestionsVisible(true)}
+          />
+        </>
+      )}
+
+      <RewardSuggestionsModal
+        visible={suggestionsVisible}
+        onClose={() => setSuggestionsVisible(false)}
+        onSelect={(s) => {
+          setSuggestionsVisible(false);
+          router.push({ pathname: "/parent/reward-edit", params: { recId: s.id } });
+        }}
+      />
+
       {mine.length > 0 && (
         <View>
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしが登録</Text>
@@ -118,6 +159,15 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.s6,
     marginBottom: theme.spacing.s2,
     color: theme.colors.brandPrimaryStrong,
+  },
+  // [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.1節。app/parent/chores.tsxの
+  // suggestionsIntroと同じスタイル（既存EmptyStateの主役を保ち、おすすめ導線は
+  // 補助的な位置づけにとどめる、31.5節トーン設計メモ）。
+  suggestionsIntro: {
+    marginTop: theme.spacing.s4,
+    marginBottom: theme.spacing.s2,
+    textAlign: "center",
+    color: theme.colors.neutralTextSecondary,
   },
   // [2026-09-03追加] app/parent/my-rewards.tsxのスナックバーと同型。
   snackbar: {
