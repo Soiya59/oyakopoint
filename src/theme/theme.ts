@@ -71,8 +71,16 @@ export const stampDefinitions = [
   { key: "ganbatta", emoji: "💪", label: "がんばったね" },
   { key: "arigato", emoji: "🙏", label: "ありがとう" },
   { key: "sugoi", emoji: "👏", label: "すごい！" },
-  { key: "tasukatta", emoji: "😊", label: "たすかったよ" },
+  // [2026-09-06] 掲示板だけは「たすかったよ」ではなく「いいね」と呼ぶ（統括指示。
+  // 掲示板の書き込みは「手伝ってもらったこと」とは限らないため）。絵文字は同じ。
+  // boardLabelが無いスタンプは、掲示板でもlabelをそのまま使う。
+  { key: "tasukatta", emoji: "😊", label: "たすかったよ", boardLabel: "いいね" },
 ] as const;
+
+/** 掲示板で表示する呼び名。boardLabelがあればそれを、無ければlabelを返す。 */
+export function boardStampLabel(def: { label: string; boardLabel?: string }): string {
+  return def.boardLabel ?? def.label;
+}
 
 // ---- 2. タイポグラフィ ----
 // sp/dpはRN上ではおおよそptに対応するものとして扱う。
@@ -285,6 +293,7 @@ export const theme = {
   colors,
   memberColorPalette,
   stampDefinitions,
+  boardStampLabel,
   typography,
   spacing,
   radius,

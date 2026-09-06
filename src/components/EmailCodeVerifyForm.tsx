@@ -117,6 +117,9 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
         maxLength={theme.emailOtpLength}
         editable={!verifying}
         placeholder="000000"
+        // [2026-09-06] 未入力の見本が実際の入力と同じ濃さで出ていて「既に入っている」
+        // ように見えるという統括の指摘により、薄い灰色を明示する（統括指示）。
+        placeholderTextColor={theme.colors.neutralBorder}
         accessibilityLabel={`${theme.emailOtpLength}桁の確認コード`}
         style={{
           marginTop: theme.spacing.s4,

@@ -435,7 +435,9 @@ export function FamilyBoardHistoryPanel({
                                   disabled={mine || isThisStampSending}
                                   onPress={() => void handleReact(post.id, key)}
                                   accessibilityLabel={
-                                    count > 0 ? countAccessibilityLabel(tone, s.label, count) : reactAccessibilityLabel(tone, s.label)
+                                    count > 0
+                                      ? countAccessibilityLabel(tone, theme.boardStampLabel(s), count)
+                                      : reactAccessibilityLabel(tone, theme.boardStampLabel(s))
                                   }
                                   style={[styles.stampBox, boxSizeStyle, mine && styles.stampBoxSent]}
                                 >
@@ -511,7 +513,7 @@ export function FamilyBoardHistoryPanel({
                               const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
                               return (
                                 <Text key={r.id} style={bodyStyle}>
-                                  {stampDef?.emoji} {r.family_members?.display_name ?? "?"}より「{stampDef?.label}」{" "}
+                                  {stampDef?.emoji} {r.family_members?.display_name ?? "?"}より「{stampDef ? theme.boardStampLabel(stampDef) : ""}」{" "}
                                   <Text style={captionStyle}>{formatTimeOnly(r.created_at)}</Text>
                                 </Text>
                               );
