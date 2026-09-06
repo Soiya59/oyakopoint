@@ -51,7 +51,7 @@ function pointsToPolylineString(p: number[], size: number): string {
 interface DrawingCanvasProps {
   /** 直径（pt）。デザイントークン.md 1.9節「直径280pt」がデフォルト。 */
   size?: number;
-  /** 選択中の色（8色パレットのHEXコードのいずれか）。 */
+  /** 選択中の色（10色パレットのHEXコードのいずれか、2026-09-07に8色から拡張）。 */
   color: string;
   /**
    * [2026-09-05追加] 選択中の太さ（`2`/`4`/`7`のいずれか、デザイントークン.md

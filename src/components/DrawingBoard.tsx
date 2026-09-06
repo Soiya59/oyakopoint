@@ -15,7 +15,7 @@
  * `onEditSave`が呼ばれる。
  *
  * [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、主要画面ワイヤーフレーム.md
- * 21.5a節・21.0節決定12〜19）。入力欄は8色パレット直下・保存ボタン直上に3ロール共通で
+ * 21.5a節・21.0節決定12〜19）。入力欄は10色パレット直下・保存ボタン直上に3ロール共通で
  * 配置する。ラベル・プレースホルダ・カウンター表示の有無はtoneで書き分ける
  * （決定12〜14）。送信直前に前後の空白をトリムし、トリム後0文字なら`null`として
  * 送る（決定15、DrawingBoard内で行う）。
@@ -142,38 +142,46 @@ export function DrawingBoard({
   // 「もう描けない」（44.8.2章）: 線数・点数はちょうど上限に達した時点で次を追加
   // できない（handleStrokeEndのガードと対称）。バイト数は線ごとの増分が一定でない
   // ため、「最小構成の線1本すら追加できない残り」をもって上限到達とみなす
-  // （実装メモ131章「迷った点」参照。厳密な>21504ではなく、次の1本を追加できるかで
+  // （実装メモ131章「迷った点」参照。厳密な>maxBytesではなく、次の1本を追加できるかで
   // 判定する44.8.2章の趣旨を、現在のlines配列だけから自己完結して評価できる形にした）。
   const atMaxLines = linesRemaining <= 0;
   const atMaxPoints = pointsRemaining <= 0;
   const atMaxBytes = bytesRemaining < MIN_DRAWING_LINE_BYTES;
   const atCapacity = atMaxLines || atMaxPoints || atMaxBytes;
-  // 「あと少し」（決定27・44.8.3章）: 各上限の残りが10%未満（線数<15、点数<300、
-  // バイト数<2150）。「もう描けない」は同時にこの条件も満たすため、表示側で
-  // atCapacityを優先すればよい（決定27の注記どおり）。
+  // 「あと少し」（決定27・44.8.3章）: 各上限の残りが10%未満（線数<30、点数<600、
+  // バイト数<約6553）。[2026-09-07変更・実装メモ136章] 上限拡張（150→300本・
+  // 3000→6000点・21504→65536byte）に伴い10%の絶対値も比例して変わる
+  // （主要画面ワイヤーフレーム.md 21.5d節 決定38の申し送り）。「もう描けない」は
+  // 同時にこの条件も満たすため、表示側でatCapacityを優先すればよい（決定27の
+  // 注記どおり）。
   const nearCapacity =
     linesRemaining < theme.drawingLimits.maxLines * 0.1 ||
     pointsRemaining < theme.drawingLimits.maxTotalPoints * 0.1 ||
-    bytesRemaining < 2150;
+    bytesRemaining < 6553;
   // 決定28（もう描けない）・決定29（あと少し）の確定文言。P30/S18は同一文言
   // （21.5節決定4と同じくキャンバス回りの部品・文言は保護者・みまもりメンバーで
   // 分けない）。
   const atCapacityText = isChildTone
     ? "たくさん かいたね！このえは もう いっぱいだよ。とっておく を おしてね。すこし けしたいときは ひとつ もどす も つかえるよ"
     : "たくさん描けました。これ以上は描き足せません。そのまま保存するか、「ひとつ戻す」で少し消せば続けて描けます";
+  // [2026-09-07変更・実装メモ136章] 21.5d節 決定37「重ねて塗ると上限が近づく」の
+  // 統合。統括の実体験（塗り絵で上限到達）を踏まえ、既存の「あと少し」文言の
+  // 直後に、なぜ思ったより早く「あと少し」になったのかという理由を1文足す
+  // （下線部相当が追加分。新しい表示枠・新しいしきい値は追加しない）。
   const nearCapacityText = isChildTone
-    ? "もうすこしで いっぱいに なりそうだよ"
-    : "もうすぐ描き足せなくなります。区切りのよいところで保存すると安心です";
+    ? "もうすこしで いっぱいに なりそうだよ。おなじところに かさねて ぬると、はやく いっぱいに なるよ"
+    : "もうすぐ描き足せなくなります。同じ場所に重ねて塗ると上限に早く近づくため、区切りのよいところで保存すると安心です";
 
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
     setLines((prev) => {
       if (prev.length >= theme.drawingLimits.maxLines) return prev;
       const totalPoints = prev.reduce((sum, l) => sum + l.p.length / 2, 0) + line.p.length / 2;
-      // 合計座標点数上限（33b章：3000点）に達する場合は、このストロークを追加しない
+      // 合計座標点数上限（46章：6000点、[2026-09-07変更・実装メモ136章]
+      // 旧3000点から拡張）に達する場合は、このストロークを追加しない
       // （DBのCHECK制約に頼らずクライアント側で先に止め、保存時のエラー表示を防ぐ）。
       if (totalPoints > theme.drawingLimits.maxTotalPoints) return prev;
       // [2026-09-05追加] バイト数上限（API仕様.md 12.2b節・44.8.2章「見積もりバイト数
-      // （次の1本を含めて計算）>21504」）。このストロークを加えた場合の見積もりが
+      // （次の1本を含めて計算）>maxBytes」）。このストロークを加えた場合の見積もりが
       // 上限を超えるなら追加しない。
       const candidate = [...prev, line];
       if (estimateLineDataBytes(candidate) > theme.drawingLimits.maxBytes) return prev;
@@ -350,13 +358,13 @@ export function DrawingBoard({
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
           </View>
 
-          {/* [2026-09-05追加] 線の太さ選択（21.5b節 決定22）。8色パレットの直下・
+          {/* [2026-09-05追加] 線の太さ選択（21.5b節 決定22）。10色パレットの直下・
               題名入力欄の直上に1行。見出し・説明文は付けない。 */}
           <View style={styles.strokeWidthWrap}>
             <DrawingStrokeWidthPicker selected={strokeWidth} onSelect={setStrokeWidth} disabled={saving} />
           </View>
 
-          {/* [2026-09-02追加] お絵かきの題名（21.5a節）。8色パレット直下・保存ボタン直上に
+          {/* [2026-09-02追加] お絵かきの題名（21.5a節）。10色パレット直下・保存ボタン直上に
               常設し、ストロークの有無で出し入れしない（実装の分岐を増やさないため）。
               題名の有無は保存ボタンの活性・非活性に一切関与しない（決定13、任意項目）。 */}
           <View style={styles.titleWrap}>

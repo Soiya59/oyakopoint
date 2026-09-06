@@ -20,7 +20,7 @@ import theme from "@/theme/theme";
 const PIECE_COUNT = 12;
 const DURATION_MS = 1200;
 
-/** 紙吹雪の色。お絵かきの8色パレットをそのまま使う（2026-08-29に赤・ピンクを見直し済み）。 */
+/** 紙吹雪の色。お絵かきの10色パレットをそのまま使う（2026-08-29に赤・ピンクを見直し・2026-09-07に10色化）。 */
 const COLORS = theme.drawingPalette.filter((c) => c.name !== "くろ").map((c) => c.value);
 
 interface Piece {
