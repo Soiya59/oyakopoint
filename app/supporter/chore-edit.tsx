@@ -9,7 +9,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import {
   createChoreNfcTag,
-  createPersonalChore,
+  createSupporterSharedChore,
   deleteChore,
   fetchActiveChoreNfcTags,
   revokeChoreNfcTag,
@@ -38,12 +38,11 @@ type NfcModalStep = "list" | "writing" | "writeFailed" | "unsupported";
 const SUPPORTER_CHORE_EMOJI_SUGGESTIONS = ["📚", "🧹", "🛁", "🧺", "🍽️"];
 
 /**
- * S6 自分専用のお手伝い登録・編集（みまもりメンバー）
- * 参照: 画面一覧・遷移図.md 2.5節S6、API仕様.md 3b章
+ * S6 クエスト登録・編集（みまもりメンバー）
+ * 参照: 画面一覧・遷移図.md 2.5節S6、API仕様.md 3b章・3b-2章
  *
  * app/parent/chore-edit.tsx（P11）と同じ構成の基本項目フォームだが、以下が異なる。
- * - カテゴリー・担当（assigned_to）・NFCタグ登録は対象外（自分専用choreには存在しない
- *   概念、19章「自分専用choreにおけるassigned_toは自己指定」のためUIで選ばせる必要が無い）
+ * - カテゴリー・担当（assigned_to）は対象外（この画面のchoreには存在しない概念）
  * - 削除ボタンを追加（編集時のみ）
  *
  * [2026-08-29修正・本部長] 従来ここは表示が「削除」なのに実際は無効化（is_active=false）
@@ -55,8 +54,13 @@ const SUPPORTER_CHORE_EMOJI_SUGGESTIONS = ["📚", "🧹", "🛁", "🧺", "🍽
  * やるというのはいらない」）により、「家族に共有する／しない」トグルは撤回した。
  * [2026-08-23再改訂・5回目のスコープ変更] 「常に非公開」という方針を撤回し、
  * 自分専用のお手伝いは常に家族全員に公開される（可視性を選べる設定は引き続き
- * 設けない）。編集・完了報告は引き続き作成者本人のみが行える（要件定義書07-7章
- * 「自分専用choreの公開方針」参照）。
+ * 設けない）。
+ *
+ * [2026-09-06改訂・要件定義書07-18章・UIUXデザイン部30.1節決定2・30.3節]
+ * 新規登録は常にscope='supporter_shared'（みまもり共通）になり、作成者を問わず
+ * みまもりメンバー全員が完了報告できる（決定2）。編集・削除は引き続き作成者本人
+ * のみに限定される（決定3、既存のscope='personal'行も同様）。登録時に
+ * 「自分専用／みまもり共通」を選ばせる導線は作らない（統括の簡素化指示）。
  */
 export default function SupporterChoreEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -200,7 +204,7 @@ export default function SupporterChoreEditScreen() {
 
     const res = chore
       ? await updatePersonalChore(client, chore.id, input)
-      : await createPersonalChore(client, state.family.id, input);
+      : await createSupporterSharedChore(client, state.family.id, input);
 
     setSaving(false);
     if (!res.ok) {
@@ -281,6 +285,14 @@ export default function SupporterChoreEditScreen() {
         </Pressable>
       </View>
 
+      {/* [2026-09-06追加・要件定義書07-18章決定7・UIUXデザイン部30.3節決定9]
+          「1回だけ」選択時のみ、早い者勝ちの挙動を前向きな言葉で事前に伝える。 */}
+      {!isRepeatable && (
+        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+          1回だけのクエストは、だれか1人が完了報告すると一覧から消えます（みまもりメンバー全員が対象です）
+        </Text>
+      )}
+
       {isRepeatable && (
         <>
           <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>1日の上限回数（空欄で無制限）</Text>
@@ -294,8 +306,13 @@ export default function SupporterChoreEditScreen() {
         </>
       )}
 
+      {/* [2026-09-06改訂・要件定義書07-18章決定8・UIUXデザイン部30.3節決定8]
+          対象chore（既存か新規か）で文言を出し分ける。既存のscope='personal'行に
+          限り、決定4'・決定22の案内（削除して登録し直す）も兼ねる。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-        ※ このクエストは家族みんなに見えます。完了報告や編集ができるのは自分だけです。
+        {chore?.scope === "personal"
+          ? "※ このクエストは家族みんなに見えますが、完了報告できるのはあなただけです。今後あたらしく登録するクエストは、みまもりメンバーなら誰でも完了報告できるようになります。共通にしたい場合は、いちど削除して登録し直してください（これまでの記録は残ります）。"
+          : "※ このクエストは家族みんなに見え、みまもりメンバーなら誰でも完了報告できます。編集・削除ができるのはあなただけです。"}
       </Text>
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
@@ -310,8 +327,14 @@ export default function SupporterChoreEditScreen() {
       />
 
       {/* NFCタグ管理（要件定義書07-2章判断事項7、主要画面ワイヤーフレーム.md 7.6.2章）
-          新規作成モード（choreがまだ存在しない）では対象のchore_idが無いため表示しない。 */}
-      {chore && (
+          新規作成モード（choreがまだ存在しない）では対象のchore_idが無いため表示しない。
+          [2026-09-06追加・スキーマ設計45.17章(2)・UIUXデザイン部30.3節決定10]
+          chore_nfc_tagsのRLSがsupporter_sharedを考慮していないため（39章未対応）、
+          scope='personal'（既存分）に限定して表示する。supporter_shared（新規分）
+          では、押しても0件書き込み失敗になる「動かない機能」を見せないためブロック
+          ごと非表示にする。将来39章がsupporter_sharedに対応した時点でこの条件を
+          外す（やること.mdに別途追記）。 */}
+      {chore && chore.scope === "personal" && (
         <Card style={{ marginTop: theme.spacing.s4 }} tone="supporter">
           <Text style={theme.typography.supporterBodyMedium}>NFCタグ</Text>
           <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>

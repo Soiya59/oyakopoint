@@ -21,6 +21,12 @@ import { useAppData } from "@/data/store";
  * [2026-08-23追加] 「ごほうびも家族に見せたい」というユーザー要望を受け、お手伝いと
  * 同じ扱いでごほうび（rewards, scope='personal'）も参考表示に加えた
  * （交換できるのは引き続き作成者本人だけ、reward_redemptions_insert_scoped）。
+ *
+ * [2026-09-06改訂・要件定義書07-18章決定6'-4・UIUXデザイン部30.10節決定23]
+ * `scope IN ('personal', 'supporter_shared')`へ絞り込みを拡張した。指摘0のとおり
+ * この拡張を怠ると、新規登録される（＝常に'supporter_shared'になる）クエスト・
+ * ごほうびが本画面に一件も表示されなくなる。グルーピング（決定25）・レイアウト
+ * （決定24）はscopeを問わず`created_by`のみで従来どおり成立するため変更不要。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -32,13 +38,17 @@ export default function ParentSupporterChoresScreen() {
     if (!loading) setLoadState(loadError ? "error" : "ready");
   }, [loading, loadError]);
 
-  const personalChores = state.chores.filter((c) => c.is_active && c.scope === "personal" && c.created_by);
+  const personalChores = state.chores.filter(
+    (c) => c.is_active && (c.scope === "personal" || c.scope === "supporter_shared") && c.created_by
+  );
   const byCreator = personalChores.reduce<Record<string, typeof personalChores>>((acc, c) => {
     const key = c.created_by as string;
     (acc[key] ??= []).push(c);
     return acc;
   }, {});
-  const personalRewards = state.rewards.filter((r) => r.is_active && r.scope === "personal" && r.created_by);
+  const personalRewards = state.rewards.filter(
+    (r) => r.is_active && (r.scope === "personal" || r.scope === "supporter_shared") && r.created_by
+  );
   const rewardsByCreator = personalRewards.reduce<Record<string, typeof personalRewards>>((acc, r) => {
     const key = r.created_by as string;
     (acc[key] ??= []).push(r);

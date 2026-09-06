@@ -167,19 +167,29 @@ INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
 
--- S3. ポリシー50本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
+-- S3. ポリシー52本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
 --     条件式変更。実装メモ.md 104章。2026-09-01再々更新、chore_nfc_tags
 --     （NFCタグの人ごと化、実装メモ.md 108章）の5ポリシーを追加。43→48本）。
 --     2026-09-02再々々更新、join_consents（招待受諾フローの可視範囲説明と同意
 --     取得、設計部/成果物/スキーマ設計.sql 40章・実装メモ.md 111章）のSELECT
 --     2本を追加。48→50本。
+--     2026-09-06更新、みまもりメンバー同士でのクエスト共同実施（設計部/成果物/
+--     スキーマ設計.sql 45章、開発部/成果物/実装メモ.md 133章）。新規ポリシー2本
+--     （chores_write_supporter_shared_by_creator・
+--     rewards_write_supporter_shared_by_creator）を追加し、既存2本
+--     （chore_completions_insert_self・reward_redemptions_insert_scoped）の
+--     条件式にsupporter_shared分岐を追加した（本数は変わらずハッシュのみ変化）。
+--     50→52本。ハッシュはローカルDockerで実測した（96.5章の遵守。手計算していない）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
   ('categories','categories_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('categories','categories_write_by_parent','ALL','a9c21f23a1a0b9627d69fdb5a4d29425'),
-  ('chore_completions','chore_completions_insert_self','INSERT','a53bedf571e4b0a3ac25020510e22ebb'),
+  -- [2026-09-06改訂] supporter_shared分岐を追加（設計部/成果物/スキーマ設計.sql
+  -- 45.7章）。既存のfamily分岐・personal分岐は無変更だが、条件式全体が変わるため
+  -- ハッシュも変わる。ローカルDockerで実測した値（96.5章の遵守）。
+  ('chore_completions','chore_completions_insert_self','INSERT','da276ec82343e03d9e8e876652ddfcf2'),
   ('chore_completions','chore_completions_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chore_daily_flags','chore_daily_flags_own_rows','ALL','00e6fbca582d21a92747412aa943e2c2'),
   -- [2026-09-01追加] chore_nfc_tags（NFCタグの人ごと化、設計部/成果物/スキーマ設計.sql
@@ -199,6 +209,11 @@ WITH expected(t, p, c, h) AS (VALUES
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
   ('chores','chores_write_personal_by_creator','ALL','c6135ee6661c1603743441b1049cb23f'),
+  -- [2026-09-06追加] みまもり共通クエストの編集・削除を作成者本人（role='supporter'）
+  -- に限定する新規ポリシー（設計部/成果物/スキーマ設計.sql 45.6章、決定2・決定3）。
+  -- rewards側の同名パターンと条件式が文字通り同一のため、
+  -- rewards_write_supporter_shared_by_creatorと同じハッシュになる（ローカルDockerで実測）。
+  ('chores','chores_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
   ('families','families_select_own','SELECT','722858ebf783bd99a2a4163f56dd1634'),
   ('families','families_update_by_parent','UPDATE','e5f50b299119f3b60ec261510beff957'),
   ('family_board_posts','family_board_posts_insert_self','INSERT','28574b1aee58588a3134af369c0c701a'),
@@ -249,11 +264,18 @@ WITH expected(t, p, c, h) AS (VALUES
   ('push_tokens','push_tokens_insert_self','INSERT','bf39c4ff3a8b4f2b96611ea9d852daae'),
   ('push_tokens','push_tokens_select_self','SELECT','d2d83fd3535d0c4e22eba82950957a4e'),
   ('push_tokens','push_tokens_update_self','UPDATE','606756f6b2c2e03c671c60f4c0ddecca'),
-  ('reward_redemptions','reward_redemptions_insert_scoped','INSERT','caf8d20b2455e06e18c4acb188f54cd7'),
+  -- [2026-09-06改訂] supporter_shared分岐を追加（設計部/成果物/スキーマ設計.sql
+  -- 45.9章、決定6'-2）。既存のfamily分岐（保護者代理交換を含む）・personal分岐は
+  -- 無変更だが、条件式全体が変わるためハッシュも変わる。ローカルDockerで実測した値。
+  ('reward_redemptions','reward_redemptions_insert_scoped','INSERT','367cb54becc9532c19c9e41d8374f5ce'),
   ('reward_redemptions','reward_redemptions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('rewards','rewards_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('rewards','rewards_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
   ('rewards','rewards_write_personal_by_creator','ALL','c6135ee6661c1603743441b1049cb23f'),
+  -- [2026-09-06追加] みまもり共通ごほうびの編集・削除を作成者本人に限定する新規
+  -- ポリシー（設計部/成果物/スキーマ設計.sql 45.8章、決定6'-2）。chores側の
+  -- chores_write_supporter_shared_by_creatorと条件式が文字通り同一のため同じハッシュ。
+  ('rewards','rewards_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
   ('weekly_family_digests','weekly_family_digests_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47')
 ),
 actual_p AS (
@@ -270,7 +292,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー50本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー52本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);

@@ -6,11 +6,16 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { createPersonalReward, deleteReward, updatePersonalReward } from "@/data/api";
+import { createSupporterSharedReward, deleteReward, updatePersonalReward } from "@/data/api";
 
 /**
- * S9 自分専用のごほうび登録・編集（みまもりメンバー）
- * 参照: 画面一覧・遷移図.md 2.5節S9、API仕様.md 7b章
+ * S9 ごほうび登録・編集（みまもりメンバー）
+ * 参照: 画面一覧・遷移図.md 2.5節S9、API仕様.md 7b章・7b-2章
+ *
+ * [2026-09-06改訂・要件定義書07-18章決定6'・UIUXデザイン部30.1節決定2・30.6節]
+ * 新規登録は常にscope='supporter_shared'（みまもり共通）になり、作成者を問わず
+ * みまもりメンバー全員が自分のポイントで交換できる（決定6'-2）。編集・削除は
+ * 引き続き作成者本人のみに限定される（既存のscope='personal'行も同様）。
  */
 
 // [2026-09-04追加・実装メモ.md 127章] app/supporter/chore-edit.tsxの
@@ -64,7 +69,7 @@ export default function SupporterRewardEditScreen() {
 
     const res = reward
       ? await updatePersonalReward(client, reward.id, input)
-      : await createPersonalReward(client, state.family.id, input);
+      : await createSupporterSharedReward(client, state.family.id, input);
 
     setSaving(false);
     if (!res.ok) {
@@ -104,9 +109,13 @@ export default function SupporterRewardEditScreen() {
       </Text>
       {/* [2026-08-23改訂] 「ごほうびも家族に見せたい」というユーザー要望を受け、
           choreと同じく家族公開に変更した（rewards_select_scoped、family_id一致のみ）。
-          交換できるのは引き続き本人だけ（reward_redemptions、作成者本人限定）。 */}
+          [2026-09-06改訂・要件定義書07-18章決定6'-2・UIUXデザイン部30.6節決定16]
+          対象reward（既存か新規か）で文言を出し分ける。既存のscope='personal'行に
+          限り、決定6'-3の案内（削除して登録し直す）も兼ねる。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        このごほうびは家族みんなに見えます。交換できるのは自分だけです。
+        {reward?.scope === "personal"
+          ? "このごほうびは家族みんなに見えますが、交換できるのはあなただけです。今後あたらしく登録するごほうびは、みまもりメンバーなら誰でも交換できるようになります。共通にしたい場合は、いちど削除して登録し直してください（これまでの交換記録は残ります）。"
+          : "このごほうびは家族みんなに見えます。みまもりメンバーなら誰でも、自分のポイントで交換できます。編集・削除ができるのはあなただけです。"}
       </Text>
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>名前（必須）</Text>

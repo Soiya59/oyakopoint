@@ -80,7 +80,11 @@ export interface Chore {
   // （閲覧のみ。編集・完了報告は引き続きcreated_by本人に限定。要件定義書07-7章
   // 「自分専用choreの公開方針」参照）。
   created_by: string | null;
-  scope: "family" | "personal";
+  // [2026-09-06改訂・要件定義書07-18章・スキーマ設計.sql 45.2章] 第3の値
+  // 'supporter_shared'（みまもり共通）を新設。'personal'は今後新規作成では
+  // 使われなくなるが値・既存行は残る（決定1b）。実施（完了報告）は作成者を問わず
+  // role='supporter'なら誰でも可能、編集・削除は作成者本人のみ（決定2）。
+  scope: "family" | "personal" | "supporter_shared";
   // [追加・2026-08-30] 要件定義書07-15章、スキーマ設計.sql 37章。
   // 07-15章2章が定める「編集」に該当するUPDATEが発生したときのみサーバー側で
   // 記録される（`chores_before_write`トリガー）。一度も編集されていない行はNULL。
@@ -200,7 +204,10 @@ export interface Reward {
   // chores.scope/created_byと同じ設計。scope='personal'のrewardには
   // is_shared_with_family相当の概念は無い（自分専用rewardは常に非公開のまま）。
   created_by: string | null;
-  scope: "family" | "personal";
+  // [2026-09-06改訂・要件定義書07-18章決定6'・スキーマ設計.sql 45.2章] 第3の値
+  // 'supporter_shared'（みまもり共通）を新設。交換は作成者を問わずrole='supporter'
+  // 本人のみ（代理交換不可）、編集・削除は作成者本人のみ（決定6'-2）。
+  scope: "family" | "personal" | "supporter_shared";
   // [追加・2026-08-30] chores.updated_byと同じ設計（要件定義書07-15章、
   // スキーマ設計.sql 37章、API仕様.md 7c章）。
   updated_by: string | null;

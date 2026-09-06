@@ -1072,8 +1072,43 @@ export async function createPersonalChore(
 }
 
 /**
+ * API仕様.md 3b-2章「新規登録」（要件定義書07-18章、2026-09-06新設）。
+ * みまもりメンバーの新規クエスト登録は常に「みまもり共通」（scope: 'supporter_shared'）
+ * になる。統括の簡素化指示により、登録時に「自分専用／みまもり共通」を選ばせる導線は
+ * 作らない（createPersonalChoreはこの用途では新規に呼ばれなくなるが、既存の
+ * scope='personal'行は残るため関数自体は削除しない）。
+ * created_by/assigned_toは送らなくてよい（chores_before_writeが本人IDで補完し、
+ * assigned_toは常にNULLへ強制される。スキーマ設計.sql 45.3章・45.4章）。RLS
+ * chores_write_supporter_shared_by_creator によりrole='supporter'かつ本人のみ許可。
+ */
+export async function createSupporterSharedChore(
+  client: SupabaseClient,
+  familyId: string,
+  input: PersonalChoreFormInput
+): Promise<ApiResult<Chore>> {
+  const { data, error } = await client
+    .from("chores")
+    .insert({
+      family_id: familyId,
+      scope: "supporter_shared",
+      title: input.title,
+      emoji: input.emoji,
+      points: input.points,
+      is_repeatable: input.is_repeatable,
+      daily_limit: input.daily_limit,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Chore };
+}
+
+/**
  * API仕様.md 3b章「編集」: scope列自体はペイロードに含めない
  * （DBトリガーが「公開範囲（scope）は作成後に変更できません」で拒否するため）。
+ * [2026-09-06追記・45.16章] scope='supporter_shared'行に対してもそのまま流用できる
+ * （呼び出し方は変更不要、対象IDがpersonalかsupporter_sharedかをクライアントが
+ * 意識する必要がない設計）。
  */
 export async function updatePersonalChore(
   client: SupabaseClient,
@@ -1126,6 +1161,34 @@ export async function createPersonalReward(
     .insert({
       family_id: familyId,
       scope: "personal",
+      name: input.name,
+      emoji: input.emoji,
+      cost: input.cost,
+      description: input.description,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as Reward };
+}
+
+/**
+ * API仕様.md 7b-2章「新規登録」（要件定義書07-18章決定6'、2026-09-06新設）。
+ * みまもりメンバーの新規ごほうび登録は常に「みまもり共通」（scope: 'supporter_shared'）
+ * になる（createPersonalRewardはこの用途では新規に呼ばれなくなるが、既存の
+ * scope='personal'行は残るため関数自体は削除しない）。RLS
+ * rewards_write_supporter_shared_by_creator によりrole='supporter'かつ本人のみ許可。
+ */
+export async function createSupporterSharedReward(
+  client: SupabaseClient,
+  familyId: string,
+  input: PersonalRewardFormInput
+): Promise<ApiResult<Reward>> {
+  const { data, error } = await client
+    .from("rewards")
+    .insert({
+      family_id: familyId,
+      scope: "supporter_shared",
       name: input.name,
       emoji: input.emoji,
       cost: input.cost,

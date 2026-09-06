@@ -18,29 +18,38 @@ import {
 } from "@/lib/cancelChoreCompletion";
 
 /**
- * S5 自分専用のお手伝い一覧（みまもりメンバー）
- * 参照: 画面一覧・遷移図.md 2.5節S5、API仕様.md 3b章
+ * S5 クエスト一覧（みまもりメンバー）
+ * 参照: 画面一覧・遷移図.md 2.5節S5、API仕様.md 3b章・3b-2章
  *
- * 自分が登録した自分専用chore（scope='personal', created_by=自分）を一覧し、
- * 新規登録（→S6）・完了報告（→S7）・編集（→S6）への入口にする。
+ * 自分が登録したクエスト（scope='personal'（既存分のみ）または'supporter_shared'、
+ * created_by=自分）を一覧し、新規登録（→S6）・完了報告（→S7）・編集（→S6）への
+ * 入口にする。新規登録は常に'supporter_shared'になる（要件定義書07-18章）。
  *
  * [2026-08-23改訂・5回目のスコープ変更] 自分専用choreは家族全員に公開される方針へ
  * 反転したため（`chores_select_scoped`は`family_id`一致のみで判定する）、
  * `state.chores`には他のみまもりメンバーが登録した自分専用choreも含まれるように
  * なった。ユーザーの発言「個人の登録したものが上位に登場し、他のお手伝いも参考に
  * できる」を踏まえ、上段＝自分の登録分（フル操作）、下段＝他のみまもりメンバーの
- * 登録分（登録者名付き・閲覧専用、編集・完了報告の導線なし）という2段構成にした
- * （画面一覧・遷移図.md S5行）。編集・完了報告できるのはクライアント側の表示制御では
- * なく、`chores_write_personal_by_creator`・`chore_completions_insert_self`RLSに
- * よって作成者本人に限定される。
+ * 登録分（登録者名付き）という2段構成にした（画面一覧・遷移図.md S5行）。
+ *
+ * [2026-09-06改訂・要件定義書07-18章・UIUXデザイン部30.2節決定5]
+ * `scope='supporter_shared'`は作成者を問わずみまもりメンバー全員が完了報告できる
+ * ため、下段（他のみまもりメンバーの登録分）にも完了報告への入口を追加した。
+ * 一方、既存の`scope='personal'`行（レガシー、07-18章決定3により実施は作成者本人に
+ * 限定されたまま）は下段でも従来どおり非タップの参考表示のまま。編集・完了報告できる
+ * かどうかはクライアント側の表示制御だけでなく、`chores_write_personal_by_creator`・
+ * `chores_write_supporter_shared_by_creator`・`chore_completions_insert_self`RLSに
+ * よってもDB側で担保される。
  */
 export default function SupporterMyChoresScreen() {
   const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
+  // [2026-09-06改訂・07-18章] 'personal'（既存分）に加え'supporter_shared'（新規分）も
+  // 対象にする（UIUXデザイン部30.0節「指摘0」）。
   const personalChores = state.chores.filter(
-    (c) => c.is_active && c.scope === "personal" && !isOneOffFinished(c)
+    (c) => c.is_active && (c.scope === "personal" || c.scope === "supporter_shared") && !isOneOffFinished(c)
   );
   const myChores = personalChores.filter((c) => c.created_by === me?.id);
   const othersChores = personalChores.filter((c) => c.created_by && c.created_by !== me?.id);
@@ -157,6 +166,8 @@ export default function SupporterMyChoresScreen() {
 
       {myChores.length > 0 && (
         <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
+          {/* [2026-09-06追加・UIUXデザイン部30.2節決定4] 下段の見出しと対にする */}
+          <Text style={theme.typography.supporterBodyMedium}>わたしが登録したクエスト</Text>
           {myChores.map((c) => {
             const done = me ? isChoreLimitReached(c, me.id) : false;
             return (
@@ -175,7 +186,11 @@ export default function SupporterMyChoresScreen() {
                   )}
                 </Pressable>
                 <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
-                  <Text style={styles.publicLabel}>👀 家族に公開中</Text>
+                  {/* [2026-09-06追加・UIUXデザイン部30.9節決定22] 既存のscope='personal'
+                      （レガシー）行にのみ、じぶんだけが完了報告できる旨を書き添える。 */}
+                  <Text style={styles.publicLabel}>
+                    {c.scope === "personal" ? "👀 家族に公開中・じぶんだけが完了報告できます" : "👀 家族に公開中"}
+                  </Text>
                   <Text style={{ flex: 1 }} />
                   <Pressable onPress={() => router.push({ pathname: "/supporter/chore-edit", params: { id: c.id } })}>
                     <Text style={styles.editLink}>編集する</Text>
@@ -193,7 +208,7 @@ export default function SupporterMyChoresScreen() {
             かぞくのほかのみまもりメンバーのクエスト
           </Text>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-            みんなの参考にどうぞ。ここから直接完了報告や編集はできません。
+            みんなの参考にどうぞ。
           </Text>
           <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
             {Object.entries(othersByCreator).map(([creatorId, chores]) => {
@@ -202,13 +217,37 @@ export default function SupporterMyChoresScreen() {
                 <Card key={creatorId} tone="supporter" style={styles.refRow}>
                   <Text style={theme.typography.supporterBodyMedium}>{creator?.display_name ?? "みまもりメンバー"}</Text>
                   <View style={{ marginTop: theme.spacing.s1, gap: theme.spacing.s1 }}>
-                    {chores.map((c) => (
-                      <View key={c.id} style={styles.refItem}>
-                        <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
-                        <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
-                        <Text style={theme.typography.supporterCaption}>+{c.points}pt</Text>
-                      </View>
-                    ))}
+                    {chores.map((c) => {
+                      // [2026-09-06追加・UIUXデザイン部30.2節決定5]
+                      // supporter_shared行のみタップで[S7 完了報告]へ。personal（レガシー）
+                      // 行は従来どおり非タップの参考表示のまま。
+                      if (c.scope === "supporter_shared") {
+                        const done = me ? isChoreLimitReached(c, me.id) : false;
+                        return (
+                          <Pressable
+                            key={c.id}
+                            disabled={done || !me}
+                            onPress={() => router.push({ pathname: "/supporter/chore-report", params: { choreId: c.id } })}
+                            style={styles.refItem}
+                          >
+                            <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                            <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
+                            {done ? (
+                              <Text style={theme.typography.supporterCaption}>きろくずみ</Text>
+                            ) : (
+                              <Text style={theme.typography.supporterCaption}>+{c.points}pt ›</Text>
+                            )}
+                          </Pressable>
+                        );
+                      }
+                      return (
+                        <View key={c.id} style={styles.refItem}>
+                          <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                          <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
+                          <Text style={theme.typography.supporterCaption}>+{c.points}pt</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </Card>
               );

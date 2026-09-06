@@ -13,7 +13,14 @@ import { PG_ERRCODE } from "@/data/api";
  *
  * app/parent/my-reward-confirm.tsxと同じロジック・同じdispatch（REDEEM_REWARDは
  * member_idベースで役割を区別しない設計。RLS reward_redemptions_insert_scoped
- * （スキーマ設計.sql 23章）が対象rewardが自分専用の場合は作成者本人のみを許可する）。
+ * （スキーマ設計.sql 23章・45.9章）が対象rewardが自分専用（personal）の場合は
+ * 作成者本人のみ、みまもり共通（supporter_shared）の場合は作成者を問わず
+ * role='supporter'本人のみを許可する）。
+ *
+ * [2026-09-06追加・要件定義書07-18章決定6'-2・UIUXデザイン部30.8節決定21] 変更なし。
+ * このコンポーネントは`rewardId`のみを見て残高判定・確定処理を行い、`created_by`を
+ * 一切参照しないため、決定6'-2の受け入れ判定はDB側（reward_redemptions_before_insert、
+ * 45.9章）が担保する。
  */
 export default function SupporterRewardConfirmScreen() {
   const { rewardId } = useLocalSearchParams<{ rewardId: string }>();

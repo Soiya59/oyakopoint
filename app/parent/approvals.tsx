@@ -201,9 +201,13 @@ export default function ApprovalsScreen() {
                     {formatDateTimeShort(c.reported_at)}{" "}
                     {isChildCard ? "とどいた" : "きろくした"}
                   </Text>
-                  {/* [2026-09-03追加] 28.4節。みまもりメンバーの自分専用chore完了報告
-                      （scope='personal'）には取消権限が無いためリンク自体を出さない。
-                      supporterの報告は常にpersonal-scopeのため（07-7章）role判定のみで足りる。 */}
+                  {/* [2026-09-03追加] 28.4節。みまもりメンバーの完了報告（scope='personal'
+                      またはscope='supporter_shared'）には保護者の取消権限が無いため
+                      リンク自体を出さない。[2026-09-06追記・要件定義書07-18章決定2・3、
+                      スキーマ設計.sql 45.12章] supporter_shared新設後も、報告者が
+                      supporterロールであれば personal/supporter_shared のいずれでも
+                      保護者は取り消せない（cancel_chore_completion側でも同じ判定に
+                      統一済み）ため、role判定のみで引き続き足りる。 */}
                   {!isSupporterCard && isWithinCancelWindow(c.reported_at) && (
                     <Pressable
                       onPress={(e) => {
