@@ -291,6 +291,15 @@ export const drawingStrokeWidths = [
 // 存在しない旧データの表示フォールバック値も同じ4に揃える（単一の基準値にする）。
 export const defaultDrawingStrokeWidth = 4;
 
+// ---- お絵かきの線の間引き（Douglas-Peucker、2026-09-07追加、実装メモ137章対応） ----
+// 描き終わった瞬間（1本の線が確定したとき）にだけ`src/lib/simplifyPolyline.ts`へ渡す
+// 許容値。単位はキャンバス座標系（0〜1000正規化）での距離。統括承認済み（2026-09-07）。
+// 本部長が統括の実際の絵（86本・1,862点・21,463byte）で検証し、許容値2で
+// 1,190点・14,746byte（-32%）まで減ることを確認した数値（実装メモ137章）。
+// 描画中のライブプレビュー・保存済みの絵（DB上の既存データ）には適用しない
+// （simplifyPolyline.tsのコメント参照）。
+export const drawingSimplifyTolerance = 2;
+
 // ---- 1.10 ガチャのアクセントカラー・景品カタログ（`color-gacha-*`、2026-08-26追加、07-13-1章対応） ----
 // 参照: デザイントークン.md 1.10節。「あと◯回でガチャ」の進捗表示・まわすボタン・
 // 景品公開演出専用の差し色（お祭り・くじ引きを連想させる金色）。
@@ -329,6 +338,7 @@ export const theme = {
   drawingLimits,
   drawingStrokeWidths,
   defaultDrawingStrokeWidth,
+  drawingSimplifyTolerance,
   gachaColors,
   gachaPlateSize,
 } as const;

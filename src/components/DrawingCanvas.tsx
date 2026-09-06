@@ -15,6 +15,7 @@
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
+import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -101,7 +102,12 @@ export function DrawingCanvas({
     // DB側chk_family_drawings_line_data（33b章）はp配列2要素以上を要求する。
     // 1点だけのタップ（指を置いてすぐ離した）は線として保存しない。
     if (pts.length < 2) return;
-    onStrokeEnd({ c: colorRef.current, p: pts, w: widthRef.current });
+    // [2026-09-07追加・実装メモ137章] 線が確定した瞬間にだけDouglas-Peucker型の
+    // ポリライン簡略化をかける。描画中のライブプレビュー（livePoints・上の
+    // onPanResponderMove）には一切適用しない（描き味を変えないため）。保存済みの
+    // 絵（DB上の既存データ）にも適用しない。詳細はsrc/lib/simplifyPolyline.ts参照。
+    const simplified = simplifyPolyline(pts, theme.drawingSimplifyTolerance);
+    onStrokeEnd({ c: colorRef.current, p: simplified, w: widthRef.current });
   };
 
   const panResponder = useRef(
