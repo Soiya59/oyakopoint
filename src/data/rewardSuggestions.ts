@@ -4,14 +4,19 @@
  * アプリ内定数としてのみ保持し、DBには一切保存しない（31.6節「対象外」・要件定義書に
  * 相当する章はまだ無く、31章が一次情報）。
  *
- * 11件は主要画面ワイヤーフレーム.md 31.2節の表を一字一句そのまま転記したもの
- * （絵文字・名前・層・必要ポイント（めやす））。掲載順も表の掲載順（#1〜#11）のまま
- * 変更していない（31.2節「フィルタ後も行の相対順は変えない」の前提）。
+ * 【2026-09-07全面差し替え】10件は`市場調査部/成果物/クエスト・ごほうびのおすすめ集の調査
+ * （2026-09-07）.md`3章の表（調査に基づく13件案）から、本部長・統括が除外を判断した3件を
+ * 除いたもの（除外の内訳・理由は同レポート末尾「【本部長・統括の最終判断（2026-09-07）】
+ * 採用と除外」節を参照。除外した項目名は本ファイルには載せない）。従来の11件も破棄した。
+ *
+ * 層（権利／体験／もの）は変更なし。掲載順は本部長の依頼メッセージが示した順（pt昇順・
+ * 層混在）のまま。
  *
  * クエスト版と異なり、頻度（frequency）・対象（target）に相当する属性は持たない
  * （31.0節決定5。rewardsテーブルには頻度・繰り返しに相当する属性が無く、ごほうびは
  * 1回の交換で完結するイベントのため）。そのため頻度→繰り返し設定のような変換ロジック
- * （choreSuggestions.tsのコメント参照）も存在しない（31.0節決定8）。
+ * （choreSuggestions.tsのコメント参照）も存在しない（31.0節決定8）。この方針は
+ * 2026-09-07の差し替えでも変更していない。
  */
 
 /** 層ラベル（保護者向け画面にのみ登場。子ども向け画面には出さない、31.5節）。 */
@@ -34,17 +39,16 @@ export const REWARD_SUGGESTION_FILTERS: ("すべて" | RewardSuggestionLayer)[] 
 ];
 
 export const REWARD_SUGGESTIONS: RewardSuggestion[] = [
-  { id: "reward-01", emoji: "🍽️", title: "夕食メニュー決定権", points: 3, layer: "権利" },
-  { id: "reward-02", emoji: "📺", title: "TV選択権", points: 3, layer: "権利" },
-  { id: "reward-03", emoji: "🍪", title: "おやつ選択権", points: 3, layer: "権利" },
-  { id: "reward-04", emoji: "🛁", title: "お風呂の順番決定権", points: 3, layer: "権利" },
-  { id: "reward-05", emoji: "🌙", title: "就寝15分延長", points: 5, layer: "権利" },
-  { id: "reward-06", emoji: "🎮", title: "ゲーム15分延長", points: 5, layer: "権利" },
-  { id: "reward-07", emoji: "🤼", title: "親と10分全力で遊ぶ券", points: 8, layer: "体験" },
-  { id: "reward-08", emoji: "📖", title: "寝る前の本1冊追加", points: 8, layer: "体験" },
-  { id: "reward-09", emoji: "🗺️", title: "週末の行き先決定権", points: 12, layer: "体験" },
-  { id: "reward-10", emoji: "🧸", title: "上限額を決めた小さいおもちゃ1つ", points: 20, layer: "もの" },
-  { id: "reward-11", emoji: "🛍️", title: "上限額を決めた月1回の買い物", points: 30, layer: "もの" },
+  { id: "reward-01", emoji: "🚀", title: "たかいたかいを5かい", points: 1, layer: "体験" },
+  { id: "reward-02", emoji: "🐛", title: "くすぐりっこタイム", points: 1, layer: "体験" },
+  { id: "reward-03", emoji: "🐴", title: "かたぐるまでおうちのなかをたんけん", points: 2, layer: "体験" },
+  { id: "reward-04", emoji: "🍽️", title: "夕食メニュー決定権", points: 2, layer: "権利" },
+  { id: "reward-05", emoji: "📺", title: "テレビ・動画をえらぶ権", points: 2, layer: "権利" },
+  { id: "reward-06", emoji: "🍪", title: "おやつをえらぶ権", points: 2, layer: "権利" },
+  { id: "reward-07", emoji: "🛁", title: "お風呂の順番をえらべる権", points: 2, layer: "権利" },
+  { id: "reward-08", emoji: "🗺️", title: "週末のおでかけさき決定権", points: 5, layer: "体験" },
+  { id: "reward-09", emoji: "🧸", title: "上限額を決めた小さいおもちゃ1つ", points: 15, layer: "もの" },
+  { id: "reward-10", emoji: "🛍️", title: "上限額を決めた月1回のおかいもの", points: 20, layer: "もの" },
 ];
 
 export function findRewardSuggestionById(id: string): RewardSuggestion | undefined {
