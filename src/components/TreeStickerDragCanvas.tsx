@@ -175,7 +175,7 @@ export function TreeStickerDragCanvas({
               },
             ]}
           >
-            <StickerIcon shape={shape} rarity={rarity} size={STICKER_DOT_SIZE} uid="drag-preview" />
+            <StickerIcon shape={shape} rarity={rarity} size={STICKER_DOT_SIZE} />
           </View>
         </View>
       </View>

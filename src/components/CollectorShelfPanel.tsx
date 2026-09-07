@@ -746,7 +746,7 @@ function StickerShelfSection({
                 const currentSeasonPlaced = owned.find((p) => p.placement?.isCurrentSeason);
                 return (
                   <View key={`${shape}-${rarity}`} style={styles.stickerRow}>
-                    <StickerIcon shape={shape} rarity={rarity} size={28} uid={`shelf-${shape}-${rarity}-${owned[0].id}`} />
+                    <StickerIcon shape={shape} rarity={rarity} size={28} />
                     <Text style={[bodyStyle, styles.stickerRowLabel]}>
                       {isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent}{" "}
                       {isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent} ×{owned.length}

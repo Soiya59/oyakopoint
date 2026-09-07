@@ -325,25 +325,20 @@ export type StickerShape = (typeof stickerShapes)[number];
 export const stickerRarities = ["bronze", "silver", "gold", "rainbow"] as const;
 export type StickerRarity = (typeof stickerRarities)[number];
 
-/** 木の上での表示直径（24pt固定）。通常の色丸13pt超・家族の絵〈景品〉36pt未満の中間サイズ。 */
-export const stickerTreeDotSize = 24;
+/**
+ * 木の上での表示直径。[2026-09-10改訂・実装メモ149章] 統括要望を受け24pt→30ptに
+ * 拡大した（実際に使うのは`FamilyTree.tsx`内の`STICKER_DOT_SIZE`で、この定数自体は
+ * 149章時点でも未参照。改訂時に値だけ揃えた）。通常の色丸13pt超・家族の絵
+ * 〈景品〉36pt未満の中間サイズという原則は変わらず満たす。
+ */
+export const stickerTreeDotSize = 30;
 /** 識別リング太さ（景品〈36pt〉のリングと揃える。1.8節）。 */
 export const stickerRingWidth = 2;
 
-/**
- * レアリティ別の色・質感（統括決定26「虹はパステル調のホログラム、金銀銅は金属光沢
- * という色と質感だけで表現する」）。グラデーションは135°（左上→右下）想定。
- */
-export const stickerRarityGradients: Record<StickerRarity, { stops: readonly string[]; highlight: boolean }> = {
-  bronze: { stops: ["#D99757", "#8B5A2B"], highlight: true },
-  silver: { stops: ["#F5F5F5", "#9CA3AF"], highlight: true },
-  gold: { stops: ["#FFE9A8", "#C99A2E"], highlight: true },
-  // 5点のパステルグラデーション（シャボン玉・真珠のような優しいホログラム）。
-  rainbow: { stops: ["#F6D9E6", "#DCE8FF", "#DFF7EA", "#FFF3D6", "#EAD9FA"], highlight: false },
-} as const;
-
-/** ちょうちょの胴体・頭部・触角、カブトムシの分割線・角のストローク色（固定）。 */
-export const stickerAccentFixed = "#2E2E2E";
+// [2026-09-10削除・実装メモ149章] `stickerRarityGradients`（レアリティ別グラデーション
+// 定義）・`stickerAccentFixed`（固定線色）は、`StickerIcon`をSVG自前描画から統括
+// 提供の画像表示へ切り替えたことで参照元がなくなったため削除した。色・質感の
+// 決定内容（統括決定26）自体は`デザイントークン.md`1.11節に記録が残る。
 
 /** 12種のカタログをUI表示用に並べる固定順（32.1節ワイヤーフレーム: 形ごとに1行、レアリティ4段を列に固定）。 */
 export const stickerCatalogOrder: readonly { shape: StickerShape; rarity: StickerRarity }[] = stickerShapes.flatMap(
@@ -440,8 +435,6 @@ export const theme = {
   stickerRarities,
   stickerTreeDotSize,
   stickerRingWidth,
-  stickerRarityGradients,
-  stickerAccentFixed,
   stickerCatalogOrder,
   stickerKeyOf,
   badgeDefinitions,

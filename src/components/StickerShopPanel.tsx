@@ -139,7 +139,7 @@ export function StickerShopPanel({
                     style={[styles.cell, tone === "child" && styles.cellChild, disabled && styles.cellDisabled]}
                     accessibilityRole="button"
                   >
-                    <StickerIcon shape={item.shape} rarity={item.rarity} size={32} uid={item.id} />
+                    <StickerIcon shape={item.shape} rarity={item.rarity} size={32} />
                     <Text style={[captionStyle, styles.cellRarity]}>
                       {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                     </Text>
@@ -166,7 +166,9 @@ export function StickerShopPanel({
             {selected && (
               <>
                 <View style={{ alignItems: "center" }}>
-                  <StickerIcon shape={selected.shape} rarity={selected.rarity} size={56} uid={`confirm-${selected.id}`} />
+                  {/* [149章] 購入確認モーダルはこのコンポーネントの中で唯一ステッカーを
+                      拡大表示する箇所のため、`highRes`で512px画像を強制する。 */}
+                  <StickerIcon shape={selected.shape} rarity={selected.rarity} size={56} highRes />
                 </View>
                 <Text style={[bodyMediumStyle, styles.modalTitle]}>{selected.display_name}</Text>
                 <Text style={[bodyStyle, styles.modalBody]}>
