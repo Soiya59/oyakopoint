@@ -9,7 +9,9 @@ import { useAppData } from "@/data/store";
 /**
  * C9 ごほうび交換（一覧）（主要5画面のひとつ）
  * 参照: 主要画面ワイヤーフレーム.md 5章
- * 残高で買えるものはボタン活性、足りないものは「あと◯pt」表示（交換不可はボタンでなく前向きな不足表示に）。
+ * 残高で買えるものは行全体をタップして交換可、足りないものは「あと◯pt」表示（交換不可はボタンでなく前向きな不足表示に）。
+ * [2026-09-08修正・実装メモ.md 154章] 2列カード→1件1行に変更。行のタップ対象は
+ * 交換可のときのみ有効（あと◯pt表示の行はタップしても反応しない、従来どおり）。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -56,27 +58,46 @@ export default function ChildRewardsScreen() {
       {loadState === "ready" && rewards.length === 0 && (
         <EmptyState tone="child" emoji="🎁" title="まだごほうびがないよ。おうちの人にリクエストしてみよう" />
       )}
+      {/* [2026-09-08修正・本部長／実装メモ.md 154章] 2列カード→1件1行に変更（home.tsxと
+          同じ理由。詳細はhome.tsxのコメント参照）。C9にはトグルのような二つ目の
+          当たり判定が無いため、行全体を1個のPressableにできる（home.tsxのように
+          main用・トグル用を分ける必要が無い）。交換不可（残高不足）の行はPressable化
+          しない（従来どおりタップしても何も起きない、あと◯pt表示のみ）。 */}
       {loadState === "ready" && rewards.length > 0 && (
-        <View style={styles.grid}>
+        <View style={styles.list}>
           {rewards.map((r) => {
             const canAfford = balance >= r.cost;
-            return (
-              <View key={r.id} style={styles.card}>
-                <Text style={{ fontSize: 32 }}>{r.emoji}</Text>
-                <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1 }]}>{r.name}</Text>
-                <Text style={theme.typography.parentCaption}>{r.cost}pt</Text>
+            const rowContent = (
+              <>
+                <Text style={styles.rowEmoji}>{r.emoji}</Text>
+                <Text style={[theme.typography.childBody, styles.rowTitle]} numberOfLines={1} ellipsizeMode="tail">
+                  {r.name}
+                </Text>
+                <Text style={[theme.typography.parentCaption, styles.costText]}>{r.cost}pt</Text>
                 {canAfford ? (
-                  <Pressable
-                    onPress={() => router.push({ pathname: "/child/reward-confirm", params: { rewardId: r.id } })}
-                    style={styles.exchangeBtn}
-                  >
-                    <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>こうかん</Text>
-                  </Pressable>
+                  // [2026-09-08修正] 従来は「こうかん」の緑ボタンだけがタップ対象だった。
+                  // 行全体がタップ対象になったため、ボタン文言は無くし、home.tsxの
+                  // pointLabel（+◯pt）と同様に「タップできる状態」であることを
+                  // シェブロン（parent/my-chores.tsxのchevronと同じ既存パターン）で示す。
+                  <Text style={styles.chevron}>›</Text>
                 ) : (
                   <View style={styles.notEnoughBox}>
-                    <Text style={styles.notEnoughText}>あと{r.cost - balance}pt</Text>
+                    <Text style={styles.notEnoughText} numberOfLines={1}>あと{r.cost - balance}pt</Text>
                   </View>
                 )}
+              </>
+            );
+            return canAfford ? (
+              <Pressable
+                key={r.id}
+                onPress={() => router.push({ pathname: "/child/reward-confirm", params: { rewardId: r.id } })}
+                style={styles.row}
+              >
+                {rowContent}
+              </Pressable>
+            ) : (
+              <View key={r.id} style={styles.row}>
+                {rowContent}
               </View>
             );
           })}
@@ -96,27 +117,24 @@ const styles = StyleSheet.create({
     padding: theme.spacing.s4,
     minHeight: theme.tapTarget.child,
   },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3, marginTop: theme.spacing.s4 },
-  card: {
-    width: "47%",
+  // [2026-09-08変更・実装メモ.md 154章] 2列グリッド（grid）→1件1行の縦並び（list）。
+  list: { gap: theme.spacing.s2, marginTop: theme.spacing.s4 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
     minHeight: theme.tapTarget.childPrimary,
     backgroundColor: theme.colors.neutralSurface,
     borderRadius: theme.radius.childXl,
-    alignItems: "center",
-    padding: theme.spacing.s4,
-  },
-  exchangeBtn: {
-    marginTop: theme.spacing.s2,
-    backgroundColor: theme.colors.brandPrimary,
-    borderRadius: theme.radius.childXl,
     paddingHorizontal: theme.spacing.s4,
     paddingVertical: theme.spacing.s2,
-    minHeight: theme.tapTarget.child,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  // 絵文字のfontSizeは変更前のcard内の値（32）をそのまま維持。
+  rowEmoji: { fontSize: 32 },
+  rowTitle: { flex: 1, marginLeft: theme.spacing.s3 },
+  costText: { marginLeft: theme.spacing.s2 },
+  chevron: { marginLeft: theme.spacing.s2, fontSize: 18, color: theme.colors.neutralTextSecondary },
   notEnoughBox: {
-    marginTop: theme.spacing.s2,
+    marginLeft: theme.spacing.s2,
     backgroundColor: theme.colors.statusPendingSoft,
     borderRadius: theme.radius.childXl,
     paddingHorizontal: theme.spacing.s4,
