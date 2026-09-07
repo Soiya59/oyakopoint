@@ -2372,9 +2372,12 @@ export interface PurchaseStickerResult {
 
 /**
  * API仕様.md 14.2章「ステッカーを購入する」。`purchase_sticker()`（SECURITY DEFINER）が
- * 月1個の上限（今月すでに購入済みなら`check_violation`）・残高チェック（不足なら
- * `check_violation`）を1トランザクションで検証する。取消APIは存在しない
- * （決定24）。無効化/存在しないIDは`foreign_key_violation`。
+ * 上限（同じ種類〈sticker_catalog_id〉につき今月すでに購入済みなら`check_violation`。
+ * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正により
+ * 「1人あたり月合計1個」から「同じ種類につき1人あたり月1枚」に変わった。月あたりの
+ * 合計購入数には上限が無い）・残高チェック（不足なら`check_violation`）を
+ * 1トランザクションで検証する。取消APIは存在しない（決定24）。無効化/存在しないIDは
+ * `foreign_key_violation`。
  */
 export async function purchaseSticker(client: SupabaseClient, catalogId: string): Promise<ApiResult<PurchaseStickerResult>> {
   const { data, error } = await client.rpc("purchase_sticker", { p_catalog_id: catalogId });

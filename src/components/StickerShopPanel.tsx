@@ -6,6 +6,12 @@
  * 列に固定）で表示する（決定9「どのインスタンスを使うか選ばせない」の前提として、
  * カタログ位置＝形×レアリティのみが選択対象）。購入確認は新しい画面を作らず、
  * 本コンポーネント内のインライン確認モーダルで行う（決定10）。
+ *
+ * [2026-09-09改訂・統括の実機確認からの指摘・要件定義書07-19-9a章「決定31」]
+ * 購入上限は「1人あたり月合計1個」ではなく「同じ種類（sticker_catalog_id）に
+ * つき1人あたり月1枚」だった（決定15の読み取り誤りの訂正）。そのためグリッド
+ * 全体を止める旧`monthlyLimitReached`は廃止し、今月すでに購入した種類だけを
+ * 個別に非活性化する（開発部/成果物/実装メモ.md 143章）。
  */
 import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -38,8 +44,14 @@ export interface StickerShopPanelProps {
   loadState: LoadState;
   catalog: StickerCatalogItem[];
   balance: number;
-  /** 今月すでに1個購入済みか（1人あたり月1個まで、決定15）。 */
-  monthlyLimitReached: boolean;
+  /**
+   * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正を
+   * 受け、「今月すでに1個購入済みか」という全体のboolean（旧`monthlyLimitReached`）
+   * ではなく、「今月すでに購入した種類（`sticker_catalog_id`）の一覧」を受け取る
+   * ように変えた。上限は同じ種類につき月1枚であり、違う種類は同じ月に何種類でも
+   * 買えるため、グリッド全体を非活性にする表示はもう正しくない。
+   */
+  purchasedCatalogIdsThisMonth: string[];
   purchasing: boolean;
   purchaseErrorMessage: string | null;
   onRetry: () => void;
@@ -62,7 +74,7 @@ export function StickerShopPanel({
   loadState,
   catalog,
   balance,
-  monthlyLimitReached,
+  purchasedCatalogIdsThisMonth,
   purchasing,
   purchaseErrorMessage,
   onRetry,
@@ -73,6 +85,7 @@ export function StickerShopPanel({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selected, setSelected] = useState<StickerCatalogItem | null>(null);
+  const purchasedIdSet = new Set(purchasedCatalogIdsThisMonth);
 
   if (loadState === "loading") return <SkeletonList count={3} />;
   if (loadState === "error") {
@@ -100,15 +113,14 @@ export function StickerShopPanel({
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
-      {monthlyLimitReached && (
-        <Card tone={tone} style={styles.limitCard}>
-          <Text style={bodyStyle}>
-            {isChild
-              ? "こんげつは もう シールを かったよ。\nらいげつも たのしみに していてね"
-              : "今月はステッカーを1つ購入済みです。来月また購入できます"}
-          </Text>
-        </Card>
-      )}
+      {/* [2026-09-09改訂・決定31] 「今月は1つ購入済み」という全体向けの案内カードは
+          廃止した。上限は同じ種類につき月1枚であり、違う種類は同じ月に何種類でも
+          買えるため、グリッド全体を止める案内は誤りになる。代わりに常設の短い注記
+          （下記）と、該当するセルだけの個別表示（購入済みの種類のみ非活性・
+          「かったよ／購入済み」表示）に置き換える。 */}
+      <Text style={[captionStyle, styles.ruleNote]}>
+        {isChild ? "おなじ シールは 1かげつに 1まいまで かえるよ" : "同じ種類は1人あたり月1枚まで購入できます"}
+      </Text>
 
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s4 }}>
         {byShape.map(({ shape, items }) => (
@@ -117,7 +129,8 @@ export function StickerShopPanel({
             <View style={styles.row}>
               {items.map((item) => {
                 const affordable = balance >= item.points_cost;
-                const disabled = monthlyLimitReached || !affordable;
+                const purchasedThisMonth = purchasedIdSet.has(item.id);
+                const disabled = purchasedThisMonth || !affordable;
                 return (
                   <Pressable
                     key={item.id}
@@ -130,8 +143,14 @@ export function StickerShopPanel({
                     <Text style={[captionStyle, styles.cellRarity]}>
                       {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                     </Text>
-                    <Text style={[captionStyle, !affordable && styles.insufficientText]}>
-                      {affordable ? `${item.points_cost}pt` : `あと${item.points_cost - balance}pt`}
+                    <Text style={[captionStyle, !affordable && !purchasedThisMonth && styles.insufficientText]}>
+                      {purchasedThisMonth
+                        ? isChild
+                          ? "かったよ"
+                          : "今月購入済み"
+                        : affordable
+                        ? `${item.points_cost}pt`
+                        : `あと${item.points_cost - balance}pt`}
                     </Text>
                   </Pressable>
                 );
@@ -185,7 +204,7 @@ export function StickerShopPanel({
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  limitCard: { marginTop: theme.spacing.s4 },
+  ruleNote: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
   shapeHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
   row: { flexDirection: "row", gap: theme.spacing.s2 },
   cell: {

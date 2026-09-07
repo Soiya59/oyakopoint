@@ -5,7 +5,7 @@ import Screen from "@/components/Screen";
 import StickerShopPanel from "@/components/StickerShopPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useMyStickerMonthlyStatus, useStickerCatalog, useStickerPurchaseAction } from "@/hooks/useStickers";
+import { useMyStickerPurchasedCatalogIdsThisMonth, useStickerCatalog, useStickerPurchaseAction } from "@/hooks/useStickers";
 
 const SNACKBAR_DISPLAY_MS = 1400;
 
@@ -21,12 +21,16 @@ export default function SupporterStickerShopScreen() {
   const myId = state.activeParentMemberId;
   const balance = memberPoints.find((m) => m.member_id === myId)?.current_points ?? 0;
   const { loadState: catalogLoadState, catalog, reload: reloadCatalog } = useStickerCatalog();
-  const { loadState: monthlyLoadState, purchasedThisMonth, reload: reloadMonthly } = useMyStickerMonthlyStatus(myId);
+  const {
+    loadState: purchasedLoadState,
+    purchasedCatalogIds,
+    reload: reloadPurchased,
+  } = useMyStickerPurchasedCatalogIdsThisMonth(myId);
   const { purchasing, purchase } = useStickerPurchaseAction();
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
-  const loadState = catalogLoadState === "error" || monthlyLoadState === "error" ? "error" : catalogLoadState === "loading" || monthlyLoadState === "loading" ? "loading" : "ready";
+  const loadState = catalogLoadState === "error" || purchasedLoadState === "error" ? "error" : catalogLoadState === "loading" || purchasedLoadState === "loading" ? "loading" : "ready";
 
   const handleConfirmPurchase = async (catalogId: string) => {
     setPurchaseError(null);
@@ -37,7 +41,7 @@ export default function SupporterStickerShopScreen() {
     }
     const item = catalog.find((c) => c.id === catalogId);
     setSnackbar(`${item?.display_name ?? "ステッカー"}を購入しました。コレクター棚に追加されました`);
-    void reloadMonthly();
+    void reloadPurchased();
     setTimeout(() => {
       setSnackbar(null);
       router.back();
@@ -55,12 +59,12 @@ export default function SupporterStickerShopScreen() {
         loadState={loadState}
         catalog={catalog}
         balance={balance}
-        monthlyLimitReached={purchasedThisMonth}
+        purchasedCatalogIdsThisMonth={purchasedCatalogIds}
         purchasing={purchasing}
         purchaseErrorMessage={purchaseError}
         onRetry={() => {
           reloadCatalog();
-          reloadMonthly();
+          reloadPurchased();
         }}
         onConfirmPurchase={handleConfirmPurchase}
       />

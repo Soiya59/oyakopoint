@@ -155,14 +155,21 @@ export function useMoveTreeStickerAction() {
 }
 
 /**
- * 購入画面（P37/C30/S23）用: 呼び出し本人が今月（JST暦月）すでに1個購入済みかどうか。
- * `purchase_sticker()`のRPC自体が最終的な検証（決定15）を行うため、これは画面の
- * ボタン非活性表示のためのUX的な事前判定にすぎない（最終防衛線はDB側）。
+ * 購入画面（P37/C30/S23）用: 呼び出し本人が今月（JST暦月）すでに購入した
+ * ステッカーの`sticker_catalog_id`一覧。
+ *
+ * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正を
+ * 受け、購入上限は「1人あたり月合計1個」ではなく「同じ種類（sticker_catalog_id）
+ * につき1人あたり月1枚」になった。そのため画面側も「今月は購入済みか」という
+ * 単一のboolean（`purchasedThisMonth`）ではなく、「今月すでに購入した種類の集合」を
+ * 返す形に変える（違う種類はグレーアウトさせない）。`purchase_sticker()`のRPC自体が
+ * 最終的な検証（決定31）を行うため、これは画面のボタン非活性表示のためのUX的な
+ * 事前判定にすぎない（最終防衛線はDB側）。
  */
-export function useMyStickerMonthlyStatus(memberId: string) {
+export function useMyStickerPurchasedCatalogIdsThisMonth(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<StickerLoadState>("loading");
-  const [purchasedThisMonth, setPurchasedThisMonth] = useState(false);
+  const [purchasedCatalogIds, setPurchasedCatalogIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -173,7 +180,9 @@ export function useMyStickerMonthlyStatus(memberId: string) {
       return;
     }
     const thisMonth = toJstDateString(new Date()).slice(0, 7);
-    setPurchasedThisMonth(res.data.some((p) => toJstDateString(p.purchased_at).slice(0, 7) === thisMonth));
+    setPurchasedCatalogIds(
+      res.data.filter((p) => toJstDateString(p.purchased_at).slice(0, 7) === thisMonth).map((p) => p.sticker_catalog_id)
+    );
     setLoadState("ready");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, memberId]);
@@ -182,5 +191,5 @@ export function useMyStickerMonthlyStatus(memberId: string) {
     void load();
   }, [load]);
 
-  return { loadState, purchasedThisMonth, reload: load };
+  return { loadState, purchasedCatalogIds, reload: load };
 }

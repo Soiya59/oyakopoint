@@ -240,10 +240,19 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
               </View>
             </View>
           ) : selectedItem.drawing ? (
-            <View style={styles.detailRow}>
-              <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={72} />
-              <View style={{ flex: 1 }}>
-                <Text style={bodyMediumStyle}>
+            // [2026-09-09拡大・統括の実機確認からの指摘「絵をタップしたときに大きく
+            // 表示してほしい。今は大きく表示されない」] グリッド（48pt）とほぼ同じ
+            // 大きさ（72pt）のサムネイルでは絵の中身が見えなかったため、詳細カード内で
+            // 大きく（220pt）表示する。新しい画面・新しいモーダルは増やさず、既存の
+            // 詳細カードの表示サイズだけを変える。横並び（絵＋テキスト）だと大きな絵の
+            // 隣にテキストが収まらないため、この分岐だけ縦積み（絵を中央上、テキストを
+            // その下に中央寄せ）のレイアウトに変える。`DrawingThumbnail`
+            // （`src/components/DrawingCanvas.tsx`）は`size`を渡せる実装のため、
+            // サイズの変更のみで対応できた。
+            <View style={styles.detailDrawingWrap}>
+              <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={220} />
+              <View style={styles.detailDrawingTextWrap}>
+                <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
                   {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
                 </Text>
                 {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
@@ -251,7 +260,7 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                     直後に、独立した1行のラベル付き表示として追加する。無い絵は
                     この行自体が無い（プレースホルダは出さない）。 */}
                 {selectedItem.drawing.title && (
-                  <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                  <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
                     {isChild ? "だいめい：" : "題名："}
                     {selectedItem.drawing.title}
                   </Text>
@@ -261,7 +270,7 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                     （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
                     だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
                     日付と一緒に見つけた人も出す。 */}
-                <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
                   {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
                   {isChild ? "が みつけたよ" : "が獲得"}
                 </Text>
@@ -436,9 +445,18 @@ export function CollectorShelfPanel({
   // 表示項目（獲得した人・描いた人のmember_id）による閲覧フィルタにすぎず、
   // 07-13-3章「景品は引いた人ではなく家族の所有物」という家族共有の原則は
   // 変えない（一時的に絞り込んで見せているだけ）。
+  //
+  // [2026-09-09修正・統括の実機確認からの指摘] 家族の絵（`item.drawing`が存在する
+  // 行）は「描いた人（artistId）」だけで絞り込む。従来は`collectorId === selectedMemberId
+  // || item.drawing?.artistId === selectedMemberId`という「引いた人 or 描いた人」の
+  // OR条件だったため、自分が描いていなくても自分が引き当てた絵まで「じぶんの
+  // つくった・あつめたもの」に出てしまっていた。既製の飾り（`item.drawing`が無い行）は
+  // 描いた人が存在しないため、従来どおり「引いた人（collectorId）」で絞り込む。
   const memberMadeOrCollected = useMemo(() => {
     if (selectedMemberId === ALL_MEMBERS_ID) return [];
-    return collectedItems.filter((item) => item.collectorId === selectedMemberId || item.drawing?.artistId === selectedMemberId);
+    return collectedItems.filter((item) =>
+      item.drawing ? item.drawing.artistId === selectedMemberId : item.collectorId === selectedMemberId
+    );
   }, [collectedItems, selectedMemberId]);
 
   return (
@@ -818,6 +836,10 @@ const styles = StyleSheet.create({
   gridCaption: { textAlign: "center" },
   detailRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 },
   detailEmoji: { fontSize: 40 },
+  // [2026-09-09新設] 家族の絵の詳細表示専用（拡大サムネイル＋縦積みレイアウト）。
+  detailDrawingWrap: { alignItems: "center" },
+  detailDrawingTextWrap: { marginTop: theme.spacing.s3, alignItems: "center" },
+  detailDrawingCenterText: { textAlign: "center" },
   emptyWrap: { alignItems: "center", paddingVertical: theme.spacing.s6 },
   legendWrap: { marginTop: theme.spacing.s3 },
   legendHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
