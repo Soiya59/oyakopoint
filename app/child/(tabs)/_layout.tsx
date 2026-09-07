@@ -53,6 +53,16 @@ export default function ChildTabsLayout() {
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🏠</Text>,
         }}
       />
+      {/* [2026-09-08・統括指示] タブの並びを「やる→ごほうび→きろく→つうちょう」に変更。
+          従来は「やる→きろく→つうちょう→ごほうび」で、毎日使う「ごほうび」が
+          いちばん端にあった。使う頻度の順に並べ直したもの。 */}
+      <Tabs.Screen
+        name="rewards"
+        options={{
+          title: "ごほうび",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🎁</Text>,
+        }}
+      />
       <Tabs.Screen
         name="history"
         options={{
@@ -65,13 +75,6 @@ export default function ChildTabsLayout() {
         options={{
           title: "つうちょう",
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>💰</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="rewards"
-        options={{
-          title: "ごほうび",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🎁</Text>,
         }}
       />
     </Tabs>
