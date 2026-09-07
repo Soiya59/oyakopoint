@@ -125,7 +125,13 @@ export default function ChildHomeScreen() {
   // （本番でも単発4件すべてが完了済みのまま最長12日間残っていた）。
   // 「くり返す」設定のchoreは今日の上限に達しただけなので、従来どおり「きろくずみ」に残す。
   const chores = state.chores.filter(
-    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me.id) && !isOneOffFinished(c)
+    (c) =>
+      c.is_active &&
+      // [2026-09-07修正・本部長] app/parent/my-chores.tsx と同じ理由。みまもり共通は
+      // assigned_to が NULL のため、子どものやることリストにも混ざっていた。
+      c.scope === "family" &&
+      (c.assigned_to === null || c.assigned_to === me.id) &&
+      !isOneOffFinished(c)
   );
 
   // [2026-08-22追加] 「まいにち」個人設定（chore_daily_flags）。ユーザーから

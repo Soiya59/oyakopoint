@@ -62,7 +62,16 @@ export default function ParentMyChoresScreen() {
   // ここは「これからやる」ための一覧なので、役目を終えた単発が残っていても押せないだけで邪魔になる。
   // 管理用の一覧（P10 app/parent/chores.tsx）では折りたたみセクションとして引き続き確認できる。
   const myChores = state.chores.filter(
-    (c) => c.is_active && (c.assigned_to === null || c.assigned_to === me?.id) && !isOneOffFinished(c)
+    (c) =>
+      c.is_active &&
+      // [2026-09-07修正・本部長] みまもり共通（scope='supporter_shared'）は assigned_to が
+      // NULL のため、下の「assigned_to が空 or 自分」という条件に引っかかり、保護者の
+      // 「じぶんのクエスト」に混ざっていた（統括の指摘「見守りのクエストが保護者の自分の
+      // クエストにある」）。2026-09-07のみまもり共通の実装時に、7箇所の scope フィルタは
+      // 直したがこの画面が漏れていた。ここは家族共有（family）のみを対象にする。
+      c.scope === "family" &&
+      (c.assigned_to === null || c.assigned_to === me?.id) &&
+      !isOneOffFinished(c)
   );
 
   // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
