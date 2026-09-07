@@ -26,6 +26,11 @@ export default function RewardsListScreen() {
   // P12の空状態限定で開くモーダル。選択するとP13へプレフィル遷移するだけで、
   // モーダル側にDB書き込みは一切発生しない（クエスト版と同型、app/parent/chores.tsx参照）。
   const [suggestionsVisible, setSuggestionsVisible] = useState(false);
+  // [2026-09-07追加・要件定義書07-20章決定2] 「かぞくが登録」の折りたたみ。
+  // app/parent/chores.tsxの「終わった単発のクエスト」・「かぞくが登録」と同じ仕組み
+  // （Pressableトグル・▾/▸・件数表示・画面固有useState・永続化しない）をそのまま
+  // 流用する。既定は「開いている」（07-20章決定2）。
+  const [othersOpen, setOthersOpen] = useState(true);
 
   // [2026-09-03追加] 保護者代理でのごほうび交換（P36）成功後の完了スナックバー
   // （主要画面ワイヤーフレーム.md 5.5.0節決定5・5.5.4節）。app/parent/my-rewards.tsx
@@ -142,8 +147,14 @@ export default function RewardsListScreen() {
 
       {others.length > 0 && (
         <View>
-          <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
-          {others.map(renderRow)}
+          {/* [2026-09-07追加・要件定義書07-20章] 折りたたみ。既定は開いている（決定2）。
+              app/parent/chores.tsxと同型。 */}
+          <Pressable onPress={() => setOthersOpen((v) => !v)} hitSlop={8}>
+            <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>
+              {othersOpen ? "▾" : "▸"} かぞくが登録（{others.length}）
+            </Text>
+          </Pressable>
+          {othersOpen && others.map(renderRow)}
         </View>
       )}
 

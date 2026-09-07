@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
@@ -47,6 +47,13 @@ export default function SupporterRewardsScreen() {
   const othersExchangeableCount = othersRewards.filter((r) => r.scope === "supporter_shared").length;
   const canExchange = myRewards.length > 0 || othersExchangeableCount > 0;
 
+  // [2026-09-07追加・要件定義書07-20章決定2] 「かぞくのほかのみまもりメンバーの
+  // ごほうび」の折りたたみ。app/parent/chores.tsxの「終わった単発のクエスト」と
+  // 同じ仕組み（Pressableトグル・▾/▸・件数表示・画面固有useState・永続化しない）
+  // をそのまま流用する。既定は「開いている」（07-20章決定2）。折りたたみは区分の
+  // 開閉だけで、中の交換への入口には触らない（07-20章決定3）。
+  const [othersOpen, setOthersOpen] = useState(true);
+
   return (
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
@@ -91,9 +98,16 @@ export default function SupporterRewardsScreen() {
       {Object.keys(othersByCreator).length > 0 && (
         <>
           {/* [2026-09-06追加・UIUXデザイン部30.5節決定13] S5と同型の下段セクション新設 */}
-          <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
-            かぞくのほかのみまもりメンバーのごほうび
-          </Text>
+          {/* [2026-09-07追加・要件定義書07-20章] 折りたたみ。既定は開いている
+              （決定2）。中の交換への入口（scope='supporter_shared'行）には触らない
+              （決定3）。 */}
+          <Pressable onPress={() => setOthersOpen((v) => !v)} style={{ marginTop: theme.spacing.s6 }} hitSlop={8}>
+            <Text style={theme.typography.supporterBodyMedium}>
+              {othersOpen ? "▾" : "▸"} かぞくのほかのみまもりメンバーのごほうび（{othersRewards.length}）
+            </Text>
+          </Pressable>
+          {othersOpen && (
+          <>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
             みんなの参考にどうぞ。
           </Text>
@@ -137,6 +151,8 @@ export default function SupporterRewardsScreen() {
               );
             })}
           </View>
+          </>
+          )}
         </>
       )}
 

@@ -76,6 +76,14 @@ export default function SupporterMyChoresScreen() {
     .filter((c) => !!me && c.reported_by === me.id && isWithinCancelWindow(c.reported_at))
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
+  // [2026-09-07追加・要件定義書07-20章決定2] 「かぞくのほかのみまもりメンバーの
+  // クエスト」の折りたたみ。app/parent/chores.tsxの「終わった単発のクエスト」と
+  // 同じ仕組み（Pressableトグル・▾/▸・件数表示・画面固有useState・永続化しない）
+  // をそのまま流用する。既定は「開いている」（07-20章決定2、07-18章で新設した
+  // 完了報告への入口の発見しやすさを損なわないため）。折りたたみは区分の開閉だけで、
+  // 中の完了報告の入口には触らない（07-20章決定3）。
+  const [othersOpen, setOthersOpen] = useState(true);
+
   const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
@@ -204,9 +212,16 @@ export default function SupporterMyChoresScreen() {
 
       {Object.keys(othersByCreator).length > 0 && (
         <>
-          <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
-            かぞくのほかのみまもりメンバーのクエスト
-          </Text>
+          {/* [2026-09-07追加・要件定義書07-20章] 折りたたみ。既定は開いている
+              （決定2）。中の完了報告への入口（scope='supporter_shared'行）には
+              触らない（決定3）。 */}
+          <Pressable onPress={() => setOthersOpen((v) => !v)} style={{ marginTop: theme.spacing.s6 }} hitSlop={8}>
+            <Text style={theme.typography.supporterBodyMedium}>
+              {othersOpen ? "▾" : "▸"} かぞくのほかのみまもりメンバーのクエスト（{othersChores.length}）
+            </Text>
+          </Pressable>
+          {othersOpen && (
+          <>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
             みんなの参考にどうぞ。
           </Text>
@@ -253,6 +268,8 @@ export default function SupporterMyChoresScreen() {
               );
             })}
           </View>
+          </>
+          )}
         </>
       )}
 

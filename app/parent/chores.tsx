@@ -25,6 +25,11 @@ import type { Chore } from "@/types/domain";
 export default function ChoresListScreen() {
   const { state, isOneOffFinished } = useAppData();
   const [finishedOpen, setFinishedOpen] = useState(false);
+  // [2026-09-07追加・要件定義書07-20章決定2] 「かぞくが登録」の折りたたみ。既存の
+  // 「終わった単発のクエスト」（finishedOpen）と同じ仕組み（Pressableトグル・▾/▸・
+  // 件数表示・画面固有useState・永続化しない）をそのまま流用する。ただし既定は
+  // finishedOpenとは逆で「開いている」（07-20章決定2の理由参照）。
+  const [othersOpen, setOthersOpen] = useState(true);
   // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
   // 27.1・27.2節）。P10の空状態限定で開くモーダル。選択するとP11へプレフィル遷移する
   // だけで、モーダル側にDB書き込みは一切発生しない。
@@ -147,8 +152,14 @@ export default function ChoresListScreen() {
 
       {others.length > 0 && (
         <View>
-          <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
-          {others.map((c) => renderRow(c, false))}
+          {/* [2026-09-07追加・要件定義書07-20章] 折りたたみ。既定は開いている（決定2）。
+              見出し文言・開閉記号・件数併記は「終わった単発のクエスト」と同型。 */}
+          <Pressable onPress={() => setOthersOpen((v) => !v)} hitSlop={8}>
+            <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>
+              {othersOpen ? "▾" : "▸"} かぞくが登録（{others.length}）
+            </Text>
+          </Pressable>
+          {othersOpen && others.map((c) => renderRow(c, false))}
         </View>
       )}
 
