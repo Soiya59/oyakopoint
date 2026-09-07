@@ -91,6 +91,19 @@ export default function ChoresListScreen() {
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
 
+      {/* [2026-09-07移動・統括指示／実装メモ147章] 146章で「＋新規追加」ボタンの下に常設化
+          したが、一覧の一番下に置いたため、クエストやごほうびの件数が増えるほど埋もれる
+          という指摘を受け、「＋新規追加」の直下（一覧より上）へ移動した。見た目・文言・
+          variant="secondary"は変更していない。位置のみの変更。 */}
+      {!(mine.length === 0 && others.length === 0 && finished.length === 0) && (
+        <AppButton
+          label="🔍 おすすめを見る"
+          variant="secondary"
+          style={{ marginTop: theme.spacing.s3 }}
+          onPress={() => setSuggestionsVisible(true)}
+        />
+      )}
+
       {/* [2026-09-02追加・本部長] クエストが0件のとき何も表示されない状態だった
           （主要画面ワイヤーフレーム.md 24章が定めていた空状態が未実装。2026-09-01の
           文書照合で発見）。統括判断「商用化の時に何かしらあったほうが良い」により実装。
@@ -154,21 +167,6 @@ export default function ChoresListScreen() {
           )}
           {finishedOpen && finished.map((c) => renderRow(c, true))}
         </View>
-      )}
-
-      {/* [2026-09-07追加・統括指示／実装メモ146章] クエストが1件以上ある状態でも
-          おすすめ集への導線を表示する（従来は空状態限定。要件定義書07-16章7.は
-          この変更で古くなった）。案内文（「迷ったら、おすすめから選んでみませんか？」）
-          は0件時の専用の言い回しのため省き、ボタンのみを一覧の下・控えめなセカンダリ
-          ボタンとして置く（主役は既存の一覧と「＋新規追加」のまま、27.4節トーン設計
-          メモに準じる）。 */}
-      {!(mine.length === 0 && others.length === 0 && finished.length === 0) && (
-        <AppButton
-          label="🔍 おすすめを見る"
-          variant="secondary"
-          style={{ marginTop: theme.spacing.s6 }}
-          onPress={() => setSuggestionsVisible(true)}
-        />
       )}
 
       {/* [2026-09-02追加・統括指示] みまもりメンバーのクエスト一覧（P25）への導線。

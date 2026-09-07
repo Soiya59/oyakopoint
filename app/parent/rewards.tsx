@@ -88,6 +88,19 @@ export default function RewardsListScreen() {
         </View>
       )}
 
+      {/* [2026-09-07移動・統括指示／実装メモ147章] 146章で「＋新規追加」ボタンの下に常設化
+          したが、一覧の一番下に置いたため、クエストやごほうびの件数が増えるほど埋もれる
+          という指摘を受け、「＋新規追加」の直下（一覧より上）へ移動した。見た目・文言・
+          variant="secondary"は変更していない。位置のみの変更。 */}
+      {!(mine.length === 0 && others.length === 0) && (
+        <AppButton
+          label="🎁 おすすめを見る"
+          variant="secondary"
+          style={{ marginTop: theme.spacing.s3 }}
+          onPress={() => setSuggestionsVisible(true)}
+        />
+      )}
+
       {/* [2026-09-06追加・本部長／主要画面ワイヤーフレーム.md 31.0節決定2・24.1節]
           ごほうびが0件のとき何も表示されない状態だった（P10側は2026-09-02に実装済み）。
           既存文言「まだごほうびが登録されていません」はそのまま変更しない（決定2）。 */}
@@ -132,20 +145,6 @@ export default function RewardsListScreen() {
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
           {others.map(renderRow)}
         </View>
-      )}
-
-      {/* [2026-09-07追加・統括指示／実装メモ146章] ごほうびが1件以上ある状態でも
-          おすすめ集への導線を表示する（従来は空状態限定。31.1節・要件定義書07-16章7.
-          相当の記述はこの変更で古くなった）。案内文は0件時の専用の言い回しのため省き、
-          ボタンのみを一覧の下・控えめなセカンダリボタンとして置く（主役は既存の一覧と
-          「＋新規追加」のまま、31.5節トーン設計メモに準じる）。 */}
-      {!(mine.length === 0 && others.length === 0) && (
-        <AppButton
-          label="🎁 おすすめを見る"
-          variant="secondary"
-          style={{ marginTop: theme.spacing.s6 }}
-          onPress={() => setSuggestionsVisible(true)}
-        />
       )}
 
       {hasAnySupporter && (
