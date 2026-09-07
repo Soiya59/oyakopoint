@@ -198,7 +198,17 @@ export default function ParentHomeScreen() {
             🌿 家族の木 いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary }}>
-            今シーズン {treeSeason?.completion_count ?? 0}回 →
+            今シーズン {treeSeason?.completion_count ?? 0}回
+            {/* [2026-09-07追加・統括の要望「あと〇〇回で花とかここにも書いて欲しい」]
+                次の段階までの残り回数を添える。閾値は theme.treeStages（DB側の
+                family_tree_stage_for_count() と一致させてある）から引く。
+                最終段階（実）に到達していれば残りは出さない。 */}
+            {(() => {
+              const count = treeSeason?.completion_count ?? 0;
+              const next = theme.treeStages.find((s) => s.threshold > count);
+              return next ? `　あと${next.threshold - count}回で「${next.name}」${next.emoji}` : "";
+            })()}
+            {" →"}
           </Text>
         </Card>
       </Pressable>
