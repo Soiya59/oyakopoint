@@ -84,6 +84,7 @@ export default function SupporterTreeDecorateScreen() {
         candidatesLoadState={candidatesLoadState}
         candidates={candidates}
         myMemberId={myId}
+        decorationKind={purchaseId ? "sticker" : "prize"}
         decorating={decorating}
         decorateErrorMessage={decorateError}
         onRetryLoad={() => {

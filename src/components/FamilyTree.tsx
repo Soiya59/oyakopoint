@@ -49,14 +49,14 @@ const DOT_SIZE = 13;
 // [2026-08-26追加・第4段階] ガチャの景品に交換された丸（デザイントークン.md 1.8節
 // 「ガチャの景品（36pt）の表示ルール」）。大きさは「これは景品だ」という意味のみを
 // 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
-const PRIZE_DOT_SIZE = 36;
+export const PRIZE_DOT_SIZE = 36;
 /**
  * [2026-09-07追加・要件定義書07-19-9a章] 木を飾るステッカー（購入品）の表示直径。
  * デザイントークン.md 1.11節「木の上での表示直径 24pt固定」。通常の色丸13pt超・
  * 景品36pt未満の中間サイズ。誰が何回購入しても大きさは変動しない
  * （レアリティは大きさではなく色・質感のみで表現、決定3）。
  */
-const STICKER_DOT_SIZE = 24;
+export const STICKER_DOT_SIZE = 24;
 /**
  * 花（stage3）の花芯の色。個人色に染めない固定色（木の共有部分と同じ扱い）。
  * [2026-09-01変更] 旧値`#FFF3B0`はメンバーカラー「レモン」と完全一致していたため、
@@ -307,13 +307,17 @@ function placeWithoutOverlap(
  * `dotDisplaySize`でドットごとに個別算出するよう変更した（景品36pt・通常13ptが
  * 混在するグループに対応するため）。重なり判定自体は既存の「互いの半径の合計＋
  * 余白」方式のままで正しく動く（本ファイル冒頭コメント参照）。
+ * [2026-09-07追加・140章] `getSize`を省略可能にし、既定は`dotDisplaySize`のまま。
+ * `TreeStageVisual`はプレビュー中の色丸だけ大きさを差し替えた`getSize`を渡す
+ * （プレビューでも重なり回避の半径計算に反映されるようにするため）。
  */
 function placeGroup(
-  items: readonly { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
+  items: readonly { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[],
+  getSize: (dot: FamilyTreeCompletionDot) => number = dotDisplaySize
 ): { dot: FamilyTreeCompletionDot; x: number; y: number }[] {
   const placed: PlacedDot[] = [];
   return items.map(({ dot, bounds }) => {
-    const radius = dotDisplaySize(dot) / 2;
+    const radius = getSize(dot) / 2;
     const p = placeWithoutOverlap(dot.id, radius, bounds, placed);
     placed.push({ x: p.x, y: p.y, r: radius });
     return { dot, x: p.x, y: p.y };
@@ -333,7 +337,7 @@ function placeGroup(
  */
 type TreeRegion = "canopy" | "lobeLeft" | "lobeRight" | "trunk" | "soil" | "sky";
 
-/** 空の重み。景品のときはこの分を樹冠へ振り替える（pickTreeRegion参照）。 */
+/** 空の重み。景品・ステッカーのときはこの分を樹冠へ振り替える（pickTreeRegion参照）。 */
 const SKY_WEIGHT = 17;
 
 const REGION_WEIGHTS: readonly (readonly [TreeRegion, number])[] = [
@@ -367,12 +371,30 @@ const FALLBACK_WIDTH = 320;
  * この配置ロジックだけが原因だった）。景品は樹冠・葉・幹・土のいずれかに置く。
  *
  * 空の分の重みは樹冠へ寄せる（樹冠がもっとも面積が広く、景品が最も自然に見える）。
+ *
+ * [2026-09-08誤り・撤回済み] 一時、`isPrize`分岐を削除し常にIDだけで部位を決める
+ * 版に変更したことがあった（前任者による対応・139章）。理由は「かざりつけモードで
+ * ハイライトした場所と、確定後に景品が現れる場所が食い違う」という統括報告への
+ * 対応だったが、**この直し方自体が本部長の指示ミスだった**。`isPrize`分岐は
+ * 直上のコメントのとおり2026-08-27の実際の本番不具合（景品が空に落ちて樹冠の裏に
+ * 隠れる）への対応であり、削除すると同じ不具合が再発する（前任者の実測で新実装の
+ * 16.6%が空に割り当てられていた。139章）。前任者は変更前にこの再発リスクを
+ * コメント・実装メモにきちんと明記しており、指摘は正しかった。**指示を出した
+ * 本部長の側が誤っていた**（140章に記録）。
+ *
+ * 統括報告の真の原因は「置き場所の規則」ではなく「ハイライトの出し方」だった。
+ * `TreeDecoratePanel`は、まだ景品になっていない色丸をそのまま渡してハイライトして
+ * いたため、ハイライトは`isPrize=false`の位置に出て、確定後に`isPrize=true`へ
+ * 切り替わると別の場所へ移動していた。正しい直し方は本関数を変えることではなく、
+ * `TreeStageVisual`の`previewDecorationSize`（後述）で「選択中の色丸だけ確定後の
+ * 姿（位置・大きさ）を先取りしてプレビューする」こと。本関数は`isPrize`分岐ごと
+ * 元の実装に戻した（140章）。
  */
-function pickTreeRegion(id: string, isPrize = false): TreeRegion {
+export function pickTreeRegion(id: string, isPrize = false): TreeRegion {
   const h = stableHash(`${id}|region`) % 100;
   let acc = 0;
   for (const [region, weight] of REGION_WEIGHTS) {
-    // 景品のときは空の枠を樹冠に振り替える（空の重み分だけ樹冠が広がる）。
+    // 景品・ステッカーのときは空の枠を樹冠に振り替える（空の重み分だけ樹冠が広がる）。
     const w = isPrize && region === "canopy" ? weight + SKY_WEIGHT : weight;
     if (isPrize && region === "sky") continue;
     acc += w;
@@ -637,6 +659,7 @@ export function TreeStageVisual({
   dots,
   highlightMemberId = null,
   highlightCompletionId = null,
+  previewDecorationSize = null,
 }: {
   stage: number;
   dots: FamilyTreeCompletionDot[];
@@ -649,6 +672,25 @@ export function TreeStageVisual({
   highlightMemberId?: string | null;
   /** 一覧UIで選択中の完了報告ID。40スロットの表示対象に含まれる場合のみ木の上でも強調する。 */
   highlightCompletionId?: string | null;
+  /**
+   * [2026-09-07新設・140章・本部長裁定] 「かざりつけモード」で選択中の色丸を、
+   * 確定後の姿（景品36pt or ステッカー24pt）でプレビュー表示するための直径。
+   * `highlightCompletionId`と組み合わせて使う。指定すると、`highlightCompletionId`に
+   * 一致する色丸だけ、
+   *   1. `pickTreeRegion(id, true)`（＝景品・ステッカー時の重み配分）で部位を計算し、
+   *   2. 表示直径もこの値を使う
+   * ことで、「かざる」確定前から確定後と全く同じ場所・大きさが見える。
+   * 呼び出し元（`PRIZE_DOT_SIZE`／`STICKER_DOT_SIZE`、どちらもこのファイルから
+   * export済み）が、これから飾ろうとしている装飾の種類に応じて渡す値を選ぶ。
+   * nullなら（通常の家族の木画面・過去の木など）従来どおり一切プレビューしない。
+   *
+   * 元は`pickTreeRegion`から`isPrize`分岐を削除する形で「ハイライトした場所に
+   * 景品が出ない」問題に対応していたが、それは2026-08-27の本番不具合（景品が
+   * 空に落ちて隠れる）を再発させる誤った直し方だった（139章・140章、`pickTreeRegion`
+   * 直上のコメント参照）。正しい直し方は`pickTreeRegion`自体を変えず、
+   * プレビュー側だけを「確定後の姿」に寄せることだった。
+   */
+  previewDecorationSize?: number | null;
 }) {
   const slots = useMemo(() => pickDisplaySlots(dots), [dots]);
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
@@ -656,18 +698,29 @@ export function TreeStageVisual({
   // React Nativeの既定の切り取りで消える（空の色丸が出ない不具合の原因になった）。
   const [canvasWidth, setCanvasWidth] = useState(FALLBACK_WIDTH);
 
+  /**
+   * この色丸を「確定後の姿」でプレビューすべきか（140章）。
+   * `previewDecorationSize`が指定されていて、かつ選択中の完了報告と一致する場合のみ。
+   */
+  const isPreviewTarget = (dot: FamilyTreeCompletionDot): boolean =>
+    previewDecorationSize != null && highlightCompletionId != null && dot.id === highlightCompletionId;
+
   // 木の段階だけ、色丸を部位ごとに振り分ける（種・芽は従来どおり地面／双葉に置く）。
   const byRegion = useMemo(() => {
     const map: Record<TreeRegion, FamilyTreeCompletionDot[]> = {
       canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [], sky: [],
     };
     if (shape.kind === "tree") {
-      for (const dot of slots) map[pickTreeRegion(dot.id, isPrioritizedDot(dot))].push(dot);
+      for (const dot of slots) {
+        const isPrize = isPrioritizedDot(dot) || isPreviewTarget(dot);
+        map[pickTreeRegion(dot.id, isPrize)].push(dot);
+      }
     } else if (shape.kind === "sprout") {
       // 芽は樹冠・幹が無いので双葉と空だけに振り分ける。芽の段階は完了報告が
       // 10〜29件あり、2枚の葉だけでは密集しがちなため、空に逃がす意味もある。
       for (const dot of slots) {
-        const r = pickTreeRegion(dot.id, isPrioritizedDot(dot));
+        const isPrize = isPrioritizedDot(dot) || isPreviewTarget(dot);
+        const r = pickTreeRegion(dot.id, isPrize);
         if (r === "sky") map.sky.push(dot);
         else if (r === "soil" || r === "trunk") map.soil.push(dot); // 芽には幹が無いので地面へ寄せる
         else if (stableHash(dot.id) % 2 === 0) map.lobeLeft.push(dot);
@@ -675,11 +728,20 @@ export function TreeStageVisual({
       }
     }
     return map;
-  }, [slots, shape.kind]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots, shape.kind, highlightCompletionId, previewDecorationSize]);
 
   const bounds = (cx: number, cy: number, rx: number, ry: number): PlacementBounds => ({
     cx, cy, rx: Math.max(rx, 0), ry: Math.max(ry, 0),
   });
+
+  /**
+   * ドットの表示直径。通常は`dotDisplaySize`のまま。ただし`isPreviewTarget`に
+   * 一致する色丸（かざりつけモードで選択中のもの）だけ`previewDecorationSize`を
+   * 使う（140章。確定後の大きさを先取りしてプレビューする）。
+   */
+  const effectiveDotSize = (dot: FamilyTreeCompletionDot): number =>
+    isPreviewTarget(dot) && previewDecorationSize != null ? previewDecorationSize : dotDisplaySize(dot);
 
   /**
    * 重なりを避けて配置済みの色丸を描く。
@@ -687,10 +749,12 @@ export function TreeStageVisual({
    * 通常の色丸は従来どおり単色の円で描く。`highlightMemberId`と一致する報告者の
    * 丸には、決定8の「淡い強調」（`mineHalo`）を丸の背面に加算的に添える
    * （他人の丸のスタイルは一切変更しない）。
+   * [2026-09-07改訂・140章] 大きさは`dotDisplaySize`ではなく`effectiveDotSize`を使う
+   * （プレビュー中の色丸だけ大きく描くため）。
    */
   const renderPlaced = (items: { dot: FamilyTreeCompletionDot; x: number; y: number }[]) =>
     items.map(({ dot, x, y }) => {
-      const size = dotDisplaySize(dot);
+      const size = effectiveDotSize(dot);
       const isMine = highlightMemberId != null && dot.reported_by === highlightMemberId;
       const isSelected = isMine && highlightCompletionId != null && dot.id === highlightCompletionId;
       const haloSize = size + MINE_HALO_PADDING * 2;
@@ -728,7 +792,7 @@ export function TreeStageVisual({
   /** 1つの座標系に属する色丸をまとめて配置して描く。 */
   const renderGroup = (
     items: { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
-  ) => renderPlaced(placeGroup(items));
+  ) => renderPlaced(placeGroup(items, effectiveDotSize));
 
   return (
     <View
