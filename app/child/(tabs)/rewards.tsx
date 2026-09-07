@@ -34,6 +34,17 @@ export default function ChildRewardsScreen() {
       <Text style={theme.typography.childBody}>🎁 ごほうびこうかんじょ</Text>
       <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s1 }]}>いま {balance}pt もってるよ</Text>
 
+      {/* [2026-09-07追加・本部長／実装メモ.md 144章] 統括の実機確認「ステッカーは購入できる
+          場所がなくなったかも／ごほうびから飛べたらよいかも」対応。ごほうび交換画面（C9）から
+          シール購入画面（C30）への導線を追加した。既存のコレクションだな経由の導線
+          （じぶんのシールタブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
+      <Pressable onPress={() => router.push("/child/sticker-shop")} style={styles.stickerLink} hitSlop={8}>
+        <Text style={theme.typography.childBody}>🧩 シールを かいに いく →</Text>
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
+          ためた ぽいんとで、きに かざる シールが かえるよ
+        </Text>
+      </Pressable>
+
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
           <SkeletonList count={4} />
@@ -76,6 +87,15 @@ export default function ChildRewardsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // [2026-09-07追加] シール購入への導線カード（実装メモ144章）。既存のcardスタイルと
+  // 同じ背景・角丸を使い、横幅いっぱいに広げただけ。
+  stickerLink: {
+    marginTop: theme.spacing.s4,
+    backgroundColor: theme.colors.neutralSurface,
+    borderRadius: theme.radius.childXl,
+    padding: theme.spacing.s4,
+    minHeight: theme.tapTarget.child,
+  },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3, marginTop: theme.spacing.s4 },
   card: {
     width: "47%",

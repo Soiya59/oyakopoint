@@ -13,11 +13,13 @@ const SNACKBAR_DISPLAY_MS = 1400;
  * P37 ステッカーを買う（保護者、新規）
  * 参照: 画面一覧・遷移図.md P37、主要画面ワイヤーフレーム.md 32.1節
  *
- * コレクター棚の区画3（app/parent/collector-shelf.tsx）から遷移する唯一の入口
- * （32.0節決定1）。木を飾るステッカー（12種）をポイントで購入する。購入確認は
- * StickerShopPanel内のインライン確認モーダルで行い、新しい画面は作らない
- * （決定10）。購入成功後は区画3へのスナックバー表示のみで、専用の完了演出画面は
- * 設けない（決定1・「購入成功」状態一覧）。
+ * コレクター棚の区画3（app/parent/collector-shelf.tsx）から遷移する入口
+ * （32.0節決定1）に加え、2026-09-07（実装メモ144章）からはごほうび管理
+ * （app/parent/rewards.tsx、P12）からも遷移できる。木を飾るステッカー（12種）を
+ * ポイントで購入する。購入確認はStickerShopPanel内のインライン確認モーダルで行い、
+ * 新しい画面は作らない（決定10）。購入成功後は呼び出し元へのスナックバー表示のみで、
+ * 専用の完了演出画面は設けない（決定1・「購入成功」状態一覧。router.back()で戻る
+ * 仕組みのため、遷移元がP12でも自然に戻る）。
  */
 export default function ParentStickerShopScreen() {
   const { state, memberPoints } = useAppData();

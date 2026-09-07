@@ -14,7 +14,8 @@ const SNACKBAR_DISPLAY_MS = 1400;
  * 参照: 画面一覧・遷移図.md S23、主要画面ワイヤーフレーム.md 32.1節
  *
  * P37と同一構成。コレクター棚の区画3（app/supporter/collector-shelf.tsx）から
- * 遷移する唯一の入口。
+ * 遷移する入口に加え、2026-09-07（実装メモ144章）からはじぶんのごほうび
+ * （app/supporter/rewards.tsx、S8）からも遷移できる。
  */
 export default function SupporterStickerShopScreen() {
   const { state, memberPoints } = useAppData();

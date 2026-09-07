@@ -140,10 +140,24 @@ export default function SupporterRewardsScreen() {
         </>
       )}
 
+      {/* [2026-09-07追加・本部長／実装メモ.md 144章] 統括の実機確認「ステッカーは購入できる
+          場所がなくなったかも／ごほうびから飛べたらよいかも」対応。ごほうび一覧（S8）から
+          ステッカー購入（S23）への導線を追加した。みまもりメンバーもロールを問わず購入できる
+          （要件定義書07-19章、みまもりを除外する記述は無い）。既存のコレクター棚経由の導線
+          （自分のステッカータブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
+      <Pressable onPress={() => router.push("/supporter/sticker-shop")} style={{ marginTop: theme.spacing.s6 }} hitSlop={8}>
+        <Card tone="supporter">
+          <Text style={theme.typography.supporterBodyMedium}>🧩 ステッカーを買いに行く →</Text>
+          <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
+            貯めたポイントで、木を飾るステッカーを買えます。
+          </Text>
+        </Card>
+      </Pressable>
+
       <AppButton
         tone="supporter"
         label="ごほうびと交換する"
-        style={{ marginTop: theme.spacing.s6 }}
+        style={{ marginTop: theme.spacing.s3 }}
         disabled={!canExchange}
         onPress={() => router.push("/supporter/reward-redeem")}
       />
