@@ -281,7 +281,14 @@ export default function ChildHomeScreen() {
             done: isChoreLimitReached(chore, me.id),
             isDaily: state.dailyFlaggedChoreIds.includes(chore.id),
           }));
-          const daily = withDaily.filter((x) => x.isDaily);
+          // [2026-09-08・統括指示] お気に入りは「★を押した順（新しいものが上）」で並べる。
+          // state.dailyFlaggedChoreIds が created_at の降順で入っている（api.ts
+          // fetchMyDailyFlaggedChoreIds）ので、その順に並べ替える。押し直せば
+          // 一番上に来るため、上下の矢印による並べ替えは作らない（実装メモ156章）。
+          const dailyOrder = state.dailyFlaggedChoreIds;
+          const daily = withDaily
+            .filter((x) => x.isDaily)
+            .sort((a, b) => dailyOrder.indexOf(a.chore.id) - dailyOrder.indexOf(b.chore.id));
           const rest = withDaily.filter((x) => !x.isDaily);
           const todo = rest.filter((x) => !x.done);
           const done = rest.filter((x) => x.done);

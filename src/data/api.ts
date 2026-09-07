@@ -575,10 +575,15 @@ export async function fetchMyDailyFlaggedChoreIds(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<string[]>> {
+  // [2026-09-08・統括指示] お気に入りに入れた順（新しいものが上）で並べる。
+  // 統括の要望「おしっこ1人でできたを一番上に」に対し、上下の矢印による
+  // 並べ替えは作らず、★を押し直せば一番上に来る形で満たす（実装メモ155章・156章）。
+  // created_at はテーブル新設時（20260822082002）から入っており、列の追加は不要。
   const { data, error } = await client
     .from("chore_daily_flags")
-    .select("chore_id")
-    .eq("member_id", memberId);
+    .select("chore_id, created_at")
+    .eq("member_id", memberId)
+    .order("created_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []).map((row) => row.chore_id as string) };
 }

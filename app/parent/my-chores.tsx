@@ -192,7 +192,12 @@ export default function ParentMyChoresScreen() {
           done: me ? isChoreLimitReached(c, me.id) : false,
           isDaily: state.dailyFlaggedChoreIds.includes(c.id),
         }));
-        const daily = withDaily.filter((x) => x.isDaily);
+        // [2026-09-08・統括指示] 子どもの画面（C5）と同じく、お気に入りは
+        // 「★を押した順（新しいものが上）」で並べる（実装メモ156章）。
+        const dailyOrder = state.dailyFlaggedChoreIds;
+        const daily = withDaily
+          .filter((x) => x.isDaily)
+          .sort((a, b) => dailyOrder.indexOf(a.chore.id) - dailyOrder.indexOf(b.chore.id));
         const rest = withDaily.filter((x) => !x.isDaily);
         const todo = rest.filter((x) => !x.done);
         const done = rest.filter((x) => x.done);
