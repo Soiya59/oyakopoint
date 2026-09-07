@@ -91,12 +91,15 @@ export default function RewardsListScreen() {
       {/* [2026-09-06追加・本部長／主要画面ワイヤーフレーム.md 31.0節決定2・24.1節]
           ごほうびが0件のとき何も表示されない状態だった（P10側は2026-09-02に実装済み）。
           既存文言「まだごほうびが登録されていません」はそのまま変更しない（決定2）。 */}
+      {/* [2026-09-07改訂・統括指示／実装メモ146章] 従来は「ごほうびが1件でもある状態
+          では表示しない」（31.1節・要件定義書07-16章7.相当）に従い空状態限定だったが、
+          この方針は本件で統括判断により変更された（該当記述はこの変更で古くなった。
+          文書更新は企画部に依頼中）。0件時の見せ方自体は変更しない。 */}
       {mine.length === 0 && others.length === 0 && (
         <>
           <EmptyState emoji="🎁" title="まだごほうびが登録されていません。「＋ 新規追加」から最初のごほうびを作ってみましょう" />
           {/* [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.1節。EmptyState（変更なし）の
-              直下にセカンダリボタンとして追加する（ごほうびが1件でもある状態では表示しない、
-              決定3）。 */}
+              直下にセカンダリボタンとして追加する。 */}
           <Text style={[theme.typography.parentBody, styles.suggestionsIntro]}>
             迷ったら、おすすめから選んでみませんか？
           </Text>
@@ -129,6 +132,20 @@ export default function RewardsListScreen() {
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>かぞくが登録</Text>
           {others.map(renderRow)}
         </View>
+      )}
+
+      {/* [2026-09-07追加・統括指示／実装メモ146章] ごほうびが1件以上ある状態でも
+          おすすめ集への導線を表示する（従来は空状態限定。31.1節・要件定義書07-16章7.
+          相当の記述はこの変更で古くなった）。案内文は0件時の専用の言い回しのため省き、
+          ボタンのみを一覧の下・控えめなセカンダリボタンとして置く（主役は既存の一覧と
+          「＋新規追加」のまま、31.5節トーン設計メモに準じる）。 */}
+      {!(mine.length === 0 && others.length === 0) && (
+        <AppButton
+          label="🎁 おすすめを見る"
+          variant="secondary"
+          style={{ marginTop: theme.spacing.s6 }}
+          onPress={() => setSuggestionsVisible(true)}
+        />
       )}
 
       {hasAnySupporter && (
