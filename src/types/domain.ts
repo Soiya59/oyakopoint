@@ -535,11 +535,34 @@ export interface OrnamentStickerPurchase {
   purchased_at: string;
 }
 
-/** 区画3「自分のステッカー」表示用。カタログ情報をネストし、今シーズンの配置有無を付与する。 */
+/**
+ * コレクター棚「シール」区分表示用（主要画面ワイヤーフレーム.md 32.2a節）。
+ * カタログ情報をネストし、木への配置状況を付与する。
+ *
+ * [2026-09-08改訂・スキーマ設計.sql 49章「決定29」] ステッカーの木への配置は
+ * completion_id（色丸）との交換方式から自由配置（pos_x/pos_y）に変わり、
+ * 同じ購入品は生涯に一度しか配置できなくなった（`uq_family_tree_decorations_
+ * sticker_once`）。そのため「今シーズン配置済みか」だけでなく「いつ・どこに
+ * 配置されたか」「その配置は今シーズン（＝その月のうちなら動かせる）か」を
+ * 持たせる必要があり、`decoratedThisSeason: boolean`を`placement`（配置が無ければ
+ * null）に置き換えた。
+ */
 export interface StickerPurchaseWithCatalog extends OrnamentStickerPurchase {
   sticker_catalog: Pick<StickerCatalogItem, "shape" | "rarity" | "sticker_key" | "display_name"> | null;
-  /** 今シーズン、この購入がすでにどこかの色丸に配置済みか（family_tree_decorationsの有無）。 */
-  decoratedThisSeason: boolean;
+  /**
+   * この購入品の木への配置（生涯に一度のみ、存在しなければnull）。
+   * `isCurrentSeason`がtrueの間だけ`move_tree_sticker()`で座標を変更できる
+   * （決定29「その月のうちは動かせる」）。過去シーズンに配置済みの場合は
+   * `isCurrentSeason=false`となり、二度と「木に飾る」対象にも「動かす」対象にも
+   * ならない（家族の絵・既製の飾りと同じく、過去の木は凍結保存される）。
+   */
+  placement: {
+    decorationId: string;
+    seasonId: string;
+    posX: number;
+    posY: number;
+    isCurrentSeason: boolean;
+  } | null;
 }
 
 /** member_badges テーブルの1行（累計到達バッジの記録。到達したら消えない）。 */

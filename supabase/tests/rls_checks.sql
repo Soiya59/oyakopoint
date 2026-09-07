@@ -173,6 +173,27 @@
 -- 推定値のまま書き込んでいない。96.5章・103.4章の運用を遵守）。本番へは未適用
 -- （本部長の操作を待つ）。
 --
+-- [2026-09-08追加・開発部] ステッカーの自由配置化（新規RPC`move_tree_sticker`・
+-- `decorate_tree_with_sticker`のシグネチャ変更、設計部/成果物/スキーマ設計.sql
+-- 49章・開発部/成果物/実装メモ.md 142章）に伴い、S1（27のまま。新しいテーブルを
+-- 追加していない。既存の`family_tree_decorations`へのALTER TABLEのみ）・
+-- S3（55本のまま。新規ポリシーを追加せず、`family_tree_decorations_select_same_
+-- family`のUSING句も一切書き換えていない）はいずれも±0（設計部49.9章・49.15章の
+-- 見込みどおり、ローカルDockerで実測して確認した）。
+-- S4は設計部見込み（49.15章「+1、56→57」）どおり**実測も56→57で一致**した
+-- （96.5章「実測が違ったら期待値を書き換えず報告する」の運用に従い、まず見込みと
+-- 実測を照合し、一致したためローカル実測値をそのまま採用した）。内訳:
+-- `decorate_tree_with_sticker`はシグネチャを`(UUID,UUID)`→`(UUID,INT,INT)`へ
+-- 変更したが、S4は関数名のみを見る照合（42.6章・118章と同じ）のため名前の
+-- 出現数は変わらず±0。新規`move_tree_sticker`への明示GRANTで+1。
+-- 部分UNIQUEインデックスの置き換え（`uq_family_tree_decorations_sticker_per_
+-- season`→`uq_family_tree_decorations_sticker_once`）はS1/S3/S4のいずれの
+-- 判定対象（テーブルのRLS有効化・ポリシー本数・関数のEXECUTE権限）にも含まれない
+-- ため、本ファイルのスナップショットには現れない。
+-- マイグレーション`20260908010000_sticker_free_placement.sql`は142章時点で
+-- ローカルDocker環境に適用済み・実測済み（96.5章の遵守）。本番へは未適用
+-- （本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -438,6 +459,11 @@ WITH expected(f) AS (VALUES
   ('member_badges_check_family_drawing'),
   ('member_badges_check_gacha_draw'),
   ('member_badges_check_sticker_purchase'),
+  -- [2026-09-08追加] move_tree_sticker（ステッカーの自由配置化、設計部/成果物/
+  -- スキーマ設計.sql 49.13章、開発部/成果物/実装メモ.md 142章）。
+  -- decorate_tree_with_gacha_prize()等と同じくSECURITY DEFINERであり、
+  -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('move_tree_sticker'),
   -- [2026-09-01追加] report_chore_completion_by_nfc_tag（NFCタグの人ごと化・代理報告
   -- RPC、設計部/成果物/スキーマ設計.sql 39.6〜39.7章、開発部/成果物/実装メモ.md 108章）。
   -- draw_gacha()等と同じくSECURITY DEFINERであり、39.7章の方針どおりPUBLIC/anonから
@@ -461,7 +487,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数56件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数57件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

@@ -87,8 +87,11 @@ function removedIsPrizeBranchVersion(id: string): TreeRegion {
 /**
  * `TreeStageVisual`のbyRegion内で実際に使われる式を模擬する
  * （`isPrioritizedDot(dot) || isPreviewTarget(dot)`）。
- *   - `dotIsPrioritized`: `dot.prize !== null || dot.sticker !== null`（確定済みかどうか）
- *   - `dotIsPreviewTarget`: かざりつけモードで選択中の色丸かどうか
+ *   - `dotIsPrioritized`: `dot.prize !== null`（ガチャ景品に確定済みかどうか。
+ *     2026-09-08・スキーマ設計.sql 49章の自由配置化により`dot.sticker`は廃止され、
+ *     本関数の対象からステッカーは外れた。自由配置ステッカーは別レイヤーで
+ *     `pickTreeRegion`自体を通らない）
+ *   - `dotIsPreviewTarget`: かざりつけモード（ガチャ）で選択中の色丸かどうか
  */
 function simulateByRegionIsPrize(dotIsPrioritized: boolean, dotIsPreviewTarget: boolean): boolean {
   return dotIsPrioritized || dotIsPreviewTarget;

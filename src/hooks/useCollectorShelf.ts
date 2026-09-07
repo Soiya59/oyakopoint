@@ -14,9 +14,11 @@ import {
   fetchFamilyCollectedGachaDraws,
   fetchFamilyTreeCompletionDots,
   fetchFamilyTreeSeasonHistory,
+  fetchFamilyTreeStickerPlacements,
   fetchFamilyTreeWeeklyCompletionCounts,
   type CollectedGachaDraw,
   type FamilyTreeCompletionDot,
+  type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 
@@ -97,6 +99,11 @@ export function usePastTreeSeasons(familyId: string) {
 export function usePastTreeSeasonDots(familyId: string) {
   const { client } = useSession();
   const [dotsBySeasonId, setDotsBySeasonId] = useState<Record<string, FamilyTreeCompletionDot[]>>({});
+  // [2026-09-08追加・スキーマ設計.sql 49章] 自由配置ステッカーは色丸から独立した
+  // 表示レイヤーのため、過去の木でも同じ「見る」展開のタイミングで別クエリとして
+  // 取得する（dotsBySeasonIdと同じ「シーズンごとに一度だけ取得しキャッシュする」
+  // 方式を踏襲）。
+  const [stickerPlacementsBySeasonId, setStickerPlacementsBySeasonId] = useState<Record<string, FamilyTreeStickerPlacement[]>>({});
   const [weeklyBySeasonId, setWeeklyBySeasonId] = useState<Record<string, FamilyTreeWeeklyCompletionCount[]>>({});
   const [loadingSeasonIds, setLoadingSeasonIds] = useState<Record<string, boolean>>({});
   const [errorSeasonIds, setErrorSeasonIds] = useState<Record<string, boolean>>({});
@@ -110,21 +117,23 @@ export function usePastTreeSeasonDots(familyId: string) {
       // JST基準の暦月初日の日付のみを持つため、JSTの0時を明示してISOに変換する）。
       const seasonStartIso = new Date(`${season.season_start}T00:00:00+09:00`).toISOString();
       const seasonEndIso = season.season_end ? new Date(`${season.season_end}T00:00:00+09:00`).toISOString() : null;
-      const [dotsRes, weeklyRes] = await Promise.all([
+      const [dotsRes, weeklyRes, stickerPlacementsRes] = await Promise.all([
         fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso, seasonEndIso),
         fetchFamilyTreeWeeklyCompletionCounts(client, season.id),
+        fetchFamilyTreeStickerPlacements(client, familyId, season.id),
       ]);
       setLoadingSeasonIds((prev) => ({ ...prev, [season.id]: false }));
-      if (!dotsRes.ok || !weeklyRes.ok) {
+      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok) {
         setErrorSeasonIds((prev) => ({ ...prev, [season.id]: true }));
         return;
       }
       setDotsBySeasonId((prev) => ({ ...prev, [season.id]: dotsRes.data }));
       setWeeklyBySeasonId((prev) => ({ ...prev, [season.id]: weeklyRes.data }));
+      setStickerPlacementsBySeasonId((prev) => ({ ...prev, [season.id]: stickerPlacementsRes.data }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [client, familyId, dotsBySeasonId, loadingSeasonIds]
   );
 
-  return { dotsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason };
+  return { dotsBySeasonId, stickerPlacementsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason };
 }

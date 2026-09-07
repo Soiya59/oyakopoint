@@ -4,39 +4,51 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import TreeDecoratePanel from "@/components/TreeDecoratePanel";
+import TreeStickerDragCanvas from "@/components/TreeStickerDragCanvas";
 import theme from "@/theme/theme";
+import type { StickerRarity, StickerShape } from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useDecorateTreeAction, useDecoratableCompletions } from "@/hooks/useTreeDecoration";
-import { useDecorateTreeWithStickerAction } from "@/hooks/useStickers";
+import { useDecorateTreeWithStickerAction, useMoveTreeStickerAction } from "@/hooks/useStickers";
 
 const SUCCESS_DISPLAY_MS = 600;
 
 /**
- * S17 木に飾る（みまもりメンバー、交換相手選択。P26/C20/S14「かざりつけモード」）
- * 参照: 画面一覧・遷移図.md S17、主要画面ワイヤーフレーム.md 21.4節・32.3節
+ * S17 木に飾る（みまもりメンバー、交換相手選択・自由配置）。P26/C20/S14「かざりつけモード」
+ * 参照: 画面一覧・遷移図.md S17、主要画面ワイヤーフレーム.md 21.4節・32.3節、
+ * 設計部/成果物/スキーマ設計.sql 49章、開発部/成果物/実装メモ.md 142章
  *
- * P29と全く同じ部品（TreeDecoratePanel等）を使う。トーンのみsupporter。
- * `drawId`（ガチャ景品）または`purchaseId`（購入ステッカー、S19区画3の「木に飾る」）
- * のいずれかを受け取る（07-19-9a章「決定16」・32.0節決定7）。
+ * P29と全く同じ構造（トーンのみsupporter）。起点は3種類
+ * （app/parent/tree-decorate.tsxのコメント参照）。
  */
 export default function SupporterTreeDecorateScreen() {
-  const { drawId, purchaseId } = useLocalSearchParams<{ drawId?: string; purchaseId?: string }>();
+  const { drawId, purchaseId, moveDecorationId, shape, rarity, posX, posY } = useLocalSearchParams<{
+    drawId?: string;
+    purchaseId?: string;
+    moveDecorationId?: string;
+    shape?: StickerShape;
+    rarity?: StickerRarity;
+    posX?: string;
+    posY?: string;
+  }>();
   const { state } = useAppData();
   const myId = state.activeParentMemberId;
-  const { loadState: treeLoadState, season, dots, reload: reloadTree } = useFamilyTreeDetail();
+  const { loadState: treeLoadState, season, dots, stickerPlacements, reload: reloadTree } = useFamilyTreeDetail();
   const { loadState: candidatesLoadState, candidates, reload: reloadCandidates } = useDecoratableCompletions(
     myId,
     season?.season_start ?? null,
     treeLoadState !== "loading"
   );
   const { decorating: decoratingGacha, decorate: decorateGacha } = useDecorateTreeAction();
-  const { decorating: decoratingSticker, decorate: decorateSticker } = useDecorateTreeWithStickerAction();
-  const decorating = decoratingGacha || decoratingSticker;
+  const { decorating: placingSticker, decorate: placeSticker } = useDecorateTreeWithStickerAction();
+  const { moving: movingSticker, move: moveSticker } = useMoveTreeStickerAction();
   const [decorateError, setDecorateError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  if (!drawId && !purchaseId) {
+  const isStickerMode = !!purchaseId || !!moveDecorationId;
+
+  if (!drawId && !purchaseId && !moveDecorationId) {
     return (
       <Screen tone="supporter">
         <Text style={theme.typography.supporterBody}>対象が見つかりませんでした</Text>
@@ -45,9 +57,20 @@ export default function SupporterTreeDecorateScreen() {
     );
   }
 
-  const handleConfirm = async (completionId: string) => {
+  const handleConfirmGacha = async (completionId: string) => {
     setDecorateError(null);
-    const res = purchaseId ? await decorateSticker(purchaseId, completionId) : await decorateGacha(drawId!, completionId);
+    const res = await decorateGacha(drawId!, completionId);
+    if (!res.ok) {
+      setDecorateError(res.error.message);
+      return;
+    }
+    setSuccess(true);
+    setTimeout(() => router.replace("/supporter/family-tree"), SUCCESS_DISPLAY_MS);
+  };
+
+  const handleConfirmSticker = async (nx: number, ny: number) => {
+    setDecorateError(null);
+    const res = purchaseId ? await placeSticker(purchaseId, nx, ny) : await moveSticker(moveDecorationId!, nx, ny);
     if (!res.ok) {
       setDecorateError(res.error.message);
       return;
@@ -61,7 +84,9 @@ export default function SupporterTreeDecorateScreen() {
       <Screen tone="supporter">
         <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
           <Text style={{ fontSize: 40 }}>🎉</Text>
-          <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>木に飾りました</Text>
+          <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>
+            {moveDecorationId ? "動かしました" : "木に飾りました"}
+          </Text>
         </View>
       </Screen>
     );
@@ -73,26 +98,44 @@ export default function SupporterTreeDecorateScreen() {
         <Text style={theme.typography.supporterBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        {purchaseId ? "ステッカーを飾る" : "木に飾る"}
+        {moveDecorationId ? "ステッカーを動かす" : purchaseId ? "ステッカーを飾る" : "木に飾る"}
       </Text>
 
-      <TreeDecoratePanel
-        tone="supporter"
-        treeLoadState={treeLoadState}
-        stage={season?.current_stage ?? 0}
-        dots={dots}
-        candidatesLoadState={candidatesLoadState}
-        candidates={candidates}
-        myMemberId={myId}
-        decorationKind={purchaseId ? "sticker" : "prize"}
-        decorating={decorating}
-        decorateErrorMessage={decorateError}
-        onRetryLoad={() => {
-          reloadTree();
-          reloadCandidates();
-        }}
-        onConfirm={handleConfirm}
-      />
+      {isStickerMode ? (
+        <TreeStickerDragCanvas
+          tone="supporter"
+          treeLoadState={treeLoadState}
+          stage={season?.current_stage ?? 0}
+          dots={dots}
+          stickerPlacements={stickerPlacements}
+          shape={(shape as StickerShape) ?? "beetle"}
+          rarity={(rarity as StickerRarity) ?? "bronze"}
+          mode={purchaseId ? "place" : "move"}
+          movingDecorationId={moveDecorationId ?? null}
+          initialPos={posX && posY ? { x: Number(posX), y: Number(posY) } : null}
+          confirming={placingSticker || movingSticker}
+          confirmErrorMessage={decorateError}
+          onRetryLoad={reloadTree}
+          onConfirm={handleConfirmSticker}
+        />
+      ) : (
+        <TreeDecoratePanel
+          tone="supporter"
+          treeLoadState={treeLoadState}
+          stage={season?.current_stage ?? 0}
+          dots={dots}
+          candidatesLoadState={candidatesLoadState}
+          candidates={candidates}
+          myMemberId={myId}
+          decorating={decoratingGacha}
+          decorateErrorMessage={decorateError}
+          onRetryLoad={() => {
+            reloadTree();
+            reloadCandidates();
+          }}
+          onConfirm={handleConfirmGacha}
+        />
+      )}
     </Screen>
   );
 }

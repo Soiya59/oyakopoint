@@ -14,8 +14,10 @@ import {
   fetchFamilyTreeCurrentSeason,
   fetchFamilyTreeMemberBreakdown,
   fetchFamilyTreeSeasonHistory,
+  fetchFamilyTreeStickerPlacements,
   fetchFamilyTreeWeeklyCompletionCounts,
   type FamilyTreeCompletionDot,
+  type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeMemberBreakdown, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 
@@ -57,6 +59,11 @@ export function useFamilyTreeDetail() {
   const [season, setSeason] = useState<FamilyTreeSeason | null>(null);
   const [breakdown, setBreakdown] = useState<FamilyTreeMemberBreakdown[]>([]);
   const [dots, setDots] = useState<FamilyTreeCompletionDot[]>([]);
+  // [2026-09-08追加・スキーマ設計.sql 49章] 自由配置ステッカー（decoration_source=
+  // 'sticker'）。dotsとは別クエリで取得する独立した表示レイヤー（決定49-9、
+  // API仕様.md 14.5節）。木の描画時にdotsの上へ最前面固定で重ねる想定
+  // （FamilyTree.tsx TreeStageVisualのstickerPlacementsプロパティに渡す）。
+  const [stickerPlacements, setStickerPlacements] = useState<FamilyTreeStickerPlacement[]>([]);
   const [lastSeason, setLastSeason] = useState<FamilyTreeSeason | null>(null);
   // [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節、API仕様.md 9.6章）。
   // 週start昇順のまま保持し、並べ替えは表示側（FamilyTreeWeeklyList）に委ねる
@@ -81,18 +88,21 @@ export function useFamilyTreeDetail() {
     }
     let dotsResData: FamilyTreeCompletionDot[] = [];
     let weeklyResData: FamilyTreeWeeklyCompletionCount[] = [];
+    let stickerPlacementsResData: FamilyTreeStickerPlacement[] = [];
     if (seasonRes.data) {
       const seasonStartIso = new Date(`${seasonRes.data.season_start}T00:00:00+09:00`).toISOString();
-      const [dotsRes, weeklyRes] = await Promise.all([
+      const [dotsRes, weeklyRes, stickerPlacementsRes] = await Promise.all([
         fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso),
         fetchFamilyTreeWeeklyCompletionCounts(client, seasonRes.data.id),
+        fetchFamilyTreeStickerPlacements(client, familyId, seasonRes.data.id),
       ]);
-      if (!dotsRes.ok || !weeklyRes.ok) {
+      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok) {
         setLoadState("error");
         return;
       }
       dotsResData = dotsRes.data;
       weeklyResData = weeklyRes.data;
+      stickerPlacementsResData = stickerPlacementsRes.data;
     }
 
     // 20.0節決定6: 直近1シーズン分の最終形態のみ「先月の木」として一言添える
@@ -104,6 +114,7 @@ export function useFamilyTreeDetail() {
     setBreakdown(breakdownRes.data);
     setDots(dotsResData);
     setWeeklyCounts(weeklyResData);
+    setStickerPlacements(stickerPlacementsResData);
     setLastSeason(mostRecentClosed);
     setLoadState("ready");
   }, [client, familyId]);
@@ -112,5 +123,5 @@ export function useFamilyTreeDetail() {
     void load();
   }, [load]);
 
-  return { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload: load };
+  return { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload: load };
 }

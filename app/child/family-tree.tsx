@@ -17,7 +17,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * 07-10章必須3条件（ソート禁止・勝者演出禁止・比較誘発コピー禁止）はP26と共通。
  */
 export default function ChildFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -52,7 +52,7 @@ export default function ChildFamilyTreeScreen() {
 
       {loadState === "ready" && (
         <Card tone="child" style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>
-          <TreeStageVisual stage={stage} dots={dots} />
+          <TreeStageVisual stage={stage} dots={dots} stickerPlacements={stickerPlacements} />
           {/* [2026-08-24改訂] 木の絵そのものをViewで描くようにしたため、段階の絵文字は
               木の代わりではなく段階名テキストに添える役割へ移した（FamilyTree.tsx参照）。 */}
           <Text style={theme.typography.childBody}>

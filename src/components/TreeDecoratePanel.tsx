@@ -2,6 +2,13 @@
  * 木への飾り付け（P29／C23／S17、「かざりつけモード」）本体の3ロール共通コンポーネント。
  * 参照: 主要画面ワイヤーフレーム.md 21.0節決定7・決定8・決定10、21.4節。
  *
+ * [2026-09-08改訂・スキーマ設計.sql 49章] ガチャの景品専用に戻した。ステッカーは
+ * 自由配置化（統括要望「ステッカーは自分の好きなところに貼りたい」）に伴い、
+ * 色丸を選んで交換する本パネルの対象から外れ、木の上を直接ドラッグして座標を
+ * 選ぶ専用コンポーネント（`TreeStickerDragCanvas.tsx`）に置き換わった。
+ * `decorationKind`（景品／ステッカーの切替）プロパティは廃止し、本パネルは
+ * 常に景品（`PRIZE_DOT_SIZE`）のプレビューのみを行う。
+ *
  * 決定7: 独立した別ビジュアルは新設せず、既存の家族の木（FamilyTree.tsx
  *   TreeStageVisual）に一時的な「かざりつけモード」を追加する形で実装する。
  * 決定8: 交換相手（自分の色丸）の選択は木の絵の直接タップではなく、本コンポーネント
@@ -14,24 +21,20 @@
  *   一覧側のハイライトのみでよい、との明記どおり）。
  *
  * [2026-09-07追加・140章] 選択中の色丸は`TreeStageVisual`の`previewDecorationSize`
- * に本コンポーネントの`decorationKind`から導いた直径を渡し、「確定後の姿（位置・
- * 大きさ）」をそのままプレビューする。統括からの実機報告「ハイライトした場所に
- * 景品が出ない」への対応（詳細はFamilyTree.tsx `pickTreeRegion`直上のコメント参照）。
- * 本パネルは景品（21.4節）・ステッカー（32.3節、21.4節を流用）の両方から呼ばれる
- * ため、`decorationKind`で確定後にどちらのサイズになるかを呼び出し元から明示させる。
+ * に`PRIZE_DOT_SIZE`を渡し、「確定後の姿（位置・大きさ）」をそのままプレビューする。
+ * 統括からの実機報告「ハイライトした場所に景品が出ない」への対応（詳細は
+ * FamilyTree.tsx `pickTreeRegion`直上のコメント参照）。
  */
 import React, { useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
-import { PRIZE_DOT_SIZE, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
+import { PRIZE_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot, DecoratableCompletion } from "@/data/api";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
-/** この確定操作で色丸がどちらのサイズの装飾になるか（140章）。 */
-export type DecorationKind = "prize" | "sticker";
 
 export interface TreeDecoratePanelProps {
   tone: Tone;
@@ -43,12 +46,6 @@ export interface TreeDecoratePanelProps {
   candidatesLoadState: LoadState;
   candidates: DecoratableCompletion[];
   myMemberId: string;
-  /**
-   * [2026-09-07追加・140章] この確定操作でできる装飾の種類（景品36pt or
-   * ステッカー24pt）。選択中の色丸のプレビュー表示サイズの決定にのみ使う
-   * （実際の確定処理自体は`onConfirm`のみで完結し、このpropはサーバーには送らない）。
-   */
-  decorationKind: DecorationKind;
   /** 「かざる」確定処理中（連打防止のためボタンをローディング表示にする）。 */
   decorating: boolean;
   /** 直近の確定操作で発生した通信エラー文言。 */
@@ -75,7 +72,6 @@ export function TreeDecoratePanel({
   candidatesLoadState,
   candidates,
   myMemberId,
-  decorationKind,
   decorating,
   decorateErrorMessage,
   onRetryLoad,
@@ -85,7 +81,7 @@ export function TreeDecoratePanel({
   const bodyStyle = bodyStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const previewDecorationSize = decorationKind === "sticker" ? STICKER_DOT_SIZE : PRIZE_DOT_SIZE;
+  const previewDecorationSize = PRIZE_DOT_SIZE;
 
   if (treeLoadState === "loading" || candidatesLoadState === "loading") {
     return <SkeletonList count={3} />;

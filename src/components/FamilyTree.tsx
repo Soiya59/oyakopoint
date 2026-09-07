@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TextStyle, View } from "react-native";
 import theme from "@/theme/theme";
-import type { FamilyTreeCompletionDot } from "@/data/api";
+import type { FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
 import type { FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
@@ -131,14 +131,20 @@ function reservoirSample(dots: FamilyTreeCompletionDot[], slotCount: number): Fa
  * すると20章決定3が守ろうとした視覚的な予算（40個）を超えてしまう、というのが
  * この方式を採用した理由（当初のUIUXデザイン部案からの本部長修正）。
  */
-// [2026-09-07改訂・要件定義書07-19-9a章「決定5」・主要画面ワイヤーフレーム.md
-// 32.0節決定5] 木を飾るステッカー（購入品）も景品と同じく40スロットの中で
-// 優先確保する（上限の対象外にはしない）。「景品かどうか」の判定に「ステッカーか
-// どうか」も同じ枝として合流させる（isPrioritized）。一度「木に飾る」を確定した
-// 装飾が確率的な間引きで偶発的に表示から漏れると「置いたはずなのに消えた」という
-// 体験になるため（07-9章「後退しない」原則・21.0節決定10と同じ理由）。
+// [2026-09-07・要件定義書07-19-9a章「決定5」・主要画面ワイヤーフレーム.md
+// 32.0節決定5] 景品（ガチャ）は40スロットの中で優先確保する（上限の対象外に
+// しない）。一度「木に飾る」を確定した装飾が確率的な間引きで偶発的に表示から
+// 漏れると「置いたはずなのに消えた」という体験になるため（07-9章「後退しない」
+// 原則・21.0節決定10と同じ理由）。
+// [2026-09-08改訂・スキーマ設計.sql 49章「決定49-8」] 木を飾るステッカー（購入品）は
+// 自由配置化に伴い、この40スロット・reservoir samplingの対象から外れた
+// （`dot.sticker`というフィールド自体が廃止された。ステッカーは`chore_completions`
+// を一切参照しなくなったため、そもそも本関数が扱う`dots`〈色丸〉の集合には
+// 含まれ得ない）。自由配置ステッカーは`stickerPlacements`という完全に独立した
+// 表示レイヤーとして扱い、最前面固定で描画する（下記TreeStageVisualの
+// stickerPlacementsプロパティ参照）。
 function isPrioritizedDot(d: FamilyTreeCompletionDot): boolean {
-  return d.prize !== null || d.sticker !== null;
+  return d.prize !== null;
 }
 
 export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): FamilyTreeCompletionDot[] {
@@ -196,7 +202,10 @@ const STAGE_GEOMETRY: readonly StageShape[] = [
 // [2026-08-24再改訂] 地面を下方向に広げた分だけ全体も高くした（木の位置は変えず、
 // 下に伸ばすだけ）。スマホ812ptに対して約64%で、当初の要望「画面の3分の2くらい」
 // にほぼ一致する。
-const CANVAS_HEIGHT = 520;
+// [2026-09-08追加・スキーマ設計.sql 49章] exportする。自由配置ステッカーの
+// ドラッグ配置・移動UI（TreeStickerDragCanvas.tsx）が、木のキャンバスと同じ
+// 高さの重なり合うオーバーレイを作るために必要（座標変換 pos_y/1000*CANVAS_HEIGHT）。
+export const CANVAS_HEIGHT = 520;
 
 /** 双葉の開き角（左右対称）。 */
 const SPROUT_LEAF_ANGLE_DEG = 26;
@@ -223,10 +232,12 @@ function dotColor(dot: FamilyTreeCompletionDot): string {
  * [2026-08-26追加・第4段階] 表示直径。景品に交換された丸だけ36pt、それ以外は
  * 通常どおり13pt固定。要件定義書07-13-4章の必須条件どおり、この大きさは
  * 「これは景品だ」という意味のみを持ち、報告者の貢献度・完了報告数では変動しない。
+ * [2026-09-08改訂・49章] `dot.sticker`分岐は廃止した（isPrioritizedDot直上の
+ * コメント参照）。ステッカーの表示直径（`STICKER_DOT_SIZE`）は自由配置レイヤー
+ * （`FreeStickerView`）が個別に使う。
  */
 function dotDisplaySize(dot: FamilyTreeCompletionDot): number {
   if (dot.prize) return PRIZE_DOT_SIZE;
-  if (dot.sticker) return STICKER_DOT_SIZE;
   return DOT_SIZE;
 }
 
@@ -613,27 +624,33 @@ function PrizeDotView({
 }
 
 /**
- * [2026-09-07新設・要件定義書07-19-9a章] 木を飾るステッカー（購入品）の中身の表現。
- * デザイントークン.md 1.11節。景品（PrizeDotView）と全く同じ「識別リング（本人の
- * avatar_color、2pt実線）＋円形クリップした内側の絵柄」という構造を24pt版として
- * 流用する（主要画面ワイヤーフレーム.md 32.0節決定4。新しいリング仕様を増やさない）。
- * 内側の絵柄はSVG自前描画（StickerIcon、決定2）。gradient idの一意性のため
- * `uid`に木の上で一意な`decorationId`を渡す（本部長申し送り事項6）。
+ * [2026-09-07新設・要件定義書07-19-9a章、2026-09-08改訂・スキーマ設計.sql 49章]
+ * 木を飾るステッカー（購入品）の中身の表現。デザイントークン.md 1.11節。景品
+ * （PrizeDotView）と全く同じ「識別リング（配置した本人のavatar_color、2pt実線）
+ * ＋円形クリップした内側の絵柄」という構造を24pt版として流用する（主要画面
+ * ワイヤーフレーム.md 32.0節決定4。新しいリング仕様を増やさない）。内側の絵柄は
+ * SVG自前描画（StickerIcon、決定2）。gradient idの一意性のため`uid`に木の上で
+ * 一意な`decorationId`を渡す（本部長申し送り事項6）。
+ *
+ * [49章での変更点] 旧`StickerDotView`は`dot: FamilyTreeCompletionDot`（色丸）を
+ * 受け取っていたが、自由配置後のステッカーは色丸を参照しないため、代わりに
+ * `FamilyTreeStickerPlacement`（family_tree_decorations単独のクエリ結果）を
+ * 受け取る`FreeStickerView`に置き換えた。`x`・`y`は呼び出し元
+ * （`renderStickerPlacements`）が`pos_x`/`pos_y`（0〜1000）から
+ * キャンバスの実ピクセル座標へ変換した値を渡す。
  */
-function StickerDotView({
-  dot,
+function FreeStickerView({
+  placement,
   x,
   y,
   size,
 }: {
-  dot: FamilyTreeCompletionDot;
+  placement: FamilyTreeStickerPlacement;
   x: number;
   y: number;
   size: number;
 }) {
-  const sticker = dot.sticker;
-  if (!sticker) return null;
-  const ringColor = dotColor(dot);
+  const ringColor = placement.avatarColor ?? theme.colors.neutralBorder;
   const innerSize = Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
   return (
     <View
@@ -649,7 +666,7 @@ function StickerDotView({
         },
       ]}
     >
-      <StickerIcon shape={sticker.shape} rarity={sticker.rarity} size={innerSize} uid={sticker.decorationId} />
+      <StickerIcon shape={placement.shape} rarity={placement.rarity} size={innerSize} uid={placement.decorationId} />
     </View>
   );
 }
@@ -660,6 +677,8 @@ export function TreeStageVisual({
   highlightMemberId = null,
   highlightCompletionId = null,
   previewDecorationSize = null,
+  stickerPlacements = null,
+  hiddenStickerDecorationId = null,
 }: {
   stage: number;
   dots: FamilyTreeCompletionDot[];
@@ -673,16 +692,21 @@ export function TreeStageVisual({
   /** 一覧UIで選択中の完了報告ID。40スロットの表示対象に含まれる場合のみ木の上でも強調する。 */
   highlightCompletionId?: string | null;
   /**
-   * [2026-09-07新設・140章・本部長裁定] 「かざりつけモード」で選択中の色丸を、
-   * 確定後の姿（景品36pt or ステッカー24pt）でプレビュー表示するための直径。
+   * [2026-09-07新設・140章・本部長裁定] ガチャの「かざりつけモード」で選択中の
+   * 色丸を、確定後の姿（景品36pt）でプレビュー表示するための直径。
    * `highlightCompletionId`と組み合わせて使う。指定すると、`highlightCompletionId`に
    * 一致する色丸だけ、
-   *   1. `pickTreeRegion(id, true)`（＝景品・ステッカー時の重み配分）で部位を計算し、
+   *   1. `pickTreeRegion(id, true)`（＝景品時の重み配分）で部位を計算し、
    *   2. 表示直径もこの値を使う
    * ことで、「かざる」確定前から確定後と全く同じ場所・大きさが見える。
-   * 呼び出し元（`PRIZE_DOT_SIZE`／`STICKER_DOT_SIZE`、どちらもこのファイルから
-   * export済み）が、これから飾ろうとしている装飾の種類に応じて渡す値を選ぶ。
+   * 呼び出し元は`PRIZE_DOT_SIZE`（このファイルからexport済み）を渡す。
    * nullなら（通常の家族の木画面・過去の木など）従来どおり一切プレビューしない。
+   *
+   * [2026-09-08改訂・49章] ステッカーは自由配置化により色丸を参照しなくなった
+   * ため、本プロパティは以後ガチャの景品専用になった（`decorationKind`のような
+   * 種類切替は不要）。ステッカーの配置・移動プレビューは`stickerPlacements`
+   * ではなく専用の`TreeStickerDragCanvas`（ドラッグ中の座標をそのまま描画する
+   * だけで足り、`pickTreeRegion`のような領域計算・重なり回避は不要。49.11章）で行う。
    *
    * 元は`pickTreeRegion`から`isPrize`分岐を削除する形で「ハイライトした場所に
    * 景品が出ない」問題に対応していたが、それは2026-08-27の本番不具合（景品が
@@ -691,6 +715,24 @@ export function TreeStageVisual({
    * プレビュー側だけを「確定後の姿」に寄せることだった。
    */
   previewDecorationSize?: number | null;
+  /**
+   * [2026-09-08新設・スキーマ設計.sql 49.6章・決定49-8] 木の上の自由配置ステッカー
+   * （`fetchFamilyTreeStickerPlacements`の結果）。指定すると、木の全レイヤーより
+   * 前面（最前面固定）に描画する。`pickTreeRegion`・40スロットの優先確保からは
+   * 完全に独立しており、`pos_x`/`pos_y`（0〜1000）をそのままキャンバスの実
+   * ピクセル座標に変換して描くだけの単純な層である（重なり回避も行わない、
+   * 決定49-11「重なりを許容する」）。通常の家族の木画面・過去の木のいずれでも
+   * このプロパティを渡すことで表示できる。nullまたは省略時は何も描画しない
+   * （既存呼び出し元との後方互換のため既定値null）。
+   */
+  stickerPlacements?: FamilyTreeStickerPlacement[] | null;
+  /**
+   * [2026-09-08新設] `stickerPlacements`のうち、この`decorationId`と一致する1件を
+   * 描画から除外する。`TreeStickerDragCanvas`が「移動中の1件だけドラッグ中の
+   * プレビューとして別途描画し、静的な最前面レイヤー側には重複して出さない」
+   * ために使う。
+   */
+  hiddenStickerDecorationId?: string | null;
 }) {
   const slots = useMemo(() => pickDisplaySlots(dots), [dots]);
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
@@ -778,8 +820,6 @@ export function TreeStageVisual({
           )}
           {dot.prize ? (
             <PrizeDotView dot={dot} x={x} y={y} size={size} />
-          ) : dot.sticker ? (
-            <StickerDotView dot={dot} x={x} y={y} size={size} />
           ) : (
             <View style={[styles.dotWrap, { left: x - size / 2, top: y - size / 2, width: size, height: size }]}>
               <StageDot color={dotColor(dot)} size={size} stage={stage} />
@@ -970,6 +1010,27 @@ export function TreeStageVisual({
           }))
         )}
       </View>
+
+      {/* [2026-09-08追加・スキーマ設計.sql 49.6章・決定49-8] 自由配置ステッカー。
+          最後の子要素として置くことで、木のどの部位よりも前面（最前面固定）に
+          描画される。pickTreeRegion・reservoirSample・placeGroup（重なり回避）の
+          いずれも通さず、pos_x/pos_y（0〜1000）をそのままキャンバスの実ピクセル
+          座標に変換するだけの単純な層（決定49-11「重なりを許容する」）。 */}
+      {stickerPlacements && stickerPlacements.length > 0 && (
+        <View style={styles.stickerOverlay} pointerEvents="none">
+          {stickerPlacements
+            .filter((p) => p.decorationId !== hiddenStickerDecorationId)
+            .map((p) => (
+              <FreeStickerView
+                key={p.decorationId}
+                placement={p}
+                x={(p.posX / 1000) * canvasWidth}
+                y={(p.posY / 1000) * CANVAS_HEIGHT}
+                size={STICKER_DOT_SIZE}
+              />
+            ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -1147,6 +1208,16 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   skyLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: CANVAS_HEIGHT,
+  },
+  // [2026-09-08追加・49.6章] 自由配置ステッカーの最前面固定オーバーレイ。skyLayerと
+  // 同じ絶対配置・同じ寸法だが、JSX上で最後に置くことで最前面に描画される
+  // （本ファイル冒頭のスタック順コメント参照）。
+  stickerOverlay: {
     position: "absolute",
     top: 0,
     left: 0,

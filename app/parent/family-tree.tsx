@@ -21,7 +21,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * そのまま表示し、本画面側では一切ソートしない。
  */
 export default function ParentFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -61,7 +61,7 @@ export default function ParentFamilyTreeScreen() {
 
       {loadState === "ready" && (
         <Card style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>
-          <TreeStageVisual stage={stage} dots={dots} />
+          <TreeStageVisual stage={stage} dots={dots} stickerPlacements={stickerPlacements} />
           {/* [2026-08-24改訂] 木の絵そのものをViewで描くようにしたため、段階の絵文字は
               木の代わりではなく段階名テキストに添える役割へ移した（FamilyTree.tsx参照）。 */}
           <Text style={theme.typography.parentBodyMedium}>

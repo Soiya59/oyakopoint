@@ -1469,13 +1469,25 @@ export interface FamilyTreeDotPrize {
 }
 
 /**
- * [2026-09-07新設] 完了報告が購入ステッカーと交換済みの場合の詳細。
- * `family_tree_decorations`（decoration_source='sticker'）経由で
- * `ornament_sticker_purchases`→`sticker_catalog`を辿った内容
- * （要件定義書07-19-9a章、API仕様.md 14.5章）。
+ * 木の上の自由配置ステッカー1件（要件定義書07-19章「決定29」、スキーマ設計.sql
+ * 49章、API仕様.md 14.5節(b)のクエリ形状）。
+ *
+ * [2026-09-08新設・49章] `decorate_tree_with_sticker()`が「本人の色丸との交換」
+ * から「木の上の任意の座標への自由配置」に変わったことに伴い、ステッカーは
+ * `chore_completions`（色丸）を一切参照しなくなった（`completion_id`は常に
+ * NULL）。このため`fetchFamilyTreeCompletionDots`（色丸起点の埋め込み）では
+ * 構造的に取得できなくなり（PostgRESTの外部キー埋め込みはcompletion_id一致
+ * でのみ結合するため）、`family_tree_decorations`単独を起点にした本型・
+ * 専用の取得関数（`fetchFamilyTreeStickerPlacements`）に置き換えた。
+ * 旧`FamilyTreeDotSticker`（`FamilyTreeCompletionDot.sticker`）は廃止した。
  */
-export interface FamilyTreeDotSticker {
+export interface FamilyTreeStickerPlacement {
   decorationId: string;
+  /** キャンバス相対の0〜1000正規化整数（`family_drawings.line_data`と同じ座標規約）。 */
+  posX: number;
+  posY: number;
+  memberId: string;
+  avatarColor: string | null;
   stickerPurchaseId: string;
   shape: "beetle" | "butterfly" | "flower";
   rarity: "bronze" | "silver" | "gold" | "rainbow";
@@ -1487,6 +1499,8 @@ export interface FamilyTreeDotSticker {
  * 完了報告1件ごとの視覚要素の色付け用（API仕様.md 9.2章）。今シーズン開始以降の完了報告を報告者の色付きで返す。
  * [2026-08-26改訂・第4段階] `prize`（非null＝景品に交換済み）を追加し、
  * `family_tree_decorations`をembedするよう変更した（API仕様.md 12.5章のクエリ形状）。
+ * [2026-09-08改訂・49章] `sticker`フィールドは廃止した（上記`FamilyTreeStickerPlacement`
+ * コメント参照。自由配置ステッカーは本型では一切表現しない、独立した表示レイヤー）。
  */
 export interface FamilyTreeCompletionDot {
   id: string;
@@ -1494,8 +1508,6 @@ export interface FamilyTreeCompletionDot {
   reported_by: string;
   avatar_color: string | null;
   prize: FamilyTreeDotPrize | null;
-  /** [2026-09-07追加] decoration_source='sticker'の場合のみ非null。prizeと同時に非nullになることはない（DB側CHECK制約）。 */
-  sticker: FamilyTreeDotSticker | null;
 }
 
 /**
@@ -1529,19 +1541,19 @@ export async function fetchFamilyTreeCompletionDots(
   seasonStartIso: string,
   seasonEndIso?: string | null
 ): Promise<ApiResult<FamilyTreeCompletionDot[]>> {
-  // [2026-09-07改訂・要件定義書07-19章] family_tree_decorationsがdecoration_source
-  // 列（'gacha'|'sticker'）を持つようになったため、埋め込みをsticker_purchase側にも
-  // 拡張する（API仕様.md 14.5章のクエリ形状）。gacha_draws・sticker_purchaseは
-  // どちらか一方のみ非nullになる（DB側CHECK制約chk_family_tree_decorations_
-  // source_payload）。新規View・新規テーブルは追加していない。
+  // [2026-09-08改訂・スキーマ設計.sql 49章] 自由配置ステッカーはcompletion_idを
+  // 持たなくなったため、本クエリ（色丸起点の埋め込み）はガチャの景品のみを返す
+  // クエリとして無変更のまま残す（API仕様.md 14.5節(a)「ガチャの景品のみを返す
+  // クエリとして引き続き有効」）。sticker_purchaseの埋め込みは削除した
+  // （構造的にヒットしなくなったため）。自由配置ステッカーの取得は
+  // `fetchFamilyTreeStickerPlacements`（本関数の直後）を使う。
   let query = client
     .from("chore_completions")
     .select(
       "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
         "family_tree_decorations(id, draw_id, decoration_source, gacha_draws(prize_kind, " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)), " +
-        "sticker_purchase:ornament_sticker_purchases(id, sticker_catalog(shape,rarity,sticker_key,display_name)))"
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)))"
     )
     .eq("family_id", familyId)
     .gte("reported_at", seasonStartIso)
@@ -1565,15 +1577,6 @@ export async function fetchFamilyTreeCompletionDots(
             preset_ornament: { display_name: string; emoji: string | null } | null;
             prize_drawing: { line_data: FamilyDrawingLineData } | null;
           } | null;
-          sticker_purchase: {
-            id: string;
-            sticker_catalog: {
-              shape: "beetle" | "butterfly" | "flower";
-              rarity: "bronze" | "silver" | "gold" | "rainbow";
-              sticker_key: string;
-              display_name: string;
-            } | null;
-          } | null;
         }
       | null;
   }[];
@@ -1595,27 +1598,79 @@ export async function fetchFamilyTreeCompletionDots(
               drawing: decoration.gacha_draws.prize_drawing,
             }
           : null;
-      const sticker: FamilyTreeDotSticker | null =
-        decoration && decoration.decoration_source === "sticker" && decoration.sticker_purchase?.sticker_catalog
-          ? {
-              decorationId: decoration.id,
-              stickerPurchaseId: decoration.sticker_purchase.id,
-              shape: decoration.sticker_purchase.sticker_catalog.shape,
-              rarity: decoration.sticker_purchase.sticker_catalog.rarity,
-              stickerKey: decoration.sticker_purchase.sticker_catalog.sticker_key,
-              displayName: decoration.sticker_purchase.sticker_catalog.display_name,
-            }
-          : null;
       return {
         id: r.id,
         reported_at: r.reported_at,
         reported_by: r.reported_by,
         avatar_color: r.family_members?.avatar_color ?? null,
         prize,
-        sticker,
       };
     }),
   };
+}
+
+/**
+ * API仕様.md 14.5節(b)「自由配置ステッカー（新規。family_tree_decorations単独、
+ * family_id・season_id起点）」。指定シーズン（現在の木なら進行中シーズンのid、
+ * 過去の木なら該当シーズンのid）に配置された自由配置ステッカー一覧を返す。
+ * 誰が・どこに・どの意匠を貼ったかを1クエリで取得できる。並び順は指定しない
+ * （呼び出し側は最前面固定で全件を重ねて描画するだけでよく、順序に意味を
+ * 持たせない、スキーマ設計.sql 49.6章）。
+ */
+export async function fetchFamilyTreeStickerPlacements(
+  client: SupabaseClient,
+  familyId: string,
+  seasonId: string
+): Promise<ApiResult<FamilyTreeStickerPlacement[]>> {
+  const { data, error } = await client
+    .from("family_tree_decorations")
+    .select(
+      "id, pos_x, pos_y, " +
+        "sticker_purchase:ornament_sticker_purchases(id, member_id, " +
+        "family_members!member_id(avatar_color), " +
+        "sticker_catalog(shape, rarity, sticker_key, display_name))"
+    )
+    .eq("family_id", familyId)
+    .eq("season_id", seasonId)
+    .eq("decoration_source", "sticker");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    pos_x: number | null;
+    pos_y: number | null;
+    sticker_purchase: {
+      id: string;
+      member_id: string;
+      family_members: { avatar_color: string | null } | null;
+      sticker_catalog: {
+        shape: "beetle" | "butterfly" | "flower";
+        rarity: "bronze" | "silver" | "gold" | "rainbow";
+        sticker_key: string;
+        display_name: string;
+      } | null;
+    } | null;
+  }[];
+  const out: FamilyTreeStickerPlacement[] = [];
+  for (const r of rows) {
+    // DB側CHECK制約（chk_family_tree_decorations_source_payload、49.1章）により
+    // decoration_source='sticker'の行は常にpos_x/pos_y・sticker_purchase_idが
+    // 非NULLだが、埋め込みが辿れなかった場合（他家族参照等、通常発生しない）に
+    // 備えて防御的にスキップする。
+    if (r.pos_x == null || r.pos_y == null || !r.sticker_purchase || !r.sticker_purchase.sticker_catalog) continue;
+    out.push({
+      decorationId: r.id,
+      posX: r.pos_x,
+      posY: r.pos_y,
+      memberId: r.sticker_purchase.member_id,
+      avatarColor: r.sticker_purchase.family_members?.avatar_color ?? null,
+      stickerPurchaseId: r.sticker_purchase.id,
+      shape: r.sticker_purchase.sticker_catalog.shape,
+      rarity: r.sticker_purchase.sticker_catalog.rarity,
+      stickerKey: r.sticker_purchase.sticker_catalog.sticker_key,
+      displayName: r.sticker_purchase.sticker_catalog.display_name,
+    });
+  }
+  return { ok: true, data: out };
 }
 
 // ============================================================
@@ -1967,13 +2022,21 @@ export interface CollectedGachaDraw {
   prizeKind: GachaPrizeKind;
   /** ガチャを引いて獲得した人（07-13-3章「引いた人のものではなく家族のもの」だが、獲得の記録として表示する）。 */
   collectorName: string;
+  /**
+   * [2026-09-08追加・主要画面ワイヤーフレーム.md 32.2a節「つくった・あつめたもの」]
+   * 獲得した人のmember_id。コレクター棚でメンバーを選んだときの絞り込みに使う
+   * （「絞り込みは既存の表示項目〈獲得した人・描いた人の名前〉による閲覧フィルタに
+   * すぎない」との整理どおり、`gacha_draws.member_id`という既存の外部キーを
+   * 表示名に加えて併せて返すだけであり、新規のデータ・新規のカラムは増えていない）。
+   */
+  collectorId: string;
   presetOrnament: { display_name: string; emoji: string | null } | null;
   /**
    * [2026-09-02追加] `title`はAPI仕様.md 12.4章「お絵かきの題名」。すでに
    * 公開済みの絵のみを対象にした一覧のため（gacha_draws経由）表示してよい。
    * 無い場合はnull（UI側は表示欄自体を出さない。07-13-2a章）。
    */
-  drawing: { line_data: FamilyDrawingLineData; artistName: string; title: string | null } | null;
+  drawing: { line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
 }
 
 /**
@@ -1991,10 +2054,10 @@ export async function fetchFamilyCollectedGachaDraws(
   const { data, error } = await client
     .from("gacha_draws")
     .select(
-      "id, drawn_at, prize_kind, " +
+      "id, drawn_at, prize_kind, member_id, " +
         "collector:family_members!member_id(display_name), " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title," +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title,artist_member_id," +
         "artist:family_members!artist_member_id(display_name))"
     )
     .eq("family_id", familyId)
@@ -2004,11 +2067,13 @@ export async function fetchFamilyCollectedGachaDraws(
     id: string;
     drawn_at: string;
     prize_kind: GachaPrizeKind;
+    member_id: string;
     collector: { display_name: string } | null;
     preset_ornament: { display_name: string; emoji: string | null } | null;
     prize_drawing: {
       line_data: FamilyDrawingLineData;
       title: string | null;
+      artist_member_id: string;
       artist: { display_name: string } | null;
     } | null;
   }[];
@@ -2019,11 +2084,13 @@ export async function fetchFamilyCollectedGachaDraws(
       drawnAt: r.drawn_at,
       prizeKind: r.prize_kind,
       collectorName: r.collector?.display_name ?? "だれか",
+      collectorId: r.member_id,
       presetOrnament: r.preset_ornament,
       drawing: r.prize_drawing
         ? {
             line_data: r.prize_drawing.line_data,
             artistName: r.prize_drawing.artist?.display_name ?? "だれか",
+            artistId: r.prize_drawing.artist_member_id,
             title: r.prize_drawing.title,
           }
         : null,
@@ -2318,14 +2385,20 @@ export async function purchaseSticker(client: SupabaseClient, catalogId: string)
 }
 
 /**
- * API仕様.md 14.3章「コレクター棚『区画3：自分のステッカー』」。指定した
- * `memberId`が購入したステッカー一覧（在庫）を新しい順で取得する。
+ * API仕様.md 14.3章「コレクター棚『区画3：自分のステッカー』」（2026-09-08改訂・
+ * 主要画面ワイヤーフレーム.md 32.2a節により「集めたもの」区画・シール区分へ統合。
+ * 旧「区画3」独立タブは廃止）。指定した`memberId`が購入したステッカー一覧（在庫）を
+ * 新しい順で取得する。
  * `ornament_sticker_purchases_select_same_family`ポリシーにより家族の誰でも
  * 他メンバーの購入記録を閲覧できる（決定7・決定23）ため、`memberId`には呼び出し
- * 本人に限らず家族内の任意のメンバーIDを渡してよい（区画3のメンバー切替タブ用）。
- * `family_tree_decorations(season_id)`を併せて埋め込み、`currentSeasonId`と一致する
- * 行があれば「今シーズン配置済み」と判定する（decoratedThisSeason）。持ち物として
- * 区画3に残り続けるため、配置済みでも一覧からは消えない（決定16）。
+ * 本人に限らず家族内の任意のメンバーIDを渡してよい（32.2a節メンバー選択チップ用）。
+ *
+ * [2026-09-08改訂・スキーマ設計.sql 49章「決定29」] `family_tree_decorations`の
+ * 埋め込みを`season_id`だけでなく`id, pos_x, pos_y`まで拡張し、`placement`
+ * （配置が無ければnull）として返す。同じ購入品は生涯に一度しか配置できない
+ * ため（`uq_family_tree_decorations_sticker_once`）、埋め込みは実質0〜1件に
+ * 収束する（asEmbeddedArrayで吸収）。持ち物として区画に残り続けるため、
+ * 配置済みでも一覧からは消えない（決定16）。
  */
 export async function fetchMyStickerPurchases(
   client: SupabaseClient,
@@ -2334,46 +2407,89 @@ export async function fetchMyStickerPurchases(
 ): Promise<ApiResult<StickerPurchaseWithCatalog[]>> {
   const { data, error } = await client
     .from("ornament_sticker_purchases")
-    .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(season_id)")
+    .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("member_id", memberId)
     .order("purchased_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   const rows = (data ?? []) as unknown as (OrnamentStickerPurchase & {
     sticker_catalog: StickerPurchaseWithCatalog["sticker_catalog"];
-    family_tree_decorations: { season_id: string }[] | { season_id: string } | null;
+    family_tree_decorations:
+      | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }[]
+      | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }
+      | null;
   })[];
   return {
     ok: true,
-    data: rows.map((r) => ({
-      id: r.id,
-      family_id: r.family_id,
-      member_id: r.member_id,
-      sticker_catalog_id: r.sticker_catalog_id,
-      points_spent: r.points_spent,
-      purchased_at: r.purchased_at,
-      sticker_catalog: r.sticker_catalog,
-      decoratedThisSeason:
-        currentSeasonId != null && asEmbeddedArray(r.family_tree_decorations).some((d) => d.season_id === currentSeasonId),
-    })),
+    data: rows.map((r) => {
+      const deco = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
+      const placement =
+        deco && deco.pos_x != null && deco.pos_y != null
+          ? {
+              decorationId: deco.id,
+              seasonId: deco.season_id,
+              posX: deco.pos_x,
+              posY: deco.pos_y,
+              isCurrentSeason: currentSeasonId != null && deco.season_id === currentSeasonId,
+            }
+          : null;
+      return {
+        id: r.id,
+        family_id: r.family_id,
+        member_id: r.member_id,
+        sticker_catalog_id: r.sticker_catalog_id,
+        points_spent: r.points_spent,
+        purchased_at: r.purchased_at,
+        sticker_catalog: r.sticker_catalog,
+        placement,
+      };
+    }),
   };
 }
 
 /**
- * API仕様.md 14.4章「ステッカーを木に飾る・翌月以降に置き直す」。
- * `decorate_tree_with_sticker()`は「自分の」購入品と「自分の」今シーズン未交換の
- * 色丸しか受け付けない（他人の購入品・他人の色丸・過去シーズンの色丸はDB側で拒否、
- * スキーマ設計.sql 47.3章）。同一シーズン内で同じ購入品を複数の色丸に飾ることは
- * できない（設計部判断、47.9章(5)・本部長承認済み47.10章）。戻り値は新規
- * `family_tree_decorations.id`。
+ * API仕様.md 14.4節「ステッカーを木に飾る」。統括要望「ステッカーは自分の好きな
+ * ところに貼りたい」（2026-09-07）・スキーマ設計.sql 49章により、木への配置は
+ * 「本人の今月の色丸1つとの交換」から「木の上の任意の座標への自由配置」に変わった。
+ * `decorate_tree_with_sticker()`は「自分の」購入品しか受け付けず（他人の購入品は
+ * DB側で拒否）、完了報告（色丸）は一切消費・参照しない。`posX`・`posY`は
+ * キャンバス相対の0〜1000整数（範囲外は`check_violation`「木の外側には貼れません」）。
+ * 同じ購入品は生涯に一度しか配置できない（決定29、`check_violation`）。
+ * 戻り値は新規`family_tree_decorations.id`。
  */
 export async function decorateTreeWithSticker(
   client: SupabaseClient,
   purchaseId: string,
-  completionId: string
+  posX: number,
+  posY: number
 ): Promise<ApiResult<string>> {
   const { data, error } = await client.rpc("decorate_tree_with_sticker", {
     p_purchase_id: purchaseId,
-    p_completion_id: completionId,
+    p_pos_x: posX,
+    p_pos_y: posY,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 14.4節「[2026-09-07新設] すでに貼ったステッカーの座標を、その月の
+ * うちに変更する」。統括判断（スキーマ設計.sql 49.12章）: 決定29「その月の木かぎり。
+ * 翌月以降に置き直すことはできない」により、貼り直す機会が二度と来ないため、
+ * その月のうちの移動を新設した。`move_tree_sticker()`は自分の配置・進行中
+ * シーズンの配置のみを対象にする（他人の配置は`foreign_key_violation`「対象の
+ * 配置が見つかりません」、過去シーズンの配置は`check_violation`「過去の木の配置は
+ * 動かせません」）。座標のみを更新し、購入・シーズン・所有者は変更しない。
+ */
+export async function moveTreeSticker(
+  client: SupabaseClient,
+  decorationId: string,
+  posX: number,
+  posY: number
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("move_tree_sticker", {
+    p_decoration_id: decorationId,
+    p_pos_x: posX,
+    p_pos_y: posY,
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as string };

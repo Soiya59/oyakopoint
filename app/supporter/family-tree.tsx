@@ -19,7 +19,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * （デザイントークン.md 1.7節）。内訳の並び順・0件メンバーの扱いはP26/C20と完全に同一。
  */
 export default function SupporterFamilyTreeScreen() {
-  const { loadState, season, breakdown, dots, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -50,7 +50,7 @@ export default function SupporterFamilyTreeScreen() {
 
       {loadState === "ready" && (
         <Card tone="supporter" style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>
-          <TreeStageVisual stage={stage} dots={dots} />
+          <TreeStageVisual stage={stage} dots={dots} stickerPlacements={stickerPlacements} />
           {/* [2026-08-24改訂] 木の絵そのものをViewで描くようにしたため、段階の絵文字は
               木の代わりではなく段階名テキストに添える役割へ移した（FamilyTree.tsx参照）。 */}
           <Text style={theme.typography.supporterBodyMedium}>

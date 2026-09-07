@@ -13,6 +13,7 @@ import {
   decorateTreeWithSticker,
   fetchMyStickerPurchases,
   fetchStickerCatalog,
+  moveTreeSticker,
   purchaseSticker,
   type ApiError,
   type PurchaseStickerResult,
@@ -69,12 +70,13 @@ export function useStickerPurchaseAction() {
 }
 
 /**
- * コレクター棚「区画3：自分のステッカー」（32.2節）。`memberId`には呼び出し本人
- * だけでなく、区画3のメンバー切替タブで選ばれた任意の家族メンバーのIDを渡してよい
- * （`ornament_sticker_purchases_select_same_family`により家族の誰でも他メンバーの
- * 購入記録を閲覧できる、決定7・決定23）。`currentSeasonId`（進行中シーズンのid、
- * 家族の木の読み込み結果から渡す）を指定すると、各購入の「今シーズン配置済みか
- * どうか」（decoratedThisSeason）を判定する。
+ * コレクター棚「集めたもの」区画・シール区分（主要画面ワイヤーフレーム.md 32.2a節。
+ * 旧32.2節「区画3：自分のステッカー」は同節により統合・廃止された）。`memberId`には
+ * 呼び出し本人だけでなく、メンバー選択チップで選ばれた任意の家族メンバーのIDを
+ * 渡してよい（`ornament_sticker_purchases_select_same_family`により家族の誰でも
+ * 他メンバーの購入記録を閲覧できる、決定7・決定23）。`currentSeasonId`（進行中
+ * シーズンのid、家族の木の読み込み結果から渡す）を指定すると、各購入の配置状況
+ * （`placement`、49章の自由配置後は「生涯に一度」なので配置は高々1件）を判定する。
  */
 export function useMyStickerPurchases(memberId: string, currentSeasonId: string | null) {
   const { client } = useSession();
@@ -103,15 +105,20 @@ export function useMyStickerPurchases(memberId: string, currentSeasonId: string 
 
 export type DecorateStickerActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };
 
-/** 木への配置確定操作（既存のTreeDecoratePanel・かざりつけモードから呼ぶ、決定7）。 */
+/**
+ * [2026-09-08改訂・スキーマ設計.sql 49章] 木への配置確定操作（`TreeStickerDragCanvas`
+ * のドラッグ配置から呼ぶ）。統括要望「ステッカーは自分の好きなところに貼りたい」を
+ * 受け、色丸（`completionId`）を選ぶ方式から座標（`posX`・`posY`、0〜1000の
+ * キャンバス相対整数）を指定する自由配置方式に変わった。
+ */
 export function useDecorateTreeWithStickerAction() {
   const { client } = useSession();
   const [decorating, setDecorating] = useState(false);
 
   const decorate = useCallback(
-    async (purchaseId: string, completionId: string): Promise<DecorateStickerActionResult> => {
+    async (purchaseId: string, posX: number, posY: number): Promise<DecorateStickerActionResult> => {
       setDecorating(true);
-      const res = await decorateTreeWithSticker(client, purchaseId, completionId);
+      const res = await decorateTreeWithSticker(client, purchaseId, posX, posY);
       setDecorating(false);
       if (!res.ok) return { ok: false, error: res.error };
       return { ok: true, decorationId: res.data };
@@ -120,6 +127,31 @@ export function useDecorateTreeWithStickerAction() {
   );
 
   return { decorating, decorate };
+}
+
+export type MoveStickerActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };
+
+/**
+ * [2026-09-08新設・スキーマ設計.sql 49.12章〜49.13章（統括判断）] すでに木に
+ * 貼ったステッカーの座標を、その月のうちに変更する操作（`TreeStickerDragCanvas`の
+ * 「動かす」モードから呼ぶ）。自分の配置・進行中シーズンの配置のみ対象。
+ */
+export function useMoveTreeStickerAction() {
+  const { client } = useSession();
+  const [moving, setMoving] = useState(false);
+
+  const move = useCallback(
+    async (decorationId: string, posX: number, posY: number): Promise<MoveStickerActionResult> => {
+      setMoving(true);
+      const res = await moveTreeSticker(client, decorationId, posX, posY);
+      setMoving(false);
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, decorationId: res.data };
+    },
+    [client]
+  );
+
+  return { moving, move };
 }
 
 /**

@@ -1,21 +1,31 @@
 /**
  * コレクター棚（P31／C26／S19）本体の3ロール共通コンポーネント。
- * 参照: 要件定義書07-13-3章、主要画面ワイヤーフレーム.md 21.0節決定6・21.6節。
+ * 参照: 要件定義書07-13-3章、主要画面ワイヤーフレーム.md 21.0節決定6・21.6節・
+ * 32.0a節（決定19〜25）・32.2a節。
  *
- * 決定6「木に飾る」「並べ替える」ボタンを一切配置しない。棚は「並べ直すための在庫」
- * ではなく「見返すためのアルバム」（07-13-3章）。本コンポーネントは表示専用の
- * 2区画（「集めたもの」「過去の木」）のみを持ち、木へ景品を戻す・並べ替える導線は
- * 一切実装しない。
+ * [2026-09-08全面改訂・統括フィードバック（本部長経由）・32.0a節/32.2a節]
+ * 「区画3：自分のステッカー」という独立タブは廃止し、タブは「集めたもの」
+ * 「過去の木」の2つに戻した（決定19）。「集めたもの」タブの中にメンバー選択
+ * チップ（全員＋各メンバー、決定20・決定22「既定は全員」）を新設し、個別メンバーを
+ * 選ぶと「バッジ」（決定24・達成済みのみ）「つくった・あつめたもの」（決定21・
+ * このメンバーが獲得/描いたものへの絞り込み）「シール」（決定23・所有数0の行は
+ * 表示しない）の3区分をまとめて見せる。
+ *
+ * 決定6「木に飾る」「並べ替える」ボタンを一切配置しない、という原則は区画1
+ * 「集めたもの」（全員選択時）・区画2「過去の木」には引き続きそのまま適用する。
+ * シール区分（個別メンバー・自分選択時のみ）は例外的に「木に飾る」「うごかす」
+ * 「シールを買いに行く」を持つ（決定25「自分を選んでいるときだけ表示」）。
  *
  * 「集めたもの」: 家族共有・永久保管の景品一覧。タップで詳細（獲得した人・日付、
  *   家族の絵の場合は描いた人の名前も表示）。未公開の絵はそもそもこの一覧に
  *   含まれない（`gacha_draws`経由でのみ取得するため。src/data/api.ts参照）。
- * 「過去の木」: シーズンごとの家族の木を、その月に飾られた景品が乗った状態のまま
- *   再現表示する。読み取り専用（タップ操作を持たない）。
+ * 「過去の木」: シーズンごとの家族の木を、その月に飾られた景品・自由配置ステッカーが
+ *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
+import BadgeList from "./BadgeList";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
@@ -24,15 +34,16 @@ import { StickerIcon } from "./StickerIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
-import type { CollectedGachaDraw, FamilyTreeCompletionDot } from "@/data/api";
+import type { BadgeRow } from "@/hooks/useBadges";
+import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
 import type { FamilyMember, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount, StickerPurchaseWithCatalog } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
-// [2026-09-07追加・要件定義書07-19-9a章「決定16」・主要画面ワイヤーフレーム.md
-// 32.2節] 区画3「自分のステッカー」を第3タブとして追加する（21.0節決定6改訂注記
-// 「区画3にはこの決定6を適用しない」）。
-type ShelfTab = "collected" | "pastTrees" | "myStickers";
+type ShelfTab = "collected" | "pastTrees";
+
+/** メンバー選択チップの「全員」を表す番兵値（実在のmember_idと衝突しない）。 */
+export const ALL_MEMBERS_ID = "__all__";
 
 const stickerShapeLabel: Record<StickerShape, { child: string; parent: string }> = {
   beetle: { child: "カブトムシ", parent: "カブトムシ" },
@@ -61,6 +72,12 @@ export interface CollectorShelfPanelProps {
 
   dotsBySeasonId: Record<string, FamilyTreeCompletionDot[]>;
   /**
+   * [2026-09-08追加・スキーマ設計.sql 49章] 過去シーズンの自由配置ステッカー
+   * （decoration_source='sticker'）。dotsBySeasonIdと同じ「見る」展開のタイミングで
+   * 取得され、TreeStageVisualのstickerPlacementsプロパティにそのまま渡す。
+   */
+  stickerPlacementsBySeasonId: Record<string, FamilyTreeStickerPlacement[]>;
+  /**
    * [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節「過去の木への反映」、
    * 主要画面ワイヤーフレーム.md 21.0節決定11）。dotsBySeasonIdと同じ「見る」展開の
    * タイミングで取得され、同一ビュー内に表示する。
@@ -79,24 +96,29 @@ export interface CollectorShelfPanelProps {
    */
   members: FamilyMember[];
 
-  // [2026-09-07追加・要件定義書07-19-9a章、主要画面ワイヤーフレーム.md 32.2節]
-  // 区画3「自分のステッカー」。他メンバーの区画3も閲覧できる（決定7・決定23）ため
-  // メンバー切替を持つが、木に飾る・購入への導線は自分の区画のみに表示する。
-  /** いま操作中の自分自身のmember_id（自分の区画かどうかの判定・導線の出し分けに使う）。 */
+  /** いま操作中の自分自身のmember_id（メンバー選択チップの「自分」表記・操作導線の出し分けに使う）。 */
   myMemberId: string;
-  /** 区画3で選択中のメンバー（初期値は自分自身を推奨）。 */
-  stickersSelectedMemberId: string;
-  onSelectStickersMember: (memberId: string) => void;
+
+  // [2026-09-08新設・主要画面ワイヤーフレーム.md 32.0a節決定19〜22]
+  // 「集めたもの」区画内のメンバー選択チップ。ALL_MEMBERS_IDが「全員」（既定）。
+  selectedMemberId: string;
+  onSelectMember: (memberId: string) => void;
+
+  /** 個別メンバー選択時の「バッジ」区分（決定24、達成済みのみ）。 */
+  badgesLoadState: LoadState;
+  badgeRows: BadgeRow[];
+  onRetryBadges: () => void;
+
+  /** 個別メンバー選択時の「シール」区分（決定23）。 */
   stickersLoadState: LoadState;
-  /** `stickersSelectedMemberId`の所持ステッカー一覧（decoratedThisSeason付き）。 */
   stickerPurchases: StickerPurchaseWithCatalog[];
   onRetryStickers: () => void;
-  /** 自分の区画のみ: 今シーズンまだ交換可能な自分の色丸が1件以上あるか（配置可否の条件）。 */
-  canPlaceStickerThisSeason: boolean;
-  /** 自分の区画のみ: 「シールを かいに いく」導線（→購入画面）。 */
+  /** 自分選択時のみ: 「シールを かいに いく」導線（→購入画面、決定25）。 */
   onGoToStickerShop: () => void;
-  /** 自分の区画のみ: 「木に かざる」導線。指定したカタログ位置の未配置インスタンスの purchaseId を渡す（決定9）。 */
-  onDecorateSticker: (purchaseId: string) => void;
+  /** 自分選択時のみ: 「木に かざる」導線（→ドラッグ配置画面、決定25）。 */
+  onPlaceSticker: (purchaseId: string, shape: StickerShape, rarity: StickerRarity) => void;
+  /** 自分選択時のみ: 「うごかす」導線（→ドラッグ移動画面、49.12章統括判断）。 */
+  onMoveSticker: (decorationId: string, shape: StickerShape, rarity: StickerRarity, posX: number, posY: number) => void;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -121,6 +143,135 @@ function formatShortDate(iso: string): string {
 
 function formatMonthLabel(dateOnly: string): string {
   return jstDate(dateOnly).toLocaleDateString("ja-JP", { month: "long" });
+}
+
+/**
+ * [2026-08-27追加・本部長] 同じ既製の飾りは1マスにまとめて個数で見せる。
+ *
+ * ユーザーの指摘: 7人程度が参加する家族では「木も棚もパンパンになりそう」。
+ * 完了報告5回ごとに1回引けるため、7人がお手伝いをすれば月に数十回引かれ、
+ * 既製の飾りが半分出るとして半年で百個以上になる。1個1マスで並べると
+ * **せっかくの家族の絵が既製品に埋もれて探せなくなる**。
+ *
+ * 家族の絵は1枚ずつ固有のものなのでまとめず、常に個別に表示する。
+ * これにより、既製品が何個増えても絵が主役の位置を保てる。
+ * 個数が増えること自体は「集まってきた」という手応えになるため、
+ * まとめても失われる情報は無い（07-13-1章「外れ枠を作らない」とも整合）。
+ *
+ * [2026-09-08改訂] 「全員」ビューと個別メンバーの「つくった・あつめたもの」の
+ * 両方から使う共通ロジックとして、コンポーネント外の純関数に切り出した。
+ */
+function buildShelfEntries(items: CollectedGachaDraw[]): { key: string; item: CollectedGachaDraw; count: number }[] {
+  const entries: { key: string; item: CollectedGachaDraw; count: number }[] = [];
+  const presetIndexByName = new Map<string, number>();
+  for (const item of items) {
+    if (item.prizeKind === "preset_ornament") {
+      const name = item.presetOrnament?.display_name ?? "?";
+      const at = presetIndexByName.get(name);
+      if (at !== undefined) {
+        entries[at].count += 1;
+        continue;
+      }
+      presetIndexByName.set(name, entries.length);
+      entries.push({ key: `preset:${name}`, item, count: 1 });
+    } else {
+      entries.push({ key: item.id, item, count: 1 });
+    }
+  }
+  return entries;
+}
+
+/**
+ * 景品一覧グリッド＋タップで開く詳細カード（「集めたもの」全員ビュー・個別メンバーの
+ * 「つくった・あつめたもの」の両方で使う共通表示）。`items`が空配列のときは何も
+ * 描画しない（空状態の文言は呼び出し側が個別に出す。全員ビューと個別ビューで
+ * 空状態の文言・導線が異なるため、02.2a節決定23と同じくここでは共通化しない）。
+ */
+function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw[] }) {
+  const isChild = tone === "child";
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  const shelfEntries = useMemo(() => buildShelfEntries(items), [items]);
+  const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
+  const selectedItem = selectedEntry?.item ?? null;
+
+  if (shelfEntries.length === 0) return null;
+
+  return (
+    <>
+      <View style={styles.grid}>
+        {shelfEntries.map((entry) => {
+          const item = entry.item;
+          const selected = entry.key === selectedItemId;
+          return (
+            <Pressable
+              key={entry.key}
+              onPress={() => setSelectedItemId(selected ? null : entry.key)}
+              style={[styles.gridItem, selected && styles.gridItemSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              {item.prizeKind === "preset_ornament" ? (
+                <Text style={styles.gridEmoji}>{item.presetOrnament?.emoji ?? "🎁"}</Text>
+              ) : item.drawing ? (
+                <DrawingThumbnail lineData={item.drawing.line_data} size={48} />
+              ) : null}
+              <Text style={[captionStyle, styles.gridCaption]}>
+                {entry.count > 1 ? `×${entry.count}` : formatShortDate(item.drawnAt)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {selectedItem && (
+        <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
+          {selectedItem.prizeKind === "preset_ornament" ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailEmoji}>{selectedItem.presetOrnament?.emoji ?? "🎁"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={bodyMediumStyle}>{selectedItem.presetOrnament?.display_name ?? "かざり"}</Text>
+                <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                  {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                  {isChild ? "が みつけたよ" : "が獲得"}
+                </Text>
+              </View>
+            </View>
+          ) : selectedItem.drawing ? (
+            <View style={styles.detailRow}>
+              <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={72} />
+              <View style={{ flex: 1 }}>
+                <Text style={bodyMediumStyle}>
+                  {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
+                </Text>
+                {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
+                    主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
+                    直後に、独立した1行のラベル付き表示として追加する。無い絵は
+                    この行自体が無い（プレースホルダは出さない）。 */}
+                {selectedItem.drawing.title && (
+                  <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                    {isChild ? "だいめい：" : "題名："}
+                    {selectedItem.drawing.title}
+                  </Text>
+                )}
+                {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
+                    絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
+                    （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
+                    だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
+                    日付と一緒に見つけた人も出す。 */}
+                <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
+                  {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                  {isChild ? "が みつけたよ" : "が獲得"}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </Card>
+      )}
+    </>
+  );
 }
 
 /**
@@ -186,6 +337,55 @@ function PastTreeColorLegend({
   );
 }
 
+/**
+ * メンバー選択チップ（主要画面ワイヤーフレーム.md 32.2a節「メンバー選択チップ」）。
+ * 「全員」を先頭に、以降は`members`の順（`created_at`昇順、呼び出し元が既に
+ * その順で渡す前提）。ソート・並び替え機能は持たせない（07-10章必須3条件）。
+ */
+function MemberSelectionChips({
+  tone,
+  members,
+  myMemberId,
+  selectedMemberId,
+  onSelectMember,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  myMemberId: string;
+  selectedMemberId: string;
+  onSelectMember: (id: string) => void;
+}) {
+  const isChild = tone === "child";
+  const captionStyle = captionStyleFor(tone);
+
+  return (
+    <View style={styles.stickerMemberRow}>
+      <Pressable
+        onPress={() => onSelectMember(ALL_MEMBERS_ID)}
+        style={[styles.stickerMemberChip, selectedMemberId === ALL_MEMBERS_ID && styles.stickerMemberChipActive]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: selectedMemberId === ALL_MEMBERS_ID }}
+      >
+        <Text style={captionStyle}>{isChild ? "ぜんいん" : "全員"}</Text>
+      </Pressable>
+      {members
+        .filter((m) => m.is_active)
+        .map((m) => (
+          <Pressable
+            key={m.id}
+            onPress={() => onSelectMember(m.id)}
+            style={[styles.stickerMemberChip, m.id === selectedMemberId && styles.stickerMemberChipActive]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: m.id === selectedMemberId }}
+          >
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
+            <Text style={captionStyle}>{m.id === myMemberId ? (isChild ? "じぶん" : "自分") : m.display_name}</Text>
+          </Pressable>
+        ))}
+    </View>
+  );
+}
+
 export function CollectorShelfPanel({
   tone,
   collectedLoadState,
@@ -196,33 +396,35 @@ export function CollectorShelfPanel({
   pastSeasons,
   onRetryPastSeasons,
   dotsBySeasonId,
+  stickerPlacementsBySeasonId,
   weeklyBySeasonId,
   loadingSeasonIds,
   errorSeasonIds,
   onExpandSeason,
   members,
   myMemberId,
-  stickersSelectedMemberId,
-  onSelectStickersMember,
+  selectedMemberId,
+  onSelectMember,
+  badgesLoadState,
+  badgeRows,
+  onRetryBadges,
   stickersLoadState,
   stickerPurchases,
   onRetryStickers,
-  canPlaceStickerThisSeason,
   onGoToStickerShop,
-  onDecorateSticker,
+  onPlaceSticker,
+  onMoveSticker,
 }: CollectorShelfPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
-  const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [tab, setTab] = useState<ShelfTab>("collected");
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [expandedSeasonId, setExpandedSeasonId] = useState<string | null>(null);
 
   const collectedLabel = isChild ? "あつめたもの" : "集めたもの";
   const pastTreesLabel = isChild ? "まえの木" : "過去の木";
-  const myStickersLabel = isChild ? "じぶんのシール" : "自分のステッカー";
-  const isViewingSelfStickers = stickersSelectedMemberId === myMemberId;
+  const isViewingSelf = selectedMemberId === myMemberId;
+  const selectedMember = members.find((m) => m.id === selectedMemberId);
 
   const toggleSeason = (season: FamilyTreeSeason) => {
     const next = expandedSeasonId === season.id ? null : season.id;
@@ -230,41 +432,14 @@ export function CollectorShelfPanel({
     if (next && !dotsBySeasonId[season.id]) onExpandSeason(season);
   };
 
-  /**
-   * [2026-08-27追加・本部長] 同じ既製の飾りは1マスにまとめて個数で見せる。
-   *
-   * ユーザーの指摘: 7人程度が参加する家族では「木も棚もパンパンになりそう」。
-   * 完了報告5回ごとに1回引けるため、7人がお手伝いをすれば月に数十回引かれ、
-   * 既製の飾りが半分出るとして半年で百個以上になる。1個1マスで並べると
-   * **せっかくの家族の絵が既製品に埋もれて探せなくなる**。
-   *
-   * 家族の絵は1枚ずつ固有のものなのでまとめず、常に個別に表示する。
-   * これにより、既製品が何個増えても絵が主役の位置を保てる。
-   * 個数が増えること自体は「集まってきた」という手応えになるため、
-   * まとめても失われる情報は無い（07-13-1章「外れ枠を作らない」とも整合）。
-   */
-  const shelfEntries = useMemo(() => {
-    const entries: { key: string; item: CollectedGachaDraw; count: number }[] = [];
-    const presetIndexByName = new Map<string, number>();
-    for (const item of collectedItems) {
-      if (item.prizeKind === "preset_ornament") {
-        const name = item.presetOrnament?.display_name ?? "?";
-        const at = presetIndexByName.get(name);
-        if (at !== undefined) {
-          entries[at].count += 1;
-          continue;
-        }
-        presetIndexByName.set(name, entries.length);
-        entries.push({ key: `preset:${name}`, item, count: 1 });
-      } else {
-        entries.push({ key: item.id, item, count: 1 });
-      }
-    }
-    return entries;
-  }, [collectedItems]);
-
-  const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
-  const selectedItem = selectedEntry?.item ?? null;
+  // 個別メンバー選択時「つくった・あつめたもの」（決定21）。絞り込みは既存の
+  // 表示項目（獲得した人・描いた人のmember_id）による閲覧フィルタにすぎず、
+  // 07-13-3章「景品は引いた人ではなく家族の所有物」という家族共有の原則は
+  // 変えない（一時的に絞り込んで見せているだけ）。
+  const memberMadeOrCollected = useMemo(() => {
+    if (selectedMemberId === ALL_MEMBERS_ID) return [];
+    return collectedItems.filter((item) => item.collectorId === selectedMemberId || item.drawing?.artistId === selectedMemberId);
+  }, [collectedItems, selectedMemberId]);
 
   return (
     <View style={{ marginTop: theme.spacing.s4 }}>
@@ -275,7 +450,7 @@ export function CollectorShelfPanel({
           accessibilityRole="button"
           accessibilityState={{ selected: tab === "collected" }}
         >
-          <Text style={[bodyMediumStyle, tab === "collected" && styles.tabTextActive]}>{collectedLabel}</Text>
+          <Text style={[bodyMediumStyleFor(tone), tab === "collected" && styles.tabTextActive]}>{collectedLabel}</Text>
         </Pressable>
         <Pressable
           onPress={() => setTab("pastTrees")}
@@ -283,118 +458,94 @@ export function CollectorShelfPanel({
           accessibilityRole="button"
           accessibilityState={{ selected: tab === "pastTrees" }}
         >
-          <Text style={[bodyMediumStyle, tab === "pastTrees" && styles.tabTextActive]}>{pastTreesLabel}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setTab("myStickers")}
-          style={[styles.tabButton, tab === "myStickers" && styles.tabButtonActive]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: tab === "myStickers" }}
-        >
-          <Text style={[bodyMediumStyle, tab === "myStickers" && styles.tabTextActive]}>{myStickersLabel}</Text>
+          <Text style={[bodyMediumStyleFor(tone), tab === "pastTrees" && styles.tabTextActive]}>{pastTreesLabel}</Text>
         </Pressable>
       </View>
 
       {tab === "collected" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          {collectedLoadState === "loading" && <SkeletonList count={3} />}
-          {collectedLoadState === "error" && (
-            <ErrorState
-              tone={isChild ? "child" : "parent"}
-              title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
-              onRetry={onRetryCollected}
-            />
-          )}
-          {collectedLoadState === "ready" && collectedItems.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyEmoji}>🎁</Text>
-              <Text style={[bodyStyle, styles.emptyText]}>
-                {isChild
-                  ? "まだ なにも あつまっていないよ。ガチャで あつめてみよう！"
-                  : "まだ何も集まっていません。ガチャで集めてみましょう"}
-              </Text>
-              <AppButton
-                label={isChild ? "ガチャへ →" : "ガチャへ"}
-                tone={tone}
-                onPress={onGoToGacha}
-                style={{ marginTop: theme.spacing.s4 }}
-              />
+          {/* [2026-09-08新設・主要画面ワイヤーフレーム.md 32.2a節] メンバー選択チップ。
+              「集めたもの」タブの中にのみ置く（決定20）。既定は「全員」（決定22）。 */}
+          <MemberSelectionChips
+            tone={tone}
+            members={members}
+            myMemberId={myMemberId}
+            selectedMemberId={selectedMemberId}
+            onSelectMember={onSelectMember}
+          />
+
+          {selectedMemberId === ALL_MEMBERS_ID ? (
+            // 「全員」選択時: 既存の家族共有プールドビューをそのまま表示する（決定21、変更なし）。
+            <View style={{ marginTop: theme.spacing.s4 }}>
+              {collectedLoadState === "loading" && <SkeletonList count={3} />}
+              {collectedLoadState === "error" && (
+                <ErrorState
+                  tone={isChild ? "child" : "parent"}
+                  title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+                  onRetry={onRetryCollected}
+                />
+              )}
+              {collectedLoadState === "ready" && collectedItems.length === 0 && (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyEmoji}>🎁</Text>
+                  <Text style={[bodyStyle, styles.emptyText]}>
+                    {isChild
+                      ? "まだ なにも あつまっていないよ。ガチャで あつめてみよう！"
+                      : "まだ何も集まっていません。ガチャで集めてみましょう"}
+                  </Text>
+                  <AppButton
+                    label={isChild ? "ガチャへ →" : "ガチャへ"}
+                    tone={tone}
+                    onPress={onGoToGacha}
+                    style={{ marginTop: theme.spacing.s4 }}
+                  />
+                </View>
+              )}
+              {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} />}
             </View>
-          )}
-          {collectedLoadState === "ready" && collectedItems.length > 0 && (
-            <>
-              <View style={styles.grid}>
-                {shelfEntries.map((entry) => {
-                  const item = entry.item;
-                  const selected = entry.key === selectedItemId;
-                  return (
-                    <Pressable
-                      key={entry.key}
-                      onPress={() => setSelectedItemId(selected ? null : entry.key)}
-                      style={[styles.gridItem, selected && styles.gridItemSelected]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                    >
-                      {item.prizeKind === "preset_ornament" ? (
-                        <Text style={styles.gridEmoji}>{item.presetOrnament?.emoji ?? "🎁"}</Text>
-                      ) : item.drawing ? (
-                        <DrawingThumbnail lineData={item.drawing.line_data} size={48} />
-                      ) : null}
-                      <Text style={[captionStyle, styles.gridCaption]}>
-                        {entry.count > 1 ? `×${entry.count}` : formatShortDate(item.drawnAt)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+          ) : (
+            // 個別メンバー選択時: バッジ・つくった/あつめたもの・シールの3区分（決定21・22）。
+            <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s6 }}>
+              {/* --- バッジ区分（決定24。達成済みのみ、進捗は出さない） --- */}
+              <View>
+                <Text style={[captionStyle, styles.legendHeading]}>バッジ</Text>
+                {badgesLoadState === "loading" && <SkeletonList count={1} />}
+                {badgesLoadState === "error" && (
+                  <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetryBadges} />
+                )}
+                {badgesLoadState === "ready" && badgeRows.every((r) => r.achievedTier === null) && (
+                  <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>
+                )}
+                {badgesLoadState === "ready" && (
+                  <BadgeList isChild={isChild} loadState={badgesLoadState} rows={badgeRows} achievedOnly hideHeading />
+                )}
               </View>
 
-              {selectedItem && (
-                <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-                  {selectedItem.prizeKind === "preset_ornament" ? (
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailEmoji}>{selectedItem.presetOrnament?.emoji ?? "🎁"}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={bodyMediumStyle}>{selectedItem.presetOrnament?.display_name ?? "かざり"}</Text>
-                        <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
-                          {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
-                          {isChild ? "が みつけたよ" : "が獲得"}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : selectedItem.drawing ? (
-                    <View style={styles.detailRow}>
-                      <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={72} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={bodyMediumStyle}>
-                          {isChild
-                            ? `「${selectedItem.drawing.artistName}」の絵`
-                            : `「${selectedItem.drawing.artistName}」が描いた絵`}
-                        </Text>
-                        {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
-                            主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
-                            直後に、独立した1行のラベル付き表示として追加する。無い絵は
-                            この行自体が無い（プレースホルダは出さない）。 */}
-                        {selectedItem.drawing.title && (
-                          <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
-                            {isChild ? "だいめい：" : "題名："}
-                            {selectedItem.drawing.title}
-                          </Text>
-                        )}
-                        {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
-                            絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
-                            （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
-                            だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
-                            日付と一緒に見つけた人も出す。 */}
-                        <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
-                          {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
-                          {isChild ? "が みつけたよ" : "が獲得"}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-                </Card>
-              )}
-            </>
+              {/* --- つくった・あつめたもの区分（決定21） --- */}
+              <View>
+                <Text style={[captionStyle, styles.legendHeading]}>つくった・あつめたもの</Text>
+                {collectedLoadState === "loading" && <SkeletonList count={2} />}
+                {collectedLoadState === "ready" && memberMadeOrCollected.length === 0 && (
+                  <Text style={bodyStyle}>{isChild ? "まだ なにも あつまっていないよ" : "まだ何も集まっていません"}</Text>
+                )}
+                {collectedLoadState === "ready" && memberMadeOrCollected.length > 0 && (
+                  <ShelfItemsGrid tone={tone} items={memberMadeOrCollected} />
+                )}
+              </View>
+
+              {/* --- シール区分（決定23。所有数0の行は表示しない） --- */}
+              <StickerShelfSection
+                tone={tone}
+                isViewingSelf={isViewingSelf}
+                selectedMemberName={selectedMember?.display_name ?? "?"}
+                loadState={stickersLoadState}
+                purchases={stickerPurchases}
+                onRetry={onRetryStickers}
+                onGoToShop={onGoToStickerShop}
+                onPlace={onPlaceSticker}
+                onMove={onMoveSticker}
+              />
+            </View>
           )}
         </View>
       )}
@@ -431,7 +582,7 @@ export function CollectorShelfPanel({
                     accessibilityRole="button"
                     accessibilityState={{ expanded }}
                   >
-                    <Text style={bodyMediumStyle}>
+                    <Text style={bodyMediumStyleFor(tone)}>
                       {formatMonthLabel(season.season_start)}の木：{stageInfo.name} {stageInfo.emoji}
                     </Text>
                     <Text style={[bodyStyle, styles.seasonToggle]}>{isChild ? (expanded ? "とじる" : "みる ▼") : expanded ? "とじる ▲" : "見る ▼"}</Text>
@@ -449,7 +600,11 @@ export function CollectorShelfPanel({
                       )}
                       {!loadingSeasonIds[season.id] && !errorSeasonIds[season.id] && dotsBySeasonId[season.id] && (
                         <>
-                          <TreeStageVisual stage={season.current_stage} dots={dotsBySeasonId[season.id]} />
+                          <TreeStageVisual
+                            stage={season.current_stage}
+                            dots={dotsBySeasonId[season.id]}
+                            stickerPlacements={stickerPlacementsBySeasonId[season.id]}
+                          />
                           <PastTreeColorLegend
                             dots={dotsBySeasonId[season.id]}
                             members={members}
@@ -488,169 +643,137 @@ export function CollectorShelfPanel({
             })}
         </View>
       )}
-
-      {tab === "myStickers" && (
-        <MyStickersTab
-          tone={tone}
-          members={members}
-          myMemberId={myMemberId}
-          selectedMemberId={stickersSelectedMemberId}
-          onSelectMember={onSelectStickersMember}
-          isViewingSelf={isViewingSelfStickers}
-          loadState={stickersLoadState}
-          purchases={stickerPurchases}
-          onRetry={onRetryStickers}
-          canPlaceThisSeason={canPlaceStickerThisSeason}
-          onGoToShop={onGoToStickerShop}
-          onDecorate={onDecorateSticker}
-        />
-      )}
     </View>
   );
 }
 
 /**
- * コレクター棚「区画3：自分のステッカー」（主要画面ワイヤーフレーム.md 32.2節）。
- * 12種のカタログ位置に対応する固定グリッドで所有数・今シーズンの配置状況を表示する。
- * この区画のみ「木に飾る」「買う」への導線を持つ（21.0節決定6改訂注記）。
+ * 「シール」区分（主要画面ワイヤーフレーム.md 32.2a節「シール」区分・決定23）。
+ * 所有している種類（形×レアリティ）だけを列挙する。所有数0の組み合わせは
+ * 表示しない（旧32.2節の12マス固定グリッドは廃止）。
+ *
+ * [2026-09-08・木への配置が自由配置化（スキーマ設計.sql 49章）したことに伴う
+ * 開発部の実装判断] UIUXデザイン部32.2a節は「木に飾る」ボタンのみを想定していたが
+ * （旧・色丸との交換方式が前提）、49章により配置後の「うごかす」操作が新設された
+ * （統括判断49.12章）。UIUXデザイン部からはこの「うごかす」導線のUI配置について
+ * 別タスクとしての発注が申し送られている（49.17章）ため、開発部の判断として、
+ * 各行（形×レアリティ）に「いまの木に かざってあるよ」の隣に「うごかす」を
+ * 併設する最小構成を採用した。同じ形×レアリティを複数個所有し、かつ複数月に
+ * わたって購入した場合、過去シーズンに配置済み（凍結・移動不可）のインスタンスと
+ * 今シーズンに配置済み（移動可）のインスタンスが混在しうるが、「うごかす」は
+ * 今シーズンの配置がある場合にのみ出す（過去シーズンの配置は移動対象外）。
  */
-function MyStickersTab({
+function StickerShelfSection({
   tone,
-  members,
-  myMemberId,
-  selectedMemberId,
-  onSelectMember,
   isViewingSelf,
+  selectedMemberName,
   loadState,
   purchases,
   onRetry,
-  canPlaceThisSeason,
   onGoToShop,
-  onDecorate,
+  onPlace,
+  onMove,
 }: {
   tone: Tone;
-  members: FamilyMember[];
-  myMemberId: string;
-  selectedMemberId: string;
-  onSelectMember: (id: string) => void;
   isViewingSelf: boolean;
+  selectedMemberName: string;
   loadState: LoadState;
   purchases: StickerPurchaseWithCatalog[];
   onRetry: () => void;
-  canPlaceThisSeason: boolean;
   onGoToShop: () => void;
-  onDecorate: (purchaseId: string) => void;
+  onPlace: (purchaseId: string, shape: StickerShape, rarity: StickerRarity) => void;
+  onMove: (decorationId: string, shape: StickerShape, rarity: StickerRarity, posX: number, posY: number) => void;
 }) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
-  const selectedMember = members.find((m) => m.id === selectedMemberId);
+
+  const totalOwned = purchases.length;
 
   return (
-    <View style={{ marginTop: theme.spacing.s4 }}>
-      {/* メンバー切替（決定7・決定23「比較は許容するがソート機能は持たせない」。
-          並び順はmembersのcreated_at昇順のまま、ソート・ランキングは行わない）。 */}
-      <View style={styles.stickerMemberRow}>
-        {members
-          .filter((m) => m.is_active)
-          .map((m) => (
-            <Pressable
-              key={m.id}
-              onPress={() => onSelectMember(m.id)}
-              style={[styles.stickerMemberChip, m.id === selectedMemberId && styles.stickerMemberChipActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: m.id === selectedMemberId }}
-            >
-              <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
-              <Text style={captionStyle}>{m.id === myMemberId ? (isChild ? "じぶん" : "自分") : m.display_name}</Text>
-            </Pressable>
-          ))}
-      </View>
+    <View>
+      <Text style={[captionStyle, styles.legendHeading]}>シール</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
         <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
       )}
 
-      {loadState === "ready" && purchases.length === 0 && (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyEmoji}>🏷️</Text>
+      {loadState === "ready" && totalOwned === 0 && (
+        <>
           {isViewingSelf ? (
             <>
-              <Text style={[bodyStyle, styles.emptyText]}>
-                {isChild ? "まだ シールを もっていないよ。かってみよう→" : "まだステッカーを購入していません。購入する→"}
-              </Text>
+              <Text style={bodyStyle}>{isChild ? "まだ シールを もっていないよ。かってみよう→" : "まだステッカーを購入していません。購入する→"}</Text>
               <AppButton
                 label={isChild ? "シールを かいに いく →" : "購入する →"}
                 tone={tone}
                 onPress={onGoToShop}
-                style={{ marginTop: theme.spacing.s4 }}
+                style={{ marginTop: theme.spacing.s3 }}
               />
             </>
           ) : (
-            <Text style={[bodyStyle, styles.emptyText]}>
-              {isChild ? `${selectedMember?.display_name ?? "?"}さんは まだ もっていないよ` : `${selectedMember?.display_name ?? "?"}さんはまだ持っていません`}
-            </Text>
+            <Text style={bodyStyle}>{isChild ? `${selectedMemberName}さんは まだ もっていないよ` : `${selectedMemberName}さんはまだ持っていません`}</Text>
           )}
-        </View>
+        </>
       )}
 
-      {loadState === "ready" && purchases.length > 0 && (
+      {loadState === "ready" && totalOwned > 0 && (
         <>
-          {isViewingSelf && !canPlaceThisSeason && (
-            <Card tone={tone} style={{ marginTop: theme.spacing.s3 }}>
-              <Text style={bodyStyle}>
-                {isChild
-                  ? "こんげつ さいしょの きろくをつけたら、シールを かざれるようになるよ"
-                  : "今月最初の記録をつけたら、ステッカーを飾れるようになります"}
-              </Text>
-            </Card>
-          )}
-
-          <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s4 }}>
-            {theme.stickerShapes.map((shape) => (
-              <View key={shape}>
-                <Text style={[captionStyle, styles.legendHeading]}>{isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent}</Text>
-                <View style={{ gap: theme.spacing.s2 }}>
-                  {theme.stickerRarities.map((rarity) => {
-                    const owned = purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity);
-                    const ownedCount = owned.length;
-                    const decoratedThisSeason = owned.some((p) => p.decoratedThisSeason);
-                    const firstUndecorated = owned.find((p) => !p.decoratedThisSeason);
-                    return (
-                      <View key={rarity} style={styles.stickerGridRow}>
-                        {ownedCount > 0 ? (
-                          <StickerIcon shape={shape} rarity={rarity} size={28} uid={`${shape}-${rarity}-${selectedMemberId}`} />
-                        ) : (
-                          <View style={[styles.stickerGridPlaceholder]} />
-                        )}
-                        <Text style={[bodyStyle, styles.stickerGridLabel]}>
-                          {isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent} ×{ownedCount}
-                        </Text>
-                        {isViewingSelf && ownedCount > 0 && decoratedThisSeason && (
-                          <Text style={[captionStyle, styles.stickerGridDone]}>
+          <View style={{ gap: theme.spacing.s2 }}>
+            {theme.stickerShapes.flatMap((shape) =>
+              theme.stickerRarities.map((rarity) => {
+                const owned = purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity);
+                if (owned.length === 0) return null; // 決定23: 所有数0の行は表示しない
+                const unplaced = owned.filter((p) => !p.placement);
+                const currentSeasonPlaced = owned.find((p) => p.placement?.isCurrentSeason);
+                return (
+                  <View key={`${shape}-${rarity}`} style={styles.stickerRow}>
+                    <StickerIcon shape={shape} rarity={rarity} size={28} uid={`shelf-${shape}-${rarity}-${owned[0].id}`} />
+                    <Text style={[bodyStyle, styles.stickerRowLabel]}>
+                      {isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent}{" "}
+                      {isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent} ×{owned.length}
+                    </Text>
+                    <View style={styles.stickerRowActions}>
+                      {currentSeasonPlaced && (
+                        <>
+                          <Text style={[captionStyle, styles.stickerRowDone]}>
                             {isChild ? "いまの きに かざってあるよ" : "いまの木にかざってあるよ"}
                           </Text>
-                        )}
-                        {isViewingSelf && ownedCount > 0 && !decoratedThisSeason && (
-                          <AppButton
-                            label={isChild ? "木に かざる" : "木に飾る"}
-                            tone={tone}
-                            variant="secondary"
-                            disabled={!canPlaceThisSeason || !firstUndecorated}
-                            onPress={() => firstUndecorated && onDecorate(firstUndecorated.id)}
-                          />
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
+                          {isViewingSelf && currentSeasonPlaced.placement && (
+                            <Pressable
+                              onPress={() =>
+                                onMove(
+                                  currentSeasonPlaced.placement!.decorationId,
+                                  shape,
+                                  rarity,
+                                  currentSeasonPlaced.placement!.posX,
+                                  currentSeasonPlaced.placement!.posY
+                                )
+                              }
+                              hitSlop={8}
+                            >
+                              <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
+                            </Pressable>
+                          )}
+                        </>
+                      )}
+                      {isViewingSelf && unplaced.length > 0 && (
+                        <AppButton
+                          label={isChild ? "木に かざる" : "木に飾る"}
+                          tone={tone}
+                          variant="secondary"
+                          onPress={() => onPlace(unplaced[0].id, shape, rarity)}
+                        />
+                      )}
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
 
           {isViewingSelf && (
-            <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s4 }}>
+            <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s3 }}>
               <Text style={[bodyStyle, { color: theme.colors.brandPrimaryStrong }]}>
                 {isChild ? "→ シールを かいに いく" : "→ ステッカーを買いに行く"}
               </Text>
@@ -705,7 +828,7 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: "center" },
   seasonHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   seasonToggle: { color: theme.colors.brandPrimaryStrong },
-  // [2026-09-07追加] 区画3「自分のステッカー」。
+  // [2026-09-08改訂] メンバー選択チップ（旧「区画3」時代のスタイルを流用）。
   stickerMemberRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2 },
   stickerMemberChip: {
     flexDirection: "row",
@@ -718,16 +841,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
   },
   stickerMemberChipActive: { borderColor: theme.gachaColors.accent, backgroundColor: theme.gachaColors.accentSoft },
-  stickerGridRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
-  stickerGridPlaceholder: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.neutralBorder,
-    opacity: 0.5,
-  },
-  stickerGridLabel: { minWidth: 72 },
-  stickerGridDone: { color: theme.colors.brandPrimaryStrong },
+  stickerRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, flexWrap: "wrap" },
+  stickerRowLabel: { minWidth: 96 },
+  stickerRowActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, flexWrap: "wrap" },
+  stickerRowDone: { color: theme.colors.brandPrimaryStrong },
+  stickerRowMoveLink: { color: theme.colors.brandPrimaryStrong, textDecorationLine: "underline" },
 });
 
 export default CollectorShelfPanel;
