@@ -295,10 +295,18 @@ export default function ChildHomeScreen() {
           // app/parent/my-chores.tsx の renderRow と同じ「main用Pressable」「トグル用
           // Pressable」を兄弟要素として並べる構成をそのまま踏襲し、ネストしたPressable
           // にはしていない（押し間違い防止。同ファイルで実績のある構成）。
-          const renderCard = ({ chore, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean }) => {
+          // [2026-09-08修正・本部長／実装メモ.md 155章] 1行おきの縞模様（ユーザー要望
+          // 「行ごとに微妙に色を変えてもいいかも」）。区分（daily/todo/done）をまたがず、
+          // 各区分の中でのローカルなindexを見て判定する（呼び出し側で
+          // `xxx.map((x, i) => renderCard(x, i))`のように渡す）。
+          const renderCard = (
+            { chore, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean },
+            index: number
+          ) => {
             const isDaily = state.dailyFlaggedChoreIds.includes(chore.id);
+            const isOdd = index % 2 === 1;
             return (
-              <View key={chore.id} style={[styles.row, done && styles.rowDone]}>
+              <View key={chore.id} style={[styles.row, done && styles.rowDone, isOdd && styles.rowStripe]}>
                 <Pressable
                   disabled={done}
                   onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
@@ -334,8 +342,11 @@ export default function ChildHomeScreen() {
                   hitSlop={8}
                   style={styles.dailyToggleWrap}
                 >
+                  {/* [2026-09-08修正・本部長／実装メモ.md 155章]「まいにち」→「お気に入り」の
+                      言い換え（統括決定）。印も☀️→★へ。子ども向けはひらがな表記。
+                      変数名・DB列名（isDaily・chore_daily_flags等）はそのまま維持している。 */}
                   <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]} numberOfLines={1}>
-                    {isDaily ? "☀️まいにち" : "☀️まいにちにする"}
+                    {isDaily ? "★おきにいり" : "★おきにいりにする"}
                   </Text>
                 </Pressable>
               </View>
@@ -346,21 +357,21 @@ export default function ChildHomeScreen() {
               {daily.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading, styles.dailySectionHeading]}>
-                    ☀️ まいにちのクエスト
+                    ★ おきにいりのクエスト
                   </Text>
-                  <View style={styles.list}>{daily.map(renderCard)}</View>
+                  <View style={styles.list}>{daily.map((x, i) => renderCard(x, i))}</View>
                 </>
               )}
               {todo.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading]}>クエスト</Text>
-                  <View style={styles.list}>{todo.map(renderCard)}</View>
+                  <View style={styles.list}>{todo.map((x, i) => renderCard(x, i))}</View>
                 </>
               )}
               {done.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading]}>きろくずみ</Text>
-                  <View style={styles.list}>{done.map(renderCard)}</View>
+                  <View style={styles.list}>{done.map((x, i) => renderCard(x, i))}</View>
                 </>
               )}
             </>
@@ -436,6 +447,15 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, flexDirection: "row", alignItems: "center" },
   rowDone: {
     backgroundColor: theme.colors.brandPrimarySoft,
+  },
+  // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。新しい色は足さず、
+  // 既存トークンneutralBg（#FBF9F4・淡い生成り色）を使う。白いカード（neutralSurface）
+  // にも子ども画面の背景（brandPrimarySoft・淡い緑）にも喧嘩しない色として選定した
+  // （neutralBgは既にほかのトーンの画面背景として使われている既存色）。
+  // done行にも適用するため、doneのbrandPrimarySoftより後ろに置いて上書きする
+  // （区分をまたがず各区分の中で1行おきにする。詳細はrenderCardのコメント参照）。
+  rowStripe: {
+    backgroundColor: theme.colors.neutralBg,
   },
   // 絵文字のfontSizeは変更前のcardMain内の値（32）をそのまま維持。
   rowEmoji: { fontSize: 32 },

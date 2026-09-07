@@ -65,8 +65,13 @@ export default function ChildRewardsScreen() {
           しない（従来どおりタップしても何も起きない、あと◯pt表示のみ）。 */}
       {loadState === "ready" && rewards.length > 0 && (
         <View style={styles.list}>
-          {rewards.map((r) => {
+          {rewards.map((r, index) => {
             const canAfford = balance >= r.cost;
+            // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。
+            // C9は区分が無い単一の一覧のため、リスト全体でのindexをそのまま使う
+            // （home.tsxのように区分ごとにリセットする必要が無い）。
+            const isOdd = index % 2 === 1;
+            const rowStyle = [styles.row, isOdd && styles.rowStripe];
             const rowContent = (
               <>
                 <Text style={styles.rowEmoji}>{r.emoji}</Text>
@@ -91,12 +96,12 @@ export default function ChildRewardsScreen() {
               <Pressable
                 key={r.id}
                 onPress={() => router.push({ pathname: "/child/reward-confirm", params: { rewardId: r.id } })}
-                style={styles.row}
+                style={rowStyle}
               >
                 {rowContent}
               </Pressable>
             ) : (
-              <View key={r.id} style={styles.row}>
+              <View key={r.id} style={rowStyle}>
                 {rowContent}
               </View>
             );
@@ -128,6 +133,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.s4,
     paddingVertical: theme.spacing.s2,
   },
+  // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。
+  // home.tsxのrowStripeと同じ考え方・同じトークン（neutralBg）を使う。
+  rowStripe: { backgroundColor: theme.colors.neutralBg },
   // 絵文字のfontSizeは変更前のcard内の値（32）をそのまま維持。
   rowEmoji: { fontSize: 32 },
   rowTitle: { flex: 1, marginLeft: theme.spacing.s3 },

@@ -219,9 +219,11 @@ export default function ParentMyChoresScreen() {
                   </>
                 )}
               </Pressable>
+              {/* [2026-09-08修正・本部長／実装メモ.md 155章]「まいにち」→「お気に入り」の
+                  言い換え（統括決定）。印も☀️→★へ。変数名・DB列名はそのまま維持している。 */}
               <Pressable onPress={() => toggleDaily(c.id, !isDaily)} hitSlop={8}>
                 <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
-                  {isDaily ? "☀️ まいにち" : "☀️ まいにちにする"}
+                  {isDaily ? "★ お気に入り" : "★ お気に入りにする"}
                 </Text>
               </Pressable>
             </Card>
@@ -231,7 +233,7 @@ export default function ParentMyChoresScreen() {
           <>
             {daily.length > 0 && (
               <View style={{ marginTop: theme.spacing.s4 }}>
-                <Text style={[styles.sectionHeading, styles.dailySectionHeading]}>☀️ まいにちのクエスト</Text>
+                <Text style={[styles.sectionHeading, styles.dailySectionHeading]}>★ お気に入りのクエスト</Text>
                 <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
                   {daily.map(renderRow)}
                 </View>
