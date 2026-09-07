@@ -11,25 +11,26 @@ import { fetchMyGratitudeGiveableBalance, sendGratitudePoints } from "@/data/api
 import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
 
 /**
- * P22 感謝ポイントを贈る（保護者）
- * 参照: 主要画面ワイヤーフレーム.md 10.2章、画面一覧・遷移図.md P22・3.10章
+ * S? 感謝ポイントを贈る（みまもりメンバー）
+ * [2026-09-07新設・実装メモ.md 141章] 本部長指示「みまもりメンバーも感謝ポイントを
+ * 送受信できるようにする」（スキーマ設計.sql 48章）に伴い開発部が新設した画面。
+ * `app/parent/gratitude-send.tsx`（P22）と全く同一構成（tone違いのみ）。
  *
- * 決定2（10.0章）: ポイント数はステッパー式（自由入力欄にしない）。上限は
- * my_gratitude_giveable_balance()の返り値に固定し、check_violationがほぼ発生しない
- * 設計にする。
- * 決定3: 贈り先選択UIから自分自身をあらかじめ除外する。
- * 決定4: 子ども・保護者を区別せず同一の並びで表示する（family_membersの登録順）。
+ * 決定1（P22を踏襲）: ポイント数はステッパー式。上限はmy_gratitude_giveable_balance()
+ * の返り値に固定する。
+ * 決定2（P22を踏襲）: 贈り先選択UIから自分自身をあらかじめ除外する。
+ * 決定3（P22を踏襲）: 子ども・保護者・みまもりを区別せず同一の並びで表示する
+ * （family_membersの登録順。スキーマ設計.sql 48.2章「ロールごとの動作まとめ」の
+ * とおり、みまもり⇄みまもりの送受信も除外しない）。
  *
- * [2026-09-07修正・実装メモ.md 141章] みまもりメンバーを候補から除外するフィルタは
- * 元々実装されていなかった（`candidates`は`is_active && id !== myId`のみ。スキーマ
- * 設計.sql 48.11章で確認済み）。この画面自体のバグ修正は、送信エラー時に
- * `res.error.message`（PostgrestErrorの生メッセージ）をそのまま表示していた点のみ
- * （RLS違反時にPostgresの英語メッセージが利用者に見えていた）。`gratitudeSendErrorText`
- * （`src/lib/gratitudeSendError.ts`）を通した日本語文言に置き換えた。
+ * [UIUXデザイン部への申し送り] `app/supporter/gratitude.tsx`と同じく、この画面は
+ * UIUXデザイン部の画面設計に未掲載（画面一覧・遷移図.md 837行目は現時点で
+ * 「みまもりメンバーは対象外」のまま）。開発部の判断でP22を最小限踏襲する形で
+ * 実装した。迷った点として実装メモ.md 141章に記録済み。
  */
 type ScreenState = "form" | "sending";
 
-export default function ParentGratitudeSendScreen() {
+export default function SupporterGratitudeSendScreen() {
   const { state } = useAppData();
   const { client } = useSession();
   const myId = state.activeParentMemberId;
@@ -62,26 +63,26 @@ export default function ParentGratitudeSendScreen() {
     });
     setScreenState("form");
     if (!res.ok) {
-      setErrorMessage(gratitudeSendErrorText("parent", res.error));
+      setErrorMessage(gratitudeSendErrorText("supporter", res.error));
       return;
     }
     const recipientName = state.members.find((m) => m.id === recipientId)?.display_name ?? "";
     router.replace({
-      pathname: "/parent/gratitude",
+      pathname: "/supporter/gratitude",
       params: { toastName: recipientName, toastPoints: String(points) },
     });
   };
 
   return (
-    <Screen tone="parent">
+    <Screen tone="supporter">
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
-          <Text style={theme.typography.parentBody}>← もどる</Text>
+          <Text style={theme.typography.supporterBody}>← もどる</Text>
         </Pressable>
-        <Text style={theme.typography.parentBody}>きょうあと{balance ?? "…"}pt贈れます</Text>
+        <Text style={theme.typography.supporterBody}>きょうあと{balance ?? "…"}pt贈れます</Text>
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>だれに？</Text>
+      <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>だれに？</Text>
       <View style={styles.chipRow}>
         {candidates.map((m) => (
           <Pressable
@@ -95,7 +96,7 @@ export default function ParentGratitudeSendScreen() {
         ))}
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
+      <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
         なにをしてくれた？（必須）
       </Text>
       <TextInput
@@ -107,7 +108,7 @@ export default function ParentGratitudeSendScreen() {
         style={styles.noteInput}
       />
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>なんpt贈る？</Text>
+      <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>なんpt贈る？</Text>
       <View style={styles.stepperRow}>
         <Pressable
           onPress={() => setPoints((p) => Math.max(1, p - 1))}
@@ -131,6 +132,7 @@ export default function ParentGratitudeSendScreen() {
       )}
 
       <AppButton
+        tone="supporter"
         label={screenState === "sending" ? "贈っています…" : "贈る"}
         fullWidth
         loading={screenState === "sending"}
@@ -155,7 +157,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
     backgroundColor: theme.colors.neutralSurface,
   },
-  memberChipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
+  memberChipSelected: { borderColor: theme.colors.supporterAccent, backgroundColor: theme.colors.supporterAccentSoft },
   noteInput: {
     marginTop: theme.spacing.s2,
     minHeight: 72,

@@ -8,6 +8,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchMyGratitudeGiveableBalance, sendGratitudePoints, PG_ERRCODE } from "@/data/api";
+import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
 
 /**
  * C17 感謝ポイントを贈る（子どもビュー）
@@ -18,6 +19,12 @@ import { fetchMyGratitudeGiveableBalance, sendGratitudePoints, PG_ERRCODE } from
  * 添える（10.4章「編集可能な下書きの提供であり…定型リスト選択UIとは異なる」）。
  * 送信成功時はC7より控えめ・C11より弱い肯定演出を、この画面内で表示してから
  * C16へ戻る（10.4章「送信成功時のワイヤーフレーム」、新しいC18等の画面は作らない）。
+ *
+ * [2026-09-07修正・実装メモ.md 141章] みまもりメンバーを候補から除外するフィルタは
+ * 元々実装されていなかった（`candidates`は`is_active && id !== myId`のみ）。エラー
+ * 処理を`gratitudeSendErrorText`（`src/lib/gratitudeSendError.ts`）に集約し、
+ * check_violation以外のエラー（RLS違反・家族またぎ等）でも生の英語メッセージを
+ * 出さないようにした。
  */
 const EXAMPLE_CHIPS = ["にもつをもってくれた", "てつだってくれた", "やさしくしてくれた", "びょうきのときにたすけてくれた"];
 
@@ -55,8 +62,18 @@ export default function ChildGratitudeSendScreen() {
       note: note.trim(),
     });
     if (!res.ok) {
-      if (res.error.code === PG_ERRCODE.checkViolation) {
-        setLimitMessage("きょうは もう いっぱい おくったよ。また あした！");
+      // [2026-09-07修正・実装メモ.md 141章] 従来はcheck_violation（日次原資超過）
+      // のみを想定した専用文言で、それ以外は一律「とどきませんでした…」の通信
+      // エラー画面に倒していた。他のエラー（RLS違反・家族またぎ等）が発生しても
+      // 生の英語メッセージを見せないよう、`gratitudeSendErrorText`に集約する
+      // （`cancelCompletionErrorText`と同じ考え方）。実際の通信断・原因不明の
+      // エラーのみを「とどきませんでした…」画面に倒す。
+      if (
+        res.error.code === PG_ERRCODE.checkViolation ||
+        res.error.code === PG_ERRCODE.foreignKeyViolation ||
+        res.error.code === PG_ERRCODE.insufficientPrivilege
+      ) {
+        setLimitMessage(gratitudeSendErrorText("child", res.error));
         setScreenState("form");
       } else {
         setScreenState("networkError");

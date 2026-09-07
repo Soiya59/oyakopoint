@@ -162,6 +162,17 @@
 -- ローカルDocker環境に適用済み・実測済み（96.5章の遵守）。本番へは未適用（本部長の
 -- 操作を待つ）。
 --
+-- [2026-09-07更新・開発部] みまもりメンバーを感謝ポイントの送受信対象に含める
+-- 改訂（スキーマ設計.sql 48章、マイグレーション`20260907030000_gratitude_points_
+-- supporter_send_receive.sql`、開発部/成果物/実装メモ.md 141章）に伴い、S1（27の
+-- まま。テーブルの追加・削除もENABLE/DISABLEの変更も無い）・S4（56のまま。新しい
+-- 関数の追加・削除も無い）は無変更。S3は本数55本のまま、
+-- `gratitude_points.gratitude_points_insert_self`の1行だけハッシュが変わった
+-- （設計部の見込みどおり。48.8章参照）。ローカルDocker環境に上記マイグレーション
+-- 適用後に実測した値（`3a333e6d1714c61877e086de96092891`）へ更新済み（手計算・
+-- 推定値のまま書き込んでいない。96.5章・103.4章の運用を遵守）。本番へは未適用
+-- （本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -293,7 +304,7 @@ WITH expected(t, p, c, h) AS (VALUES
   ('gacha_draws','gacha_draws_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gacha_member_progress','gacha_member_progress_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gacha_preset_ornaments','gacha_preset_ornaments_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
-  ('gratitude_points','gratitude_points_insert_self','INSERT','dbc7880686f5a4383314d24a9ba591ab'),
+  ('gratitude_points','gratitude_points_insert_self','INSERT','3a333e6d1714c61877e086de96092891'),
   ('gratitude_points','gratitude_points_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gratitude_points','gratitude_points_update_revoke_by_sender','UPDATE','5cc6c5f5c30e0d1ecae492e233a49ac1'),
   -- [2026-09-02追加] join_consents（招待受諾フローにおける可視範囲の説明と同意

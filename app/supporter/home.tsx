@@ -83,6 +83,11 @@ export default function SupporterHomeScreen() {
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「S1みまもりホームのショートカット『コレクター棚』──▶S19」）。
     { emoji: "🗄️", label: "コレクター棚", path: "/supporter/collector-shelf" },
+    // [2026-09-07追加・実装メモ.md 141章] 本部長指示によりみまもりメンバーも感謝
+    // ポイントの送受信対象になった（スキーマ設計.sql 48章）。P7/C5の「感謝ポイント」
+    // ショートカットと同じ位置づけで追加した（`/parent/home.tsx`の「💌 感謝\nポイント」
+    // タイルと同型）。送受信できる仕様にしたのに入口が無いと意味がないための対応。
+    { emoji: "💌", label: "ありがとう", path: "/supporter/gratitude" },
     { emoji: "⚙️", label: "設定", path: "/supporter/settings" },
   ];
 
