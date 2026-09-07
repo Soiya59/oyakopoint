@@ -2408,6 +2408,39 @@ export async function purchaseSticker(client: SupabaseClient, catalogId: string)
  * 収束する（asEmbeddedArrayで吸収）。持ち物として区画に残り続けるため、
  * 配置済みでも一覧からは消えない（決定16）。
  */
+type StickerPurchaseRow = OrnamentStickerPurchase & {
+  sticker_catalog: StickerPurchaseWithCatalog["sticker_catalog"];
+  family_tree_decorations:
+    | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }[]
+    | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }
+    | null;
+};
+
+/** `ornament_sticker_purchases`の1行をコレクター棚表示用の形へ変換する（fetchMyStickerPurchases/fetchFamilyStickerPurchasesの共通処理）。 */
+function mapStickerPurchaseRow(r: StickerPurchaseRow, currentSeasonId: string | null): StickerPurchaseWithCatalog {
+  const deco = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
+  const placement =
+    deco && deco.pos_x != null && deco.pos_y != null
+      ? {
+          decorationId: deco.id,
+          seasonId: deco.season_id,
+          posX: deco.pos_x,
+          posY: deco.pos_y,
+          isCurrentSeason: currentSeasonId != null && deco.season_id === currentSeasonId,
+        }
+      : null;
+  return {
+    id: r.id,
+    family_id: r.family_id,
+    member_id: r.member_id,
+    sticker_catalog_id: r.sticker_catalog_id,
+    points_spent: r.points_spent,
+    purchased_at: r.purchased_at,
+    sticker_catalog: r.sticker_catalog,
+    placement,
+  };
+}
+
 export async function fetchMyStickerPurchases(
   client: SupabaseClient,
   memberId: string,
@@ -2419,39 +2452,32 @@ export async function fetchMyStickerPurchases(
     .eq("member_id", memberId)
     .order("purchased_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
-  const rows = (data ?? []) as unknown as (OrnamentStickerPurchase & {
-    sticker_catalog: StickerPurchaseWithCatalog["sticker_catalog"];
-    family_tree_decorations:
-      | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }[]
-      | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }
-      | null;
-  })[];
-  return {
-    ok: true,
-    data: rows.map((r) => {
-      const deco = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
-      const placement =
-        deco && deco.pos_x != null && deco.pos_y != null
-          ? {
-              decorationId: deco.id,
-              seasonId: deco.season_id,
-              posX: deco.pos_x,
-              posY: deco.pos_y,
-              isCurrentSeason: currentSeasonId != null && deco.season_id === currentSeasonId,
-            }
-          : null;
-      return {
-        id: r.id,
-        family_id: r.family_id,
-        member_id: r.member_id,
-        sticker_catalog_id: r.sticker_catalog_id,
-        points_spent: r.points_spent,
-        purchased_at: r.purchased_at,
-        sticker_catalog: r.sticker_catalog,
-        placement,
-      };
-    }),
-  };
+  const rows = (data ?? []) as unknown as StickerPurchaseRow[];
+  return { ok: true, data: rows.map((r) => mapStickerPurchaseRow(r, currentSeasonId)) };
+}
+
+/**
+ * [2026-09-08新設・実装メモ158章・統括の実機確認「あつめたものに、メダルも入れて
+ * ほしい」] コレクター棚「集めたもの」区画・メンバー選択チップ「全員」選択時に、
+ * 家族全員のメダル所有状況を一覧するための取得。`fetchMyStickerPurchases`と同じ
+ * `ornament_sticker_purchases_select_same_family`ポリシー（`family_id =
+ * current_family_id()`、スキーマ設計.sql・20260907020000マイグレーション）の範囲内で、
+ * `member_id`ではなく`family_id`で絞り込む点のみが異なる。新規テーブル・新規列・
+ * 新規ポリシーは追加していない（DBの変更なし）。
+ */
+export async function fetchFamilyStickerPurchases(
+  client: SupabaseClient,
+  familyId: string,
+  currentSeasonId: string | null
+): Promise<ApiResult<StickerPurchaseWithCatalog[]>> {
+  const { data, error } = await client
+    .from("ornament_sticker_purchases")
+    .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
+    .eq("family_id", familyId)
+    .order("purchased_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as StickerPurchaseRow[];
+  return { ok: true, data: rows.map((r) => mapStickerPurchaseRow(r, currentSeasonId)) };
 }
 
 /**

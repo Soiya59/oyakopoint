@@ -8,7 +8,7 @@ import type { StickerRarity, StickerShape } from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useCollectedPrizes, usePastTreeSeasonDots, usePastTreeSeasons } from "@/hooks/useCollectorShelf";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
-import { useMyStickerPurchases } from "@/hooks/useStickers";
+import { useFamilyStickerPurchases, useMyStickerPurchases } from "@/hooks/useStickers";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
 
 /**
@@ -44,6 +44,12 @@ export default function ParentCollectorShelfScreen() {
     effectiveMemberId,
     season?.id ?? null
   );
+  // [2026-09-08追加・実装メモ158章] 「全員」選択時の「メダル」区分用。
+  const {
+    loadState: familyStickersLoadState,
+    purchases: familyStickerPurchases,
+    reload: reloadFamilyStickers,
+  } = useFamilyStickerPurchases(familyId, season?.id ?? null);
 
   return (
     <Screen tone="parent">
@@ -77,6 +83,9 @@ export default function ParentCollectorShelfScreen() {
         stickersLoadState={stickersLoadState}
         stickerPurchases={stickerPurchases}
         onRetryStickers={reloadStickers}
+        familyStickersLoadState={familyStickersLoadState}
+        familyStickerPurchases={familyStickerPurchases}
+        onRetryFamilyStickers={reloadFamilyStickers}
         onGoToStickerShop={() => router.push("/parent/sticker-shop")}
         onPlaceSticker={(purchaseId: string, shape: StickerShape, rarity: StickerRarity) =>
           router.push({ pathname: "/parent/tree-decorate", params: { purchaseId, shape, rarity } })

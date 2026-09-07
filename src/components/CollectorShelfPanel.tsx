@@ -117,6 +117,13 @@ export interface CollectorShelfPanelProps {
   stickersLoadState: LoadState;
   stickerPurchases: StickerPurchaseWithCatalog[];
   onRetryStickers: () => void;
+  /**
+   * [2026-09-08追加・実装メモ158章] 「全員」選択時の「メダル」区分。家族全員分の
+   * メダル所有状況をまとめて受け取る（`member_id`で誰の物かを判別する）。
+   */
+  familyStickersLoadState: LoadState;
+  familyStickerPurchases: StickerPurchaseWithCatalog[];
+  onRetryFamilyStickers: () => void;
   /** 自分選択時のみ: 「シールを かいに いく」導線（→購入画面、決定25）。 */
   onGoToStickerShop: () => void;
   /** 自分選択時のみ: 「木に かざる」導線（→ドラッグ配置画面、決定25）。 */
@@ -424,6 +431,9 @@ export function CollectorShelfPanel({
   stickersLoadState,
   stickerPurchases,
   onRetryStickers,
+  familyStickersLoadState,
+  familyStickerPurchases,
+  onRetryFamilyStickers,
   onGoToStickerShop,
   onPlaceSticker,
   onMoveSticker,
@@ -524,6 +534,19 @@ export function CollectorShelfPanel({
                 </View>
               )}
               {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} />}
+
+              {/* --- メダル区分（「全員」選択時。実装メモ158章・統括の実機確認「あつめたものに
+                  メダルも入れてほしい」対応） --- */}
+              <View style={{ marginTop: theme.spacing.s6 }}>
+                <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
+                <FamilyMedalSection
+                  tone={tone}
+                  members={members}
+                  loadState={familyStickersLoadState}
+                  purchases={familyStickerPurchases}
+                  onRetry={onRetryFamilyStickers}
+                />
+              </View>
             </View>
           ) : (
             // 個別メンバー選択時: バッジ・つくった/あつめたもの・シールの3区分（決定21・22）。
@@ -901,6 +924,132 @@ function StickerDetailCard({
               )}
             </View>
           )}
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * 「メダル」区分（「全員」選択時。実装メモ158章）。統括の実機確認「あつめたものに、
+ * メダルも入れてほしい」への対応で、個別メンバー選択時の`StickerShelfSection`とは
+ * 別に、家族全員分のメダル所有状況を1つのグリッドにまとめて表示する。
+ *
+ * 表示グリッドは`StickerShelfSection`（個別メンバー版）と完全に同じスタイル
+ * （`styles.grid`/`gridItem`/`gridCaption`）を使い、「つくった・あつめたもの」の
+ * グリッドとも見た目を揃える（統括指摘・実装メモ151章で揃えたばかりのため）。
+ * ただし「木に飾る」「うごかす」「メダルを買いに行く」などの操作導線は一切持たない
+ * （決定6「全員選択時に並べ替え等のボタンを一切配置しない」・決定25「自分を
+ * 選んでいるときだけ操作を表示」。全員ビューは特定の「自分」を持たないため）。
+ */
+function FamilyMedalSection({
+  tone,
+  members,
+  loadState,
+  purchases,
+  onRetry,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  loadState: LoadState;
+  purchases: StickerPurchaseWithCatalog[];
+  onRetry: () => void;
+}) {
+  const isChild = tone === "child";
+  const bodyStyle = bodyStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const entries = useMemo(() => buildStickerShelfEntries(purchases), [purchases]);
+  const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
+
+  if (loadState === "loading") return <SkeletonList count={2} />;
+  if (loadState === "error") {
+    return (
+      <ErrorState
+        tone={isChild ? "child" : "parent"}
+        title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        onRetry={onRetry}
+      />
+    );
+  }
+  if (entries.length === 0) {
+    return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
+  }
+
+  return (
+    <>
+      <View style={styles.grid}>
+        {entries.map((entry) => {
+          const selected = entry.key === selectedKey;
+          return (
+            <Pressable
+              key={entry.key}
+              onPress={() => setSelectedKey(selected ? null : entry.key)}
+              style={[styles.gridItem, selected && styles.gridItemSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <StickerIcon shape={entry.shape} rarity={entry.rarity} size={48} />
+              <Text style={[captionStyle, styles.gridCaption]}>
+                {stickerEntryLabel(tone, entry.shape, entry.rarity)}
+                {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {selectedEntry && <FamilyStickerDetailCard tone={tone} members={members} entry={selectedEntry} />}
+    </>
+  );
+}
+
+/**
+ * 「メダル」区分（全員選択時）の詳細カード。個別メンバー版の`StickerDetailCard`とは
+ * 異なり、木への配置状況・操作導線は持たず、「誰が何個持っているか」の内訳のみを示す。
+ * 家族の絵の詳細（誰が描いたか）に倣い、「全員」ビューでも誰の物かを詳細タップで
+ * 追えるようにする（本節冒頭コメント参照）。
+ *
+ * 並び順は`members`順（`PastTreeColorLegend`と同じ、決定5の内訳表示と揃える）で、
+ * 件数の多い順には並べ替えない（07-10章必須3条件「ランキングを作らない」）。
+ */
+function FamilyStickerDetailCard({
+  tone,
+  members,
+  entry,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  entry: { shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] };
+}) {
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const { shape, rarity, owned } = entry;
+
+  const ownerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    owned.forEach((p) => counts.set(p.member_id, (counts.get(p.member_id) ?? 0) + 1));
+    return members.filter((m) => counts.has(m.id)).map((m) => ({ member: m, count: counts.get(m.id)! }));
+  }, [owned, members]);
+
+  return (
+    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
+      <View style={styles.detailDrawingWrap}>
+        <StickerIcon shape={shape} rarity={rarity} size={220} highRes />
+        <View style={styles.detailDrawingTextWrap}>
+          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
+          <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
+            {ownerCounts.map(({ member, count }) => (
+              <View key={member.id} style={styles.legendRow}>
+                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} />
+                <Text style={captionStyle}>
+                  {member.display_name}
+                  {count > 1 ? ` ×${count}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
     </Card>

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import {
   decorateTreeWithSticker,
+  fetchFamilyStickerPurchases,
   fetchMyStickerPurchases,
   fetchStickerCatalog,
   moveTreeSticker,
@@ -95,6 +96,36 @@ export function useMyStickerPurchases(memberId: string, currentSeasonId: string 
     setLoadState("ready");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, memberId, currentSeasonId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, purchases, reload: load };
+}
+
+/**
+ * コレクター棚「集めたもの」区画・メンバー選択チップ「全員」選択時の「メダル」
+ * 区分（実装メモ158章）。`useMyStickerPurchases`と同じ形の戻り値だが、`memberId`
+ * ではなく`familyId`で家族全員分をまとめて取得する。
+ */
+export function useFamilyStickerPurchases(familyId: string, currentSeasonId: string | null) {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [purchases, setPurchases] = useState<StickerPurchaseWithCatalog[]>([]);
+
+  const load = useCallback(async () => {
+    if (!familyId) return;
+    setLoadState("loading");
+    const res = await fetchFamilyStickerPurchases(client, familyId, currentSeasonId);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    setPurchases(res.data);
+    setLoadState("ready");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, familyId, currentSeasonId]);
 
   useEffect(() => {
     void load();
