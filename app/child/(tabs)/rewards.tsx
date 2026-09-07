@@ -39,9 +39,9 @@ export default function ChildRewardsScreen() {
           シール購入画面（C30）への導線を追加した。既存のコレクションだな経由の導線
           （じぶんのシールタブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
       <Pressable onPress={() => router.push("/child/sticker-shop")} style={styles.stickerLink} hitSlop={8}>
-        <Text style={theme.typography.childBody}>🧩 シールを かいに いく →</Text>
+        <Text style={theme.typography.childBody}>🧩 メダルを かいに いく →</Text>
         <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-          ためた ぽいんとで、きに かざる シールが かえるよ
+          ためた ぽいんとで、きに かざる メダルが かえるよ
         </Text>
       </Pressable>
 

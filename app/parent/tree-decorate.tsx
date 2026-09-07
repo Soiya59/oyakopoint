@@ -106,7 +106,7 @@ export default function ParentTreeDecorateScreen() {
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        {moveDecorationId ? "ステッカーを動かす" : purchaseId ? "ステッカーを飾る" : "木に飾る"}
+        {moveDecorationId ? "メダルを動かす" : purchaseId ? "メダルを飾る" : "木に飾る"}
       </Text>
 
       {isStickerMode ? (

@@ -44,7 +44,7 @@ export default function ChildStickerShopScreen() {
       return;
     }
     const item = catalog.find((c) => c.id === catalogId);
-    setSnackbar(`⭐ ${item?.display_name ?? "シール"}を てにいれたよ！コレクターだなに しまってあるよ`);
+    setSnackbar(`⭐ ${item?.display_name ?? "メダル"}を てにいれたよ！コレクターだなに しまってあるよ`);
     void reloadPurchased();
     setTimeout(() => {
       setSnackbar(null);

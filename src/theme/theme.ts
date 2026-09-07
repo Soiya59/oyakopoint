@@ -369,7 +369,7 @@ export const badgeDefinitions: readonly {
   { key: "lifetime_completions", emoji: "✅", nameParent: "がんばり50回", nameChild: "がんばり50かい" },
   { key: "lifetime_drawings", emoji: "✏️", nameParent: "えかき10まい", nameChild: "えかき10まい" },
   { key: "lifetime_gacha_draws", emoji: "🔍", nameParent: "ひみつはっけん10かい", nameChild: "ひみつはっけん10かい" },
-  { key: "lifetime_sticker_purchases", emoji: "🏷️", nameParent: "ステッカー5こ", nameChild: "シール5こ" },
+  { key: "lifetime_sticker_purchases", emoji: "🏷️", nameParent: "メダル5こ", nameChild: "メダル5こ" },
 ] as const;
 
 /**

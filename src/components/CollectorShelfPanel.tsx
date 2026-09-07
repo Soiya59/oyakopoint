@@ -3,6 +3,10 @@
  * 参照: 要件定義書07-13-3章、主要画面ワイヤーフレーム.md 21.0節決定6・21.6節・
  * 32.0a節（決定19〜25）・32.2a節。
  *
+ * [2026-09-07改訂・本部長／実装メモ152章] 画面に出す呼び名は「メダル」に統一した
+ * （統括判断）。コンポーネント名・DBの`sticker_key`・本コメントの「シール」
+ * 「ステッカー」はそのまま変更していない。
+ *
  * [2026-09-08全面改訂・統括フィードバック（本部長経由）・32.0a節/32.2a節]
  * 「区画3：自分のステッカー」という独立タブは廃止し、タブは「集めたもの」
  * 「過去の木」の2つに戻した（決定19）。「集めたもの」タブの中にメンバー選択
@@ -745,7 +749,9 @@ function StickerShelfSection({
 
   return (
     <View>
-      <Text style={[captionStyle, styles.legendHeading]}>シール</Text>
+      {/* [2026-09-07改訂・本部長／実装メモ152章] 呼び名を「メダル」に統一（統括判断）。
+          DBの`sticker_key`・コンポーネント名・コメント中の「シール」「ステッカー」は変更しない。 */}
+      <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
@@ -756,9 +762,9 @@ function StickerShelfSection({
         <>
           {isViewingSelf ? (
             <>
-              <Text style={bodyStyle}>{isChild ? "まだ シールを もっていないよ。かってみよう→" : "まだステッカーを購入していません。購入する→"}</Text>
+              <Text style={bodyStyle}>{isChild ? "まだ メダルを もっていないよ。かってみよう→" : "まだメダルを購入していません。購入する→"}</Text>
               <AppButton
-                label={isChild ? "シールを かいに いく →" : "購入する →"}
+                label={isChild ? "メダルを かいに いく →" : "購入する →"}
                 tone={tone}
                 onPress={onGoToShop}
                 style={{ marginTop: theme.spacing.s3 }}
@@ -800,7 +806,7 @@ function StickerShelfSection({
           {isViewingSelf && (
             <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s3 }}>
               <Text style={[bodyStyle, { color: theme.colors.brandPrimaryStrong }]}>
-                {isChild ? "→ シールを かいに いく" : "→ ステッカーを買いに行く"}
+                {isChild ? "→ メダルを かいに いく" : "→ メダルを買いに行く"}
               </Text>
             </Pressable>
           )}

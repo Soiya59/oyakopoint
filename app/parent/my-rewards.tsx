@@ -128,9 +128,9 @@ export default function ParentMyRewardsScreen() {
         hitSlop={8}
       >
         <Card>
-          <Text style={theme.typography.parentBodyMedium}>🧩 ステッカーを買いに行く →</Text>
+          <Text style={theme.typography.parentBodyMedium}>🧩 メダルを買いに行く →</Text>
           <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-            貯めたポイントで、木を飾るステッカーを買えます。
+            貯めたポイントで、木を飾るメダルを買えます。
           </Text>
         </Card>
       </Pressable>

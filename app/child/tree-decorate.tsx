@@ -109,7 +109,7 @@ export default function ChildTreeDecorateScreen() {
         <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        {moveDecorationId ? "シールを うごかす" : purchaseId ? "シールを かざる" : "きに かざる"}
+        {moveDecorationId ? "メダルを うごかす" : purchaseId ? "メダルを かざる" : "きに かざる"}
       </Text>
 
       {isStickerMode ? (

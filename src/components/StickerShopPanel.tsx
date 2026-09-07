@@ -12,6 +12,10 @@
  * つき1人あたり月1枚」だった（決定15の読み取り誤りの訂正）。そのためグリッド
  * 全体を止める旧`monthlyLimitReached`は廃止し、今月すでに購入した種類だけを
  * 個別に非活性化する（開発部/成果物/実装メモ.md 143章）。
+ *
+ * [2026-09-07改訂・本部長／実装メモ152章] 画面に出す呼び名は「メダル」に統一した
+ * （統括判断）。DBの`sticker_key`・本コンポーネント名・コメント中の「シール」
+ * 「ステッカー」はそのまま変更していない。
  */
 import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -109,7 +113,7 @@ export function StickerShopPanel({
   return (
     <View>
       <View style={styles.headerRow}>
-        <Text style={bodyMediumStyle}>{isChild ? "シールを かう" : "ステッカーを買う"}</Text>
+        <Text style={bodyMediumStyle}>{isChild ? "メダルを かう" : "メダルを買う"}</Text>
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
@@ -119,7 +123,7 @@ export function StickerShopPanel({
           （下記）と、該当するセルだけの個別表示（購入済みの種類のみ非活性・
           「かったよ／購入済み」表示）に置き換える。 */}
       <Text style={[captionStyle, styles.ruleNote]}>
-        {isChild ? "おなじ シールは 1かげつに 1まいまで かえるよ" : "同じ種類は1人あたり月1枚まで購入できます"}
+        {isChild ? "おなじ メダルは 1かげつに 1まいまで かえるよ" : "同じ種類は1人あたり月1枚まで購入できます"}
       </Text>
 
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s4 }}>
