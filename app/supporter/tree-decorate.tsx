@@ -8,17 +8,20 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useDecorateTreeAction, useDecoratableCompletions } from "@/hooks/useTreeDecoration";
+import { useDecorateTreeWithStickerAction } from "@/hooks/useStickers";
 
 const SUCCESS_DISPLAY_MS = 600;
 
 /**
  * S17 木に飾る（みまもりメンバー、交換相手選択。P26/C20/S14「かざりつけモード」）
- * 参照: 画面一覧・遷移図.md S17、主要画面ワイヤーフレーム.md 21.4節
+ * 参照: 画面一覧・遷移図.md S17、主要画面ワイヤーフレーム.md 21.4節・32.3節
  *
  * P29と全く同じ部品（TreeDecoratePanel等）を使う。トーンのみsupporter。
+ * `drawId`（ガチャ景品）または`purchaseId`（購入ステッカー、S19区画3の「木に飾る」）
+ * のいずれかを受け取る（07-19-9a章「決定16」・32.0節決定7）。
  */
 export default function SupporterTreeDecorateScreen() {
-  const { drawId } = useLocalSearchParams<{ drawId?: string }>();
+  const { drawId, purchaseId } = useLocalSearchParams<{ drawId?: string; purchaseId?: string }>();
   const { state } = useAppData();
   const myId = state.activeParentMemberId;
   const { loadState: treeLoadState, season, dots, reload: reloadTree } = useFamilyTreeDetail();
@@ -27,14 +30,16 @@ export default function SupporterTreeDecorateScreen() {
     season?.season_start ?? null,
     treeLoadState !== "loading"
   );
-  const { decorating, decorate } = useDecorateTreeAction();
+  const { decorating: decoratingGacha, decorate: decorateGacha } = useDecorateTreeAction();
+  const { decorating: decoratingSticker, decorate: decorateSticker } = useDecorateTreeWithStickerAction();
+  const decorating = decoratingGacha || decoratingSticker;
   const [decorateError, setDecorateError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  if (!drawId) {
+  if (!drawId && !purchaseId) {
     return (
       <Screen tone="supporter">
-        <Text style={theme.typography.supporterBody}>景品が見つかりませんでした</Text>
+        <Text style={theme.typography.supporterBody}>対象が見つかりませんでした</Text>
         <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
       </Screen>
     );
@@ -42,7 +47,7 @@ export default function SupporterTreeDecorateScreen() {
 
   const handleConfirm = async (completionId: string) => {
     setDecorateError(null);
-    const res = await decorate(drawId, completionId);
+    const res = purchaseId ? await decorateSticker(purchaseId, completionId) : await decorateGacha(drawId!, completionId);
     if (!res.ok) {
       setDecorateError(res.error.message);
       return;
@@ -68,7 +73,7 @@ export default function SupporterTreeDecorateScreen() {
         <Text style={theme.typography.supporterBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        木に飾る
+        {purchaseId ? "ステッカーを飾る" : "木に飾る"}
       </Text>
 
       <TreeDecoratePanel

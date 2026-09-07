@@ -96,7 +96,7 @@ export default function SupporterHomeScreen() {
         </Pressable>
       </View>
 
-      <MyPointsCard tone="supporter" points={myPoints} />
+      <MyPointsCard tone="supporter" points={myPoints} memberId={state.activeParentMemberId} />
 
       <GachaHomeWidget
         tone="supporter"

@@ -510,6 +510,56 @@ export interface FamilyBoardReactionWithPostBody extends FamilyBoardReaction {
   family_board_posts: { body: string; author_member_id: string } | null;
 }
 
+// [新設・2026-09-07] 木を飾るステッカー購入とバッジ（要件定義書07-19章、
+// スキーマ設計.sql 47章、API仕様.md 14章、開発部/成果物/実装メモ.md 138章）。
+
+/** sticker_catalog テーブルの1行（全家族共通グローバルカタログ、12種固定）。 */
+export interface StickerCatalogItem {
+  id: string;
+  shape: "beetle" | "butterfly" | "flower";
+  rarity: "bronze" | "silver" | "gold" | "rainbow";
+  sticker_key: string;
+  display_name: string;
+  points_cost: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** ornament_sticker_purchases テーブルの1行（購入記録。取消経路は無い）。 */
+export interface OrnamentStickerPurchase {
+  id: string;
+  family_id: string;
+  member_id: string;
+  sticker_catalog_id: string;
+  points_spent: number;
+  purchased_at: string;
+}
+
+/** 区画3「自分のステッカー」表示用。カタログ情報をネストし、今シーズンの配置有無を付与する。 */
+export interface StickerPurchaseWithCatalog extends OrnamentStickerPurchase {
+  sticker_catalog: Pick<StickerCatalogItem, "shape" | "rarity" | "sticker_key" | "display_name"> | null;
+  /** 今シーズン、この購入がすでにどこかの色丸に配置済みか（family_tree_decorationsの有無）。 */
+  decoratedThisSeason: boolean;
+}
+
+/** member_badges テーブルの1行（累計到達バッジの記録。到達したら消えない）。 */
+export interface MemberBadge {
+  id: string;
+  family_id: string;
+  member_id: string;
+  badge_key: "lifetime_points_earned" | "lifetime_completions" | "lifetime_drawings" | "lifetime_gacha_draws" | "lifetime_sticker_purchases";
+  tier_value: number;
+  achieved_at: string;
+}
+
+/** member_badge_progress View の1行（メンバー×指標ごとの現在の累計値、進捗表示用）。 */
+export interface MemberBadgeProgress {
+  member_id: string;
+  family_id: string;
+  badge_key: MemberBadge["badge_key"];
+  current_value: number;
+}
+
 /** family_home_card View の source 列（スキーマ設計.sql 35d章）。 */
 export type FamilyHomeCardSource = "board_post" | "weekly_digest";
 

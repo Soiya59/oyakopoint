@@ -6,6 +6,7 @@ import type { FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from 
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
+import { StickerIcon } from "./StickerIcon";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 
 /**
@@ -49,6 +50,13 @@ const DOT_SIZE = 13;
 // 「ガチャの景品（36pt）の表示ルール」）。大きさは「これは景品だ」という意味のみを
 // 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
 const PRIZE_DOT_SIZE = 36;
+/**
+ * [2026-09-07追加・要件定義書07-19-9a章] 木を飾るステッカー（購入品）の表示直径。
+ * デザイントークン.md 1.11節「木の上での表示直径 24pt固定」。通常の色丸13pt超・
+ * 景品36pt未満の中間サイズ。誰が何回購入しても大きさは変動しない
+ * （レアリティは大きさではなく色・質感のみで表現、決定3）。
+ */
+const STICKER_DOT_SIZE = 24;
 /**
  * 花（stage3）の花芯の色。個人色に染めない固定色（木の共有部分と同じ扱い）。
  * [2026-09-01変更] 旧値`#FFF3B0`はメンバーカラー「レモン」と完全一致していたため、
@@ -123,9 +131,19 @@ function reservoirSample(dots: FamilyTreeCompletionDot[], slotCount: number): Fa
  * すると20章決定3が守ろうとした視覚的な予算（40個）を超えてしまう、というのが
  * この方式を採用した理由（当初のUIUXデザイン部案からの本部長修正）。
  */
+// [2026-09-07改訂・要件定義書07-19-9a章「決定5」・主要画面ワイヤーフレーム.md
+// 32.0節決定5] 木を飾るステッカー（購入品）も景品と同じく40スロットの中で
+// 優先確保する（上限の対象外にはしない）。「景品かどうか」の判定に「ステッカーか
+// どうか」も同じ枝として合流させる（isPrioritized）。一度「木に飾る」を確定した
+// 装飾が確率的な間引きで偶発的に表示から漏れると「置いたはずなのに消えた」という
+// 体験になるため（07-9章「後退しない」原則・21.0節決定10と同じ理由）。
+function isPrioritizedDot(d: FamilyTreeCompletionDot): boolean {
+  return d.prize !== null || d.sticker !== null;
+}
+
 export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): FamilyTreeCompletionDot[] {
-  const prizeDots = dots.filter((d) => d.prize !== null);
-  const normalDots = dots.filter((d) => d.prize === null);
+  const prizeDots = dots.filter(isPrioritizedDot);
+  const normalDots = dots.filter((d) => !isPrioritizedDot(d));
 
   const keptPrizes = prizeDots.length <= MAX_SLOTS ? prizeDots : reservoirSample(prizeDots, MAX_SLOTS);
   const remainingSlots = MAX_SLOTS - keptPrizes.length;
@@ -207,7 +225,9 @@ function dotColor(dot: FamilyTreeCompletionDot): string {
  * 「これは景品だ」という意味のみを持ち、報告者の貢献度・完了報告数では変動しない。
  */
 function dotDisplaySize(dot: FamilyTreeCompletionDot): number {
-  return dot.prize ? PRIZE_DOT_SIZE : DOT_SIZE;
+  if (dot.prize) return PRIZE_DOT_SIZE;
+  if (dot.sticker) return STICKER_DOT_SIZE;
+  return DOT_SIZE;
 }
 
 // [2026-08-24再改訂] 当初は段階ごとに土の幅を変えていたが、
@@ -570,6 +590,48 @@ function PrizeDotView({
   );
 }
 
+/**
+ * [2026-09-07新設・要件定義書07-19-9a章] 木を飾るステッカー（購入品）の中身の表現。
+ * デザイントークン.md 1.11節。景品（PrizeDotView）と全く同じ「識別リング（本人の
+ * avatar_color、2pt実線）＋円形クリップした内側の絵柄」という構造を24pt版として
+ * 流用する（主要画面ワイヤーフレーム.md 32.0節決定4。新しいリング仕様を増やさない）。
+ * 内側の絵柄はSVG自前描画（StickerIcon、決定2）。gradient idの一意性のため
+ * `uid`に木の上で一意な`decorationId`を渡す（本部長申し送り事項6）。
+ */
+function StickerDotView({
+  dot,
+  x,
+  y,
+  size,
+}: {
+  dot: FamilyTreeCompletionDot;
+  x: number;
+  y: number;
+  size: number;
+}) {
+  const sticker = dot.sticker;
+  if (!sticker) return null;
+  const ringColor = dotColor(dot);
+  const innerSize = Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
+  return (
+    <View
+      style={[
+        styles.prizeDot,
+        {
+          left: x - size / 2,
+          top: y - size / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: ringColor,
+        },
+      ]}
+    >
+      <StickerIcon shape={sticker.shape} rarity={sticker.rarity} size={innerSize} uid={sticker.decorationId} />
+    </View>
+  );
+}
+
 export function TreeStageVisual({
   stage,
   dots,
@@ -600,12 +662,12 @@ export function TreeStageVisual({
       canopy: [], lobeLeft: [], lobeRight: [], trunk: [], soil: [], sky: [],
     };
     if (shape.kind === "tree") {
-      for (const dot of slots) map[pickTreeRegion(dot.id, dot.prize !== null)].push(dot);
+      for (const dot of slots) map[pickTreeRegion(dot.id, isPrioritizedDot(dot))].push(dot);
     } else if (shape.kind === "sprout") {
       // 芽は樹冠・幹が無いので双葉と空だけに振り分ける。芽の段階は完了報告が
       // 10〜29件あり、2枚の葉だけでは密集しがちなため、空に逃がす意味もある。
       for (const dot of slots) {
-        const r = pickTreeRegion(dot.id, dot.prize !== null);
+        const r = pickTreeRegion(dot.id, isPrioritizedDot(dot));
         if (r === "sky") map.sky.push(dot);
         else if (r === "soil" || r === "trunk") map.soil.push(dot); // 芽には幹が無いので地面へ寄せる
         else if (stableHash(dot.id) % 2 === 0) map.lobeLeft.push(dot);
@@ -652,6 +714,8 @@ export function TreeStageVisual({
           )}
           {dot.prize ? (
             <PrizeDotView dot={dot} x={x} y={y} size={size} />
+          ) : dot.sticker ? (
+            <StickerDotView dot={dot} x={x} y={y} size={size} />
           ) : (
             <View style={[styles.dotWrap, { left: x - size / 2, top: y - size / 2, width: size, height: size }]}>
               <StageDot color={dotColor(dot)} size={size} stage={stage} />

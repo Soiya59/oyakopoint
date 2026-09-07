@@ -45,12 +45,17 @@ import type {
   GachaPresetOrnament,
   GachaPrizeKind,
   GratitudePoint,
+  MemberBadge,
+  MemberBadgeProgress,
   MemberPoints,
+  OrnamentStickerPurchase,
   ReactionKind,
   ReportChoreCompletionByNfcTagResult,
   Reward,
   RewardRedemption,
   StampKey,
+  StickerCatalogItem,
+  StickerPurchaseWithCatalog,
   WeeklyFamilyDigest,
 } from "@/types/domain";
 
@@ -1464,6 +1469,21 @@ export interface FamilyTreeDotPrize {
 }
 
 /**
+ * [2026-09-07新設] 完了報告が購入ステッカーと交換済みの場合の詳細。
+ * `family_tree_decorations`（decoration_source='sticker'）経由で
+ * `ornament_sticker_purchases`→`sticker_catalog`を辿った内容
+ * （要件定義書07-19-9a章、API仕様.md 14.5章）。
+ */
+export interface FamilyTreeDotSticker {
+  decorationId: string;
+  stickerPurchaseId: string;
+  shape: "beetle" | "butterfly" | "flower";
+  rarity: "bronze" | "silver" | "gold" | "rainbow";
+  stickerKey: string;
+  displayName: string;
+}
+
+/**
  * 完了報告1件ごとの視覚要素の色付け用（API仕様.md 9.2章）。今シーズン開始以降の完了報告を報告者の色付きで返す。
  * [2026-08-26改訂・第4段階] `prize`（非null＝景品に交換済み）を追加し、
  * `family_tree_decorations`をembedするよう変更した（API仕様.md 12.5章のクエリ形状）。
@@ -1474,6 +1494,8 @@ export interface FamilyTreeCompletionDot {
   reported_by: string;
   avatar_color: string | null;
   prize: FamilyTreeDotPrize | null;
+  /** [2026-09-07追加] decoration_source='sticker'の場合のみ非null。prizeと同時に非nullになることはない（DB側CHECK制約）。 */
+  sticker: FamilyTreeDotSticker | null;
 }
 
 /**
@@ -1507,13 +1529,19 @@ export async function fetchFamilyTreeCompletionDots(
   seasonStartIso: string,
   seasonEndIso?: string | null
 ): Promise<ApiResult<FamilyTreeCompletionDot[]>> {
+  // [2026-09-07改訂・要件定義書07-19章] family_tree_decorationsがdecoration_source
+  // 列（'gacha'|'sticker'）を持つようになったため、埋め込みをsticker_purchase側にも
+  // 拡張する（API仕様.md 14.5章のクエリ形状）。gacha_draws・sticker_purchaseは
+  // どちらか一方のみ非nullになる（DB側CHECK制約chk_family_tree_decorations_
+  // source_payload）。新規View・新規テーブルは追加していない。
   let query = client
     .from("chore_completions")
     .select(
       "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
-        "family_tree_decorations(id, draw_id, gacha_draws(prize_kind, " +
+        "family_tree_decorations(id, draw_id, decoration_source, gacha_draws(prize_kind, " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)))"
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)), " +
+        "sticker_purchase:ornament_sticker_purchases(id, sticker_catalog(shape,rarity,sticker_key,display_name)))"
     )
     .eq("family_id", familyId)
     .gte("reported_at", seasonStartIso)
@@ -1530,11 +1558,21 @@ export async function fetchFamilyTreeCompletionDots(
     family_tree_decorations:
       | {
           id: string;
-          draw_id: string;
+          draw_id: string | null;
+          decoration_source: "gacha" | "sticker";
           gacha_draws: {
             prize_kind: GachaPrizeKind;
             preset_ornament: { display_name: string; emoji: string | null } | null;
             prize_drawing: { line_data: FamilyDrawingLineData } | null;
+          } | null;
+          sticker_purchase: {
+            id: string;
+            sticker_catalog: {
+              shape: "beetle" | "butterfly" | "flower";
+              rarity: "bronze" | "silver" | "gold" | "rainbow";
+              sticker_key: string;
+              display_name: string;
+            } | null;
           } | null;
         }
       | null;
@@ -1548,7 +1586,7 @@ export async function fetchFamilyTreeCompletionDots(
       // 先頭要素の有無だけを見る。
       const decoration = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
       const prize: FamilyTreeDotPrize | null =
-        decoration && decoration.gacha_draws
+        decoration && decoration.decoration_source === "gacha" && decoration.gacha_draws && decoration.draw_id
           ? {
               decorationId: decoration.id,
               drawId: decoration.draw_id,
@@ -1557,12 +1595,24 @@ export async function fetchFamilyTreeCompletionDots(
               drawing: decoration.gacha_draws.prize_drawing,
             }
           : null;
+      const sticker: FamilyTreeDotSticker | null =
+        decoration && decoration.decoration_source === "sticker" && decoration.sticker_purchase?.sticker_catalog
+          ? {
+              decorationId: decoration.id,
+              stickerPurchaseId: decoration.sticker_purchase.id,
+              shape: decoration.sticker_purchase.sticker_catalog.shape,
+              rarity: decoration.sticker_purchase.sticker_catalog.rarity,
+              stickerKey: decoration.sticker_purchase.sticker_catalog.sticker_key,
+              displayName: decoration.sticker_purchase.sticker_catalog.display_name,
+            }
+          : null;
       return {
         id: r.id,
         reported_at: r.reported_at,
         reported_by: r.reported_by,
         avatar_color: r.family_members?.avatar_color ?? null,
         prize,
+        sticker,
       };
     }),
   };
@@ -2219,4 +2269,147 @@ export async function fetchFamilyBoardReactionsLog(
     .order("created_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithPostBody[] };
+}
+
+// ============================================================
+// 14. 木を飾るステッカー購入とバッジ（要件定義書07-19章、API仕様.md 14章、
+//     スキーマ設計.sql 47章、2026-09-07新設）
+//
+// [本章の配置について] 12・13章と同じ理由（既存の実際の章番号が他部署の成果物と
+// ズレているため、これ以上ズレを広げないよう末尾に追加する）。
+// ============================================================
+
+/**
+ * API仕様.md 14.1章「ステッカーカタログを見る」。12種（形3種×レアリティ4段）を
+ * 常に同じ配置（形ごとに1行、レアリティ4段を列に固定）で表示するため、
+ * shape→rarity（cost）の順で並べる。SVGの実データはDBに保存しない
+ * （`sticker_key`がクライアント側アセット参照キー、theme.stickerCatalogOrder参照）。
+ */
+export async function fetchStickerCatalog(client: SupabaseClient): Promise<ApiResult<StickerCatalogItem[]>> {
+  const { data, error } = await client
+    .from("sticker_catalog")
+    .select("*")
+    .eq("is_active", true)
+    .order("shape")
+    .order("points_cost");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as StickerCatalogItem[] };
+}
+
+export interface PurchaseStickerResult {
+  purchase_id: string;
+  sticker_catalog_id: string;
+  points_spent: number;
+  purchased_at: string;
+}
+
+/**
+ * API仕様.md 14.2章「ステッカーを購入する」。`purchase_sticker()`（SECURITY DEFINER）が
+ * 月1個の上限（今月すでに購入済みなら`check_violation`）・残高チェック（不足なら
+ * `check_violation`）を1トランザクションで検証する。取消APIは存在しない
+ * （決定24）。無効化/存在しないIDは`foreign_key_violation`。
+ */
+export async function purchaseSticker(client: SupabaseClient, catalogId: string): Promise<ApiResult<PurchaseStickerResult>> {
+  const { data, error } = await client.rpc("purchase_sticker", { p_catalog_id: catalogId });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: { code: "unknown_error", message: "購入結果を取得できませんでした" } };
+  return { ok: true, data: row as PurchaseStickerResult };
+}
+
+/**
+ * API仕様.md 14.3章「コレクター棚『区画3：自分のステッカー』」。指定した
+ * `memberId`が購入したステッカー一覧（在庫）を新しい順で取得する。
+ * `ornament_sticker_purchases_select_same_family`ポリシーにより家族の誰でも
+ * 他メンバーの購入記録を閲覧できる（決定7・決定23）ため、`memberId`には呼び出し
+ * 本人に限らず家族内の任意のメンバーIDを渡してよい（区画3のメンバー切替タブ用）。
+ * `family_tree_decorations(season_id)`を併せて埋め込み、`currentSeasonId`と一致する
+ * 行があれば「今シーズン配置済み」と判定する（decoratedThisSeason）。持ち物として
+ * 区画3に残り続けるため、配置済みでも一覧からは消えない（決定16）。
+ */
+export async function fetchMyStickerPurchases(
+  client: SupabaseClient,
+  memberId: string,
+  currentSeasonId: string | null
+): Promise<ApiResult<StickerPurchaseWithCatalog[]>> {
+  const { data, error } = await client
+    .from("ornament_sticker_purchases")
+    .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(season_id)")
+    .eq("member_id", memberId)
+    .order("purchased_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as (OrnamentStickerPurchase & {
+    sticker_catalog: StickerPurchaseWithCatalog["sticker_catalog"];
+    family_tree_decorations: { season_id: string }[] | { season_id: string } | null;
+  })[];
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      family_id: r.family_id,
+      member_id: r.member_id,
+      sticker_catalog_id: r.sticker_catalog_id,
+      points_spent: r.points_spent,
+      purchased_at: r.purchased_at,
+      sticker_catalog: r.sticker_catalog,
+      decoratedThisSeason:
+        currentSeasonId != null && asEmbeddedArray(r.family_tree_decorations).some((d) => d.season_id === currentSeasonId),
+    })),
+  };
+}
+
+/**
+ * API仕様.md 14.4章「ステッカーを木に飾る・翌月以降に置き直す」。
+ * `decorate_tree_with_sticker()`は「自分の」購入品と「自分の」今シーズン未交換の
+ * 色丸しか受け付けない（他人の購入品・他人の色丸・過去シーズンの色丸はDB側で拒否、
+ * スキーマ設計.sql 47.3章）。同一シーズン内で同じ購入品を複数の色丸に飾ることは
+ * できない（設計部判断、47.9章(5)・本部長承認済み47.10章）。戻り値は新規
+ * `family_tree_decorations.id`。
+ */
+export async function decorateTreeWithSticker(
+  client: SupabaseClient,
+  purchaseId: string,
+  completionId: string
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("decorate_tree_with_sticker", {
+    p_purchase_id: purchaseId,
+    p_completion_id: completionId,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 14.7章「バッジ（累計到達）」。自分（または家族の誰か）が獲得済みの
+ * バッジ一覧。`member_badges_select_same_family`により家族の誰でも閲覧可能。
+ */
+export async function fetchMemberBadges(client: SupabaseClient, memberId: string): Promise<ApiResult<MemberBadge[]>> {
+  const { data, error } = await client
+    .from("member_badges")
+    .select("*")
+    .eq("member_id", memberId)
+    .order("achieved_at");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as MemberBadge[] };
+}
+
+/** API仕様.md 14.7章「メンバー×指標ごとの現在の累計値（進捗表示用）」。 */
+export async function fetchMemberBadgeProgress(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<MemberBadgeProgress[]>> {
+  const { data, error } = await client.from("member_badge_progress").select("*").eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as MemberBadgeProgress[] };
+}
+
+/**
+ * API仕様.md 14.7章「各指標の到達段階一覧（青天井の階段）」。DB側
+ * `badge_tier_thresholds()`（純関数、PUBLIC実行可能のままREVOKEされていない、
+ * スキーマ設計.sql 47.6章）を正とする。昇順の整数配列を返す。
+ */
+export async function fetchBadgeTierThresholds(client: SupabaseClient, badgeKey: string): Promise<ApiResult<number[]>> {
+  const { data, error } = await client.rpc("badge_tier_thresholds", { p_badge_key: badgeKey });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as number[] };
 }

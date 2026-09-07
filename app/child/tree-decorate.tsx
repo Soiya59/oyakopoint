@@ -8,20 +8,23 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useDecorateTreeAction, useDecoratableCompletions } from "@/hooks/useTreeDecoration";
+import { useDecorateTreeWithStickerAction } from "@/hooks/useStickers";
 
 const SUCCESS_DISPLAY_MS = 600;
 
 /**
  * C23 木に飾る（子ども、交換相手選択。P26/C20/S14「かざりつけモード」）
- * 参照: 画面一覧・遷移図.md C23、主要画面ワイヤーフレーム.md 21.4節
+ * 参照: 画面一覧・遷移図.md C23、主要画面ワイヤーフレーム.md 21.4節・32.3節
  *
- * C22（app/child/gacha-result.tsx）の「きに かざる →」から`drawId`を受け取り、
- * 自分の今シーズンの完了報告一覧から交換相手を選んで確定する
- * （`decorate_tree_with_gacha_prize()`）。構造・ロジックはTreeDecoratePanel
- * （3ロール共通）に集約し、本画面はトーン・遷移先のみを渡す薄い殻にする。
+ * C22（app/child/gacha-result.tsx）の「きに かざる →」から`drawId`を受け取るか、
+ * C26区画3「じぶんのシール」（app/child/collector-shelf.tsx）「木に かざる」から
+ * `purchaseId`を受け取る（07-19-9a章「決定16」・32.0節決定7）。自分の今シーズンの
+ * 完了報告一覧から交換相手を選んで確定する。構造・ロジックはTreeDecoratePanel
+ * （3ロール共通）に集約し、本画面はトーン・遷移先・起点に応じた呼び出し先RPCの
+ * 切替のみを担う。
  */
 export default function ChildTreeDecorateScreen() {
-  const { drawId } = useLocalSearchParams<{ drawId?: string }>();
+  const { drawId, purchaseId } = useLocalSearchParams<{ drawId?: string; purchaseId?: string }>();
   const { state } = useAppData();
   const myId = state.activeChildMemberId;
   const { loadState: treeLoadState, season, dots, reload: reloadTree } = useFamilyTreeDetail();
@@ -30,14 +33,16 @@ export default function ChildTreeDecorateScreen() {
     season?.season_start ?? null,
     treeLoadState !== "loading"
   );
-  const { decorating, decorate } = useDecorateTreeAction();
+  const { decorating: decoratingGacha, decorate: decorateGacha } = useDecorateTreeAction();
+  const { decorating: decoratingSticker, decorate: decorateSticker } = useDecorateTreeWithStickerAction();
+  const decorating = decoratingGacha || decoratingSticker;
   const [decorateError, setDecorateError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  if (!drawId) {
+  if (!drawId && !purchaseId) {
     return (
       <Screen tone="child">
-        <Text style={theme.typography.childBody}>けいひんが みつかりませんでした</Text>
+        <Text style={theme.typography.childBody}>たいしょうが みつかりませんでした</Text>
         <AppButton
           label="やることリストへもどる"
           tone="child"
@@ -50,7 +55,7 @@ export default function ChildTreeDecorateScreen() {
 
   const handleConfirm = async (completionId: string) => {
     setDecorateError(null);
-    const res = await decorate(drawId, completionId);
+    const res = purchaseId ? await decorateSticker(purchaseId, completionId) : await decorateGacha(drawId!, completionId);
     if (!res.ok) {
       setDecorateError(res.error.message);
       return;
@@ -76,7 +81,7 @@ export default function ChildTreeDecorateScreen() {
         <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        きに かざる
+        {purchaseId ? "シールを かざる" : "きに かざる"}
       </Text>
 
       <TreeDecoratePanel

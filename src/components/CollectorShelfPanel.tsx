@@ -20,14 +20,32 @@ import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
 import { MemberAvatar } from "./MemberAvatar";
+import { StickerIcon } from "./StickerIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
+import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot } from "@/data/api";
-import type { FamilyMember, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
+import type { FamilyMember, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount, StickerPurchaseWithCatalog } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
-type ShelfTab = "collected" | "pastTrees";
+// [2026-09-07追加・要件定義書07-19-9a章「決定16」・主要画面ワイヤーフレーム.md
+// 32.2節] 区画3「自分のステッカー」を第3タブとして追加する（21.0節決定6改訂注記
+// 「区画3にはこの決定6を適用しない」）。
+type ShelfTab = "collected" | "pastTrees" | "myStickers";
+
+const stickerShapeLabel: Record<StickerShape, { child: string; parent: string }> = {
+  beetle: { child: "カブトムシ", parent: "カブトムシ" },
+  butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
+  flower: { child: "はな", parent: "小さな花" },
+};
+
+const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
+  bronze: { child: "どう", parent: "銅" },
+  silver: { child: "ぎん", parent: "銀" },
+  gold: { child: "きん", parent: "金" },
+  rainbow: { child: "にじ", parent: "虹" },
+};
 
 export interface CollectorShelfPanelProps {
   tone: Tone;
@@ -60,6 +78,25 @@ export interface CollectorShelfPanelProps {
    * `state.members`は`is_active`で絞っていないため退会者も引ける（実装メモ99章）。
    */
   members: FamilyMember[];
+
+  // [2026-09-07追加・要件定義書07-19-9a章、主要画面ワイヤーフレーム.md 32.2節]
+  // 区画3「自分のステッカー」。他メンバーの区画3も閲覧できる（決定7・決定23）ため
+  // メンバー切替を持つが、木に飾る・購入への導線は自分の区画のみに表示する。
+  /** いま操作中の自分自身のmember_id（自分の区画かどうかの判定・導線の出し分けに使う）。 */
+  myMemberId: string;
+  /** 区画3で選択中のメンバー（初期値は自分自身を推奨）。 */
+  stickersSelectedMemberId: string;
+  onSelectStickersMember: (memberId: string) => void;
+  stickersLoadState: LoadState;
+  /** `stickersSelectedMemberId`の所持ステッカー一覧（decoratedThisSeason付き）。 */
+  stickerPurchases: StickerPurchaseWithCatalog[];
+  onRetryStickers: () => void;
+  /** 自分の区画のみ: 今シーズンまだ交換可能な自分の色丸が1件以上あるか（配置可否の条件）。 */
+  canPlaceStickerThisSeason: boolean;
+  /** 自分の区画のみ: 「シールを かいに いく」導線（→購入画面）。 */
+  onGoToStickerShop: () => void;
+  /** 自分の区画のみ: 「木に かざる」導線。指定したカタログ位置の未配置インスタンスの purchaseId を渡す（決定9）。 */
+  onDecorateSticker: (purchaseId: string) => void;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -164,6 +201,15 @@ export function CollectorShelfPanel({
   errorSeasonIds,
   onExpandSeason,
   members,
+  myMemberId,
+  stickersSelectedMemberId,
+  onSelectStickersMember,
+  stickersLoadState,
+  stickerPurchases,
+  onRetryStickers,
+  canPlaceStickerThisSeason,
+  onGoToStickerShop,
+  onDecorateSticker,
 }: CollectorShelfPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
@@ -175,6 +221,8 @@ export function CollectorShelfPanel({
 
   const collectedLabel = isChild ? "あつめたもの" : "集めたもの";
   const pastTreesLabel = isChild ? "まえの木" : "過去の木";
+  const myStickersLabel = isChild ? "じぶんのシール" : "自分のステッカー";
+  const isViewingSelfStickers = stickersSelectedMemberId === myMemberId;
 
   const toggleSeason = (season: FamilyTreeSeason) => {
     const next = expandedSeasonId === season.id ? null : season.id;
@@ -236,6 +284,14 @@ export function CollectorShelfPanel({
           accessibilityState={{ selected: tab === "pastTrees" }}
         >
           <Text style={[bodyMediumStyle, tab === "pastTrees" && styles.tabTextActive]}>{pastTreesLabel}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setTab("myStickers")}
+          style={[styles.tabButton, tab === "myStickers" && styles.tabButtonActive]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: tab === "myStickers" }}
+        >
+          <Text style={[bodyMediumStyle, tab === "myStickers" && styles.tabTextActive]}>{myStickersLabel}</Text>
         </Pressable>
       </View>
 
@@ -432,6 +488,176 @@ export function CollectorShelfPanel({
             })}
         </View>
       )}
+
+      {tab === "myStickers" && (
+        <MyStickersTab
+          tone={tone}
+          members={members}
+          myMemberId={myMemberId}
+          selectedMemberId={stickersSelectedMemberId}
+          onSelectMember={onSelectStickersMember}
+          isViewingSelf={isViewingSelfStickers}
+          loadState={stickersLoadState}
+          purchases={stickerPurchases}
+          onRetry={onRetryStickers}
+          canPlaceThisSeason={canPlaceStickerThisSeason}
+          onGoToShop={onGoToStickerShop}
+          onDecorate={onDecorateSticker}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * コレクター棚「区画3：自分のステッカー」（主要画面ワイヤーフレーム.md 32.2節）。
+ * 12種のカタログ位置に対応する固定グリッドで所有数・今シーズンの配置状況を表示する。
+ * この区画のみ「木に飾る」「買う」への導線を持つ（21.0節決定6改訂注記）。
+ */
+function MyStickersTab({
+  tone,
+  members,
+  myMemberId,
+  selectedMemberId,
+  onSelectMember,
+  isViewingSelf,
+  loadState,
+  purchases,
+  onRetry,
+  canPlaceThisSeason,
+  onGoToShop,
+  onDecorate,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  myMemberId: string;
+  selectedMemberId: string;
+  onSelectMember: (id: string) => void;
+  isViewingSelf: boolean;
+  loadState: LoadState;
+  purchases: StickerPurchaseWithCatalog[];
+  onRetry: () => void;
+  canPlaceThisSeason: boolean;
+  onGoToShop: () => void;
+  onDecorate: (purchaseId: string) => void;
+}) {
+  const isChild = tone === "child";
+  const bodyStyle = bodyStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const selectedMember = members.find((m) => m.id === selectedMemberId);
+
+  return (
+    <View style={{ marginTop: theme.spacing.s4 }}>
+      {/* メンバー切替（決定7・決定23「比較は許容するがソート機能は持たせない」。
+          並び順はmembersのcreated_at昇順のまま、ソート・ランキングは行わない）。 */}
+      <View style={styles.stickerMemberRow}>
+        {members
+          .filter((m) => m.is_active)
+          .map((m) => (
+            <Pressable
+              key={m.id}
+              onPress={() => onSelectMember(m.id)}
+              style={[styles.stickerMemberChip, m.id === selectedMemberId && styles.stickerMemberChipActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: m.id === selectedMemberId }}
+            >
+              <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
+              <Text style={captionStyle}>{m.id === myMemberId ? (isChild ? "じぶん" : "自分") : m.display_name}</Text>
+            </Pressable>
+          ))}
+      </View>
+
+      {loadState === "loading" && <SkeletonList count={2} />}
+      {loadState === "error" && (
+        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
+      )}
+
+      {loadState === "ready" && purchases.length === 0 && (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyEmoji}>🏷️</Text>
+          {isViewingSelf ? (
+            <>
+              <Text style={[bodyStyle, styles.emptyText]}>
+                {isChild ? "まだ シールを もっていないよ。かってみよう→" : "まだステッカーを購入していません。購入する→"}
+              </Text>
+              <AppButton
+                label={isChild ? "シールを かいに いく →" : "購入する →"}
+                tone={tone}
+                onPress={onGoToShop}
+                style={{ marginTop: theme.spacing.s4 }}
+              />
+            </>
+          ) : (
+            <Text style={[bodyStyle, styles.emptyText]}>
+              {isChild ? `${selectedMember?.display_name ?? "?"}さんは まだ もっていないよ` : `${selectedMember?.display_name ?? "?"}さんはまだ持っていません`}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {loadState === "ready" && purchases.length > 0 && (
+        <>
+          {isViewingSelf && !canPlaceThisSeason && (
+            <Card tone={tone} style={{ marginTop: theme.spacing.s3 }}>
+              <Text style={bodyStyle}>
+                {isChild
+                  ? "こんげつ さいしょの きろくをつけたら、シールを かざれるようになるよ"
+                  : "今月最初の記録をつけたら、ステッカーを飾れるようになります"}
+              </Text>
+            </Card>
+          )}
+
+          <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s4 }}>
+            {theme.stickerShapes.map((shape) => (
+              <View key={shape}>
+                <Text style={[captionStyle, styles.legendHeading]}>{isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent}</Text>
+                <View style={{ gap: theme.spacing.s2 }}>
+                  {theme.stickerRarities.map((rarity) => {
+                    const owned = purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity);
+                    const ownedCount = owned.length;
+                    const decoratedThisSeason = owned.some((p) => p.decoratedThisSeason);
+                    const firstUndecorated = owned.find((p) => !p.decoratedThisSeason);
+                    return (
+                      <View key={rarity} style={styles.stickerGridRow}>
+                        {ownedCount > 0 ? (
+                          <StickerIcon shape={shape} rarity={rarity} size={28} uid={`${shape}-${rarity}-${selectedMemberId}`} />
+                        ) : (
+                          <View style={[styles.stickerGridPlaceholder]} />
+                        )}
+                        <Text style={[bodyStyle, styles.stickerGridLabel]}>
+                          {isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent} ×{ownedCount}
+                        </Text>
+                        {isViewingSelf && ownedCount > 0 && decoratedThisSeason && (
+                          <Text style={[captionStyle, styles.stickerGridDone]}>
+                            {isChild ? "いまの きに かざってあるよ" : "いまの木にかざってあるよ"}
+                          </Text>
+                        )}
+                        {isViewingSelf && ownedCount > 0 && !decoratedThisSeason && (
+                          <AppButton
+                            label={isChild ? "木に かざる" : "木に飾る"}
+                            tone={tone}
+                            variant="secondary"
+                            disabled={!canPlaceThisSeason || !firstUndecorated}
+                            onPress={() => firstUndecorated && onDecorate(firstUndecorated.id)}
+                          />
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {isViewingSelf && (
+            <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s4 }}>
+              <Text style={[bodyStyle, { color: theme.colors.brandPrimaryStrong }]}>
+                {isChild ? "→ シールを かいに いく" : "→ ステッカーを買いに行く"}
+              </Text>
+            </Pressable>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -479,6 +705,29 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: "center" },
   seasonHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   seasonToggle: { color: theme.colors.brandPrimaryStrong },
+  // [2026-09-07追加] 区画3「自分のステッカー」。
+  stickerMemberRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2 },
+  stickerMemberChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.s1,
+    paddingHorizontal: theme.spacing.s2,
+    paddingVertical: theme.spacing.s1,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+  },
+  stickerMemberChipActive: { borderColor: theme.gachaColors.accent, backgroundColor: theme.gachaColors.accentSoft },
+  stickerGridRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  stickerGridPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.neutralBorder,
+    opacity: 0.5,
+  },
+  stickerGridLabel: { minWidth: 72 },
+  stickerGridDone: { color: theme.colors.brandPrimaryStrong },
 });
 
 export default CollectorShelfPanel;

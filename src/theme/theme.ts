@@ -315,6 +315,101 @@ export const gachaPlateSize = {
   supporter: 14,
 } as const;
 
+// ---- 1.11 木を飾るステッカー（`sticker-*`、2026-09-07追加、07-19-9a章対応） ----
+// 参照: デザイントークン.md 1.11節。形3種（beetle/butterfly/flower）×レアリティ4段
+// （bronze/silver/gold/rainbow）＝12種類。レアリティは大きさではなく色・質感のみで
+// 表現し、12種類とも表示直径は同一。
+export const stickerShapes = ["beetle", "butterfly", "flower"] as const;
+export type StickerShape = (typeof stickerShapes)[number];
+
+export const stickerRarities = ["bronze", "silver", "gold", "rainbow"] as const;
+export type StickerRarity = (typeof stickerRarities)[number];
+
+/** 木の上での表示直径（24pt固定）。通常の色丸13pt超・家族の絵〈景品〉36pt未満の中間サイズ。 */
+export const stickerTreeDotSize = 24;
+/** 識別リング太さ（景品〈36pt〉のリングと揃える。1.8節）。 */
+export const stickerRingWidth = 2;
+
+/**
+ * レアリティ別の色・質感（統括決定26「虹はパステル調のホログラム、金銀銅は金属光沢
+ * という色と質感だけで表現する」）。グラデーションは135°（左上→右下）想定。
+ */
+export const stickerRarityGradients: Record<StickerRarity, { stops: readonly string[]; highlight: boolean }> = {
+  bronze: { stops: ["#D99757", "#8B5A2B"], highlight: true },
+  silver: { stops: ["#F5F5F5", "#9CA3AF"], highlight: true },
+  gold: { stops: ["#FFE9A8", "#C99A2E"], highlight: true },
+  // 5点のパステルグラデーション（シャボン玉・真珠のような優しいホログラム）。
+  rainbow: { stops: ["#F6D9E6", "#DCE8FF", "#DFF7EA", "#FFF3D6", "#EAD9FA"], highlight: false },
+} as const;
+
+/** ちょうちょの胴体・頭部・触角、カブトムシの分割線・角のストローク色（固定）。 */
+export const stickerAccentFixed = "#2E2E2E";
+
+/** 12種のカタログをUI表示用に並べる固定順（32.1節ワイヤーフレーム: 形ごとに1行、レアリティ4段を列に固定）。 */
+export const stickerCatalogOrder: readonly { shape: StickerShape; rarity: StickerRarity }[] = stickerShapes.flatMap(
+  (shape) => stickerRarities.map((rarity) => ({ shape, rarity }))
+);
+
+export function stickerKeyOf(shape: StickerShape, rarity: StickerRarity): string {
+  return `${shape}_${rarity}`;
+}
+
+// ---- 1.12 累計到達バッジ（`badge-*`、2026-09-07追加、07-19-9b章対応） ----
+// バッジは新しい絵を増やさず、既存の絵文字1種＋到達値の数字併記で表現する
+// （決定28「絵は増やさない、同じ印に到達値を添える」）。
+export type BadgeKey =
+  | "lifetime_points_earned"
+  | "lifetime_completions"
+  | "lifetime_drawings"
+  | "lifetime_gacha_draws"
+  | "lifetime_sticker_purchases";
+
+export const badgeDefinitions: readonly {
+  key: BadgeKey;
+  emoji: string;
+  nameParent: string;
+  nameChild: string;
+}[] = [
+  { key: "lifetime_points_earned", emoji: "🌟", nameParent: "はじめの100pt", nameChild: "はじめの100pt" },
+  { key: "lifetime_completions", emoji: "✅", nameParent: "がんばり50回", nameChild: "がんばり50かい" },
+  { key: "lifetime_drawings", emoji: "✏️", nameParent: "えかき10まい", nameChild: "えかき10まい" },
+  { key: "lifetime_gacha_draws", emoji: "🔍", nameParent: "ひみつはっけん10かい", nameChild: "ひみつはっけん10かい" },
+  { key: "lifetime_sticker_purchases", emoji: "🏷️", nameParent: "ステッカー5こ", nameChild: "シール5こ" },
+] as const;
+
+/**
+ * 閾値の初期値（1段階目、企画部初期案）。実際の全段階（青天井、決定28）は
+ * DB側`badge_tier_thresholds()`（スキーマ設計.sql 47.6章）が返す10段階の配列を
+ * 正とする（`api.fetchBadgeTierThresholds`参照）。この初期値は「1・3・10・30・100」
+ * 倍率列の起点として、DB取得結果と一致することの目安表示にのみ使う。
+ */
+export const badgeInitialThresholds: Record<BadgeKey, number> = {
+  lifetime_points_earned: 100,
+  lifetime_completions: 50,
+  lifetime_drawings: 10,
+  lifetime_gacha_draws: 10,
+  lifetime_sticker_purchases: 5,
+};
+
+/**
+ * 現在値と、DBから取得した昇順の閾値配列（`badge_tier_thresholds()`の戻り値）から、
+ * 「達成済みの最大値」「次の段階」「次の段階までの残り」を求める（表示用、決定15）。
+ * 全段階を達成済み（青天井の末尾、DB側配列を使い切った状態）の場合はnextTier/remainingは
+ * ともにnullになる（決定28の想定運用〈MVP期間内での到達は想定薄〉）。
+ */
+export function badgeProgressInfo(
+  tiers: readonly number[],
+  currentValue: number
+): { achievedTier: number | null; nextTier: number | null; remaining: number | null } {
+  let achievedTier: number | null = null;
+  let nextTier: number | null = null;
+  for (const t of tiers) {
+    if (currentValue >= t) achievedTier = t;
+    else if (nextTier === null) nextTier = t;
+  }
+  return { achievedTier, nextTier, remaining: nextTier !== null ? nextTier - currentValue : null };
+}
+
 // ---- 5. モーション ----
 export const motion = {
   successDurationMs: 260,
@@ -341,6 +436,17 @@ export const theme = {
   drawingSimplifyTolerance,
   gachaColors,
   gachaPlateSize,
+  stickerShapes,
+  stickerRarities,
+  stickerTreeDotSize,
+  stickerRingWidth,
+  stickerRarityGradients,
+  stickerAccentFixed,
+  stickerCatalogOrder,
+  stickerKeyOf,
+  badgeDefinitions,
+  badgeInitialThresholds,
+  badgeProgressInfo,
 } as const;
 
 export type Theme = typeof theme;

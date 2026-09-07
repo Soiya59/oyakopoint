@@ -3,17 +3,22 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
+import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useMemberBadgeRows } from "@/hooks/useBadges";
 
 /**
  * C8 じぶんの通帳（主要5画面のひとつ。P16と共通仕様）
- * 参照: 主要画面ワイヤーフレーム.md 4章
+ * 参照: 主要画面ワイヤーフレーム.md 4章・32.4節
  * 大きな残高表示＋ひらがな中心の履歴（絵文字＋pt）。消費履歴も赤字にしない。
  *
  * [2026-08-15改訂] 承認フロー廃止に伴い「承認済み」等のstatusLabelは廃止した。
  * 代わりに、各履歴行に届いた保護者リアクション（スタンプ／コメント）をチップとして
  * 併記する（主要画面ワイヤーフレーム.md 4章「届いたスタンプを絵文字で併記」）。
+ *
+ * [2026-09-07追加] バッジ区画（要件定義書07-19-9b章、主要画面ワイヤーフレーム.md
+ * 32.4節）。残高表示の直後・履歴リストの直前に常時表示する。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -29,6 +34,7 @@ export default function ChildPointsScreen() {
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const ledger = fullLedger(me.id);
+  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(me.id);
 
   return (
     <Screen tone="child">
@@ -44,6 +50,10 @@ export default function ChildPointsScreen() {
 
       <View style={styles.balanceBox}>
         <Text style={theme.typography.childHeadline}>いま {balance}pt</Text>
+      </View>
+
+      <View style={{ marginTop: theme.spacing.s6 }}>
+        <BadgeList isChild rowStyle={theme.typography.childBody} loadState={badgeLoadState} rows={badgeRows} />
       </View>
 
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>さいきんの きろく</Text>

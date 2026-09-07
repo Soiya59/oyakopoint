@@ -1,0 +1,154 @@
+/**
+ * 木を飾るステッカー購入（要件定義書07-19-9a章、API仕様.md 14.1〜14.4章）向けの
+ * データ取得・操作フック。
+ * 参照: src/data/api.ts（fetchStickerCatalog/purchaseSticker/fetchMyStickerPurchases/
+ * decorateTreeWithSticker）。
+ *
+ * バッジ（14.7章）は useBadges.ts に分離した（07-19-9b章はステッカーとは別の
+ * 「ポイントを消費しない情報的フィードバック」という性質を持つため、実装単位も分ける）。
+ */
+import { useCallback, useEffect, useState } from "react";
+import { useSession } from "@/lib/session";
+import {
+  decorateTreeWithSticker,
+  fetchMyStickerPurchases,
+  fetchStickerCatalog,
+  purchaseSticker,
+  type ApiError,
+  type PurchaseStickerResult,
+} from "@/data/api";
+import { toJstDateString } from "@/lib/calendarDates";
+import type { StickerCatalogItem, StickerPurchaseWithCatalog } from "@/types/domain";
+
+export type StickerLoadState = "loading" | "error" | "ready";
+
+/** 購入画面（P37/C30/S23）用: カタログ12種を取得する。 */
+export function useStickerCatalog() {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [catalog, setCatalog] = useState<StickerCatalogItem[]>([]);
+
+  const load = useCallback(async () => {
+    setLoadState("loading");
+    const res = await fetchStickerCatalog(client);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    setCatalog(res.data);
+    setLoadState("ready");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, catalog, reload: load };
+}
+
+export type PurchaseActionResult = { ok: true; data: PurchaseStickerResult } | { ok: false; error: ApiError };
+
+/** 購入確定操作（決定10「購入確認はインライン確認モーダル」）。 */
+export function useStickerPurchaseAction() {
+  const { client } = useSession();
+  const [purchasing, setPurchasing] = useState(false);
+
+  const purchase = useCallback(
+    async (catalogId: string): Promise<PurchaseActionResult> => {
+      setPurchasing(true);
+      const res = await purchaseSticker(client, catalogId);
+      setPurchasing(false);
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, data: res.data };
+    },
+    [client]
+  );
+
+  return { purchasing, purchase };
+}
+
+/**
+ * コレクター棚「区画3：自分のステッカー」（32.2節）。`memberId`には呼び出し本人
+ * だけでなく、区画3のメンバー切替タブで選ばれた任意の家族メンバーのIDを渡してよい
+ * （`ornament_sticker_purchases_select_same_family`により家族の誰でも他メンバーの
+ * 購入記録を閲覧できる、決定7・決定23）。`currentSeasonId`（進行中シーズンのid、
+ * 家族の木の読み込み結果から渡す）を指定すると、各購入の「今シーズン配置済みか
+ * どうか」（decoratedThisSeason）を判定する。
+ */
+export function useMyStickerPurchases(memberId: string, currentSeasonId: string | null) {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [purchases, setPurchases] = useState<StickerPurchaseWithCatalog[]>([]);
+
+  const load = useCallback(async () => {
+    if (!memberId) return;
+    setLoadState("loading");
+    const res = await fetchMyStickerPurchases(client, memberId, currentSeasonId);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    setPurchases(res.data);
+    setLoadState("ready");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, memberId, currentSeasonId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, purchases, reload: load };
+}
+
+export type DecorateStickerActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };
+
+/** 木への配置確定操作（既存のTreeDecoratePanel・かざりつけモードから呼ぶ、決定7）。 */
+export function useDecorateTreeWithStickerAction() {
+  const { client } = useSession();
+  const [decorating, setDecorating] = useState(false);
+
+  const decorate = useCallback(
+    async (purchaseId: string, completionId: string): Promise<DecorateStickerActionResult> => {
+      setDecorating(true);
+      const res = await decorateTreeWithSticker(client, purchaseId, completionId);
+      setDecorating(false);
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, decorationId: res.data };
+    },
+    [client]
+  );
+
+  return { decorating, decorate };
+}
+
+/**
+ * 購入画面（P37/C30/S23）用: 呼び出し本人が今月（JST暦月）すでに1個購入済みかどうか。
+ * `purchase_sticker()`のRPC自体が最終的な検証（決定15）を行うため、これは画面の
+ * ボタン非活性表示のためのUX的な事前判定にすぎない（最終防衛線はDB側）。
+ */
+export function useMyStickerMonthlyStatus(memberId: string) {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [purchasedThisMonth, setPurchasedThisMonth] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!memberId) return;
+    setLoadState("loading");
+    const res = await fetchMyStickerPurchases(client, memberId, null);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    const thisMonth = toJstDateString(new Date()).slice(0, 7);
+    setPurchasedThisMonth(res.data.some((p) => toJstDateString(p.purchased_at).slice(0, 7) === thisMonth));
+    setLoadState("ready");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, memberId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, purchasedThisMonth, reload: load };
+}

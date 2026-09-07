@@ -6,18 +6,24 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useMemberBadgeRows } from "@/hooks/useBadges";
 
 /**
  * P16 ポイント通帳（保護者ビュー）（主要5画面のひとつ）
- * 参照: 主要画面ワイヤーフレーム.md 4章
- * メンバー切替タブ・残高・獲得/消費履歴（表形式、消費も赤字にしない）を実装。
+ * 参照: 主要画面ワイヤーフレーム.md 4章・32.4節
+ * メンバー切替タブ・残高・バッジ区画・獲得/消費履歴（表形式、消費も赤字にしない）を実装。
  *
  * [2026-08-15改訂] 履歴行の末尾にあった「承認済」表示を削除した。承認フロー廃止により
  * 全ての完了報告は送信時点で確定済みであり、「承認済」というラベル自体が意味を失った
  * ため（スキーマ設計.sql v2.0 5章参照）。代わりに、届いたリアクション（スタンプ／コメント）
  * を併記する。
+ *
+ * [2026-09-07追加] バッジ区画（要件定義書07-19-9b章、主要画面ワイヤーフレーム.md
+ * 32.4節）。配置位置は残高表示の直後・履歴リストの直前（決定「比較を生まない
+ * 自分だけの記録であり、常時表示・折りたたみなしとする」）。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -36,6 +42,7 @@ export default function ParentPointsScreen() {
   const activeMemberId = selectedMemberId ?? members[0]?.id ?? null;
   const activeBalance = memberPoints.find((m) => m.member_id === activeMemberId)?.current_points ?? 0;
   const ledger = activeMemberId ? fullLedger(activeMemberId) : [];
+  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(activeMemberId ?? "");
 
   return (
     <Screen tone="parent">
@@ -88,6 +95,10 @@ export default function ParentPointsScreen() {
               {members.find((m) => m.id === activeMemberId)?.display_name}: {activeBalance}pt
             </Text>
           </Card>
+
+          <View style={{ marginTop: theme.spacing.s4 }}>
+            <BadgeList isChild={false} loadState={badgeLoadState} rows={badgeRows} />
+          </View>
 
           {ledger.length === 0 ? (
             <EmptyState emoji="📔" title="まだ履歴がありません" />

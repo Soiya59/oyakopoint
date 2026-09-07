@@ -117,6 +117,51 @@
 -- ローカルDocker環境に適用済み・実測済み（96.5章の遵守として、実測した上で
 -- 記録している）。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-07追加・開発部] 木を飾るステッカー購入とバッジ（新規テーブル
+-- `sticker_catalog`・`ornament_sticker_purchases`・`member_badges`、
+-- 設計部/成果物/スキーマ設計.sql 47章・開発部/成果物/実装メモ.md 138章）に伴い、
+-- S1（24→27、上記3テーブルをENABLE ROW LEVEL SECURITY）・S3（52→55本、
+-- 各テーブルのSELECTポリシー1本ずつを追加。`sticker_catalog_select_authenticated`は
+-- `gacha_preset_ornaments_select_authenticated`と条件式が文字通り同一のため同じ
+-- ハッシュ、`ornament_sticker_purchases_select_same_family`・
+-- `member_badges_select_same_family`は他の多数の`family_id = current_family_id()`
+-- のみのSELECTポリシーと同じハッシュになる。104章の教訓どおり、いずれも既存の
+-- 承認済みハッシュから引き写せる形であることをローカルDockerで実測して確認した）を
+-- 更新した。
+--
+-- **S4は設計部の見込み（49→51、47.8章）と実測が食い違った。実測は49→56。**
+-- 96.5章「FAILを消すためにスナップショットを更新してはならない。期待値が実測と
+-- 違ったら期待値を書き換えず報告する」に従い、以下のとおり報告したうえで実測値に
+-- 更新する（詳細は実装メモ.md 138章）。
+--   - 設計部の見込みは新規RPC`purchase_sticker`・`decorate_tree_with_sticker`への
+--     明示的なGRANTのみを+2として数えていた（ここは実測と一致）。
+--   - しかし設計部47.8章は「4本のトリガー関数（`member_badges_check_*`）は
+--     RETURNS TRIGGERでありPostgREST経由で呼び出せないため、`gacha_member_
+--     progress_bump()`と同様にS4に影響しない」としていたが、**この一覧
+--     （`expected(f)`）自体に`gacha_member_progress_bump`が既に含まれている**
+--     （本ファイル該当行参照）。S4の実際の判定はRETURNS TRIGGERかどうかを見ず
+--     `has_function_privilege('authenticated', ..., 'EXECUTE')`のみで機械的に
+--     数えるため、REVOKEしていないトリガー関数は他の既存トリガー関数
+--     （`chore_completions_before_insert`・`family_board_reactions_before_insert`
+--     等）と同じくS4に含まれる。したがって新規4本のトリガー関数
+--     （`member_badges_check_chore_completion`・`member_badges_check_family_drawing`・
+--     `member_badges_check_gacha_draw`・`member_badges_check_sticker_purchase`）も
+--     S4に含まれる（+4）。
+--   - 同様に47.8章は`badge_tier_thresholds`を「`is_valid_drawing_line_data`等と
+--     同じ理由でS4のカウント対象外」としていたが、**`is_valid_drawing_line_data`
+--     自体が本ファイルのS4一覧に既に含まれている**（該当行参照）。REVOKEして
+--     いないSQL関数はPostgreSQLがCREATE FUNCTION時にPUBLICへEXECUTEを自動付与する
+--     （34.5章の既知の挙動）ため、`badge_tier_thresholds`もS4に含まれる（+1）。
+--   - 合計 49 + 2（明示GRANT）+ 4（トリガー関数）+ 1（badge_tier_thresholds）= 56。
+--     ローカルDocker環境で実測し、設計部の見込み文書（47.8章）の記述誤りを
+--     確認した（下流〈開発部〉が上流〈設計部〉の記述の誤りを発見した事例として
+--     実装メモ.md 138章に記録する。マイグレーション自体〈GRANT/REVOKEの実装〉は
+--     設計SQLをそのまま書き写しており正しい。誤っていたのは47.8章の影響見積り
+--     コメントのみで、DDL本体・セキュリティ上の扱いに問題は無い）。
+-- マイグレーション`20260907020000_sticker_purchases_and_badges.sql`は138章時点で
+-- ローカルDocker環境に適用済み・実測済み（96.5章の遵守）。本番へは未適用（本部長の
+-- 操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -155,8 +200,10 @@ GRANT INSERT ON _r TO authenticated;
 -- より22→23。
 -- [2026-09-02再更新] join_consents（開発部/成果物/実装メモ.md 111章）の追加に
 -- より23→24。
+-- [2026-09-07再更新] sticker_catalog・ornament_sticker_purchases・member_badges
+-- （開発部/成果物/実装メモ.md 138章）の追加により24→27。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '24', count(*)::text, count(*) = 24
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '27', count(*)::text, count(*) = 27
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -260,6 +307,15 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 同一のものが無い新しい形であり、ローカルDockerで実測した（111章参照）。
   ('join_consents','join_consents_select_by_parent','SELECT','a64bcea5635a1759018a24e6bf16edc5'),
   ('join_consents','join_consents_select_own','SELECT','a81cabc4ac6fc746a840a3457e019f8e'),
+  -- [2026-09-07追加] 木を飾るステッカー購入とバッジ（設計部/成果物/スキーマ設計.sql
+  -- 47章、開発部/成果物/実装メモ.md 138章）。member_badges・ornament_sticker_purchasesの
+  -- SELECT条件式は`family_id = current_family_id()`のみであり、既存の多数のSELECT
+  -- ポリシーと文字通り同一のためハッシュを引き写せる（104章の教訓）。
+  -- sticker_catalogのSELECT条件式`true`（TO authenticated）はgacha_preset_ornaments_
+  -- select_authenticatedと文字通り同一のため同じハッシュになる。いずれもローカル
+  -- Dockerで実測して確認した。
+  ('member_badges','member_badges_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  ('ornament_sticker_purchases','ornament_sticker_purchases_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('push_tokens','push_tokens_delete_self','DELETE','d2d83fd3535d0c4e22eba82950957a4e'),
   ('push_tokens','push_tokens_insert_self','INSERT','bf39c4ff3a8b4f2b96611ea9d852daae'),
   ('push_tokens','push_tokens_select_self','SELECT','d2d83fd3535d0c4e22eba82950957a4e'),
@@ -276,6 +332,7 @@ WITH expected(t, p, c, h) AS (VALUES
   -- ポリシー（設計部/成果物/スキーマ設計.sql 45.8章、決定6'-2）。chores側の
   -- chores_write_supporter_shared_by_creatorと条件式が文字通り同一のため同じハッシュ。
   ('rewards','rewards_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
+  ('sticker_catalog','sticker_catalog_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
   ('weekly_family_digests','weekly_family_digests_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47')
 ),
 actual_p AS (
@@ -292,7 +349,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー52本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー55本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -301,6 +358,12 @@ SELECT 'C層', 'S3 ポリシー52本の定義が承認済みと一致',
 --     84章の事故は、ここから1つ消えたことで起きた。増えるほうも危険。
 WITH expected(f) AS (VALUES
   ('accept_family_invite'),
+  -- [2026-09-07追加] badge_tier_thresholds（累計到達バッジの階段閾値、設計部/成果物/
+  -- スキーマ設計.sql 47.6章、開発部/成果物/実装メモ.md 138章）。is_valid_drawing_
+  -- line_data等と同じくLANGUAGE SQL・IMMUTABLEでSECURITY DEFINERではないため、
+  -- 新規関数作成時にauthenticatedへEXECUTE権限が自動付与される（34.5章の既知の
+  -- 挙動）。明示的なREVOKEは行っていない。
+  ('badge_tier_thresholds'),
   -- [2026-09-03追加] cancel_chore_completion（完了報告の直後の取消、設計部/成果物/
   -- スキーマ設計.sql 43章、開発部/成果物/実装メモ.md 120章）。draw_gacha()等と同じく
   -- SECURITY DEFINERであり、43.7章の方針どおりPUBLIC/anonから明示的にREVOKEした
@@ -322,6 +385,11 @@ WITH expected(f) AS (VALUES
   -- のEXECUTE権限が自動付与される（34.5章の既知の挙動）。明示的なREVOKEは行っていない。
   ('current_join_consent_version'),
   ('decorate_tree_with_gacha_prize'),
+  -- [2026-09-07追加] decorate_tree_with_sticker（木を飾るステッカー購入とバッジ、
+  -- 設計部/成果物/スキーマ設計.sql 47.3章、開発部/成果物/実装メモ.md 138章）。
+  -- decorate_tree_with_gacha_prize()等と同じくSECURITY DEFINERであり、
+  -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('decorate_tree_with_sticker'),
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
@@ -347,13 +415,29 @@ WITH expected(f) AS (VALUES
   ('max_nfc_tags_per_chore_member'),
   ('max_unpublished_drawings_per_member'),('my_family_board_posts_remaining_today'),
   ('my_gratitude_giveable_balance'),
+  -- [2026-09-07追加] 木を飾るステッカー購入とバッジの4本のAFTER INSERTトリガー関数
+  -- （設計部/成果物/スキーマ設計.sql 47.6章、開発部/成果物/実装メモ.md 138章）。
+  -- **設計部47.8章は「RETURNS TRIGGERのためS4に影響しない」としていたが、これは
+  -- 誤りだった（実測で判明。本ファイル冒頭2026-09-07追加コメント参照）。**
+  -- 他の既存トリガー関数（chore_completions_before_insert・chore_reactions_
+  -- before_insert・family_board_reactions_before_insert等）と全く同じ理由
+  -- （SECURITY DEFINERではないため新規関数作成時にauthenticatedへEXECUTE権限が
+  -- 自動付与される、34.5章の既知の挙動）でS4に含まれる。明示的なREVOKEは行っていない。
+  ('member_badges_check_chore_completion'),
+  ('member_badges_check_family_drawing'),
+  ('member_badges_check_gacha_draw'),
+  ('member_badges_check_sticker_purchase'),
   -- [2026-09-01追加] report_chore_completion_by_nfc_tag（NFCタグの人ごと化・代理報告
   -- RPC、設計部/成果物/スキーマ設計.sql 39.6〜39.7章、開発部/成果物/実装メモ.md 108章）。
   -- draw_gacha()等と同じくSECURITY DEFINERであり、39.7章の方針どおりPUBLIC/anonから
   -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   ('report_chore_completion_by_nfc_tag'),
   ('reward_redemptions_before_insert'),('rewards_before_write'),
-  ('set_updated_at')
+  ('set_updated_at'),
+  -- [2026-09-07追加] purchase_sticker（設計部/成果物/スキーマ設計.sql 47.2章、
+  -- 開発部/成果物/実装メモ.md 138章）。draw_gacha()等と同じくSECURITY DEFINERで
+  -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('purchase_sticker')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -366,7 +450,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数49件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数56件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -510,13 +594,15 @@ INSERT INTO _r SELECT 'B層', 'B7 保護者: 保護者として判定される',
 -- 踏襲。テスト家族2件は `supabase/seed.sql` がローカルのみに投入する）。
 --
 -- [絞り方とその理由]
---   RLSが有効な22テーブルのうち、gacha_preset_ornaments
---   （全家族共通のグローバルカタログ。family_id列を持たず、両家族が
+--   [2026-09-07更新・開発部・実装メモ138章] この節の「◯テーブル」という数字は
+--   新規テーブル追加のたびにずれる（GLOSSARY.mdの方針と同じ考え方）。2026-09-07
+--   時点でRLSが有効な27テーブルのうち、gacha_preset_ornaments・sticker_catalog
+--   （いずれも全家族共通のグローバルカタログ。family_id列を持たず、両家族が
 --   同じ行を見えるのが正しい設計のため「他家族のデータが見えない」という
---   検査自体が意味を持たない）を除いた21テーブルを対象にする。
---   21テーブル全部を3ロール（保護者・こども・みまもり）でそれぞれ検査すると
---   63件になり検査項目が肥大化するため、以下のように絞った。
---     - 代表ロール（保護者）1つで21テーブルすべてを検査する
+--   検査自体が意味を持たない）を除いた25テーブルを対象にする（A01〜A25）。
+--   25テーブル全部を3ロール（保護者・こども・みまもり）でそれぞれ検査すると
+--   件数が肥大化するため、以下のように絞った。
+--     - 代表ロール（保護者）1つで対象テーブルすべてを検査する
 --       （このブロック）。RLSポリシーの条件式自体はロールに関わらず
 --       同じ形（family_id = current_family_id()）で書かれているものが
 --       大半であり、代表1ロールでの検査でも「family_idによる分離が
@@ -529,7 +615,10 @@ INSERT INTO _r SELECT 'B層', 'B7 保護者: 保護者として判定される',
 --       枝分かれしているポリシーが実際に存在する
 --       （family_members_update_scoped等）ため、ロールによって挙動が
 --       異なる可能性を排除しきれない。
---   （合計 21 + 3テーブル×2ロール + 過剰遮断でない確認1件 = 28件）
+--   （件数の内訳は代表ロール分＋「特に重要な3テーブル」×2ロール＋過剰遮断で
+--   ないことの確認1件。追加のたびにずれるため、正確な合計は本ファイルの
+--   A層の行数を直接数えること。2026-09-07時点ではA01〜A25＋A-supporter/A-child
+--   の重ね分＋A-guard）
 --
 -- [「過剰に厳しくない」側の確認（96.3(3)の方針）]
 --   家族Aの保護者から、家族A自身のfamily_membersが見えることを確認する
@@ -684,6 +773,23 @@ INSERT INTO _r SELECT 'A層', 'A23 保護者: join_consentsに他家族の行が
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM join_consents WHERE family_id <> current_family_id();
+
+-- [2026-09-07追加] A24・A25 木を飾るステッカー購入とバッジ（設計部/成果物/
+-- スキーマ設計.sql 47章、開発部/成果物/実装メモ.md 138章）。ornament_sticker_
+-- purchases・member_badgesはいずれもfamily_idを持つ家族間分離対象の新規テーブル
+-- のため、既存のA01〜A23と同じ形で追加する。sticker_catalogはgacha_preset_
+-- ornamentsと同じ全家族共通グローバルカタログ（family_id列を持たない）のため、
+-- 「他家族のデータが見えない」という検査自体が意味を持たず対象外とする
+-- （47.9章決定47-1、13章「絞り方とその理由」と同じ考え方）。
+INSERT INTO _r SELECT 'A層', 'A24 保護者: ornament_sticker_purchasesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM ornament_sticker_purchases WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A25 保護者: member_badgesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM member_badges WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
