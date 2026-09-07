@@ -146,22 +146,6 @@ export default function RewardsListScreen() {
         </Pressable>
       )}
 
-      {/* [2026-09-07追加・本部長／実装メモ.md 144章] 統括の実機確認「ステッカーは購入できる
-          場所がなくなったかも／ごほうびから飛べたらよいかも」対応。ポイントの使い道を
-          1か所に並べる意図で、ごほうび管理（P12）からステッカー購入（P37）への導線を追加した。
-          コレクター棚経由の導線（isViewingSelf限定）はそのまま残す（判断の理由は実装メモ参照）。 */}
-      <Pressable
-        onPress={() => router.push("/parent/sticker-shop")}
-        style={{ marginTop: theme.spacing.s3 }}
-        hitSlop={8}
-      >
-        <Card>
-          <Text style={theme.typography.parentBodyMedium}>🧩 ステッカーを買いに行く →</Text>
-          <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-            貯めたポイントで、木を飾るステッカーを買えます。
-          </Text>
-        </Card>
-      </Pressable>
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>

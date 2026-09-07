@@ -115,6 +115,26 @@ export default function ParentMyRewardsScreen() {
         </View>
       )}
 
+      {/* [2026-09-07追加・本部長／実装メモ.md 144章・145章] 統括の実機確認
+          「ステッカーは購入できる場所がなくなったかも／ごほうびから飛べたらよいかも」対応。
+          144章では保護者だけ P12（ごほうび管理一覧）に置いてしまったが、P12は家族の
+          ごほうびを登録・編集する管理画面であり、自分のポイントを使う場所ではない。
+          統括の指摘「保護者は管理画面のご褒美からかいに行く仕様になってる」を受け、
+          本画面（じぶんのごほうび）へ移した。子ども・みまもりは元から自分用の
+          ごほうび画面が1つしか無いため、最初から正しい場所に入っていた。 */}
+      <Pressable
+        onPress={() => router.push("/parent/sticker-shop")}
+        style={{ marginTop: theme.spacing.s3 }}
+        hitSlop={8}
+      >
+        <Card>
+          <Text style={theme.typography.parentBodyMedium}>🧩 ステッカーを買いに行く →</Text>
+          <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
+            貯めたポイントで、木を飾るステッカーを買えます。
+          </Text>
+        </Card>
+      </Pressable>
+
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
     </Screen>
   );
