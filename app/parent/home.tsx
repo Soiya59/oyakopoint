@@ -11,6 +11,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
+import { StageDot } from "@/components/FamilyTree";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 
@@ -191,25 +192,34 @@ export default function ParentHomeScreen() {
       </Pressable>
 
       {/* [2026-08-23追加] 家族の木ミニウィジェット（07-9章、主要画面ワイヤーフレーム.md
-          20.6章決定7）。段階名・今シーズンの完了報告数の2情報のみ。タップでP26へ。 */}
+          20.6章決定7）。段階名・今シーズンの完了報告数の2情報のみ。タップでP26へ。
+          [2026-09-08追加・実装メモ153章] カード左に、いまの段階の木の絵を40pt程度で
+          小さく添えた（統括採用のA案。木の全体はホームに置かない）。20.6章決定7
+          「段階名・完了報告数の2情報のみ」はテキストとしては維持しつつ、絵は補助と
+          して追加している。文字が主役・絵は補助という位置づけは崩していない。 */}
       <Pressable onPress={() => router.push("/parent/family-tree")}>
-        <Card style={styles.treeWidget}>
-          <Text style={theme.typography.parentBodyMedium}>
-            🌿 家族の木 いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
-          </Text>
-          <Text style={{ color: theme.colors.neutralTextSecondary }}>
-            今シーズン {treeSeason?.completion_count ?? 0}回
-            {/* [2026-09-07追加・統括の要望「あと〇〇回で花とかここにも書いて欲しい」]
-                次の段階までの残り回数を添える。閾値は theme.treeStages（DB側の
-                family_tree_stage_for_count() と一致させてある）から引く。
-                最終段階（実）に到達していれば残りは出さない。 */}
-            {(() => {
-              const count = treeSeason?.completion_count ?? 0;
-              const next = theme.treeStages.find((s) => s.threshold > count);
-              return next ? `　あと${next.threshold - count}回で「${next.name}」${next.emoji}` : "";
-            })()}
-            {" →"}
-          </Text>
+        <Card style={styles.treeWidgetCard}>
+          {/* 個人色（avatar_color）ではなく、木の共有部分の色（theme.treeColors.foliageBase）
+              で塗る（本部長指示。StageDot直上のコメント参照）。 */}
+          <StageDot color={theme.treeColors.foliageBase} size={40} stage={treeSeason?.current_stage ?? 0} />
+          <View style={styles.treeWidgetTextCol}>
+            <Text style={theme.typography.parentBodyMedium}>
+              🌿 家族の木 いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
+            </Text>
+            <Text style={{ color: theme.colors.neutralTextSecondary }}>
+              今シーズン {treeSeason?.completion_count ?? 0}回
+              {/* [2026-09-07追加・統括の要望「あと〇〇回で花とかここにも書いて欲しい」]
+                  次の段階までの残り回数を添える。閾値は theme.treeStages（DB側の
+                  family_tree_stage_for_count() と一致させてある）から引く。
+                  最終段階（実）に到達していれば残りは出さない。 */}
+              {(() => {
+                const count = treeSeason?.completion_count ?? 0;
+                const next = theme.treeStages.find((s) => s.threshold > count);
+                return next ? `　あと${next.threshold - count}回で「${next.name}」${next.emoji}` : "";
+              })()}
+              {" →"}
+            </Text>
+          </View>
         </Card>
       </Pressable>
 
@@ -317,7 +327,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralBorder,
     opacity: 0.6,
   },
-  treeWidget: { marginTop: theme.spacing.s3 },
+  // [2026-09-08改訂・実装メモ153章] 旧`treeWidget`（marginTopのみ）を、木の絵を
+  // 横並びにする都合で本スタイルに統合した（Card.styleは配列非対応でViewStyle
+  // 単体しか受け付けないため、1つのスタイルオブジェクトに合成する必要があった）。
+  treeWidgetCard: { marginTop: theme.spacing.s3, flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 },
+  treeWidgetTextCol: { flex: 1 },
   pendingCard: {
     marginTop: theme.spacing.s4,
     backgroundColor: theme.colors.statusPendingSoft,

@@ -475,7 +475,15 @@ export function pickTreeRegion(id: string, isPrize = false): TreeRegion {
 const DOT_STROKE_COLOR = "rgba(0,0,0,0.16)";
 const DOT_STROKE_WIDTH = 1;
 
-function StageDot({ color, size, stage }: { color: string; size: number; stage: number }) {
+/**
+ * [2026-09-08追加・実装メモ153章] 保護者ホーム（P7）の家族の木ミニウィジェットが、
+ * カード内に「いまの段階の木の絵」を小さく（40pt目安）添えるために、この段階専用の
+ * 形をそのまま再利用したいという理由でexportした。新しい絵は描かず、この部品を
+ * そのまま呼ぶ（統括判断・本部長具申「木の全体はホームに置かない」を踏まえたA案）。
+ * `color`には報告者の`avatar_color`ではなく`theme.treeColors.foliageBase`
+ * （木の共有部分・樹冠の背景と同じ固定色）を渡すこと。個人の色は使わない。
+ */
+export function StageDot({ color, size, stage }: { color: string; size: number; stage: number }) {
   if (stage <= 0) {
     // 種: 対称なレンズ形（粒）。
     return (
