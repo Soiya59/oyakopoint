@@ -168,7 +168,7 @@ export function StickerShopPanel({
                 <View style={{ alignItems: "center" }}>
                   {/* [149章] 購入確認モーダルはこのコンポーネントの中で唯一ステッカーを
                       拡大表示する箇所のため、`highRes`で512px画像を強制する。 */}
-                  <StickerIcon shape={selected.shape} rarity={selected.rarity} size={56} highRes />
+                  <StickerIcon shape={selected.shape} rarity={selected.rarity} size={180} highRes />
                 </View>
                 <Text style={[bodyMediumStyle, styles.modalTitle]}>{selected.display_name}</Text>
                 <Text style={[bodyStyle, styles.modalBody]}>
