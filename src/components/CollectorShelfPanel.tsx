@@ -675,12 +675,44 @@ export function CollectorShelfPanel({
  * （旧・色丸との交換方式が前提）、49章により配置後の「うごかす」操作が新設された
  * （統括判断49.12章）。UIUXデザイン部からはこの「うごかす」導線のUI配置について
  * 別タスクとしての発注が申し送られている（49.17章）ため、開発部の判断として、
- * 各行（形×レアリティ）に「いまの木に かざってあるよ」の隣に「うごかす」を
- * 併設する最小構成を採用した。同じ形×レアリティを複数個所有し、かつ複数月に
- * わたって購入した場合、過去シーズンに配置済み（凍結・移動不可）のインスタンスと
- * 今シーズンに配置済み（移動可）のインスタンスが混在しうるが、「うごかす」は
- * 今シーズンの配置がある場合にのみ出す（過去シーズンの配置は移動対象外）。
+ * 各エントリ（形×レアリティ）に「うごかす」を併設する。同じ形×レアリティを
+ * 複数個所有し、かつ複数月にわたって購入した場合、過去シーズンに配置済み
+ * （凍結・移動不可）のインスタンスと今シーズンに配置済み（移動可）のインスタンスが
+ * 混在しうるが、「うごかす」は今シーズンの配置がある場合にのみ出す
+ * （過去シーズンの配置は移動対象外）。
+ *
+ * [2026-09-11改訂・本部長経由の統括指摘（実装メモ151章）] 従来は横1行の文字列
+ * （小さな`StickerIcon` 28pt＋テキスト＋ボタンを1行に並べる表示）だったが、統括の
+ * 指摘「同じ自分の持ち物なのに見た目も操作もバラバラで、せっかくのメダルの絵が
+ * 見えない」（『お絵かきと同じ感じで並べて、同様に押したら拡大されるように』）を
+ * 受け、上の「つくった・あつめたもの」区分（`ShelfItemsGrid`）と同じ
+ * カードグリッド＋タップで開く詳細カードの形に統一した。カードの大きさ・間隔・
+ * 角丸は`ShelfItemsGrid`と共通の`styles.grid`/`styles.gridItem`/`styles.gridItemSelected`
+ * /`styles.gridCaption`をそのまま流用し、新規スタイルは追加していない。
+ * 「木に飾る」「うごかす」は行から詳細カード（`StickerDetailCard`）の中へ移した
+ * （決定25「自分を選んでいるときだけ表示」は維持）。詳細・迷った点は実装メモ151章参照。
  */
+function buildStickerShelfEntries(
+  purchases: StickerPurchaseWithCatalog[]
+): { key: string; shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] }[] {
+  const entries: { key: string; shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] }[] = [];
+  theme.stickerShapes.forEach((shape) => {
+    theme.stickerRarities.forEach((rarity) => {
+      const owned = purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity);
+      if (owned.length === 0) return; // 決定23: 所有数0の組み合わせは表示しない
+      entries.push({ key: `${shape}-${rarity}`, shape, rarity, owned });
+    });
+  });
+  return entries;
+}
+
+function stickerEntryLabel(tone: Tone, shape: StickerShape, rarity: StickerRarity): string {
+  const isChild = tone === "child";
+  return `${isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent} ${
+    isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent
+  }`;
+}
+
 function StickerShelfSection({
   tone,
   isViewingSelf,
@@ -705,8 +737,11 @@ function StickerShelfSection({
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const totalOwned = purchases.length;
+  const entries = useMemo(() => buildStickerShelfEntries(purchases), [purchases]);
+  const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
 
   return (
     <View>
@@ -737,58 +772,30 @@ function StickerShelfSection({
 
       {loadState === "ready" && totalOwned > 0 && (
         <>
-          <View style={{ gap: theme.spacing.s2 }}>
-            {theme.stickerShapes.flatMap((shape) =>
-              theme.stickerRarities.map((rarity) => {
-                const owned = purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity);
-                if (owned.length === 0) return null; // 決定23: 所有数0の行は表示しない
-                const unplaced = owned.filter((p) => !p.placement);
-                const currentSeasonPlaced = owned.find((p) => p.placement?.isCurrentSeason);
-                return (
-                  <View key={`${shape}-${rarity}`} style={styles.stickerRow}>
-                    <StickerIcon shape={shape} rarity={rarity} size={28} />
-                    <Text style={[bodyStyle, styles.stickerRowLabel]}>
-                      {isChild ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent}{" "}
-                      {isChild ? stickerRarityLabel[rarity].child : stickerRarityLabel[rarity].parent} ×{owned.length}
-                    </Text>
-                    <View style={styles.stickerRowActions}>
-                      {currentSeasonPlaced && (
-                        <>
-                          <Text style={[captionStyle, styles.stickerRowDone]}>
-                            {isChild ? "いまの きに かざってあるよ" : "いまの木にかざってあるよ"}
-                          </Text>
-                          {isViewingSelf && currentSeasonPlaced.placement && (
-                            <Pressable
-                              onPress={() =>
-                                onMove(
-                                  currentSeasonPlaced.placement!.decorationId,
-                                  shape,
-                                  rarity,
-                                  currentSeasonPlaced.placement!.posX,
-                                  currentSeasonPlaced.placement!.posY
-                                )
-                              }
-                              hitSlop={8}
-                            >
-                              <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
-                            </Pressable>
-                          )}
-                        </>
-                      )}
-                      {isViewingSelf && unplaced.length > 0 && (
-                        <AppButton
-                          label={isChild ? "木に かざる" : "木に飾る"}
-                          tone={tone}
-                          variant="secondary"
-                          onPress={() => onPlace(unplaced[0].id, shape, rarity)}
-                        />
-                      )}
-                    </View>
-                  </View>
-                );
-              })
-            )}
+          <View style={styles.grid}>
+            {entries.map((entry) => {
+              const selected = entry.key === selectedKey;
+              return (
+                <Pressable
+                  key={entry.key}
+                  onPress={() => setSelectedKey(selected ? null : entry.key)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <StickerIcon shape={entry.shape} rarity={entry.rarity} size={48} />
+                  <Text style={[captionStyle, styles.gridCaption]}>
+                    {stickerEntryLabel(tone, entry.shape, entry.rarity)}
+                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
+
+          {selectedEntry && (
+            <StickerDetailCard tone={tone} isViewingSelf={isViewingSelf} entry={selectedEntry} onPlace={onPlace} onMove={onMove} />
+          )}
 
           {isViewingSelf && (
             <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s3 }}>
@@ -800,6 +807,97 @@ function StickerShelfSection({
         </>
       )}
     </View>
+  );
+}
+
+/**
+ * シール詳細カード（グリッドをタップすると開く）。`ShelfItemsGrid`の家族の絵の
+ * 詳細（`DrawingThumbnail size={220}`で拡大表示する分岐）と同じ縦積みレイアウト
+ * （`styles.detailDrawingWrap`/`detailDrawingTextWrap`/`detailDrawingCenterText`を
+ * 流用）を使い、`StickerIcon`は`size={220}`・`highRes`指定で512px画像を使う。
+ * 名前・必要ポイント・今シーズンに飾ってあるかどうか・「うごかす」「木に飾る」の
+ * 導線をここにまとめる（従来は一覧の行に出ていた。統括指摘・実装メモ151章）。
+ *
+ * [必要ポイントの出典について・迷った点] `sticker_catalog`の`points_cost`
+ * （カタログの現在価格）ではなく、`owned`配列の先頭（＝最も新しい購入。
+ * `fetchMyStickerPurchases`が`purchased_at`降順で返すため）の`points_spent`
+ * （その購入インスタンスが実際に支払った額）を表示する。カタログの現在価格を
+ * 出すにはAPI側のselect文とドメイン型（`StickerPurchaseWithCatalog.sticker_catalog`の
+ * Pick）を拡張する必要があり、今回は「DBの変更は無い」指示の範囲を画面側の
+ * 表示ロジックだけに留めるため、既に取得済みの`points_spent`で代替した。
+ * カタログ価格が改定されない前提なら両者は一致する（価格改定機能は現状無い）。
+ */
+function StickerDetailCard({
+  tone,
+  isViewingSelf,
+  entry,
+  onPlace,
+  onMove,
+}: {
+  tone: Tone;
+  isViewingSelf: boolean;
+  entry: { shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] };
+  onPlace: (purchaseId: string, shape: StickerShape, rarity: StickerRarity) => void;
+  onMove: (decorationId: string, shape: StickerShape, rarity: StickerRarity, posX: number, posY: number) => void;
+}) {
+  const isChild = tone === "child";
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+
+  const { shape, rarity, owned } = entry;
+  const unplaced = owned.filter((p) => !p.placement);
+  const currentSeasonPlaced = owned.find((p) => p.placement?.isCurrentSeason);
+  const pointsCost = owned[0]?.points_spent;
+
+  return (
+    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
+      <View style={styles.detailDrawingWrap}>
+        <StickerIcon shape={shape} rarity={rarity} size={220} highRes />
+        <View style={styles.detailDrawingTextWrap}>
+          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
+          {pointsCost != null && (
+            <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>{pointsCost}pt</Text>
+          )}
+          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+            {currentSeasonPlaced
+              ? isChild
+                ? "いまの きに かざってあるよ"
+                : "いまの木にかざってあります"
+              : isChild
+              ? "いまの きには かざっていないよ"
+              : "いまの木にはかざっていません"}
+          </Text>
+          {isViewingSelf && (
+            <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
+              {currentSeasonPlaced && currentSeasonPlaced.placement && (
+                <Pressable
+                  onPress={() =>
+                    onMove(
+                      currentSeasonPlaced.placement!.decorationId,
+                      shape,
+                      rarity,
+                      currentSeasonPlaced.placement!.posX,
+                      currentSeasonPlaced.placement!.posY
+                    )
+                  }
+                  hitSlop={8}
+                >
+                  <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
+                </Pressable>
+              )}
+              {unplaced.length > 0 && (
+                <AppButton
+                  label={isChild ? "木に かざる" : "木に飾る"}
+                  tone={tone}
+                  variant="secondary"
+                  onPress={() => onPlace(unplaced[0].id, shape, rarity)}
+                />
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </Card>
   );
 }
 
@@ -863,10 +961,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
   },
   stickerMemberChipActive: { borderColor: theme.gachaColors.accent, backgroundColor: theme.gachaColors.accentSoft },
-  stickerRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, flexWrap: "wrap" },
-  stickerRowLabel: { minWidth: 96 },
-  stickerRowActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, flexWrap: "wrap" },
-  stickerRowDone: { color: theme.colors.brandPrimaryStrong },
+  // [2026-09-11改訂] 旧・横1行表示（stickerRow等）はグリッド化に伴い廃止し、
+  // 「うごかす」リンクのスタイルのみ残す（実装メモ151章）。
   stickerRowMoveLink: { color: theme.colors.brandPrimaryStrong, textDecorationLine: "underline" },
 });
 
