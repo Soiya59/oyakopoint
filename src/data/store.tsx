@@ -20,7 +20,7 @@
  * `findChoreByTag` も非同期（`Promise<Chore | undefined>`）に変更した
  * （実際のDBトリガーエラー・RLS越しの0件応答を待ち受ける必要があるため）。
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import type {
   Chore,
@@ -53,6 +53,7 @@ import { useSession } from "@/lib/session";
 import * as api from "./api";
 import type { ApiError } from "./api";
 import theme from "@/theme/theme";
+import { useBackgroundAutoRefresh } from "@/hooks/useBackgroundAutoRefresh";
 
 export interface State {
   family: typeof seedFamily;
@@ -323,16 +324,49 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   const activeParentMemberId =
     session.status === "parent" || session.status === "supporter" ? session.parentMember?.id ?? "" : "";
 
-  const load = useCallback(async () => {
+  /**
+   * [2026-09-08追加・実装メモ.md 172章] 何度目のload()呼び出しかを表す世代カウンタ。
+   * アプリの前面復帰・画面遷移をきっかけにした「裏での」再取得（background）と、
+   * 書き込みアクション成功後のload()（`dispatch`内、非background）が入れ替わりで
+   * 実行された場合に、後から始まった方の結果だけを反映する（レースコンディション対策）。
+   * 生成はload()の冒頭・awaitより前で同期的に採番するため、「後から呼ばれたほうが
+   * 常に最新世代になる」（＝完了の先後ではなく開始の先後で勝敗が決まる）。
+   */
+  const loadGenerationRef = useRef(0);
+
+  const load = useCallback(async (options?: { background?: boolean }) => {
     if (!familyId) return;
-    setLoading(true);
-    setLoadError(null);
+    const background = options?.background ?? false;
+    const myGeneration = ++loadGenerationRef.current;
+    const isStale = () => myGeneration !== loadGenerationRef.current;
+
+    // [background=true の場合] 「初回の読み込み」ではなく「裏での取り直し」のため、
+    // setLoading(true)を呼ばない。呼ぶと4画面（app/parent/approvals.tsx・
+    // app/supporter/activity.tsx・app/{parent,child}/supporter-chores.tsx）が
+    // `loading`をそのままローカルのloadStateへ写しており、SkeletonListに
+    // 一瞬切り替わってしまう（統括指摘「画面がちらつかないこと」に抵触するため）。
+    if (!background) setLoading(true);
+    if (!background) setLoadError(null);
     const client = session.client;
 
+    // background=trueの通信エラーは無視して古い表示を保つ（統括指摘「裏での取り直し」の
+    // 失敗で正常に表示できていた画面を壊さないようにするため）。setLoadErrorを呼ぶと
+    // 上記4画面のloadState effectが`loading`を見ずに`loadError`単体の変化でも
+    // 再評価され（依存配列`[loading, loadError]`）、一時的な通信エラーでいきなり
+    // エラー画面に切り替わってしまう。次回の成功時（次のbackground再取得や次回起動）に
+    // 静かに回復させる方針とした。
+    const fail = (message: string) => {
+      if (isStale()) return;
+      if (!background) {
+        setLoadError(message);
+        setLoading(false);
+      }
+    };
+
     const bundleRes = await api.fetchFamilyBundle(client, familyId);
+    if (isStale()) return;
     if (!bundleRes.ok) {
-      setLoadError(bundleRes.error.message);
-      setLoading(false);
+      fail(bundleRes.error.message);
       return;
     }
 
@@ -383,45 +417,38 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
         .lte("activity_date", today),
       api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
     ]);
+    if (isStale()) return;
 
     if (!completionsRes.ok) {
-      setLoadError(completionsRes.error.message);
-      setLoading(false);
+      fail(completionsRes.error.message);
       return;
     }
     if (!reactionsRes.ok) {
-      setLoadError(reactionsRes.error.message);
-      setLoading(false);
+      fail(reactionsRes.error.message);
       return;
     }
     if (!redemptionsRes.ok) {
-      setLoadError(redemptionsRes.error.message);
-      setLoading(false);
+      fail(redemptionsRes.error.message);
       return;
     }
     if (!memberPointsRes.ok) {
-      setLoadError(memberPointsRes.error.message);
-      setLoading(false);
+      fail(memberPointsRes.error.message);
       return;
     }
     if (!gratitudeRes.ok) {
-      setLoadError(gratitudeRes.error.message);
-      setLoading(false);
+      fail(gratitudeRes.error.message);
       return;
     }
     if (!familyBoardReactionsRes.ok) {
-      setLoadError(familyBoardReactionsRes.error.message);
-      setLoading(false);
+      fail(familyBoardReactionsRes.error.message);
       return;
     }
     if (dailySummaryRes.error) {
-      setLoadError(dailySummaryRes.error.message);
-      setLoading(false);
+      fail(dailySummaryRes.error.message);
       return;
     }
     if (!dailyFlagsRes.ok) {
-      setLoadError(dailyFlagsRes.error.message);
-      setLoading(false);
+      fail(dailyFlagsRes.error.message);
       return;
     }
 
@@ -442,10 +469,32 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
-    setLoading(false);
+    if (!background) setLoading(false);
     setLoadedOnce(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId, session.client, activeChildMemberId, activeParentMemberId]);
+
+  /**
+   * [2026-09-08追加・実装メモ.md 172章] (1)アプリの前面復帰・(2)アプリ内で画面へ
+   * 戻ってきたとき、の2つを起点にload({ background: true })を呼ぶ。
+   * `familyId`が確定し、かつ初回読み込み（loadedOnce）が終わっている間だけ有効にする
+   * （ログアウト直後・セッション未確定・初回読み込み中は発火させない）。
+   *
+   * [間引きのしきい値: 15秒（useBackgroundAutoRefreshのデフォルト）を採用した理由]
+   * 子どもの下タブ（やる/ごほうび/きろく/つうちょう）を数秒間隔で行き来する操作
+   * （統括の指摘にある典型パターン）では、その数秒〜十数秒の間に家族の別メンバーが
+   * 新しく書き込む確率は低く、その間は間引いてよいと判断した。一方で「少し他の画面を
+   * 見てからまた戻ってくる」（統括の実機での体感に近い、数十秒〜のオーダー）は
+   * 15秒を超えるため素通りし、再取得される。長すぎる値（例: 60秒）にすると
+   * タブを行き来しただけの操作でも「さっき見たときと変わらない」体感の範囲を
+   * 超えて古いまま据え置かれる時間が延びるため、15秒を採用した。
+   */
+  useBackgroundAutoRefresh(
+    () => {
+      void load({ background: true });
+    },
+    { enabled: Boolean(familyId) && loadedOnce }
+  );
 
   // [2026-08-16修正・本部長] 実機で保護者→子どもへログインを切り替えた際、
   // "Cannot read properties of undefined (reading 'display_name')" というクラッシュを

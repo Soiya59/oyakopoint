@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
+import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   fetchFamilyTreeCompletionDots,
   fetchFamilyTreeCurrentSeason,
@@ -31,21 +32,39 @@ export function useFamilyTreeSummary() {
   const [loadState, setLoadState] = useState<FamilyTreeLoadState>("loading");
   const [season, setSeason] = useState<FamilyTreeSeason | null>(null);
 
-  const load = useCallback(async () => {
-    if (!familyId) return;
-    setLoadState("loading");
-    const res = await fetchFamilyTreeCurrentSeason(client, familyId);
-    if (!res.ok) {
-      setLoadState("error");
-      return;
-    }
-    setSeason(res.data);
-    setLoadState("ready");
-  }, [client, familyId]);
+  const load = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!familyId) return;
+      const background = options?.background ?? false;
+      if (!background) setLoadState("loading");
+      const res = await fetchFamilyTreeCurrentSeason(client, familyId);
+      if (!res.ok) {
+        // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
+        // ホームの控えめなウィジェットが、裏での取り直し失敗のたびにエラー表示へ
+        // 切り替わってちらつくのを避けるため）。
+        if (!background) setLoadState("error");
+        return;
+      }
+      setSeason(res.data);
+      setLoadState("ready");
+    },
+    [client, familyId]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // [2026-09-08追加・実装メモ.md 172章] ホームウィジェット（P7の家族の木ミニ表示）を
+  // アプリの前面復帰・画面遷移のたびに裏で取り直す。C5は現在このフックを使っていない
+  // （src/hooks/useFamilyTree.ts冒頭コメント・app/child/(tabs)/home.tsx参照）ため、
+  // このフックを使っている画面（現状P7のみ）にだけ効く。
+  useBackgroundAutoRefresh(
+    () => {
+      void load({ background: true });
+    },
+    { enabled: Boolean(familyId) }
+  );
 
   return { loadState, season, reload: load };
 }

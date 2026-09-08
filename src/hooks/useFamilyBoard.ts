@@ -38,6 +38,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   deleteFamilyBoardPost,
   fetchFamilyBoardPostsHistory,
@@ -66,24 +67,42 @@ export function useFamilyHomeCard(familyId: string) {
   const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
   const [card, setCard] = useState<FamilyHomeCard | null>(null);
 
-  const load = useCallback(async () => {
-    if (!familyId) {
-      setLoadState("error");
-      return;
-    }
-    setLoadState("loading");
-    const res = await fetchFamilyHomeCard(client, familyId);
-    if (!res.ok) {
-      setLoadState("error");
-      return;
-    }
-    setCard(res.data);
-    setLoadState("ready");
-  }, [client, familyId]);
+  const load = useCallback(
+    async (options?: { background?: boolean }) => {
+      const background = options?.background ?? false;
+      if (!familyId) {
+        // background=trueでこの分岐に来ることは無い（呼び出し側でenabled: Boolean(familyId)
+        // により発火自体を止めている）が、念のため通常どおりerrorに倒す。
+        setLoadState("error");
+        return;
+      }
+      if (!background) setLoadState("loading");
+      const res = await fetchFamilyHomeCard(client, familyId);
+      if (!res.ok) {
+        // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
+        // 「かぞくのけいじばん」カードが裏での取り直し失敗のたびに控えめな文言へ
+        // 切り替わってちらつくのを避けるため）。
+        if (!background) setLoadState("error");
+        return;
+      }
+      setCard(res.data);
+      setLoadState("ready");
+    },
+    [client, familyId]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // [2026-09-08追加・実装メモ.md 172章] ホームウィジェット（P7/C5/S1の「かぞくのけいじばん」
+  // カード）を、アプリの前面復帰・画面遷移のたびに裏で取り直す。
+  useBackgroundAutoRefresh(
+    () => {
+      void load({ background: true });
+    },
+    { enabled: Boolean(familyId) }
+  );
 
   return { loadState, card, reload: load };
 }

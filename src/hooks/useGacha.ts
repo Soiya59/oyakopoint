@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   drawGacha,
   fetchGachaPresetOrnament,
@@ -32,28 +33,47 @@ export function useGachaProgress(memberId: string) {
   const [remaining, setRemaining] = useState(5);
   const [canDrawNow, setCanDrawNow] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!memberId) return;
-    setLoadState("loading");
-    const res = await fetchGachaProgressSummary(client, memberId);
-    if (!res.ok) {
-      setLoadState("error");
-      return;
-    }
-    if (res.data) {
-      setRemaining(res.data.remaining_until_next_draw);
-      setCanDrawNow(res.data.can_draw_now);
-    } else {
-      setRemaining(5);
-      setCanDrawNow(false);
-    }
-    setLoadState("ready");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, memberId]);
+  const load = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!memberId) return;
+      const background = options?.background ?? false;
+      if (!background) setLoadState("loading");
+      const res = await fetchGachaProgressSummary(client, memberId);
+      if (!res.ok) {
+        // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
+        // 「あと◯回」ウィジェットが裏での取り直し失敗のたびにエラー表示へ
+        // 切り替わってちらつくのを避けるため）。
+        if (!background) setLoadState("error");
+        return;
+      }
+      if (res.data) {
+        setRemaining(res.data.remaining_until_next_draw);
+        setCanDrawNow(res.data.can_draw_now);
+      } else {
+        setRemaining(5);
+        setCanDrawNow(false);
+      }
+      setLoadState("ready");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [client, memberId]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // [2026-09-08追加・実装メモ.md 172章] ホームウィジェット（P7/C5/S1の「あと◯回」表示）・
+  // ガチャ画面自体を、アプリの前面復帰・画面遷移のたびに裏で取り直す。このフックは
+  // ホームウィジェット以外（ガチャ画面本体・GachaCelebrationHint）からも呼ばれているが、
+  // 同じ「あと何回でガチャが引けるか」を表す値である以上、常に最新化しておくのが自然
+  // であり、あえてホーム用途だけに絞る特別扱いはしない。
+  useBackgroundAutoRefresh(
+    () => {
+      void load({ background: true });
+    },
+    { enabled: Boolean(memberId) }
+  );
 
   return { loadState, remaining, canDrawNow, reload: load };
 }
