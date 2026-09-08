@@ -74,13 +74,13 @@ export default function ChildRewardsScreen() {
           しない（従来どおりタップしても何も起きない、あと◯pt表示のみ）。 */}
       {loadState === "ready" && rewards.length > 0 && (
         <View style={styles.list}>
-          {rewards.map((r, index) => {
+          {rewards.map((r) => {
             const canAfford = balance >= r.cost;
-            // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。
-            // C9は区分が無い単一の一覧のため、リスト全体でのindexをそのまま使う
-            // （home.tsxのように区分ごとにリセットする必要が無い）。
-            const isOdd = index % 2 === 1;
-            const rowStyle = [styles.row, isOdd && styles.rowStripe];
+            // [2026-09-09修正・本部長／軽微変更ルート] 1行おきの縞模様を撤回した。
+            // 統括の指摘はクエスト（C5）についてのものだったが、同じ理由がここにも
+            // そのまま当てはまり、子どもの2つの一覧で見た目が食い違うのを避けるため
+            // あわせて外した。理由はhome.tsxのrenderCardのコメント参照。
+            const rowStyle = [styles.row];
             const rowContent = (
               <>
                 <Text style={styles.rowEmoji}>{r.emoji}</Text>
@@ -143,8 +143,6 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.s2,
   },
   // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。
-  // home.tsxのrowStripeと同じ考え方・同じトークン（neutralBg）を使う。
-  rowStripe: { backgroundColor: theme.colors.neutralBg },
   // 絵文字のfontSizeは変更前のcard内の値（32）をそのまま維持。
   rowEmoji: { fontSize: 32 },
   rowTitle: { flex: 1, marginLeft: theme.spacing.s3 },
