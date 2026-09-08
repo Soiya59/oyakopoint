@@ -239,15 +239,18 @@ export default function ChildHomeScreen() {
           アイコンを主役にした横1列に集約し、4行を1行に減らす。 */}
       <View style={styles.shortcutRow}>
         {[
-          { emoji: "👨‍👩‍👧‍👦", label: "かぞく", path: "/child/family-activity" },
+          // [2026-09-08変更・本部長／実装メモ.md 166章] 統括指示により並び順を
+          // 「よく使うものを左に」へ変更（かぞく→木→おえかき→コレクション から
+          // おえかき→木→コレクション→かぞく へ）。
+          { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
           // [2026-08-29変更・本部長] ラベルを段階名（種／芽／若木／花／実）から「木」固定へ。
           // 「いまどこまで育ったか」をホームで見せる狙いで段階名を出していたが、実機では
           // 「🌳 花」と表示され、**何のボタンなのかが分からない**とユーザーが指摘した
           // （ボタンのラベルは行き先を示すもので、状態を示すものではない）。
           // 段階名は遷移先のC20と、保護者ホームの木ウィジェットで引き続き確認できる。
           { emoji: "🌳", label: "木", path: "/child/family-tree" },
-          { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
           { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
+          { emoji: "👨‍👩‍👧‍👦", label: "かぞく", path: "/child/family-activity" },
         ].map((s2) => (
           <Pressable key={s2.path} onPress={() => router.push(s2.path as never)} style={styles.shortcutItem}>
             <Text style={styles.shortcutEmoji}>{s2.emoji}</Text>
@@ -424,12 +427,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginTop: theme.spacing.s3,
   },
+  // [2026-09-08変更・本部長／実装メモ.md 166章] 統括指示「背景と同じで押せると
+  // 分かりにくいので、1つずつ白のしかくで囲んでもよいかも」に対応。既存のCard
+  // コンポーネント（src/components/Card.tsx）のbaseスタイルと同じ背景色・枠線色・
+  // 角丸（子ども向けはchildXl）を流用した。4つをまとめて1つの箱にはせず、1つずつ
+  // 個別に囲む（統括指示「押せるものが4つあることがはっきりします」）。
+  // minWidth/minHeightは変更前と同じtheme.tapTarget.child（56dp）を維持しており、
+  // 白い四角にしたことでタップ領域が変更前より狭くなってはいない。
   shortcutItem: {
     minWidth: theme.tapTarget.child,
     minHeight: theme.tapTarget.child,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.spacing.s1,
+    backgroundColor: theme.colors.neutralSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.childXl,
   },
   shortcutEmoji: { fontSize: 30 },
   shortcutLabel: {
