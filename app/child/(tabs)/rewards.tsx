@@ -45,7 +45,12 @@ export default function ChildRewardsScreen() {
           シール購入画面（C30）への導線を追加した。既存のコレクションだな経由の導線
           （じぶんのシールタブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
       <Pressable onPress={() => router.push("/child/sticker-shop")} style={styles.stickerLink} hitSlop={8}>
-        <Text style={theme.typography.childBody}>🏅 メダルを かいに いく →</Text>
+        <Text style={theme.typography.childBody}>
+          {/* [2026-09-08・統括指示] 絵文字は🧩→🏅→🪙と変えた。🏅は紐が付いた
+              首から下げるメダルで、木に貼る丸いメダルの絵と合わないため。
+              あわせて絵文字だけ一回り大きくする。 */}
+          <Text style={{ fontSize: 22 }}>🪙</Text> メダルを かいに いく →
+        </Text>
         <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
           ためた ぽいんとで、きに かざる メダルが かえるよ
         </Text>

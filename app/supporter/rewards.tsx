@@ -163,7 +163,9 @@ export default function SupporterRewardsScreen() {
           （自分のステッカータブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
       <Pressable onPress={() => router.push("/supporter/sticker-shop")} style={{ marginTop: theme.spacing.s6 }} hitSlop={8}>
         <Card tone="supporter">
-          <Text style={theme.typography.supporterBodyMedium}>🏅 メダルを買いに行く →</Text>
+          <Text style={theme.typography.supporterBodyMedium}>
+            <Text style={{ fontSize: 22 }}>🪙</Text> メダルを買いに行く →
+          </Text>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
             貯めたポイントで、木を飾るメダルを買えます。
           </Text>
