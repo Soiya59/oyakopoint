@@ -285,7 +285,14 @@ export default function ParentHomeScreen() {
           // 判明した。P8と同じmemberOf() + MemberAvatarのパターンをそのまま踏襲した。
           const member = memberOf(c.reported_by);
           return (
-            <Card key={c.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            // [2026-09-08追加・本部長／軽微変更ルート] 統括の実機確認「みまもりは最近の
+            // 報告をクリックしたら完了報告につながるけど、保護者は繋がらない」。
+            // S1みまもりホームは同じ並びの各行をPressableで包んで[S17 かぞくのようす]へ
+            // 飛ばしていたのに、P7だけ素のCardのままだった。飛び先は保護者にとっての
+            // 同等画面＝[P8 完了報告]（app/parent/approvals.tsx。スタンプ・コメントを
+            // 送れる画面）にする。上の「完了報告 新着◯件」カードと同じ行き先。
+            <Pressable key={c.id} onPress={() => router.push("/parent/approvals")}>
+            <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                 <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
                 <Text style={{ marginLeft: theme.spacing.s2 }}>
@@ -303,6 +310,7 @@ export default function ParentHomeScreen() {
                 </Text>
               </View>
             </Card>
+            </Pressable>
           );
         })}
       </View>
