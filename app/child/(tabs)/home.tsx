@@ -422,9 +422,15 @@ const styles = StyleSheet.create({
   },
   // [2026-08-27追加] 4本の文字リンクを置き換えた横1列のショートカット。
   // 子ども向けタップ領域56dp（デザイントークン.md 1.7節）を高さで確保する。
+  // [2026-09-08改訂・本部長／軽微変更ルート] 統括の実機確認「お絵かきとか少し窮屈かも」。
+  // 従来はspace-aroundで、白い四角が中身の文字幅ちょうどに縮んでいた。そのため
+  // 「おえかき」「木」「かぞく」は文字が枠にぴったり接する一方、「コレクション」だけ
+  // 幅広という不揃いな並びになっていた。flex:1で4つを等幅にし、余っていた横方向の
+  // 空白を4枚に配り直す。「コレクション」が今の幅（画面の約1/4）で収まっているので、
+  // 等幅にしても文字が入らなくなることはなく、他の3枚だけが広くなる。
   shortcutRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    gap: theme.spacing.s2,
     marginTop: theme.spacing.s3,
   },
   // [2026-09-08変更・本部長／実装メモ.md 166章] 統括指示「背景と同じで押せると
@@ -435,10 +441,15 @@ const styles = StyleSheet.create({
   // minWidth/minHeightは変更前と同じtheme.tapTarget.child（56dp）を維持しており、
   // 白い四角にしたことでタップ領域が変更前より狭くなってはいない。
   shortcutItem: {
+    // [2026-09-08改訂] 等幅（上のshortcutRowのコメント参照）。上下にも余白を入れて、
+    // 絵文字とラベルが枠の上下に接しないようにする。minHeightは従来どおり
+    // theme.tapTarget.child（56dp）で、タップ領域は狭くなっていない。
+    flex: 1,
     minWidth: theme.tapTarget.child,
     minHeight: theme.tapTarget.child,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: theme.spacing.s2,
     paddingHorizontal: theme.spacing.s1,
     backgroundColor: theme.colors.neutralSurface,
     borderWidth: 1,
