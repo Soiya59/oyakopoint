@@ -19,7 +19,6 @@ import {
   type ApiError,
   type PurchaseStickerResult,
 } from "@/data/api";
-import { toJstDateString } from "@/lib/calendarDates";
 import type { StickerCatalogItem, StickerPurchaseWithCatalog } from "@/types/domain";
 
 export type StickerLoadState = "loading" | "error" | "ready";
@@ -186,41 +185,61 @@ export function useMoveTreeStickerAction() {
 }
 
 /**
- * 購入画面（P37/C30/S23）用: 呼び出し本人が今月（JST暦月）すでに購入した
- * ステッカーの`sticker_catalog_id`一覧。
- *
- * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正を
- * 受け、購入上限は「1人あたり月合計1個」ではなく「同じ種類（sticker_catalog_id）
- * につき1人あたり月1枚」になった。そのため画面側も「今月は購入済みか」という
- * 単一のboolean（`purchasedThisMonth`）ではなく、「今月すでに購入した種類の集合」を
- * 返す形に変える（違う種類はグレーアウトさせない）。`purchase_sticker()`のRPC自体が
- * 最終的な検証（決定31）を行うため、これは画面のボタン非活性表示のためのUX的な
- * 事前判定にすぎない（最終防衛線はDB側）。
+ * 段階購入制（要件定義書07-19-14章「決定32」）: あるレアリティを買うために
+ * 家族の誰かが過去に購入している必要がある「ひとつ下のレアリティ」。銅は
+ * 下の段が無いためnull（無条件で買える）。`StickerShopPanel.tsx`と同じ表。
  */
-export function useMyStickerPurchasedCatalogIdsThisMonth(memberId: string) {
-  const { client } = useSession();
-  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
-  const [purchasedCatalogIds, setPurchasedCatalogIds] = useState<string[]>([]);
+const requiredLowerRarity: Record<string, string | null> = {
+  bronze: null,
+  silver: "bronze",
+  gold: "silver",
+  rainbow: "gold",
+};
 
-  const load = useCallback(async () => {
-    if (!memberId) return;
-    setLoadState("loading");
-    const res = await fetchMyStickerPurchases(client, memberId, null);
-    if (!res.ok) {
-      setLoadState("error");
-      return;
-    }
-    const thisMonth = toJstDateString(new Date()).slice(0, 7);
-    setPurchasedCatalogIds(
-      res.data.filter((p) => toJstDateString(p.purchased_at).slice(0, 7) === thisMonth).map((p) => p.sticker_catalog_id)
-    );
-    setLoadState("ready");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, memberId]);
+/**
+ * 購入画面（P37/C30/S23）用: カタログ12種のうち、家族としてまだ解放されて
+ * いない（＝ひとつ下のレアリティを家族の誰も過去に購入したことがない）
+ * カタログID一覧を計算する純関数。
+ *
+ * [2026-09-08新設・要件定義書07-19-14章「決定32・33・34」・
+ * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 32.0b節「開発部への申し送り」・
+ * 開発部/成果物/実装メモ.md 161章]
+ * 「持っている」の判定基準は現在の保有数ではなく過去の購入履歴（決定33）。
+ * 判定範囲はfamily_id単位（購入者本人は問わない）。形ごとに完全に独立
+ * （決定34）。新規テーブル・新規Viewは追加せず、既存の`fetchFamilyStickerPurchases`
+ * が返す家族全員分の購入記録（`sticker_catalog`のshape/rarityを埋め込み済み）と
+ * カタログ一覧から、画面側で導出する（企画部「新しい状態を別途持つ必要はない」
+ * という判断を踏襲）。`purchase_sticker()`のRPC自体が最終的な検証（決定32〜34）を
+ * 行うため、これは画面のボタン非活性表示・理由表示のためのUX的な事前判定に
+ * すぎない（最終防衛線はDB側）。
+ */
+export function computeLockedCatalogIds(
+  catalog: StickerCatalogItem[],
+  familyPurchases: Pick<StickerPurchaseWithCatalog, "sticker_catalog">[]
+): string[] {
+  const purchasedShapeRarities = new Set(
+    familyPurchases
+      .map((p) => p.sticker_catalog)
+      .filter((c): c is NonNullable<StickerPurchaseWithCatalog["sticker_catalog"]> => !!c)
+      .map((c) => `${c.shape}:${c.rarity}`)
+  );
+  return catalog
+    .filter((item) => {
+      const required = requiredLowerRarity[item.rarity];
+      if (!required) return false; // 銅は無条件（下の段が無い）
+      return !purchasedShapeRarities.has(`${item.shape}:${required}`);
+    })
+    .map((item) => item.id);
+}
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { loadState, purchasedCatalogIds, reload: load };
+/**
+ * 購入画面（P37/C30/S23）用: 家族全員の購入記録を取得する。段階購入制の
+ * 判定には季節・配置情報が不要なため`currentSeasonId`は`null`固定で渡す。
+ * 既存の`useFamilyStickerPurchases`（コレクター棚「集めたもの」区画・32.2a節用に
+ * 新設済み）をそのまま呼ぶだけの薄いラッパーで、新規のAPI関数・DB問い合わせは
+ * 追加していない。呼び出し側で`computeLockedCatalogIds(catalog, purchases)`と
+ * 組み合わせて`lockedCatalogIds`を導出する。
+ */
+export function useFamilyStickerPurchasesForLock(familyId: string) {
+  return useFamilyStickerPurchases(familyId, null);
 }

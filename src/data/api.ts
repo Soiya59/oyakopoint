@@ -2410,11 +2410,14 @@ export interface PurchaseStickerResult {
 
 /**
  * API仕様.md 14.2章「ステッカーを購入する」。`purchase_sticker()`（SECURITY DEFINER）が
- * 上限（同じ種類〈sticker_catalog_id〉につき今月すでに購入済みなら`check_violation`。
- * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正により
- * 「1人あたり月合計1個」から「同じ種類につき1人あたり月1枚」に変わった。月あたりの
- * 合計購入数には上限が無い）・残高チェック（不足なら`check_violation`）を
- * 1トランザクションで検証する。取消APIは存在しない（決定24）。無効化/存在しないIDは
+ * 段階購入制（要件定義書07-19-14章「決定32〜34」。銅以外のレアリティは、同じ形の
+ * ひとつ下のレアリティを家族の誰かが過去に購入したことがある場合のみ購入可。
+ * 違反時は`check_violation`）・残高チェック（不足なら`check_violation`。両方の
+ * 理由が同時に成立する場合は段階購入制のエラーを優先して返す、UIUXデザイン部
+ * 32.0b節「決定29」に合わせた順序）を1トランザクションで検証する。
+ * [2026-09-08改訂・決定39] 月次購入上限（旧決定31「同じ種類につき1人あたり
+ * 月1枚」、2026-09-09導入）は統括判断により撤廃された。同じ種類を同じ月に
+ * 何枚でも購入できる。取消APIは存在しない（決定24）。無効化/存在しないIDは
  * `foreign_key_violation`。
  */
 export async function purchaseSticker(client: SupabaseClient, catalogId: string): Promise<ApiResult<PurchaseStickerResult>> {

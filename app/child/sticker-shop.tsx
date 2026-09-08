@@ -5,7 +5,7 @@ import Screen from "@/components/Screen";
 import StickerShopPanel from "@/components/StickerShopPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useMyStickerPurchasedCatalogIdsThisMonth, useStickerCatalog, useStickerPurchaseAction } from "@/hooks/useStickers";
+import { computeLockedCatalogIds, useFamilyStickerPurchasesForLock, useStickerCatalog, useStickerPurchaseAction } from "@/hooks/useStickers";
 
 const SNACKBAR_DISPLAY_MS = 1400;
 
@@ -26,15 +26,23 @@ export default function ChildStickerShopScreen() {
   const balance = memberPoints.find((m) => m.member_id === myId)?.current_points ?? 0;
   const { loadState: catalogLoadState, catalog, reload: reloadCatalog } = useStickerCatalog();
   const {
-    loadState: purchasedLoadState,
-    purchasedCatalogIds,
-    reload: reloadPurchased,
-  } = useMyStickerPurchasedCatalogIdsThisMonth(myId);
+    loadState: familyPurchasesLoadState,
+    purchases: familyPurchases,
+    reload: reloadFamilyPurchases,
+  } = useFamilyStickerPurchasesForLock(state.family.id);
   const { purchasing, purchase } = useStickerPurchaseAction();
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
-  const loadState = catalogLoadState === "error" || purchasedLoadState === "error" ? "error" : catalogLoadState === "loading" || purchasedLoadState === "loading" ? "loading" : "ready";
+  const loadState =
+    catalogLoadState === "error" || familyPurchasesLoadState === "error"
+      ? "error"
+      : catalogLoadState === "loading" || familyPurchasesLoadState === "loading"
+      ? "loading"
+      : "ready";
+  // [要件定義書07-19-14章「決定32・33」] 段階購入制。家族としてまだ解放されて
+  // いないカタログIDを、カタログ一覧と家族全員の購入記録から導出する。
+  const lockedCatalogIds = computeLockedCatalogIds(catalog, familyPurchases);
 
   const handleConfirmPurchase = async (catalogId: string) => {
     setPurchaseError(null);
@@ -45,7 +53,7 @@ export default function ChildStickerShopScreen() {
     }
     const item = catalog.find((c) => c.id === catalogId);
     setSnackbar(`⭐ ${item?.display_name ?? "メダル"}を てにいれたよ！コレクターだなに しまってあるよ`);
-    void reloadPurchased();
+    void reloadFamilyPurchases();
     setTimeout(() => {
       setSnackbar(null);
       router.back();
@@ -63,12 +71,12 @@ export default function ChildStickerShopScreen() {
         loadState={loadState}
         catalog={catalog}
         balance={balance}
-        purchasedCatalogIdsThisMonth={purchasedCatalogIds}
+        lockedCatalogIds={lockedCatalogIds}
         purchasing={purchasing}
         purchaseErrorMessage={purchaseError}
         onRetry={() => {
           reloadCatalog();
-          reloadPurchased();
+          reloadFamilyPurchases();
         }}
         onConfirmPurchase={handleConfirmPurchase}
       />

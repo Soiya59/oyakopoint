@@ -7,11 +7,18 @@
  * カタログ位置＝形×レアリティのみが選択対象）。購入確認は新しい画面を作らず、
  * 本コンポーネント内のインライン確認モーダルで行う（決定10）。
  *
- * [2026-09-09改訂・統括の実機確認からの指摘・要件定義書07-19-9a章「決定31」]
- * 購入上限は「1人あたり月合計1個」ではなく「同じ種類（sticker_catalog_id）に
- * つき1人あたり月1枚」だった（決定15の読み取り誤りの訂正）。そのためグリッド
- * 全体を止める旧`monthlyLimitReached`は廃止し、今月すでに購入した種類だけを
- * 個別に非活性化する（開発部/成果物/実装メモ.md 143章）。
+ * [2026-09-08改訂・要件定義書07-19-14章「決定32〜38」・決定39・
+ * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 32.0b節・32.1節、
+ * 開発部/成果物/実装メモ.md 161章]
+ * メダルの段階購入制（形ごとに銅→銀→金→虹の順でしか買えない。解放条件は
+ * 家族の誰かの過去購入実績、決定32・33）を導入した。あわせて統括判断（決定39）
+ * により月次の購入上限は完全に撤廃されたため、旧`purchasedCatalogIdsThisMonth`
+ * （2026-09-09改訂、143章）は廃止し、`lockedCatalogIds`（家族解放待ちの
+ * カタログID一覧）に置き換えた。買えない理由は「①家族解放待ち」「②残高不足」の
+ * 2つになり、優先順位は「家族解放待ち＞残高不足」（32.0b節決定29。貯めても
+ * 解決しない条件を先に伝える）。段階の順序はグリッド上でセル間に矢印「→」を
+ * 表示して明示する（32.0b節決定31）。「家族の誰が持っているか」は一切表示しない
+ * （32.0b節決定30）。
  *
  * [2026-09-07改訂・本部長／実装メモ152章] 画面に出す呼び名は「メダル」に統一した
  * （統括判断）。DBの`sticker_key`・本コンポーネント名・コメント中の「シール」
@@ -43,19 +50,38 @@ const rarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
   rainbow: { child: "にじ", parent: "虹" },
 };
 
+/**
+ * 段階購入制（要件定義書07-19-14章「決定32」）: このレアリティを買うために
+ * 家族の誰かが過去に購入している必要がある「ひとつ下のレアリティ」。銅は
+ * 下の段が無いためnull（無条件で買える）。
+ */
+const requiredLowerRarity: Record<StickerRarity, StickerRarity | null> = {
+  bronze: null,
+  silver: "bronze",
+  gold: "silver",
+  rainbow: "gold",
+};
+
+/** 32.0b節「決定28」の3ロール文言テンプレート。 */
+function familyLockedMessage(tone: Tone, requiredRarity: StickerRarity): string {
+  const isChild = tone === "child";
+  const label = isChild ? rarityLabel[requiredRarity].child : rarityLabel[requiredRarity].parent;
+  return isChild ? `${label}を だれかが かうと ひらくよ` : `${label}を家族の誰かが買うと、購入できるようになります`;
+}
+
 export interface StickerShopPanelProps {
   tone: Tone;
   loadState: LoadState;
   catalog: StickerCatalogItem[];
   balance: number;
   /**
-   * [2026-09-09改訂・要件定義書07-19-9a章「決定31」] 決定15の読み取り誤りの訂正を
-   * 受け、「今月すでに1個購入済みか」という全体のboolean（旧`monthlyLimitReached`）
-   * ではなく、「今月すでに購入した種類（`sticker_catalog_id`）の一覧」を受け取る
-   * ように変えた。上限は同じ種類につき月1枚であり、違う種類は同じ月に何種類でも
-   * 買えるため、グリッド全体を非活性にする表示はもう正しくない。
+   * [2026-09-08新設・要件定義書07-19-14章「決定32・33」・実装メモ161章]
+   * 家族としてまだ解放されていない（＝ひとつ下のレアリティを家族の誰も過去に
+   * 購入したことがない）カタログID一覧。旧`purchasedCatalogIdsThisMonth`
+   * （143章、月次購入上限の表示用）は決定39（月次購入上限の完全撤廃）により
+   * 廃止し、本propに置き換えた。
    */
-  purchasedCatalogIdsThisMonth: string[];
+  lockedCatalogIds: string[];
   purchasing: boolean;
   purchaseErrorMessage: string | null;
   onRetry: () => void;
@@ -78,7 +104,7 @@ export function StickerShopPanel({
   loadState,
   catalog,
   balance,
-  purchasedCatalogIdsThisMonth,
+  lockedCatalogIds,
   purchasing,
   purchaseErrorMessage,
   onRetry,
@@ -89,7 +115,7 @@ export function StickerShopPanel({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selected, setSelected] = useState<StickerCatalogItem | null>(null);
-  const purchasedIdSet = new Set(purchasedCatalogIdsThisMonth);
+  const lockedIdSet = new Set(lockedCatalogIds);
 
   if (loadState === "loading") return <SkeletonList count={3} />;
   if (loadState === "error") {
@@ -117,46 +143,47 @@ export function StickerShopPanel({
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
-      {/* [2026-09-09改訂・決定31] 「今月は1つ購入済み」という全体向けの案内カードは
-          廃止した。上限は同じ種類につき月1枚であり、違う種類は同じ月に何種類でも
-          買えるため、グリッド全体を止める案内は誤りになる。代わりに常設の短い注記
-          （下記）と、該当するセルだけの個別表示（購入済みの種類のみ非活性・
-          「かったよ／購入済み」表示）に置き換える。 */}
-      <Text style={[captionStyle, styles.ruleNote]}>
-        {isChild ? "おなじ メダルは 1かげつに 1まいまで かえるよ" : "同じ種類は1人あたり月1枚まで購入できます"}
-      </Text>
-
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s4 }}>
         {byShape.map(({ shape, items }) => (
           <View key={shape}>
             <Text style={[captionStyle, styles.shapeHeading]}>{isChild ? shapeLabel[shape].child : shapeLabel[shape].parent}</Text>
             <View style={styles.row}>
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const affordable = balance >= item.points_cost;
-                const purchasedThisMonth = purchasedIdSet.has(item.id);
-                const disabled = purchasedThisMonth || !affordable;
+                const locked = lockedIdSet.has(item.id);
+                // [32.0b節決定29] 優先順位「家族解放待ち＞残高不足」。貯めても
+                // 解決しない条件（家族解放待ち）を優先して伝える。
+                const disabled = locked || !affordable;
+                const requiredRarity = requiredLowerRarity[item.rarity];
                 return (
-                  <Pressable
-                    key={item.id}
-                    disabled={disabled}
-                    onPress={() => setSelected(item)}
-                    style={[styles.cell, tone === "child" && styles.cellChild, disabled && styles.cellDisabled]}
-                    accessibilityRole="button"
-                  >
-                    <StickerIcon shape={item.shape} rarity={item.rarity} size={32} />
-                    <Text style={[captionStyle, styles.cellRarity]}>
-                      {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
-                    </Text>
-                    <Text style={[captionStyle, !affordable && !purchasedThisMonth && styles.insufficientText]}>
-                      {purchasedThisMonth
-                        ? isChild
-                          ? "かったよ"
-                          : "今月購入済み"
-                        : affordable
-                        ? `${item.points_cost}pt`
-                        : `あと${item.points_cost - balance}pt`}
-                    </Text>
-                  </Pressable>
+                  <React.Fragment key={item.id}>
+                    {/* [32.0b節決定31] 段階の順序（銅→銀→金→虹）をセル間の矢印で明示する。
+                        ナビゲーション目的ではなく順序の可視化のみのため、
+                        スクリーンリーダーには読み上げさせない。 */}
+                    {index > 0 && (
+                      <Text style={[captionStyle, styles.arrow]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                        →
+                      </Text>
+                    )}
+                    <Pressable
+                      disabled={disabled}
+                      onPress={() => setSelected(item)}
+                      style={[styles.cell, tone === "child" && styles.cellChild, disabled && styles.cellDisabled]}
+                      accessibilityRole="button"
+                    >
+                      <StickerIcon shape={item.shape} rarity={item.rarity} size={32} />
+                      <Text style={[captionStyle, styles.cellRarity]}>
+                        {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
+                      </Text>
+                      <Text style={[captionStyle, !affordable && !locked && styles.insufficientText]}>
+                        {locked && requiredRarity
+                          ? familyLockedMessage(tone, requiredRarity)
+                          : affordable
+                          ? `${item.points_cost}pt`
+                          : `あと${item.points_cost - balance}pt`}
+                      </Text>
+                    </Pressable>
+                  </React.Fragment>
                 );
               })}
             </View>
@@ -210,9 +237,9 @@ export function StickerShopPanel({
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  ruleNote: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
   shapeHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
   row: { flexDirection: "row", gap: theme.spacing.s2 },
+  arrow: { color: theme.colors.neutralTextSecondary, alignSelf: "center" },
   cell: {
     flex: 1,
     alignItems: "center",
