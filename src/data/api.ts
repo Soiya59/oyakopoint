@@ -696,7 +696,15 @@ export async function cancelChoreCompletion(
   };
 }
 
-/** API仕様.md 5章: スタンプ／コメントのリアクション付与 */
+/**
+ * API仕様.md 5章: コメントのリアクション付与。
+ * [2026-09-10改訂・実装メモ.md 157章] スタンプ（kind='stamp'）の直接INSERTは
+ * `chore_reactions_insert_scoped`ポリシーの改訂によりRLSで拒否されるようになった
+ * （マイグレーション`20260910020000_toggle_chore_reaction_stamp.sql`）。スタンプの
+ * 追加・切替・取消は下記`toggleReactionStamp`（RPC）に一本化したため、本関数は
+ * 実質的にコメント（kind='comment'）専用になった。呼び出し側のシグネチャは
+ * 後方互換のため変更していない。
+ */
 export async function addReaction(
   client: SupabaseClient,
   input: { completion_id: string; reacted_by: string; kind: ReactionKind; stamp_key?: StampKey; comment_body?: string }
@@ -714,6 +722,26 @@ export async function addReaction(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as ChoreReaction };
+}
+
+/**
+ * [2026-09-10新設・実装メモ.md 157章] 完了報告へのスタンプ（絵文字）リアクションの
+ * 追加・切替・取消。同じスタンプをもう一度送ると取消、違うスタンプを送ると切替になる
+ * （SECURITY DEFINER関数`toggle_chore_reaction_stamp`側で判定する。呼び出し側は
+ * 常に「押したスタンプの種類」だけを送ればよく、現在の状態を見て呼び分ける必要はない）。
+ * 自分（呼び出し元のcurrent_family_member_id()）の分しか操作できない設計のため、
+ * reacted_byをパラメータとして渡す必要が無い（渡しても無視されるのではなく、
+ * そもそも関数シグネチャに存在しない）。
+ */
+export async function toggleReactionStamp(
+  client: SupabaseClient,
+  input: { completion_id: string; stamp_key: StampKey }
+): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
+  const { data, error } = await client
+    .rpc("toggle_chore_reaction_stamp", { p_completion_id: input.completion_id, p_stamp_key: input.stamp_key })
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
 }
 
 /** API仕様.md 7章: ごほうび交換申請 */

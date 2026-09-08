@@ -79,12 +79,13 @@ export default function ApprovalsScreen() {
 
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
+  // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
+  // 取消、違うスタンプをタップすると切替になる（統括指示）。以前あった
+  // 「送信済みなら何もしない」ガードは撤去した（もう一度押したい操作そのものが
+  // 取消の入口になったため）。
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    // uq_chore_reactions_stamp_dedup（スキーマ設計.sql 5b章）をボタン無効化で未然に防ぐ
-    // （主要画面ワイヤーフレーム.md 6章「送信済みのstamp_keyのボタンをあらかじめ無効化」）。
-    if (hasReactedWithStamp(completionId, myParentId, stampKey)) return;
     setReactionError(null);
-    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myParentId, kind: "stamp", stampKey });
+    const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myParentId, stampKey });
     if (!result.ok) setReactionError("スタンプを送信できませんでした。もう一度お試しください");
   };
 
@@ -226,8 +227,10 @@ export default function ApprovalsScreen() {
                     {cancelRowError.message}
                   </Text>
                 )}
-                {/* カード上のクイックスタンプ。タップで即座にchore_reactions insert（3.1章）。
-                    自分自身の完了報告カードには表示しない。 */}
+                {/* カード上のクイックスタンプ。タップで即座にトグルRPCを呼ぶ（3.1章、
+                    2026-09-10改訂・実装メモ.md 157章）。自分自身の完了報告カードには
+                    表示しない。[2026-09-10改訂] 送信済み（sent）でもdisabledにしない。
+                    もう一度タップすると取消、違うスタンプをタップすると切替になる。 */}
                 {!isOwnCard && (
                   <View style={styles.stampRow}>
                     {theme.stampDefinitions.map((s) => {
@@ -235,7 +238,6 @@ export default function ApprovalsScreen() {
                       return (
                         <Pressable
                           key={s.key}
-                          disabled={sent}
                           onPress={() => sendStamp(c.id, s.key as StampKey)}
                           style={[styles.stampBtn, sent && styles.stampBtnSent]}
                         >
@@ -388,7 +390,6 @@ export default function ApprovalsScreen() {
                             return (
                               <Pressable
                                 key={s.key}
-                                disabled={sent}
                                 onPress={() => sendStamp(detailTarget.id, s.key as StampKey)}
                                 style={[styles.stampChip, sent && styles.stampChipSent]}
                               >

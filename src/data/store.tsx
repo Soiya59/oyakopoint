@@ -115,6 +115,14 @@ export type Action =
       stampKey?: StampKey;
       commentBody?: string;
     }
+  /**
+   * [2026-09-10追加・実装メモ.md 157章] 完了報告へのスタンプ（絵文字）リアクションの
+   * 追加・切替・取消。同じスタンプをもう一度送ると取消、違うスタンプを送ると切替。
+   * reactedByは実接続時はRPC側が呼び出し本人（current_family_member_id()）を使う
+   * ため無視されるが、モック実装（MockDataProviderImpl）は本物のRLSを持たないため
+   * 誰の操作かを判別するのに必要（ADD_REACTIONと同じ形）。
+   */
+  | { type: "TOGGLE_REACTION_STAMP"; completionId: string; reactedBy: string; stampKey: StampKey }
   | { type: "REDEEM_REWARD"; rewardId: string; memberId: string }
   | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string }
   | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean }
@@ -519,6 +527,19 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
         }
 
+        // [2026-09-10追加・実装メモ.md 157章] スタンプの追加・切替・取消。
+        // RPCが1回で判定するため、事前のhasReactedWithStampガード（ADD_REACTIONの
+        // uq_chore_reactions_stamp_dedup対策のような）は不要。
+        case "TOGGLE_REACTION_STAMP": {
+          const res = await api.toggleReactionStamp(client, {
+            completion_id: action.completionId,
+            stamp_key: action.stampKey,
+          });
+          if (!res.ok) return { ok: false, error: res.error };
+          await load();
+          return { ok: true };
+        }
+
         case "REDEEM_REWARD": {
           const res = await api.redeemReward(client, { reward_id: action.rewardId, member_id: action.memberId });
           if (!res.ok) return { ok: false, error: res.error };
@@ -685,6 +706,37 @@ function reducer(state: State, action: Action): State {
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...state.reactions, reaction] };
+    }
+
+    // [2026-09-10追加・実装メモ.md 157章] モック実装（Supabase未接続時）でも
+    // 同じトグル挙動を再現する。同じスタンプ→取消、違うスタンプ→切替、
+    // いずれの場合も「自分（reactedBy）のこのcompletionへの既存スタンプ」を
+    // まず全部取り除いてから、必要なら1件だけ足し直す（RPC本体と同じ手順）。
+    case "TOGGLE_REACTION_STAMP": {
+      const hadSame = state.reactions.some(
+        (r) =>
+          r.completion_id === action.completionId &&
+          r.reacted_by === action.reactedBy &&
+          r.kind === "stamp" &&
+          r.stamp_key === action.stampKey
+      );
+      const withoutMine = state.reactions.filter(
+        (r) => !(r.completion_id === action.completionId && r.reacted_by === action.reactedBy && r.kind === "stamp")
+      );
+      if (hadSame) {
+        return { ...state, reactions: withoutMine };
+      }
+      const reaction: ChoreReaction = {
+        id: `reaction-${Date.now()}`,
+        family_id: state.family.id,
+        completion_id: action.completionId,
+        reacted_by: action.reactedBy,
+        kind: "stamp",
+        stamp_key: action.stampKey,
+        comment_body: null,
+        created_at: new Date().toISOString(),
+      };
+      return { ...state, reactions: [...withoutMine, reaction] };
     }
 
     case "REDEEM_REWARD": {

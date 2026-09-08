@@ -194,6 +194,17 @@
 -- ローカルDocker環境に適用済み・実測済み（96.5章の遵守）。本番へは未適用
 -- （本部長の操作を待つ）。
 --
+-- [2026-09-10追加・開発部] 完了報告へのスタンプ（絵文字）リアクションの取消・切替
+-- （統括指示、開発部/成果物/実装メモ.md 157章、マイグレーション
+-- `20260910020000_toggle_chore_reaction_stamp.sql`）に伴い、S1（27のまま。
+-- 新規テーブルを追加していない）・S3（55本のまま。新規ポリシーを追加せず、
+-- 既存の`chore_reactions_insert_scoped`1行にのみ`kind = 'comment'`条件を追加した。
+-- 本数は変わらずハッシュのみ変化）・S4（57→58、新規SECURITY DEFINER関数
+-- `toggle_chore_reaction_stamp`をauthenticatedへ明示的にGRANT）を更新した。
+-- いずれもローカルDocker環境で実測した値（96.5章の遵守。手計算していない）。
+-- 本マイグレーションは157章時点でローカルDocker環境に適用済み・実測済み。
+-- 本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -283,7 +294,13 @@ WITH expected(t, p, c, h) AS (VALUES
   ('chore_nfc_tags','chore_nfc_tags_revoke_family_by_parent','UPDATE','4363f0549d157159f7553c9de572d3f4'),
   ('chore_nfc_tags','chore_nfc_tags_revoke_personal_by_creator','UPDATE','a299667c176e888b5d809f234cf7c088'),
   ('chore_nfc_tags','chore_nfc_tags_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
-  ('chore_reactions','chore_reactions_insert_scoped','INSERT','64b4f4d34c91a08ed214c412011c2725'),
+  -- [2026-09-10改訂] スタンプ（絵文字）リアクションの取消・切替（開発部/成果物/
+  -- 実装メモ.md 157章、マイグレーション`20260910020000_toggle_chore_reaction_stamp.sql`）
+  -- に伴い、`kind = 'comment'`条件を追加した（スタンプの直接INSERTを塞ぎ、
+  -- 新設のSECURITY DEFINER関数`toggle_chore_reaction_stamp`経由に一本化するため）。
+  -- 家族・ロールの境界条件（保護者は誰にでも、子どもは対象completionの報告者が
+  -- parentの場合のみ）自体は変更していない。ローカルDockerで実測した値。
+  ('chore_reactions','chore_reactions_insert_scoped','INSERT','70dc0d171fa57628d0955970fc316165'),
   ('chore_reactions','chore_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
@@ -474,7 +491,12 @@ WITH expected(f) AS (VALUES
   -- [2026-09-07追加] purchase_sticker（設計部/成果物/スキーマ設計.sql 47.2章、
   -- 開発部/成果物/実装メモ.md 138章）。draw_gacha()等と同じくSECURITY DEFINERで
   -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
-  ('purchase_sticker')
+  ('purchase_sticker'),
+  -- [2026-09-10追加] toggle_chore_reaction_stamp（完了報告へのスタンプ〈絵文字〉
+  -- リアクションの取消・切替、開発部/成果物/実装メモ.md 157章）。
+  -- cancel_chore_completion()等と同じくSECURITY DEFINERであり、PUBLIC/anonから
+  -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('toggle_chore_reaction_stamp')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -487,7 +509,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数57件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数58件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

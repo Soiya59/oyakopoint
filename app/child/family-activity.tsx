@@ -65,10 +65,11 @@ export default function FamilyActivityScreen() {
 
   const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
 
+  // [2026-09-10改訂・実装メモ.md 157章] おくったスタンプをもういちど押すと取消、
+  // ちがうスタンプを押すと切替になる（統括指示）。
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    if (hasReactedWithStamp(completionId, myId, stampKey)) return;
     setReactionError(null);
-    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myId, kind: "stamp", stampKey });
+    const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
     if (!result.ok) setReactionError("おくれなかったよ。もういちどためしてね");
   };
 
@@ -128,7 +129,6 @@ export default function FamilyActivityScreen() {
                   return (
                     <Pressable
                       key={s.key}
-                      disabled={sent}
                       onPress={() => sendStamp(c.id, s.key as StampKey)}
                       style={[styles.stampBtn, sent && styles.stampBtnSent]}
                     >
@@ -199,7 +199,6 @@ export default function FamilyActivityScreen() {
                         return (
                           <Pressable
                             key={s.key}
-                            disabled={sent}
                             onPress={() => sendStamp(detailTarget.id, s.key as StampKey)}
                             style={[styles.stampChip, sent && styles.stampChipSent]}
                           >

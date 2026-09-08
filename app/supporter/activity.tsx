@@ -62,10 +62,11 @@ export default function SupporterActivityScreen() {
 
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
+  // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
+  // 取消、違うスタンプをタップすると切替になる（統括指示）。
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    if (hasReactedWithStamp(completionId, myId, stampKey)) return;
     setReactionError(null);
-    const result = await dispatch({ type: "ADD_REACTION", completionId, reactedBy: myId, kind: "stamp", stampKey });
+    const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
     if (!result.ok) setReactionError("スタンプを送信できませんでした。もう一度お試しください");
   };
 
@@ -172,7 +173,6 @@ export default function SupporterActivityScreen() {
                       return (
                         <Pressable
                           key={s.key}
-                          disabled={sent}
                           onPress={() => sendStamp(c.id, s.key as StampKey)}
                           style={[styles.stampBtn, sent && styles.stampBtnSent]}
                         >
@@ -262,7 +262,6 @@ export default function SupporterActivityScreen() {
                             return (
                               <Pressable
                                 key={s.key}
-                                disabled={sent}
                                 onPress={() => sendStamp(detailTarget.id, s.key as StampKey)}
                                 style={[styles.stampChip, sent && styles.stampChipSent]}
                               >
