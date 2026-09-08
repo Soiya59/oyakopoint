@@ -175,18 +175,22 @@ export default function ParentHomeScreen() {
           子どもホーム（C5）と同じ位置・同じ数え方に揃える。 */}
       <View style={styles.headerRow}>
         {/* [2026-09-08変更・本部長／軽微変更ルート] 左上に「いま誰として使っているか」を
-            出す（C5子どもホームと同じ役割）。統括指示により、アバターと名前は小さく、
-            その右に家族名を置き、従来の「の ホーム」は削除した。 */}
+            出す（C5子どもホームと同じ役割）。その右に家族名を置き、従来の「の ホーム」は
+            削除した。
+            [同日・2回目の改訂] 最初はアバター24・名前をparentBody（15px）で小さく出したが、
+            統括の実機確認「アバターと名前は小さくなくても良かった。普通のサイズに戻して」に
+            より、アバター36（C5子どもホームと同じ）・名前をparentTitle（家族名と同じ）に
+            した。左の「誰として使っているか」と右の「どの家族か」が同じ重さで並ぶ。 */}
         {me &&
           (childProfiles.length > 0 ? (
             <Pressable style={styles.headerMe} onPress={goToChildSwitch} hitSlop={8}>
-              <MemberAvatar name={me.display_name} color={me.avatar_color} size={24} />
-              <Text style={theme.typography.parentBody}>{me.display_name}</Text>
+              <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
+              <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
             </Pressable>
           ) : (
             <View style={styles.headerMe}>
-              <MemberAvatar name={me.display_name} color={me.avatar_color} size={24} />
-              <Text style={theme.typography.parentBody}>{me.display_name}</Text>
+              <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
+              <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
             </View>
           ))}
         <Text style={[theme.typography.parentTitle, styles.headerFamilyName]}>{state.family.name}</Text>
