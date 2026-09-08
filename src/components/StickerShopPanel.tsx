@@ -23,6 +23,14 @@
  * [2026-09-07改訂・本部長／実装メモ152章] 画面に出す呼び名は「メダル」に統一した
  * （統括判断）。DBの`sticker_key`・本コンポーネント名・コメント中の「シール」
  * 「ステッカー」はそのまま変更していない。
+ *
+ * [2026-09-08改訂・本部長（実機確認より）／実装メモ164章] 未開放マスに説明文
+ * （旧・32.0b節決定28の3ロール文言テンプレート）を並べると同じ説明が縦に最大3つ
+ * 並んで文字が過密になったため、未開放マスからは説明文を外し、絵とレアリティ名
+ * だけにした（薄く表示するdimmingは維持）。代わりに形の行の下に1行だけ、その行で
+ * 次に開くレアリティと必要なレアリティを差し込んだ説明を出す（矢印「→」が順序を
+ * 既に示しているため、行に1つで足りるという判断）。行が全部開放済みならこの1行は
+ * 出さない。開放済みマスの見た目（価格／「あと◯pt」）は変更していない。
  */
 import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -62,11 +70,24 @@ const requiredLowerRarity: Record<StickerRarity, StickerRarity | null> = {
   rainbow: "gold",
 };
 
-/** 32.0b節「決定28」の3ロール文言テンプレート。 */
-function familyLockedMessage(tone: Tone, requiredRarity: StickerRarity): string {
+/**
+ * [2026-09-08改訂・本部長／実装メモ164章] 未開放マスの説明文は行の下1行に集約した
+ * （旧・32.0b節「決定28」の3ロール文言テンプレートは廃止。詳細は実装メモ164章）。
+ * その行でまだ開いていない最初のレアリティ（＝次に開くもの）と、それを開くために
+ * 必要な「ひとつ下のレアリティ」を差し込んだ1文を返す。行がすべて開放済みなら
+ * `null`（＝1行ごと表示しない）。
+ */
+function nextUnlockMessage(tone: Tone, items: StickerCatalogItem[], lockedIdSet: Set<string>): string | null {
+  const firstLocked = items.find((item) => lockedIdSet.has(item.id));
+  if (!firstLocked) return null;
+  const requiredRarity = requiredLowerRarity[firstLocked.rarity];
+  if (!requiredRarity) return null;
   const isChild = tone === "child";
-  const label = isChild ? rarityLabel[requiredRarity].child : rarityLabel[requiredRarity].parent;
-  return isChild ? `${label}を だれかが かうと ひらくよ` : `${label}を家族の誰かが買うと、購入できるようになります`;
+  const nextLabel = isChild ? rarityLabel[firstLocked.rarity].child : rarityLabel[firstLocked.rarity].parent;
+  const requiredLabel = isChild ? rarityLabel[requiredRarity].child : rarityLabel[requiredRarity].parent;
+  return isChild
+    ? `${nextLabel}は、${requiredLabel}を だれかが かうと ひらくよ`
+    : `${nextLabel}は、${requiredLabel}を家族の誰かが買うと、購入できるようになります`;
 }
 
 export interface StickerShopPanelProps {
@@ -154,7 +175,6 @@ export function StickerShopPanel({
                 // [32.0b節決定29] 優先順位「家族解放待ち＞残高不足」。貯めても
                 // 解決しない条件（家族解放待ち）を優先して伝える。
                 const disabled = locked || !affordable;
-                const requiredRarity = requiredLowerRarity[item.rarity];
                 return (
                   <React.Fragment key={item.id}>
                     {/* [32.0b節決定31] 段階の順序（銅→銀→金→虹）をセル間の矢印で明示する。
@@ -175,18 +195,24 @@ export function StickerShopPanel({
                       <Text style={[captionStyle, styles.cellRarity]}>
                         {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                       </Text>
-                      <Text style={[captionStyle, !affordable && !locked && styles.insufficientText]}>
-                        {locked && requiredRarity
-                          ? familyLockedMessage(tone, requiredRarity)
-                          : affordable
-                          ? `${item.points_cost}pt`
-                          : `あと${item.points_cost - balance}pt`}
-                      </Text>
+                      {/* [2026-09-08改訂・実装メモ164章] 未開放マスには説明文・「あと◯pt」を
+                          出さない（絵とレアリティ名だけ）。次に開く条件は行の下1行に集約した。 */}
+                      {!locked && (
+                        <Text style={[captionStyle, !affordable && styles.insufficientText]}>
+                          {affordable ? `${item.points_cost}pt` : `あと${item.points_cost - balance}pt`}
+                        </Text>
+                      )}
                     </Pressable>
                   </React.Fragment>
                 );
               })}
             </View>
+            {/* [2026-09-08改訂・実装メモ164章] 行の下に1行だけ、その行で次に開くものを説明する。
+                行が全部開放済みなら何も出さない。 */}
+            {(() => {
+              const message = nextUnlockMessage(tone, items, lockedIdSet);
+              return message ? <Text style={[captionStyle, styles.rowUnlockHint]}>{message}</Text> : null;
+            })()}
           </View>
         ))}
       </View>
@@ -240,6 +266,7 @@ const styles = StyleSheet.create({
   shapeHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
   row: { flexDirection: "row", gap: theme.spacing.s2 },
   arrow: { color: theme.colors.neutralTextSecondary, alignSelf: "center" },
+  rowUnlockHint: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
   cell: {
     flex: 1,
     alignItems: "center",
