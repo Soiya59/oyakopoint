@@ -25,11 +25,14 @@ export default function SupporterDrawingScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showSavedSnackbar, setShowSavedSnackbar] = useState(false);
+  // [2026-09-08追加・やること.md 4-4] 削除競合（先にガチャで公開された）の通知。
+  const [deletePublishedNotice, setDeletePublishedNotice] = useState<string | null>(null);
 
   const handleSave = async (lineData: FamilyDrawingLineData, title: string | null): Promise<boolean> => {
     setSaving(true);
     setErrorMessage(null);
     setShowSavedSnackbar(false);
+    setDeletePublishedNotice(null);
     const res = await save(lineData, title);
     setSaving(false);
     if (!res.ok) {
@@ -53,6 +56,7 @@ export default function SupporterDrawingScreen() {
     setSaving(true);
     setErrorMessage(null);
     setShowSavedSnackbar(false);
+    setDeletePublishedNotice(null);
     const res = await edit(drawingId, lineData, title);
     setSaving(false);
     if (!res.ok) {
@@ -66,9 +70,20 @@ export default function SupporterDrawingScreen() {
   const handleDeleteRequest = async (drawingId: string) => {
     setDeletingId(drawingId);
     setErrorMessage(null);
+    setDeletePublishedNotice(null);
     const res = await remove(drawingId);
     setDeletingId(null);
-    if (!res.ok) setErrorMessage(res.error.message);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    // [2026-09-08追加・やること.md 4-4] 削除しようとした瞬間に他メンバーの
+    // ガチャで先に公開されていた場合（失敗ではなく喜ばしい出来事）。
+    if (res.published) {
+      setDeletePublishedNotice(
+        "削除しようとした瞬間に、家族の誰かがガチャでこの絵を見つけました。もう削除できませんが、家族の宝物になりました"
+      );
+    }
   };
 
   return (
@@ -101,6 +116,7 @@ export default function SupporterDrawingScreen() {
             atLimit={atLimit}
             saving={saving}
             errorMessage={errorMessage}
+            deletePublishedNotice={deletePublishedNotice}
             saveLabel="せーぶする"
             clearLabel="ぜんぶけす"
             undoLabel="ひとつ戻す"

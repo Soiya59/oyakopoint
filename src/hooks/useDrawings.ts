@@ -16,6 +16,14 @@ export type DrawingsLoadState = "loading" | "error" | "ready";
 
 export type DrawingActionResult = { ok: true } | { ok: false; error: ApiError };
 
+/**
+ * [2026-09-08追加・やること.md 4-4] 削除専用の戻り値。`published: true`は
+ * 「削除しようとした瞬間に他メンバーのガチャで先に公開されていた（削除は
+ * 行われていない）」ことを示す。エラーではないため`DrawingActionResult`の
+ * `ok: false`とは分ける。
+ */
+export type DrawingDeleteResult = { ok: true; published: boolean } | { ok: false; error: ApiError };
+
 export function useMyDrawings(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<DrawingsLoadState>("loading");
@@ -58,11 +66,11 @@ export function useMyDrawings(memberId: string) {
   );
 
   const remove = useCallback(
-    async (drawingId: string): Promise<DrawingActionResult> => {
+    async (drawingId: string): Promise<DrawingDeleteResult> => {
       const res = await deleteDrawing(client, drawingId);
       if (!res.ok) return { ok: false, error: res.error };
       await load();
-      return { ok: true };
+      return { ok: true, published: res.data.published };
     },
     [client, load]
   );

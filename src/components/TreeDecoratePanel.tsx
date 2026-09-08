@@ -32,6 +32,7 @@ import { PRIZE_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot, DecoratableCompletion } from "@/data/api";
+import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -60,8 +61,15 @@ const bodyStyleFor = (tone: Tone) =>
 const captionStyleFor = (tone: Tone) =>
   tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
 
+/**
+ * [2026-09-08改訂・やること.md 4-3] `src/lib/calendarDates.ts` の共通関数
+ * （`formatDateShort`/`toJstDateString`）に寄せた。従来は`toLocaleDateString`の
+ * 直呼び（端末TZ依存）で独自実装していたが、他画面と表記を揃える共通関数が
+ * 既にあるため重複だった。JST固定になる点のみ従来と異なるが、実利用端末は
+ * ほぼ常にJSTのため表示結果は変わらない（開発部/成果物/実装メモ.md 165章で検証）。
+ */
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  return formatDateShort(toJstDateString(iso));
 }
 
 export function TreeDecoratePanel({

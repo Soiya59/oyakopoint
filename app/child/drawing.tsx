@@ -25,10 +25,13 @@ export default function ChildDrawingScreen() {
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // [2026-09-08追加・やること.md 4-4] 削除競合（先にガチャで公開された）の通知。
+  const [deletePublishedNotice, setDeletePublishedNotice] = useState<string | null>(null);
 
   const handleSave = async (lineData: FamilyDrawingLineData, title: string | null): Promise<boolean> => {
     setSaving(true);
     setErrorMessage(null);
+    setDeletePublishedNotice(null);
     const res = await save(lineData, title);
     setSaving(false);
     if (!res.ok) {
@@ -52,6 +55,7 @@ export default function ChildDrawingScreen() {
   ): Promise<boolean> => {
     setSaving(true);
     setErrorMessage(null);
+    setDeletePublishedNotice(null);
     const res = await edit(drawingId, lineData, title);
     setSaving(false);
     if (!res.ok) {
@@ -65,9 +69,20 @@ export default function ChildDrawingScreen() {
   const handleDeleteRequest = async (drawingId: string) => {
     setDeletingId(drawingId);
     setErrorMessage(null);
+    setDeletePublishedNotice(null);
     const res = await remove(drawingId);
     setDeletingId(null);
-    if (!res.ok) setErrorMessage(res.error.message);
+    if (!res.ok) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+    // [2026-09-08追加・やること.md 4-4] 削除しようとした瞬間に他メンバーの
+    // ガチャで先に公開されていた場合（失敗ではなく喜ばしい出来事）。
+    if (res.published) {
+      setDeletePublishedNotice(
+        "けそうとした しゅんかんに、だれかが ガチャで この えを みつけて くれたよ！もう けせないけど、かぞくの たからものに なったよ"
+      );
+    }
   };
 
   return (
@@ -99,6 +114,7 @@ export default function ChildDrawingScreen() {
             atLimit={atLimit}
             saving={saving}
             errorMessage={errorMessage}
+            deletePublishedNotice={deletePublishedNotice}
             saveLabel="とっておく"
             clearLabel="ぜんぶ けす"
             undoLabel="ひとつ もどす"

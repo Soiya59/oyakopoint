@@ -243,6 +243,22 @@
 -- 遵守。手計算していない）。本マイグレーションは163章時点でローカルDocker
 -- 環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-13追加・開発部] generate_weekly_family_digest()（引数なし版、死んだ
+-- オーバーロード）のDROP（やること.md 4-7、開発部/成果物/実装メモ.md 165章、
+-- マイグレーション`20260913010000_drop_generate_weekly_family_digest_no_arg_
+-- overload.sql`）に伴い、S1（27のまま。テーブルの追加・削除は無い）・S3（54本の
+-- まま。ポリシーの追加・変更は無い）は無変更。**S4は59→58に減った**
+-- （見込みどおり、実測して確認。96.5章の遵守。手計算していない）。理由:
+-- 現行版generate_weekly_family_digest(uuid,date)は元々service_roleにのみ
+-- EXECUTE権限があり（authenticated/anonへは明示REVOKE済み）authenticatedからは
+-- 実行できない状態のままだったが、DROPした引数なし版は8月の作成時に明示REVOKEを
+-- 一度も受けておらず、本プロジェクトの既知の挙動（34.5章）でauthenticated・anon
+-- の両方にEXECUTE権限が自動付与されたまま本番に残っていた（本DROPで発覚・解消。
+-- 詳細はマイグレーション本体のコメント参照）。DROPによりproname
+-- `generate_weekly_family_digest`自体がS4の一覧（`DISTINCT proname`で集計）から
+-- 消える。本マイグレーションは165章時点でローカルDocker環境に適用済み・実測済み。
+-- 本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -509,7 +525,13 @@ WITH expected(f) AS (VALUES
   ('family_member_pins_before_write'),('family_members_before_update'),('family_tree_seasons_bump'),
   ('family_tree_stage_for_count'),('gacha_drawing_weight'),('gacha_member_progress_bump'),
   ('gacha_preset_ornaments_before_update'),('generate_invite_code'),
-  ('generate_weekly_family_digest'),('gratitude_daily_allowance'),('gratitude_points_before_insert'),
+  -- [2026-09-13削除・やること.md 4-7、開発部/成果物/実装メモ.md 165章]
+  -- generate_weekly_family_digest()（引数なし版、8月のマイグレーションで
+  -- 2引数化した際にDROPし忘れていた死んだオーバーロード）を明示DROPした。
+  -- 現行版generate_weekly_family_digest(uuid,date)はservice_roleにのみ
+  -- EXECUTE権限がある設計どおりの状態のままのため、authenticatedが実行
+  -- できる関数のこの一覧からはproname自体が消える。
+  ('gratitude_daily_allowance'),('gratitude_points_before_insert'),
   ('gratitude_points_before_update'),('gratitude_points_daily_used'),('is_current_user_parent'),
   ('is_valid_drawing_line_data'),('join_family_with_invite_code'),('jst_week_start_date'),
   -- [2026-09-01追加] max_nfc_tags_per_chore_member（NFCタグの人ごと化、設計部/成果物/
@@ -569,7 +591,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数59件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数58件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

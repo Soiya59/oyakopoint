@@ -35,6 +35,7 @@ import MemberAvatar from "./MemberAvatar";
 import { EmptyState } from "./StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -174,12 +175,11 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
     );
   }, [memberId, state.completions, state.reactions, state.gratitude, state.familyBoardReactions]);
 
-  const formatWhen = (iso: string) => {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(
-      d.getMinutes()
-    ).padStart(2, "0")}`;
-  };
+  // [2026-09-08改訂・やること.md 4-3] `src/lib/calendarDates.ts`の`formatDateTimeShort`
+  // （M/D HH:MM、JST固定）に寄せた。従来は独自実装（端末TZ依存）だったが、共通関数と
+  // 重複していた。JST固定になる点のみ従来と異なるが、実利用端末はほぼ常にJSTのため
+  // 表示結果は変わらない（開発部/成果物/実装メモ.md 165章で検証）。
+  const formatWhen = formatDateTimeShort;
 
   if (items.length === 0) {
     return (

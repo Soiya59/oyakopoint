@@ -1773,17 +1773,40 @@ export async function createDrawing(
   return { ok: true, data: data as FamilyDrawing };
 }
 
+export interface DeleteDrawingResult {
+  /**
+   * [2026-09-08追加・やること.md 4-4] 削除しようとしたまさにその瞬間に、他の家族
+   * メンバーのガチャがこの絵を引いて先に公開していた場合は`true`（このとき削除は
+   * 行われておらず、絵は家族の記録として残っている）。通常の削除成功時は`false`。
+   */
+  published: boolean;
+}
+
 /**
  * API仕様.md 12.2章「未公開の絵を削除する（描き直したい場合）」
  * （【2026-08-25本部長決定B】family_drawings_delete_own_unpublishedポリシー）。
  * 公開済み（is_published=true）の行はRLSのUSING句を満たさないため対象0件になる
- * だけでエラーにはならない（33b章コメント参照。呼び出し側で「削除できなかった」旨の
- * ハンドリングは不要）。
+ * だけでエラーにはならない（33b章コメント）。
+ *
+ * [2026-09-08改訂・やること.md 4-4] 従来は0件のときに何もしていなかったが、
+ * スキーマ設計.sql 33b章の申し送り「UI側はDELETE後にis_publishedを再取得して
+ * 確認することを推奨する」に対応した。`.select("id")`でDELETEされた行数を見て、
+ * 0件だった場合のみ対象行を再取得し、is_publishedを確認する。公開済みなら
+ * `family_drawings_select_scoped`（33b章、`is_published OR artist_member_id = 自分`）
+ * により本人からも見えるため、この再取得で判定できる（行が見当たらない場合は
+ * 二重押下等で既に削除済みとみなし、published: falseのまま扱う＝実害なし）。
  */
-export async function deleteDrawing(client: SupabaseClient, drawingId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("family_drawings").delete().eq("id", drawingId);
+export async function deleteDrawing(client: SupabaseClient, drawingId: string): Promise<ApiResult<DeleteDrawingResult>> {
+  const { data, error } = await client.from("family_drawings").delete().eq("id", drawingId).select("id");
   if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: null };
+  if (data && data.length > 0) return { ok: true, data: { published: false } };
+
+  const { data: row } = await client
+    .from("family_drawings")
+    .select("is_published")
+    .eq("id", drawingId)
+    .maybeSingle();
+  return { ok: true, data: { published: row?.is_published === true } };
 }
 
 /**

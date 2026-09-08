@@ -43,6 +43,13 @@ interface DrawingBoardProps {
   saving: boolean;
   /** 直近の保存/削除/編集で発生した通信エラー文言。 */
   errorMessage: string | null;
+  /**
+   * [2026-09-08追加・やること.md 4-4] 削除しようとした瞬間に他メンバーのガチャで
+   * 先に公開されていた（削除は行われていない）ことを伝える文言。エラーではなく
+   * 喜ばしい出来事（家族の誰かが見つけた）なので、`errorMessage`とは別枠にし、
+   * 失敗トーン（赤・statusBlocking）ではなく`limitCard`と同じ穏やかな配色で出す。
+   */
+  deletePublishedNotice: string | null;
   /** 「せーぶする」（保護者・みまもりメンバー）/「とっておく」（子ども）。新規保存・編集保存の両方で使う。 */
   saveLabel: string;
   /**
@@ -90,6 +97,7 @@ export function DrawingBoard({
   atLimit,
   saving,
   errorMessage,
+  deletePublishedNotice,
   saveLabel,
   clearLabel,
   undoLabel,
@@ -327,6 +335,12 @@ export function DrawingBoard({
 
   return (
     <View>
+      {deletePublishedNotice && (
+        <Card tone={tone} style={styles.limitCard}>
+          <Text style={bodyStyle}>{deletePublishedNotice}</Text>
+        </Card>
+      )}
+
       {atLimit && !isEditing && (
         <Card tone={tone} style={styles.limitCard}>
           <Text style={bodyStyle}>
