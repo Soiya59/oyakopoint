@@ -365,7 +365,9 @@ export const seedReactions: ChoreReaction[] = [
 // （scope='family'・created_by=null）を補完する。
 // [2026-08-30追加] Chore型と同じ理由（上記コメント参照）でReward型にも
 // updated_by/updated_atが追加されたため、モックシードにも同様の補完を行う。
-type LegacyRewardSeed = Omit<Reward, "created_by" | "scope" | "updated_by" | "updated_at">;
+// [2026-09-12追加] Reward型にassigned_to（担当者、要件定義書07-22章）が追加された
+// ため、他の補完列と同じくデフォルト値（null=誰でも交換可）を.map()で補完する。
+type LegacyRewardSeed = Omit<Reward, "created_by" | "scope" | "updated_by" | "updated_at" | "assigned_to">;
 
 export const seedRewards: Reward[] = (
   [
@@ -412,6 +414,7 @@ export const seedRewards: Reward[] = (
   scope: "family" as const,
   updated_by: null,
   updated_at: "2026-07-01T00:00:00+09:00",
+  assigned_to: null,
 }));
 
 export const seedRedemptions: RewardRedemption[] = [

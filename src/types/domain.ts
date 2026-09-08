@@ -200,6 +200,12 @@ export interface Reward {
   cost: number;
   description: string | null;
   is_active: boolean;
+  // [追加・2026-09-12] ごほうびの担当者（要件定義書07-22章、スキーマ設計.sql 50章、
+  // 開発部/成果物/実装メモ.md 163章）。chores.assigned_toと同じ意味・同じ持ち方
+  // （family_members.id、NULLなら誰でも交換可）。scope='personal'は常に
+  // created_byと同一値、scope='supporter_shared'は常にNULLへDBトリガーで強制される
+  // （ユーザーが選べる項目ではない。3章chores.assigned_toと対称）。
+  assigned_to: string | null;
   // [追加・2026-08-22] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 20章）。
   // chores.scope/created_byと同じ設計。scope='personal'のrewardには
   // is_shared_with_family相当の概念は無い（自分専用rewardは常に非公開のまま）。

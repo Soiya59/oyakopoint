@@ -38,6 +38,14 @@ const REWARD_EMOJI_SUGGESTIONS = ["🍰", "☕", "🛍️", "♨️", "🎬"];
  * 一時期ここに置いていたが、統括の実機確認により削除した。経緯は実装メモ.md 162章
  * （124章「廃止」の注記）を参照。保護者は設定の「👦 こどもモードにする」で子どもに
  * 切り替えれば同じ操作ができるため、代理の入口は二重導線になっていた。
+ *
+ * [2026-09-12追加] 担当者（要件定義書07-22章、スキーマ設計.sql 50章、API仕様.md
+ * 7d節、開発部/成果物/実装メモ.md 163章）。P11（app/parent/chore-edit.tsx）の
+ * 「担当（未指定=誰でも実行可）」チップと同型のUIを「誰でも交換可」の文言に
+ * 置き換えて追加した。候補一覧はP11の最新版（2026-09-08改訂）を踏襲し、
+ * みまもりメンバー（role='supporter'）を最初から除外している
+ * （家族共有ごほうびはみまもりメンバーの一覧に一切表示されないため、担当者に
+ * 指定しても実効性が無い。スキーマ設計.sql 50.14章(1)参照）。
  */
 export default function RewardEditScreen() {
   const { id, recId } = useLocalSearchParams<{ id?: string; recId?: string }>();
@@ -58,11 +66,19 @@ export default function RewardEditScreen() {
     reward ? String(reward.cost) : recommendation ? String(recommendation.points) : ""
   );
   const [description, setDescription] = useState(reward?.description ?? "");
+  // [2026-09-12追加] 担当者（未指定=NULL=誰でも交換可）。
+  const [assignedTo, setAssignedTo] = useState<string | null>(reward?.assigned_to ?? null);
 
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // [2026-09-12追加] app/parent/chore-edit.tsxの`members`と同じ絞り込み
+  // （2026-09-08改訂・統括指示: 家族共有choreの担当者にみまもりメンバーは
+  // 選べない。ごほうびも同じ理由〈家族共有ごほうびはみまもりメンバーの
+  // 一覧に出ないため、担当者に指定しても意味が無い〉で最初から踏襲する）。
+  const members = state.members.filter((m) => m.is_active && m.role !== "supporter");
 
   const validate = (): string | null => {
     if (!name.trim()) return "名前を入力してください";
@@ -105,6 +121,7 @@ export default function RewardEditScreen() {
       emoji,
       cost: Number(costText),
       description: description.trim() ? description.trim() : null,
+      assigned_to: assignedTo,
     };
 
     const res = reward
@@ -218,6 +235,28 @@ export default function RewardEditScreen() {
         multiline
         style={[styles.input, styles.textArea]}
       />
+
+      {/* [2026-09-12追加] 担当（未指定=誰でも交換可）。app/parent/chore-edit.tsxの
+          「担当」チップと同型のUI。API仕様.md 7d節「候補一覧はP11の最新版を
+          そのまま踏襲」のとおり、みまもりメンバーを除外したmembersを使う。 */}
+      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>担当（未指定=誰でも交換可）</Text>
+      <View style={styles.chipRow}>
+        <Pressable
+          onPress={() => setAssignedTo(null)}
+          style={[styles.chip, assignedTo === null && styles.chipSelected]}
+        >
+          <Text>誰でも交換可</Text>
+        </Pressable>
+        {members.map((m) => (
+          <Pressable
+            key={m.id}
+            onPress={() => setAssignedTo(m.id)}
+            style={[styles.chip, assignedTo === m.id && styles.chipSelected]}
+          >
+            <Text>{m.display_name}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>

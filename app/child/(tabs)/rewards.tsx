@@ -29,7 +29,11 @@ export default function ChildRewardsScreen() {
   // [2026-09-01修正・本部長] 保護者側（app/parent/my-rewards.tsx）と同じ不具合が
   // 子ども側にもあった。みまもりメンバーの自分専用ごほうびが交換一覧に混ざる。
   // 3ロールとも同時に直す（実装メモ106章）。
-  const rewards = state.rewards.filter((r) => r.is_active && r.scope === "family");
+  // [2026-09-12追加] 担当者による絞り込み（要件定義書07-22章、API仕様.md 7d節、
+  // 開発部/成果物/実装メモ.md 163章）。app/parent/my-rewards.tsxと同型。
+  const rewards = state.rewards.filter(
+    (r) => r.is_active && r.scope === "family" && (r.assigned_to === null || r.assigned_to === me.id)
+  );
 
   return (
     <Screen tone="child">

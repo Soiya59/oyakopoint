@@ -1015,11 +1015,15 @@ export async function updateChore(
  * [2026-08-20追加] 当初`emoji`はフォーム対象外だったが、ChoreFormInputと同じ理由
  * （43章のレイアウト改善に続く見やすさ改善）でフォームに追加した。
  */
+// [2026-09-12追加] assigned_to（担当者）。ChoreFormInputのassigned_toと同型
+// （要件定義書07-22章、スキーマ設計.sql 50章、API仕様.md 7d節、開発部/成果物/
+// 実装メモ.md 163章）。未指定=NULL=誰でも交換可。
 export interface RewardFormInput {
   name: string;
   emoji: string | null;
   cost: number;
   description: string | null;
+  assigned_to: string | null;
 }
 
 export async function createReward(
@@ -1035,6 +1039,7 @@ export async function createReward(
       emoji: input.emoji,
       cost: input.cost,
       description: input.description,
+      assigned_to: input.assigned_to,
     })
     .select("*")
     .single();
@@ -1054,6 +1059,7 @@ export async function updateReward(
       emoji: input.emoji,
       cost: input.cost,
       description: input.description,
+      assigned_to: input.assigned_to,
     })
     .eq("id", rewardId)
     .select("*")

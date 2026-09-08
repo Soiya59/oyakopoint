@@ -48,7 +48,15 @@ export default function ParentMyRewardsScreen() {
   // 自分専用ごほうびが保護者の交換一覧に混ざっていた**（統括が実機で発見）。
   // 実装メモ90章で管理一覧（P12）からは外したが、交換画面が漏れていた。
   // 88・89・93・94章と同じ「片方だけ直して完了と判断する」パターン。
-  const rewards = state.rewards.filter((r) => r.is_active && r.scope === "family");
+  // [2026-09-12追加] 担当者による絞り込み（要件定義書07-22章、API仕様.md 7d節、
+  // 開発部/成果物/実装メモ.md 163章）。app/parent/my-chores.tsxの
+  // `c.scope === "family" && (c.assigned_to === null || c.assigned_to === me?.id)`
+  // と同型（scope='family'を明示条件に含めるのは、personal/supporter_sharedの
+  // assigned_toが別の意味の固定値〈created_by/常にNULL〉を持つため。07-20章の
+  // 教訓）。
+  const rewards = state.rewards.filter(
+    (r) => r.is_active && r.scope === "family" && (r.assigned_to === null || r.assigned_to === me?.id)
+  );
 
   return (
     <Screen tone="parent">

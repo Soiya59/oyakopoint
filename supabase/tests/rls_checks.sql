@@ -223,6 +223,26 @@
 -- 本マイグレーションは159章時点でローカルDocker環境に適用済み・実測済み。
 -- 本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-12追加・開発部] ごほうびへの担当者新設（rewards.assigned_to）・
+-- クエストの担当者をDBでも効かせる（統括判断B、設計部/成果物/スキーマ設計.sql
+-- 50章・51章、開発部/成果物/実装メモ.md 163章、マイグレーション
+-- `20260912010000_reward_assigned_to_and_chore_assigned_to_enforced.sql`）に伴い、
+-- S1（27のまま。新規テーブルを追加していない）・S4（59のまま。新しい関数の
+-- 追加・削除も無い。rewards_before_write・chore_completions_before_insertは
+-- いずれも既存の名前・シグネチャのままCREATE OR REPLACEしたのみ）は無変更。
+-- **S3は本数54本のまま増減なし（+0）だが、2本のハッシュが変化する**
+-- （設計部50.11章・51.10章の見込みどおり）。
+--   - `chore_completions.chore_completions_insert_self`（INSERT）: scope='family'
+--     分岐に`(c.assigned_to IS NULL OR c.assigned_to = reported_by)`を追加。
+--   - `reward_redemptions.reward_redemptions_insert_scoped`（INSERT）: scope='family'
+--     分岐に`(r.assigned_to IS NULL OR r.assigned_to = member_id)`を追加。
+-- 他のいずれのポリシーのUSING/WITH CHECK句も変更していない。CHECK制約
+-- `chk_rewards_personal_self_assigned`・インデックス`idx_rewards_assigned_to`は
+-- 49.14章の教訓のとおりS1/S3/S4のいずれにも数えない（本ファイルのスナップ
+-- ショットには現れない）。いずれもローカルDocker環境で実測した値（96.5章の
+-- 遵守。手計算していない）。本マイグレーションは163章時点でローカルDocker
+-- 環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -293,15 +313,22 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 --     3ポリシーを追加。52→55本。2026-09-10再更新、家族の掲示板へのスタンプ
 --     リアクションの取消・切替（実装メモ.md 159章）で`family_board_reactions_
 --     insert_self`をDROPし置き換えを作らなかったため1本減。55→54本。
+--     2026-09-12再更新、ごほうびの担当者新設・クエストの担当者をDBでも効かせる
+--     （設計部/成果物/スキーマ設計.sql 50章・51章、開発部/成果物/実装メモ.md
+--     163章）で`chore_completions_insert_self`・`reward_redemptions_insert_scoped`
+--     の2本にscope='family'分岐への担当者条件を追加した（本数は変わらず
+--     ハッシュのみ変化）。54本のまま。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
   ('categories','categories_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('categories','categories_write_by_parent','ALL','a9c21f23a1a0b9627d69fdb5a4d29425'),
-  -- [2026-09-06改訂] supporter_shared分岐を追加（設計部/成果物/スキーマ設計.sql
-  -- 45.7章）。既存のfamily分岐・personal分岐は無変更だが、条件式全体が変わるため
-  -- ハッシュも変わる。ローカルDockerで実測した値（96.5章の遵守）。
-  ('chore_completions','chore_completions_insert_self','INSERT','da276ec82343e03d9e8e876652ddfcf2'),
+  -- [2026-09-12改訂] scope='family'分岐に担当者条件`(c.assigned_to IS NULL OR
+  -- c.assigned_to = reported_by)`を追加（設計部/成果物/スキーマ設計.sql 51.3章、
+  -- 開発部/成果物/実装メモ.md 163章）。personal/supporter_shared分岐は無変更だが
+  -- 条件式全体が変わるためハッシュも変わる。ローカルDockerで実測した値
+  -- （96.5章の遵守）。
+  ('chore_completions','chore_completions_insert_self','INSERT','f3035b6602138f5668f00138e928e179'),
   ('chore_completions','chore_completions_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chore_daily_flags','chore_daily_flags_own_rows','ALL','00e6fbca582d21a92747412aa943e2c2'),
   -- [2026-09-01追加] chore_nfc_tags（NFCタグの人ごと化、設計部/成果物/スキーマ設計.sql
@@ -395,10 +422,12 @@ WITH expected(t, p, c, h) AS (VALUES
   ('push_tokens','push_tokens_insert_self','INSERT','bf39c4ff3a8b4f2b96611ea9d852daae'),
   ('push_tokens','push_tokens_select_self','SELECT','d2d83fd3535d0c4e22eba82950957a4e'),
   ('push_tokens','push_tokens_update_self','UPDATE','606756f6b2c2e03c671c60f4c0ddecca'),
-  -- [2026-09-06改訂] supporter_shared分岐を追加（設計部/成果物/スキーマ設計.sql
-  -- 45.9章、決定6'-2）。既存のfamily分岐（保護者代理交換を含む）・personal分岐は
-  -- 無変更だが、条件式全体が変わるためハッシュも変わる。ローカルDockerで実測した値。
-  ('reward_redemptions','reward_redemptions_insert_scoped','INSERT','367cb54becc9532c19c9e41d8374f5ce'),
+  -- [2026-09-12改訂] scope='family'分岐に担当者条件`(r.assigned_to IS NULL OR
+  -- r.assigned_to = member_id)`を追加（設計部/成果物/スキーマ設計.sql 50.5章、
+  -- 開発部/成果物/実装メモ.md 163章）。personal/supporter_shared分岐は無変更だが
+  -- 条件式全体が変わるためハッシュも変わる。ローカルDockerで実測した値
+  -- （96.5章の遵守）。
+  ('reward_redemptions','reward_redemptions_insert_scoped','INSERT','8c62197f12dd20d85ad1e99ea1aefdf4'),
   ('reward_redemptions','reward_redemptions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('rewards','rewards_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('rewards','rewards_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
