@@ -21,6 +21,11 @@ import { PG_ERRCODE } from "@/data/api";
  * このコンポーネントは`rewardId`のみを見て残高判定・確定処理を行い、`created_by`を
  * 一切参照しないため、決定6'-2の受け入れ判定はDB側（reward_redemptions_before_insert、
  * 45.9章）が担保する。
+ *
+ * [2026-09-08改訂・UIUXデザイン部33.2節決定6] S10「ごほうびと交換」（旧ルート、
+ * 削除済み）廃止に伴い、成功後の戻り先・残高不足時の「ごほうびへもどる」ボタンの
+ * 戻り先を、両方とも旧S10のルートから`/supporter/rewards`（S8）へ変更した。
+ * ロジック自体（`rewardId`のみで判定）は変更なし。
  */
 export default function SupporterRewardConfirmScreen() {
   const { rewardId } = useLocalSearchParams<{ rewardId: string }>();
@@ -55,7 +60,7 @@ export default function SupporterRewardConfirmScreen() {
       return;
     }
     router.replace({
-      pathname: "/supporter/reward-redeem",
+      pathname: "/supporter/rewards",
       params: { justRewardId: reward.id, justName: reward.name, justCost: String(reward.cost) },
     });
   };
@@ -69,7 +74,7 @@ export default function SupporterRewardConfirmScreen() {
           tone="supporter"
           label="ごほうびへもどる"
           style={{ marginTop: theme.spacing.s6 }}
-          onPress={() => router.replace("/supporter/reward-redeem")}
+          onPress={() => router.replace("/supporter/rewards")}
         />
       </Screen>
     );
