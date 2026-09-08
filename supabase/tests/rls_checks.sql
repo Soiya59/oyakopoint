@@ -205,6 +205,13 @@
 -- 本マイグレーションは157章時点でローカルDocker環境に適用済み・実測済み。
 -- 本番へは未適用（本部長の操作を待つ）。
 --
+-- [**訂正・2026-09-08発見**] 上記「既存の`chore_reactions_insert_scoped`1行にのみ
+-- `kind = 'comment'`条件を追加した」は不正確だった。実際には送信者側の条件も
+-- `current_family_role() IN ('parent', 'supporter')`から`is_current_user_parent()`
+-- （parentのみ）へ書き換えており、みまもりメンバーが送信できなくなるデグレを
+-- 生んでいた（本部長の実機確認で発覚）。詳細・修正は本ファイル末尾の
+-- [2026-09-08追加・開発部・デグレ修正]、開発部/成果物/実装メモ.md 170章を参照。
+--
 -- [2026-09-10再追加・開発部] 家族の掲示板へのスタンプ（絵文字）リアクションの
 -- 取消・切替（統括指示「掲示板も同じくで」、開発部/成果物/実装メモ.md 159章、
 -- マイグレーション`20260910030000_toggle_family_board_reaction_stamp.sql`）に伴い、
@@ -258,6 +265,25 @@
 -- `generate_weekly_family_digest`自体がS4の一覧（`DISTINCT proname`で集計）から
 -- 消える。本マイグレーションは165章時点でローカルDocker環境に適用済み・実測済み。
 -- 本番へは未適用（本部長の操作を待つ）。
+--
+-- [2026-09-08追加・開発部・デグレ修正] 157章（`20260910020000_toggle_chore_
+-- reaction_stamp.sql`）が`chore_reactions_insert_scoped`の送信者側の条件を
+-- `current_family_role() IN ('parent', 'supporter')`から`is_current_user_parent()`
+-- （parentのみ）へ誤って書き換えており、みまもりメンバーが完了報告へスタンプ・
+-- コメントを送れなくなるデグレが本番で発生していた（本部長の実機確認、本番
+-- `chore_reactions`にみまもりの過去投稿が実在することで裏付け済み）。**下記
+-- [2026-09-10追加]の「家族・ロールの境界条件自体は変更していない」という記述は
+-- 誤りだった**（実際には境界条件を書き換えていた）。同じ誤りが
+-- `toggle_chore_reaction_stamp()`関数本体の権限判定にも複製されていた。
+-- `20260914010000_fix_chore_reactions_supporter_dropped.sql`（開発部/成果物/
+-- 実装メモ.md 170章）で両方を`current_family_role() IN ('parent', 'supporter')`に
+-- 訂正した。これに伴い、S1（27のまま。テーブルの追加・削除は無い）・S3（54本の
+-- まま。`chore_reactions_insert_scoped`1行のみハッシュが変わる）・S4（58のまま。
+-- 関数の追加・削除は無く、GRANT/REVOKEもシグネチャ不変のCREATE OR REPLACEで
+-- 維持されるため変わらない）を更新した（S1・S4は実測しても差分0件だったため
+-- 数値上の変更は無い）。いずれもローカルDocker環境で実測した値（96.5章の遵守。
+-- 手計算していない）。本マイグレーションは170章時点でローカルDocker環境に
+-- 適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
@@ -363,9 +389,16 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 実装メモ.md 157章、マイグレーション`20260910020000_toggle_chore_reaction_stamp.sql`）
   -- に伴い、`kind = 'comment'`条件を追加した（スタンプの直接INSERTを塞ぎ、
   -- 新設のSECURITY DEFINER関数`toggle_chore_reaction_stamp`経由に一本化するため）。
-  -- 家族・ロールの境界条件（保護者は誰にでも、子どもは対象completionの報告者が
-  -- parentの場合のみ）自体は変更していない。ローカルDockerで実測した値。
-  ('chore_reactions','chore_reactions_insert_scoped','INSERT','70dc0d171fa57628d0955970fc316165'),
+  -- [**この行は誤りだった**] 「家族・ロールの境界条件（保護者は誰にでも、子どもは
+  -- 対象completionの報告者がparentの場合のみ）自体は変更していない」としていたが、
+  -- 実際には送信者側の条件を`current_family_role() IN ('parent', 'supporter')`から
+  -- `is_current_user_parent()`（parentのみ）へ書き換えており、みまもりメンバーが
+  -- 送信できなくなるデグレを生んでいた（本部長の実機確認・2026-09-08）。
+  -- [2026-09-08改訂] `20260914010000_fix_chore_reactions_supporter_dropped.sql`
+  -- （開発部/成果物/実装メモ.md 170章）で送信者側の条件を
+  -- `current_family_role() IN ('parent', 'supporter')`に戻した（`kind = 'comment'`
+  -- 制約・子ども向けの第2項は無変更）。ローカルDockerで実測した値。
+  ('chore_reactions','chore_reactions_insert_scoped','INSERT','082329d1b7d6403a9842f9bf95e7a3dc'),
   ('chore_reactions','chore_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
