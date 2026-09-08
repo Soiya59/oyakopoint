@@ -112,7 +112,7 @@ export default function ParentFamilyTreeScreen() {
           {lastSeason && (
             <Pressable onPress={() => router.push("/parent/collector-shelf")} hitSlop={8}>
               <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong }]}>
-                → コレクター棚で見る
+                → コレクションで見る
               </Text>
             </Pressable>
           )}

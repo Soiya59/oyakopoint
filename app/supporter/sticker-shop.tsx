@@ -49,7 +49,7 @@ export default function SupporterStickerShopScreen() {
       return;
     }
     const item = catalog.find((c) => c.id === catalogId);
-    setSnackbar(`${item?.display_name ?? "メダル"}を購入しました。コレクター棚に追加されました`);
+    setSnackbar(`${item?.display_name ?? "メダル"}を購入しました。コレクションに追加されました`);
     void reloadFamilyPurchases();
     setTimeout(() => {
       setSnackbar(null);

@@ -50,7 +50,7 @@ export default function SupporterCollectorShelfScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.supporterBody}>← もどる</Text>
       </Pressable>
-      <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>コレクター棚</Text>
+      <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>コレクション</Text>
 
       <CollectorShelfPanel
         tone="supporter"

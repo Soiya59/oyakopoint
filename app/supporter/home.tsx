@@ -71,7 +71,7 @@ export default function SupporterHomeScreen() {
 
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "👀", label: "かぞくのようす", path: "/supporter/activity" },
-    { emoji: "🎯", label: "クエスト", path: "/supporter/my-chores" },
+    { emoji: "🧹", label: "クエスト", path: "/supporter/my-chores" },
     { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
     // [2026-08-23追加] 家族の木（07-9章、主要画面ワイヤーフレーム.md 20.6章
@@ -82,12 +82,12 @@ export default function SupporterHomeScreen() {
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     // [2026-08-27追加・第5段階（最終段階）] コレクター棚（07-13-3章、画面一覧・
     // 遷移図.md「S1みまもりホームのショートカット『コレクター棚』──▶S19」）。
-    { emoji: "🗄️", label: "コレクター棚", path: "/supporter/collector-shelf" },
+    { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },
     // [2026-09-07追加・実装メモ.md 141章] 本部長指示によりみまもりメンバーも感謝
     // ポイントの送受信対象になった（スキーマ設計.sql 48章）。P7/C5の「感謝ポイント」
     // ショートカットと同じ位置づけで追加した（`/parent/home.tsx`の「💌 感謝\nポイント」
     // タイルと同型）。送受信できる仕様にしたのに入口が無いと意味がないための対応。
-    { emoji: "💌", label: "ありがとう", path: "/supporter/gratitude" },
+    { emoji: "💌", label: "感謝\nポイント", path: "/supporter/gratitude" },
     { emoji: "⚙️", label: "設定", path: "/supporter/settings" },
   ];
 
@@ -188,7 +188,10 @@ export default function SupporterHomeScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={theme.typography.supporterBody}>{s.label}</Text>
+            {/* [2026-09-08・本部長／軽微変更ルート] 保護者ホームに表記を揃えた際に
+                感謝ポイントのラベルが2行になったため、P7の tileLabel と同じく
+                中央揃えにする（左寄せだと2行目がガタつく）。 */}
+            <Text style={[theme.typography.supporterBody, styles.tileLabel]}>{s.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -221,6 +224,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.s2,
     color: theme.colors.supporterAccent,
   },
+  tileLabel: { textAlign: "center" },
   tileEmojiCircle: {
     width: 44,
     height: 44,

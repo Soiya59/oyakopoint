@@ -55,7 +55,7 @@ export function GachaResultView({ tone, result, onDecorate, onGoToShelf }: Gacha
   }, [useTwoStepReveal, result]);
 
   const decorateLabel = isChild ? "きに かざる →" : "木に飾る →";
-  const shelfLabel = isChild ? "コレクションだなを みる →" : "コレクター棚を見る →";
+  const shelfLabel = isChild ? "コレクションだなを みる →" : "コレクションを見る →";
 
   if (useTwoStepReveal && !revealed) {
     return (
@@ -79,7 +79,7 @@ export function GachaResultView({ tone, result, onDecorate, onGoToShelf }: Gacha
             ただし07-13-1章「外れ枠を作らない」に配慮し、「はずれ」ではなく
             「棚に加わった」という獲得の事実を前向きに伝える文言にする。 */}
         <Text style={[bodyStyle, styles.shelfNote]}>
-          {isChild ? "コレクションだなに はいったよ！" : "コレクター棚に加わりました"}
+          {isChild ? "コレクションだなに はいったよ！" : "コレクションに加わりました"}
         </Text>
         <AppButton label={shelfLabel} tone={tone} fullWidth style={styles.button} onPress={onGoToShelf} />
       </View>

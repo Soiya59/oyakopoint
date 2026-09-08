@@ -94,7 +94,7 @@ export default function SupporterFamilyTreeScreen() {
           {lastSeason && (
             <Pressable onPress={() => router.push("/supporter/collector-shelf")} hitSlop={8}>
               <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong }]}>
-                → コレクター棚で見る
+                → コレクションで見る
               </Text>
             </Pressable>
           )}

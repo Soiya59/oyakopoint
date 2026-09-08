@@ -56,7 +56,7 @@ export default function ParentCollectorShelfScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
-      <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>コレクター棚</Text>
+      <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>コレクション</Text>
 
       <CollectorShelfPanel
         tone="parent"

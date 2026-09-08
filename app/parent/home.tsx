@@ -89,6 +89,26 @@ export default function ParentHomeScreen() {
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
+  // [2026-09-08追加・本部長／軽微変更ルート] 統括指示「保護者も左上に名前が欲しい。
+  // クリックすると子どもの選択画面がある」。飛び先は設定（app/parent/family.tsx）の
+  // 「👦 こどもモードにする」と同一で、新しい画面も通信も増やしていない。
+  // childProfilesの作り方もfamily.tsxからそのまま持ってきている（invite-lookupが返す
+  // InviteLookupChildと同じ形）。子どもが1人もいなければタップできる意味が無いので
+  // その場合は名前だけを出す（押しても行き先が空の画面になるのを避ける）。
+  // PINは従来どおり必要。実装メモ92.2章「保護者→子どもは変更していない」を崩さない。
+  const me = state.members.find((m) => m.id === state.activeParentMemberId);
+  const childProfiles = state.members
+    .filter((m) => m.is_active && m.role === "child")
+    .map((m) => ({ member_id: m.id, display_name: m.display_name, avatar_color: m.avatar_color }));
+  const goToChildSwitch = () =>
+    router.push({
+      pathname: "/child-auth/profile-select",
+      params: {
+        inviteCode: state.family.invite_code,
+        childrenJson: JSON.stringify(childProfiles),
+      },
+    });
+
   // [2026-08-26整理・本部長] メニュー項目が12個に達し「多すぎる」との指摘を受けて
   // 2グループに分けた。項目自体は1つも減らしていない。
   //
@@ -154,7 +174,22 @@ export default function ParentHomeScreen() {
           （ユーザー指示「子供と同じように右上にベルマークで表示してほしい」）。
           子どもホーム（C5）と同じ位置・同じ数え方に揃える。 */}
       <View style={styles.headerRow}>
-        <Text style={[theme.typography.parentTitle, { flex: 1 }]}>{state.family.name} の ホーム</Text>
+        {/* [2026-09-08変更・本部長／軽微変更ルート] 左上に「いま誰として使っているか」を
+            出す（C5子どもホームと同じ役割）。統括指示により、アバターと名前は小さく、
+            その右に家族名を置き、従来の「の ホーム」は削除した。 */}
+        {me &&
+          (childProfiles.length > 0 ? (
+            <Pressable style={styles.headerMe} onPress={goToChildSwitch} hitSlop={8}>
+              <MemberAvatar name={me.display_name} color={me.avatar_color} size={24} />
+              <Text style={theme.typography.parentBody}>{me.display_name}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.headerMe}>
+              <MemberAvatar name={me.display_name} color={me.avatar_color} size={24} />
+              <Text style={theme.typography.parentBody}>{me.display_name}</Text>
+            </View>
+          ))}
+        <Text style={[theme.typography.parentTitle, styles.headerFamilyName]}>{state.family.name}</Text>
         <Pressable onPress={() => router.push("/parent/inbox")} hitSlop={8} style={styles.bellHit}>
           <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
         </Pressable>
@@ -302,6 +337,8 @@ export default function ParentHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerMe: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },
   headerRow: { flexDirection: "row", alignItems: "center" },
   bellHit: { minHeight: theme.tapTarget.parent, justifyContent: "center", paddingLeft: theme.spacing.s2 },
   notifBadge: { fontSize: 16, fontWeight: "700" },

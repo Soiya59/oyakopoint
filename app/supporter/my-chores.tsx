@@ -124,7 +124,7 @@ export default function SupporterMyChoresScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <View style={styles.header}>
-        <Text style={theme.typography.supporterTitle}>🎯 じぶんのクエスト</Text>
+        <Text style={theme.typography.supporterTitle}>じぶんのクエスト</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
       </View>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>

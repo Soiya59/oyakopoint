@@ -58,7 +58,7 @@ export default function SupporterRewardsScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <View style={styles.header}>
-        <Text style={theme.typography.supporterTitle}>🎯 じぶんのごほうび</Text>
+        <Text style={theme.typography.supporterTitle}>じぶんのごほうび</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/reward-edit")} />
       </View>
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s1 }]}>いま {balance}pt</Text>
