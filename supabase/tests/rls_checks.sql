@@ -320,6 +320,33 @@
 -- 22番（本来の確定仕様）と1文字ずつ突き合わせたうえでハッシュを更新した
 -- （174章参照）。
 --
+-- [2026-09-09再更新・開発部] 子どもどうしの完了報告リアクション解禁・自己
+-- リアクション禁止（企画部/成果物/要件定義書.md 07-23章決定1・決定2、開発部/
+-- 成果物/実装メモ.md 175章、マイグレーション
+-- `20260916020000_chore_reactions_open_to_all_and_self_ban.sql`）に伴い、
+-- `chore_reactions_insert_scoped`の役割による絞り込み（送信者側・対象側の第1項・
+-- 第2項）を撤廃し、自己リアクション禁止（`NOT EXISTS (... cc.reported_by =
+-- chore_reactions.reacted_by)`）に置き換えた。`toggle_chore_reaction_stamp()`
+-- 関数本体の権限判定も同じ内容に揃えた（175章参照。第1項/第2項の役割条件を
+-- IF文ごと自己リアクション禁止チェックに差し替えた）。
+-- **本部長依頼の「1文字ずつの突き合わせ」の結果**: `20260916010000_fix_chore_
+-- reactions_supporter_target_dropped.sql`（本ファイルの直前の確定仕様）の
+-- ポリシー定義・関数本体と突き合わせたところ、差分はいずれも上記の意図した
+-- 1箇所（役割条件→自己リアクション禁止条件の置き換え）のみであり、
+-- `family_id = current_family_id()`・`reacted_by = current_family_member_id()`・
+-- `kind = 'comment'`制約、関数本体のステップ1（対象completionの存在確認・
+-- 自家族限定）・ステップ3〜5（トグル判定・DELETE・INSERT）はいずれも文字通り
+-- 無変更だった（175章に差分の詳細を記録）。
+-- これに伴い、S1（27のまま。テーブルの追加・削除は無い）・S3（54本のまま。
+-- `chore_reactions_insert_scoped`1行のみハッシュが変わる）・S4（58のまま。
+-- 関数の追加・削除は無く、GRANT/REVOKEもシグネチャ不変のCREATE OR REPLACEで
+-- 維持されるため変わらない）を更新した。いずれもローカルDocker環境で実測した値
+-- （96.5章の遵守。手計算していない。修正前に本スイートを実行し46項目すべて
+-- PASSであることを確認したうえで、修正後に想定どおりS3のみFAILすることを確認
+-- してからハッシュを更新した。実測結果は175.4節参照）。本マイグレーションは
+-- 175章時点でローカルDocker環境に適用済み・実測済み。本番へは未適用
+-- （`20260916010000`とあわせて本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -441,7 +468,16 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 無変更）。`20260823070000_supporter_chore_public_visibility.sql`22番
   -- （本来の確定仕様）と1文字ずつ突き合わせ、他に差分が無いことを確認したうえで
   -- ローカルDockerで実測した値。
-  ('chore_reactions','chore_reactions_insert_scoped','INSERT','4cca476734e384e0f8525f275cc85f1d'),
+  -- [2026-09-09再改訂・要件定義書07-23章決定1・決定2、開発部/成果物/実装メモ.md
+  -- 175章] 子どもどうしの完了報告リアクション解禁に伴い、役割による絞り込み
+  -- （送信者側・対象側の第1項・第2項）を撤廃し、自己リアクション禁止
+  -- （`NOT EXISTS (SELECT 1 FROM chore_completions cc WHERE cc.id = ... AND
+  -- cc.reported_by = chore_reactions.reacted_by)`）に置き換えた
+  -- （`20260916020000_chore_reactions_open_to_all_and_self_ban.sql`）。
+  -- `family_id`・`reacted_by`・`kind = 'comment'`の3条件は無変更。
+  -- `20260916010000`時点の定義と1文字ずつ突き合わせ、差分がこの1箇所のみである
+  -- ことを確認したうえでローカルDockerで実測した値。
+  ('chore_reactions','chore_reactions_insert_scoped','INSERT','b7e8b9ad7f8cd74a9f752434770251f4'),
   ('chore_reactions','chore_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),

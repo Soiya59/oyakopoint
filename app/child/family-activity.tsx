@@ -40,6 +40,15 @@ import { formatDateTimeShort } from "@/lib/calendarDates";
  * 常に自分専用choreのものである。カードは`supporterAccentSoft`の控えめな配色で
  * 区別し、画面下部に「みまもりメンバーのおてつだいをみる」リンク（→C19）を追加した
  * （画面一覧・遷移図.md C18・C19行参照）。
+ *
+ * [2026-09-09改訂・要件定義書07-23章、開発部/成果物/実装メモ.md 175章] 統括判断
+ * 「子どもどうしの反応を許す」を受け、対象を**保護者・みまもりメンバーに限定せず、
+ * 家族内の全員の完了報告**に広げた（子ども同士のスタンプ・コメントを解禁。決定1、
+ * コメントも対象に含む）。あわせて、自分自身の完了報告は一覧に出さない（決定2・
+ * 自己リアクション禁止。DB側〈`chore_reactions_insert_scoped`・
+ * `toggle_chore_reaction_stamp()`〉でも同じ制約を強制しているが、送れない相手を
+ * そもそもボタン付きで見せないようにするUI側の対応でもある。07-14章の「ボタン
+ * 自体を出さない」方式・app/parent/approvals.tsxの`isOwnCard`と同じ考え方）。
  */
 export default function FamilyActivityScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp } = useAppData();
@@ -53,14 +62,14 @@ export default function FamilyActivityScreen() {
   const myId = state.activeChildMemberId;
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  // 保護者・みまもりメンバーの完了報告を対象にする（子ども同士の相互リアクションは
-  // 対象外のまま。15章「roleがparentの場合のみ子どももリアクション可」の当初方針を
-  // 踏襲しつつ、要件定義書07-7章5回目のスコープ変更に伴いsupporterを再度対象に含める）。
-  const parentCompletions = [...state.completions]
-    .filter((c) => {
-      const role = memberOf(c.reported_by)?.role;
-      return role === "parent" || role === "supporter";
-    })
+  // [2026-09-09改訂・要件定義書07-23章決定1] 家族内の全員（保護者・みまもり
+  // メンバー・他の子ども）の完了報告を対象にする。従来はrole==='parent'|'supporter'
+  // に限定していたが、統括判断「子どもどうしの反応を許す」によりこの絞り込みを
+  // 撤廃した。[決定2・自己リアクション禁止] 自分自身の完了報告は
+  // `c.reported_by !== myId`で一覧から除外する（送れない相手をボタン付きで
+  // 見せない。DB側の禁止と二重の防御）。
+  const reactableCompletions = [...state.completions]
+    .filter((c) => c.reported_by !== myId)
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
@@ -102,11 +111,11 @@ export default function FamilyActivityScreen() {
         おうちのひとにも「がんばったね」をおくってみよう
       </Text>
 
-      {parentCompletions.length === 0 && (
+      {reactableCompletions.length === 0 && (
         <EmptyState tone="child" emoji="🌱" title="まだきろくがないよ" />
       )}
 
-      {parentCompletions.map((c) => {
+      {reactableCompletions.map((c) => {
         const member = memberOf(c.reported_by);
         const isSupporterCard = member?.role === "supporter";
         return (
