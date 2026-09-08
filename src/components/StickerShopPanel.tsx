@@ -177,7 +177,14 @@ export function StickerShopPanel({
                 const locked = lockedIdSet.has(item.id);
                 // [32.0b節決定29] 優先順位「家族解放待ち＞残高不足」。貯めても
                 // 解決しない条件（家族解放待ち）を優先して伝える。
-                const disabled = locked || !affordable;
+                // [2026-09-08改訂・本部長／軽微変更ルート] 統括の実機確認
+                // 「ロックされているメダルは拡大できないでいいけど、ロック解除に
+                // なっているメダルは拡大できるようにしたい」。従来は
+                // `locked || !affordable`でタップを塞いでいたため、開放済みでも
+                // ポイントが足りないメダルは絵を大きく見られなかった。
+                // タップ不可は「家族解放待ち」のときだけにする。残高不足のときは
+                // 拡大して見られるが、モーダル側で「買う」は出さない（下記）。
+                const disabled = locked;
                 return (
                   <React.Fragment key={item.id}>
                     {/* [32.0b節決定31] 段階の順序（銅→銀→金→虹）をセル間の矢印で明示する。
@@ -240,30 +247,55 @@ export function StickerShopPanel({
                   <StickerIcon shape={selected.shape} rarity={selected.rarity} size={180} highRes />
                 </View>
                 <Text style={[bodyMediumStyle, styles.modalTitle]}>{selected.display_name}</Text>
-                <Text style={[bodyStyle, styles.modalBody]}>
-                  {isChild
-                    ? `${selected.points_cost}pt で かうよ。いいかな？`
-                    : `${selected.points_cost}ptで購入します。よろしいですか？`}
-                </Text>
-                {purchaseErrorMessage && <Text style={styles.errorText}>{purchaseErrorMessage}</Text>}
-                <View style={styles.modalButtonRow}>
-                  <AppButton
-                    label={isChild ? "かう" : "買う"}
-                    tone={tone}
-                    loading={purchasing}
-                    disabled={purchasing}
-                    onPress={handleConfirm}
-                    style={{ flex: 1 }}
-                  />
-                  <AppButton
-                    label={isChild ? "やめておく" : "やめておく"}
-                    tone={tone}
-                    variant="ghost"
-                    disabled={purchasing}
-                    onPress={() => setSelected(null)}
-                    style={{ flex: 1 }}
-                  />
-                </View>
+                {/* [2026-09-08追加・本部長／軽微変更ルート] ポイントが足りないメダルも
+                    絵を大きく見られるようにしたため（上記）、その場合は購入の確認ではなく
+                    「あと◯pt」を伝えるだけにする。「買う」を出したまま押させると
+                    DB側のCHECK違反で失敗するだけなので、ボタン自体を出さない。 */}
+                {balance >= selected.points_cost ? (
+                  <>
+                    <Text style={[bodyStyle, styles.modalBody]}>
+                      {isChild
+                        ? `${selected.points_cost}pt で かうよ。いいかな？`
+                        : `${selected.points_cost}ptで購入します。よろしいですか？`}
+                    </Text>
+                    {purchaseErrorMessage && <Text style={styles.errorText}>{purchaseErrorMessage}</Text>}
+                    <View style={styles.modalButtonRow}>
+                      <AppButton
+                        label={isChild ? "かう" : "買う"}
+                        tone={tone}
+                        loading={purchasing}
+                        disabled={purchasing}
+                        onPress={handleConfirm}
+                        style={{ flex: 1 }}
+                      />
+                      <AppButton
+                        label="やめておく"
+                        tone={tone}
+                        variant="ghost"
+                        disabled={purchasing}
+                        onPress={() => setSelected(null)}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[bodyStyle, styles.modalBody]}>
+                      {isChild
+                        ? `${selected.points_cost}pt で かえるよ。あと ${selected.points_cost - balance}pt！`
+                        : `${selected.points_cost}ptで購入できます。あと${selected.points_cost - balance}ptです。`}
+                    </Text>
+                    <View style={styles.modalButtonRow}>
+                      <AppButton
+                        label={isChild ? "とじる" : "閉じる"}
+                        tone={tone}
+                        variant="ghost"
+                        onPress={() => setSelected(null)}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </>
+                )}
               </>
             )}
           </Card>
