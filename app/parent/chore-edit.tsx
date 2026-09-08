@@ -190,7 +190,14 @@ export default function ChoreEditScreen() {
   };
 
   const categories = state.categories;
-  const members = state.members.filter((m) => m.is_active);
+  // [2026-09-08修正・統括指示] 担当者の選択肢からみまもりメンバーを除く。
+  // 統括の指摘「クエストの担当者に、みまもりメンバーを選べなくてよい。誰でも可能と
+  // 選択しても、見守りメンバーに反映されないので」。家族共有（scope='family'）の
+  // クエストはみまもりメンバーの一覧に出ないため、担当者に指定しても意味が無く、
+  // 選択肢に出ているだけで混乱のもとだった。企画部が要件定義書07-22章の作業中に
+  // 「他章の記述（みまもりは家族共有choreの担当者になれない）と食い違う」と指摘し、
+  // 統括が実態に合わせて選択肢から外す判断をした。
+  const members = state.members.filter((m) => m.is_active && m.role !== "supporter");
 
   const validate = (): string | null => {
     if (!title.trim()) return "タイトルを入力してください";
