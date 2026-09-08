@@ -6,6 +6,11 @@
  * （統括判断）。コンポーネント名・DBの`sticker_key`・本コメントの「シール」
  * 「ステッカー」はそのまま変更していない。
  *
+ * [2026-09-08改訂・本部長／実装メモ173章] 最上位レアリティの呼び名を統括判断で
+ * 「虹（rainbow）」から「クリスタル（crystal）」に改称した（絵を作り直したことで
+ * クリスタル感が出たため）。アセットファイル名（`*_rainbow.png`）も`*_crystal.png`に
+ * 差し替えた（旧`*_rainbow.png`はリポジトリから削除、内容はcrystal側と同一だった）。
+ *
  * [2026-09-10改訂・実装メモ149章] 従来は`react-native-svg`による自前描画
  * （形とレアリティのグラデーションをコードで組み立てる方式）だったが、統括提供の
  * 完成画像（`assets/stickers/`、12種×2解像度）へ差し替えた。理由・変更点は
@@ -40,8 +45,8 @@ import beetleSilverFull from "../../assets/stickers/beetle_silver.png";
 import beetleSilverSm from "../../assets/stickers/beetle_silver@sm.png";
 import beetleGoldFull from "../../assets/stickers/beetle_gold.png";
 import beetleGoldSm from "../../assets/stickers/beetle_gold@sm.png";
-import beetleRainbowFull from "../../assets/stickers/beetle_rainbow.png";
-import beetleRainbowSm from "../../assets/stickers/beetle_rainbow@sm.png";
+import beetleCrystalFull from "../../assets/stickers/beetle_crystal.png";
+import beetleCrystalSm from "../../assets/stickers/beetle_crystal@sm.png";
 
 import butterflyBronzeFull from "../../assets/stickers/butterfly_bronze.png";
 import butterflyBronzeSm from "../../assets/stickers/butterfly_bronze@sm.png";
@@ -49,8 +54,8 @@ import butterflySilverFull from "../../assets/stickers/butterfly_silver.png";
 import butterflySilverSm from "../../assets/stickers/butterfly_silver@sm.png";
 import butterflyGoldFull from "../../assets/stickers/butterfly_gold.png";
 import butterflyGoldSm from "../../assets/stickers/butterfly_gold@sm.png";
-import butterflyRainbowFull from "../../assets/stickers/butterfly_rainbow.png";
-import butterflyRainbowSm from "../../assets/stickers/butterfly_rainbow@sm.png";
+import butterflyCrystalFull from "../../assets/stickers/butterfly_crystal.png";
+import butterflyCrystalSm from "../../assets/stickers/butterfly_crystal@sm.png";
 
 import flowerBronzeFull from "../../assets/stickers/flower_bronze.png";
 import flowerBronzeSm from "../../assets/stickers/flower_bronze@sm.png";
@@ -58,27 +63,27 @@ import flowerSilverFull from "../../assets/stickers/flower_silver.png";
 import flowerSilverSm from "../../assets/stickers/flower_silver@sm.png";
 import flowerGoldFull from "../../assets/stickers/flower_gold.png";
 import flowerGoldSm from "../../assets/stickers/flower_gold@sm.png";
-import flowerRainbowFull from "../../assets/stickers/flower_rainbow.png";
-import flowerRainbowSm from "../../assets/stickers/flower_rainbow@sm.png";
+import flowerCrystalFull from "../../assets/stickers/flower_crystal.png";
+import flowerCrystalSm from "../../assets/stickers/flower_crystal@sm.png";
 
 const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof beetleBronzeFull; sm: typeof beetleBronzeSm }>> = {
   beetle: {
     bronze: { full: beetleBronzeFull, sm: beetleBronzeSm },
     silver: { full: beetleSilverFull, sm: beetleSilverSm },
     gold: { full: beetleGoldFull, sm: beetleGoldSm },
-    rainbow: { full: beetleRainbowFull, sm: beetleRainbowSm },
+    crystal: { full: beetleCrystalFull, sm: beetleCrystalSm },
   },
   butterfly: {
     bronze: { full: butterflyBronzeFull, sm: butterflyBronzeSm },
     silver: { full: butterflySilverFull, sm: butterflySilverSm },
     gold: { full: butterflyGoldFull, sm: butterflyGoldSm },
-    rainbow: { full: butterflyRainbowFull, sm: butterflyRainbowSm },
+    crystal: { full: butterflyCrystalFull, sm: butterflyCrystalSm },
   },
   flower: {
     bronze: { full: flowerBronzeFull, sm: flowerBronzeSm },
     silver: { full: flowerSilverFull, sm: flowerSilverSm },
     gold: { full: flowerGoldFull, sm: flowerGoldSm },
-    rainbow: { full: flowerRainbowFull, sm: flowerRainbowSm },
+    crystal: { full: flowerCrystalFull, sm: flowerCrystalSm },
   },
 };
 

@@ -317,12 +317,15 @@ export const gachaPlateSize = {
 
 // ---- 1.11 木を飾るステッカー（`sticker-*`、2026-09-07追加、07-19-9a章対応） ----
 // 参照: デザイントークン.md 1.11節。形3種（beetle/butterfly/flower）×レアリティ4段
-// （bronze/silver/gold/rainbow）＝12種類。レアリティは大きさではなく色・質感のみで
+// （bronze/silver/gold/crystal）＝12種類。レアリティは大きさではなく色・質感のみで
 // 表現し、12種類とも表示直径は同一。
+// [2026-09-08改訂・本部長／実装メモ173章] 最上位レアリティの呼び名を統括判断で
+// 「虹（rainbow）」から「クリスタル（crystal）」に改称した（絵を作り直したことで
+// クリスタル感が出たため）。4段階の構成自体は変わらない。
 export const stickerShapes = ["beetle", "butterfly", "flower"] as const;
 export type StickerShape = (typeof stickerShapes)[number];
 
-export const stickerRarities = ["bronze", "silver", "gold", "rainbow"] as const;
+export const stickerRarities = ["bronze", "silver", "gold", "crystal"] as const;
 export type StickerRarity = (typeof stickerRarities)[number];
 
 /**

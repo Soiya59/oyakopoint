@@ -193,7 +193,9 @@ const requiredLowerRarity: Record<string, string | null> = {
   bronze: null,
   silver: "bronze",
   gold: "silver",
-  rainbow: "gold",
+  // [2026-09-08改訂・本部長／実装メモ173章] 統括判断で「虹」から「クリスタル」に
+  // 改称（StickerShopPanel.tsxと同じ表）。
+  crystal: "gold",
 };
 
 /**

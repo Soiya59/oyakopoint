@@ -1528,7 +1528,7 @@ export interface FamilyTreeStickerPlacement {
   avatarColor: string | null;
   stickerPurchaseId: string;
   shape: "beetle" | "butterfly" | "flower";
-  rarity: "bronze" | "silver" | "gold" | "rainbow";
+  rarity: "bronze" | "silver" | "gold" | "crystal";
   stickerKey: string;
   displayName: string;
 }
@@ -1682,7 +1682,7 @@ export async function fetchFamilyTreeStickerPlacements(
       family_members: { avatar_color: string | null } | null;
       sticker_catalog: {
         shape: "beetle" | "butterfly" | "flower";
-        rarity: "bronze" | "silver" | "gold" | "rainbow";
+        rarity: "bronze" | "silver" | "gold" | "crystal";
         sticker_key: string;
         display_name: string;
       } | null;

@@ -59,7 +59,9 @@ const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string 
   bronze: { child: "どう", parent: "銅" },
   silver: { child: "ぎん", parent: "銀" },
   gold: { child: "きん", parent: "金" },
-  rainbow: { child: "にじ", parent: "虹" },
+  // [2026-09-08改訂・本部長／実装メモ173章] 統括判断で「虹」から「クリスタル」に
+  // 改称（StickerShopPanel.tsxと同じ表記統一の理由）。
+  crystal: { child: "クリスタル", parent: "クリスタル" },
 };
 
 export interface CollectorShelfPanelProps {

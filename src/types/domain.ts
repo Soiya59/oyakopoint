@@ -523,7 +523,7 @@ export interface FamilyBoardReactionWithPostBody extends FamilyBoardReaction {
 export interface StickerCatalogItem {
   id: string;
   shape: "beetle" | "butterfly" | "flower";
-  rarity: "bronze" | "silver" | "gold" | "rainbow";
+  rarity: "bronze" | "silver" | "gold" | "crystal";
   sticker_key: string;
   display_name: string;
   points_cost: number;
