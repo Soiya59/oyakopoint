@@ -205,6 +205,24 @@
 -- 本マイグレーションは157章時点でローカルDocker環境に適用済み・実測済み。
 -- 本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-10再追加・開発部] 家族の掲示板へのスタンプ（絵文字）リアクションの
+-- 取消・切替（統括指示「掲示板も同じくで」、開発部/成果物/実装メモ.md 159章、
+-- マイグレーション`20260910030000_toggle_family_board_reaction_stamp.sql`）に伴い、
+-- S1（27のまま。新規テーブルを追加していない）・
+-- **S3（55→54、157章とは異なり本数が1本減る）**・S4（58→59、新規SECURITY
+-- DEFINER関数`toggle_family_board_reaction_stamp`をauthenticatedへ明示的にGRANT）
+-- を更新した。
+-- S3が157章と異なり「置き換え」ではなく「純減」になった理由: chore_reactionsは
+-- `kind`列（'stamp'/'comment'）を持ち、スタンプの直接INSERTだけを塞ぐために
+-- 既存ポリシーへ`kind = 'comment'`条件を追加する「置き換え」で済んだが、
+-- family_board_reactionsには`kind`列が無く（このテーブルへの書き込みは100%
+-- スタンプであり、残すべき直接INSERT経路が1つも無い）、既存の
+-- `family_board_reactions_insert_self`ポリシーをDROPし置き換えを作らなかった
+-- （マイグレーション本体・実装メモ.md 159章に判断理由を記録）。
+-- いずれもローカルDocker環境で実測した値（96.5章の遵守。手計算していない）。
+-- 本マイグレーションは159章時点でローカルDocker環境に適用済み・実測済み。
+-- 本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -271,6 +289,10 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 --     （chore_completions_insert_self・reward_redemptions_insert_scoped）の
 --     条件式にsupporter_shared分岐を追加した（本数は変わらずハッシュのみ変化）。
 --     50→52本。ハッシュはローカルDockerで実測した（96.5章の遵守。手計算していない）。
+--     2026-09-07更新、木を飾るステッカー購入とバッジ（実装メモ.md 138章）で
+--     3ポリシーを追加。52→55本。2026-09-10再更新、家族の掲示板へのスタンプ
+--     リアクションの取消・切替（実装メモ.md 159章）で`family_board_reactions_
+--     insert_self`をDROPし置き換えを作らなかったため1本減。55→54本。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -314,10 +336,14 @@ WITH expected(t, p, c, h) AS (VALUES
   ('families','families_update_by_parent','UPDATE','e5f50b299119f3b60ec261510beff957'),
   ('family_board_posts','family_board_posts_insert_self','INSERT','28574b1aee58588a3134af369c0c701a'),
   ('family_board_posts','family_board_posts_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
-  -- [2026-09-01追加] family_board_reactions（開発部/成果物/実装メモ.md 103章）。
-  -- INSERTはfamily_board_posts_insert_selfと同型（family_id一致＋本人一致）だが、
-  -- 列名がreactor_member_idである点が異なるためハッシュも異なる。
-  ('family_board_reactions','family_board_reactions_insert_self','INSERT','b92ec48c10ddb918af378dc16afcfb45'),
+  -- [2026-09-10改訂・削除] family_board_reactions_insert_self（開発部/成果物/
+  -- 実装メモ.md 159章、マイグレーション
+  -- `20260910030000_toggle_family_board_reaction_stamp.sql`）。掲示板スタンプの
+  -- 取消・切替導入に伴い、新設のSECURITY DEFINER関数
+  -- `toggle_family_board_reaction_stamp`経由に一本化するため、このINSERT
+  -- ポリシー自体をDROPし置き換えを作らなかった（157章のchore_reactionsと異なり
+  -- `kind`列が無く残すべき直接INSERT経路が無いため。マイグレーション本体・
+  -- 159章に判断理由を記録）。よってこの一覧からも1行削除する（55→54）。
   -- [2026-09-01再改訂] SELECTを「閲覧者自身の行のみ」→「家族全員が読める」へ変更した
   -- ことに伴い、ポリシー名を`family_board_reactions_select_own`→
   -- `family_board_reactions_select_same_family`に改名（実装メモ.md 104章）。
@@ -398,7 +424,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー55本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー54本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -496,7 +522,12 @@ WITH expected(f) AS (VALUES
   -- リアクションの取消・切替、開発部/成果物/実装メモ.md 157章）。
   -- cancel_chore_completion()等と同じくSECURITY DEFINERであり、PUBLIC/anonから
   -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
-  ('toggle_chore_reaction_stamp')
+  ('toggle_chore_reaction_stamp'),
+  -- [2026-09-10再追加] toggle_family_board_reaction_stamp（家族の掲示板への
+  -- スタンプ〈絵文字〉リアクションの取消・切替、開発部/成果物/実装メモ.md
+  -- 159章）。toggle_chore_reaction_stamp()等と同じくSECURITY DEFINERであり、
+  -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('toggle_family_board_reaction_stamp')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -509,7 +540,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数58件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数59件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

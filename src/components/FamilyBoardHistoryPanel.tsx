@@ -432,7 +432,7 @@ export function FamilyBoardHistoryPanel({
                               return (
                                 <Pressable
                                   key={s.key}
-                                  disabled={mine || isThisStampSending}
+                                  disabled={isThisStampSending}
                                   onPress={() => void handleReact(post.id, key)}
                                   accessibilityLabel={
                                     count > 0

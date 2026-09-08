@@ -28,7 +28,6 @@ import type {
   Family,
   FamilyBoardPost,
   FamilyBoardPostWithAuthor,
-  FamilyBoardReaction,
   FamilyBoardReactionWithPostBody,
   FamilyBoardReactionWithReactor,
   FamilyDrawing,
@@ -2309,39 +2308,45 @@ export async function deleteFamilyBoardPost(client: SupabaseClient, postId: stri
 }
 
 /**
- * 要件定義書07-14章「リアクション（スタンプ）の追加」・主要画面ワイヤーフレーム.md
- * 22.2.1節: 投稿へのスタンプ送信（2026-09-01追加・実装メモ.md 103章、104章で
- * 「1人1投稿1スタンプ」→「1人1投稿につきスタンプの種類ごとに1個（4種類まで）」へ改訂）。
+ * [2026-09-10改訂・実装メモ.md 159章→160章で仕様変更] 掲示板投稿へのスタンプの
+ * 追加・取消。統括指示「掲示板も完了報告と同じく取消・切替できるように」を受け、
+ * 157章（`toggleReactionStamp`）と同じRPC集約方式にした。
  *
- * `chore_reactions`の`addReaction`と同じ形（直接INSERT、確認ダイアログなしの
- * タップ即送信）。取消不可・自己リアクション不可・スタンプの種類ごとに1個までの
- * 判定はすべてDB側（BEFORE INSERTトリガー・一意制約・RLS）が行うため、本関数自体は
- * 判定ロジックを持たない。想定される失敗:
+ * [重要・旧実装からの変更点] 旧実装（103章・104章、〜2026-09-10）は
+ * `family_board_reactions`への直接INSERTだったが、本改訂で
+ * `family_board_reactions_insert_self`ポリシー自体をDROPし置き換えを作らなかった
+ * ため（マイグレーション`20260910030000_toggle_family_board_reaction_stamp.sql`
+ * 本体のコメント参照）、直接INSERTは以後RLSにより必ず拒否される。旧`addFamilyBoardReaction`
+ * 関数は本関数に置き換えて削除した。
+ *
+ * [重要・160章での仕様変更] 159章時点は157章と同じ「1人1投稿につき有効な
+ * スタンプは常に1件まで」を強制していた（違うスタンプを送ると既存のスタンプが
+ * 消えて切り替わる）が、これは104章（統括が指示した「1人が最大4種類のスタンプを
+ * 送れる」仕様）を実質撤回するものだったため、本番適用前に統括に確認したうえで
+ * 撤回した（実装メモ.md 160章）。**現在の仕様は、同じスタンプをもう一度送ると
+ * そのスタンプだけ取消（`removed: true`）、違うスタンプを送ると追加（自分の
+ * 他のスタンプは消えない）、未送信なら新規追加。** 157章の完了報告
+ * （1人1件まで）とは意図的に異なる仕様である。
+ *
+ * `reactor_member_id`は引数に取らない（RPC側が`current_family_member_id()`で
+ * 呼び出し本人に固定するため、他人のスタンプを指定して操作する経路がそもそも
+ * 存在しない）。想定される失敗:
  *   - `foreign_key_violation`（23503）: 対象投稿が存在しないか、既に削除されている
- *     （論理削除された投稿へのリアクションはトリガー内のSELECTがRLSにより空振りする
- *     ため、この経路で拒否される。マイグレーション本体のコメント参照）
+ *     （他家族の投稿を指定した場合もこれに収束する。区別しない設計）
  *   - `check_violation`（23514）: 自分の投稿への自己リアクション（UI側でボタン自体を
  *     出さないため通常到達しないが、多重防御として存在する）
- *   - `unique_violation`（23505）: 同じ投稿・同じスタンプに既に別タブ・別デバイス等で
- *     先に送信済み（`(post_id, reactor_member_id, stamp_key)`の一意制約）
- * `family_id`・`created_at`はクライアントから送る必要が無い（BEFORE INSERTトリガーが
- * 対象投稿からサーバー側で確定させる、family_board_posts_before_insertと同じ設計）。
+ *   - `insufficient_privilege`（42501）: 未ログイン
+ * `stamp_key`の空文字・NULL・長さ超過は既存のCHECK制約がDB側で拒否する。
  */
-export async function addFamilyBoardReaction(
+export async function toggleFamilyBoardReactionStamp(
   client: SupabaseClient,
-  input: { post_id: string; reactor_member_id: string; stamp_key: StampKey }
-): Promise<ApiResult<FamilyBoardReaction>> {
+  input: { post_id: string; stamp_key: StampKey }
+): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
   const { data, error } = await client
-    .from("family_board_reactions")
-    .insert({
-      post_id: input.post_id,
-      reactor_member_id: input.reactor_member_id,
-      stamp_key: input.stamp_key,
-    })
-    .select("*")
+    .rpc("toggle_family_board_reaction_stamp", { p_post_id: input.post_id, p_stamp_key: input.stamp_key })
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: data as FamilyBoardReaction };
+  return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
 }
 
 /**

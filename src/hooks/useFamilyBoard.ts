@@ -39,13 +39,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import {
-  addFamilyBoardReaction,
   deleteFamilyBoardPost,
   fetchFamilyBoardPostsHistory,
   fetchFamilyBoardReactionsForPost,
   fetchFamilyHomeCard,
   fetchMyFamilyBoardPostsRemainingToday,
   PG_ERRCODE,
+  toggleFamilyBoardReactionStamp,
 } from "@/data/api";
 import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, FamilyHomeCard, StampKey } from "@/types/domain";
 
@@ -179,12 +179,18 @@ export function useFamilyBoardHistory(familyId: string) {
 
   // [2026-09-01追加・実装メモ.md 103章／104章で改訂] 投稿へのスタンプリアクション
   // （要件定義書07-14章「リアクション（スタンプ）の追加」、主要画面ワイヤーフレーム.md
-  // 22.2.1節）。取消不可のため「送る」操作のみを公開する（removePostと違い、逆方向の
-  // 操作は無い）。
-  // [104章] 「1人1投稿1スタンプ」→「1人1投稿につきスタンプの種類ごとに1個（4種類まで）」
-  // へ改訂されたため、`reactingReaction`は{postId, stampKey}のまま
-  // （送信中はそのスタンプだけを止め、同じ投稿の他のスタンプは押せる。22.2.1節
-  // 「押したあとの見え方」の「送信中（このスタンプ）」参照）。
+  // 22.2.1節）。
+  // [2026-09-10改訂・実装メモ.md 159章→160章で仕様変更] 統括指示「掲示板も
+  // 完了報告と同じく取消・切替できるように」を受け、「送る」専用だった操作を
+  // `toggleFamilyBoardReactionStamp`（RPC）によるトグル（追加・取消）に置き換えた。
+  // **159章時点は157章（chore_reactions版）と同じく「1人1投稿につき有効な
+  // スタンプは常に1件まで」を強制する実装にしていたが、これは104章（統括自身の
+  // 「LINEみたいに複数種類使える感じでも良い」という指示）を実質撤回することになる
+  // 点を本部長経由で統括に確認したところ、統括判断Bにより撤回した。** 現在の仕様は
+  // 「同じスタンプをもう一度押すとそのスタンプだけ消える」「違うスタンプを押すと
+  // 追加される（他の自分のスタンプは消えない）」であり、157章の完了報告
+  // （1人1件まで）とは意図的に異なる（実装メモ.md 160章参照。完了報告は
+  // 「一言添える」、掲示板は「みんなで押す」という場の性格の違いによる）。
   const [reactingReaction, setReactingReaction] = useState<{ postId: string; stampKey: StampKey } | null>(null);
   const [reactionError, setReactionError] = useState<{ postId: string; message: string } | null>(null);
 
@@ -192,43 +198,45 @@ export function useFamilyBoardHistory(familyId: string) {
     async (postId: string, memberId: string, stampKey: StampKey): Promise<boolean> => {
       setReactingReaction({ postId, stampKey });
       setReactionError(null);
-      const res = await addFamilyBoardReaction(client, {
-        post_id: postId,
-        reactor_member_id: memberId,
-        stamp_key: stampKey,
-      });
+      const res = await toggleFamilyBoardReactionStamp(client, { post_id: postId, stamp_key: stampKey });
       setReactingReaction(null);
       if (!res.ok) {
-        // 22.2.1節「対象投稿が削除済み」: 対象投稿がトリガー内のSELECTで見つからず
+        // 22.2.1節「対象投稿が削除済み」: 対象投稿がRPC内のチェックで見つからず
         // foreign_key_violationになった場合は、次のreloadを待たずに一覧からその投稿を
         // 即時除去する（removePostのno_data_found処理と同じ考え方）。
         if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
           setPosts((prev) => prev.filter((p) => p.id !== postId));
         }
-        // unique_violation（同じ投稿・同じスタンプへの二重送信）は、UI側で既送信の
-        // スタンプへのタップを無効化しているため通常到達しないが、競合（別タブ・
-        // 別デバイスからのほぼ同時送信）で起こり得る。楽観的な加算をfabricateせず
-        // reload()で実際の状態（家族全員分の反応）を取り直す。
-        if (res.error.code === PG_ERRCODE.uniqueViolation) {
-          void load();
-        }
         setReactionError({ postId, message: res.error.message });
         return false;
       }
-      // [104章] 全件reloadではなく該当投稿のreactions配列に1件追加するだけで
-      // ローカル更新する（removePostと同じくページング位置・スクロール位置を
-      // 崩さないため）。旧仕様（103章）はmy_reactionを1件で置き換えていたが、
-      // 家族全員分を保持する配列になったため「追加」に変わる。
+      // [160章] RPC本体と同じ手順をローカルでも再現する。取消なら「自分×この
+      // stamp_keyの行」だけを取り除き、追加ならその1件だけを足す。159章時点は
+      // 「自分の既存スタンプを種類問わず全て取り除いてから足し直す」実装だったが、
+      // これは撤回した（104章の複数種類対応を維持するため、他の自分のスタンプに
+      // 触れてはならない）。全件reloadではなく該当投稿のreactions配列を更新する
+      // だけにとどめる（removePostと同じくページング位置・スクロール位置を
+      // 崩さないため）。
       setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, reactions: [...p.reactions, { stamp_key: stampKey, reactor_member_id: memberId }] }
-            : p
-        )
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          if (res.data.removed) {
+            return {
+              ...p,
+              reactions: p.reactions.filter(
+                (r) => !(r.reactor_member_id === memberId && r.stamp_key === stampKey)
+              ),
+            };
+          }
+          return {
+            ...p,
+            reactions: [...p.reactions, { stamp_key: stampKey, reactor_member_id: memberId }],
+          };
+        })
       );
       return true;
     },
-    [client, load]
+    [client]
   );
 
   // [2026-09-01追加・104章] 22.2.1節「内訳の見せ方（誰が押したか）」用。
