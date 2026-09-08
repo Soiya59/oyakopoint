@@ -55,18 +55,19 @@ export function BadgeList({ isChild, loadState, rows, headingStyle, rowStyle, ac
           const achieved = row.achievedTier !== null;
           const label = isChild ? row.nameChild : row.nameParent;
           const achievedLabel = isChild ? "たっせい！" : "達成";
+          // [2026-09-08改訂・本部長／軽微変更ルート] 従来は「ポイント以外は一律で
+          // 回／かい」と書いていたため、「えかき10まい（つぎの段階10回まで あと3回）」
+          // のように名前と単位が食い違っていた（統括の実機確認）。単位は
+          // theme.badgeDefinitions の unit を使う。
+          const unit = row.unit[isChild ? 1 : 0];
           const progressLabel =
-            !achievedOnly && row.remaining !== null
-              ? isChild
-                ? `あと${row.remaining}${row.key === "lifetime_points_earned" ? "pt" : "かい"}`
-                : `あと${row.remaining}${row.key === "lifetime_points_earned" ? "pt" : "回"}`
-              : null;
+            !achievedOnly && row.remaining !== null ? `あと${row.remaining}${unit}` : null;
           return (
             <Text key={row.key} style={[theme.typography.parentBody, rowStyle]}>
               {row.emoji} {label}
               {achieved ? `${isChild ? " " : "（"}${achievedLabel}${isChild ? "" : "）"}` : ""}
               {progressLabel && row.nextTier !== null
-                ? `（つぎの${isChild ? "" : "段階"}${row.nextTier}${row.key === "lifetime_points_earned" ? "pt" : isChild ? "かい" : "回"}まで ${progressLabel}）`
+                ? `（つぎの${isChild ? "" : "段階"}${row.nextTier}${unit}まで ${progressLabel}）`
                 : progressLabel
                 ? `（${progressLabel}）`
                 : ""}

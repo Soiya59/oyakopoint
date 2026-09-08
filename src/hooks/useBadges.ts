@@ -20,6 +20,8 @@ export interface BadgeRow {
   emoji: string;
   nameParent: string;
   nameChild: string;
+  /** 進捗文言の単位（[保護者・みまもり, 子ども]）。theme.badgeDefinitions由来 */
+  unit: readonly [string, string];
   currentValue: number;
   achievedTier: number | null;
   nextTier: number | null;
@@ -70,6 +72,7 @@ export function useMemberBadgeRows(memberId: string) {
         emoji: def.emoji,
         nameParent: def.nameParent,
         nameChild: def.nameChild,
+        unit: def.unit,
         currentValue,
         achievedTier,
         nextTier,

@@ -359,17 +359,42 @@ export type BadgeKey =
   | "lifetime_gacha_draws"
   | "lifetime_sticker_purchases";
 
+/**
+ * [2026-09-08改訂・本部長／軽微変更ルート] 統括の実機確認「このバッジについて、
+ * 絵文字や記載が合っていない。がんばりはクエスト。絵文字も合わせて」への対応。
+ * デザイントークン.md 1.12節の選定理由のうち、前提が変わったものを直した。
+ *
+ * - `lifetime_completions`: 名前を「がんばり」→「クエスト」に。2026-08-29に
+ *   「お手伝い」を「クエスト」へ改称した際（要件定義書40行目）、このバッジ名だけが
+ *   取り残されていた。絵文字も、ホームのメニュータイル「🧹 クエスト」に合わせる。
+ *   従来の✅は「C5の『✅ がんばったね』と同じ絵文字を再利用」という理由だったが、
+ *   名前がクエストになる以上、指すものが一致する絵文字のほうがよい。
+ * - `lifetime_drawings`: ✏️→🎨。1.12節は「既製の飾りカタログ例に🎨が含まれるため
+ *   混同を避けて鉛筆にした」としていたが、コード全体で🎨を使っているのは
+ *   3ロールのホームの「お絵かき」タイルだけになっており（`grep -rl "🎨"`で確認）、
+ *   避ける理由が消えていた。
+ * - `lifetime_sticker_purchases`: 🏷️→🪙。🏷️は「ステッカー」という呼び名だった頃に
+ *   「具体的な形に限定されない収集物」を表すために選ばれたもの。2026-09-07に
+ *   「メダル」へ改称し（実装メモ150章）、導線の絵文字も🪙に統一済み（実装メモ166章）。
+ * - `unit`: 進捗文言の単位。従来`BadgeList.tsx`が「ポイント以外は一律で回／かい」と
+ *   していたため、「えかき10まい（つぎの段階10**回**まで あと3**回**）」
+ *   「メダル5こ（つぎの段階5**回**まで あと4**回**）」と、名前と単位が食い違っていた。
+ */
 export const badgeDefinitions: readonly {
   key: BadgeKey;
   emoji: string;
   nameParent: string;
   nameChild: string;
+  /** 進捗文言の単位。[0]=保護者・みまもり向け、[1]=子ども向け（ひらがな） */
+  unit: readonly [string, string];
 }[] = [
-  { key: "lifetime_points_earned", emoji: "🌟", nameParent: "はじめの100pt", nameChild: "はじめの100pt" },
-  { key: "lifetime_completions", emoji: "✅", nameParent: "がんばり50回", nameChild: "がんばり50かい" },
-  { key: "lifetime_drawings", emoji: "✏️", nameParent: "えかき10まい", nameChild: "えかき10まい" },
-  { key: "lifetime_gacha_draws", emoji: "🔍", nameParent: "ひみつはっけん10かい", nameChild: "ひみつはっけん10かい" },
-  { key: "lifetime_sticker_purchases", emoji: "🏷️", nameParent: "メダル5こ", nameChild: "メダル5こ" },
+  { key: "lifetime_points_earned", emoji: "🌟", nameParent: "はじめの100pt", nameChild: "はじめの100pt", unit: ["pt", "pt"] },
+  { key: "lifetime_completions", emoji: "🧹", nameParent: "クエスト50回", nameChild: "クエスト50かい", unit: ["回", "かい"] },
+  { key: "lifetime_drawings", emoji: "🎨", nameParent: "えかき10まい", nameChild: "えかき10まい", unit: ["まい", "まい"] },
+  // ガチャだけは保護者向けの名前も「10かい」とひらがなのため、単位も「かい」で揃える
+  // （「ひみつはっけん10かい（つぎの段階10回まで…）」と1行の中で食い違うのを避ける）。
+  { key: "lifetime_gacha_draws", emoji: "🔍", nameParent: "ひみつはっけん10かい", nameChild: "ひみつはっけん10かい", unit: ["かい", "かい"] },
+  { key: "lifetime_sticker_purchases", emoji: "🪙", nameParent: "メダル5こ", nameChild: "メダル5こ", unit: ["こ", "こ"] },
 ] as const;
 
 /**
