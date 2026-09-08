@@ -160,7 +160,10 @@ export function StickerShopPanel({
   return (
     <View>
       <View style={styles.headerRow}>
-        <Text style={bodyMediumStyle}>{isChild ? "メダルを かう" : "メダルを買う"}</Text>
+        {/* [2026-09-08追加・本部長／軽微変更ルート] 統括の実機確認「上のメダルという
+            文字の左側にメダルの絵文字欲しい」。ごほうび画面からの導線（166章で🪙に
+            統一）と同じ絵文字にして、着く前と着いた後で同じ印が見えるようにする。 */}
+        <Text style={bodyMediumStyle}>🪙 {isChild ? "メダルを かう" : "メダルを買う"}</Text>
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
@@ -196,8 +199,17 @@ export function StickerShopPanel({
                         {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                       </Text>
                       {/* [2026-09-08改訂・実装メモ164章] 未開放マスには説明文・「あと◯pt」を
-                          出さない（絵とレアリティ名だけ）。次に開く条件は行の下1行に集約した。 */}
-                      {!locked && (
+                          出さない（絵とレアリティ名だけ）。次に開く条件は行の下1行に集約した。
+                          [2026-09-08再改訂・本部長／軽微変更ルート] 統括の実機確認「解放されて
+                          ないメダルは鍵マークあったほうが好き」。「あと◯pt」があった位置に🔒を
+                          置く。マスの高さが開放済みのものと揃うので、行の中で背の低いマスが
+                          混ざる状態（164章の変更で生じていた）も同時に解消する。
+                          開く条件そのものは行の下1行に集約したままで、ここには書かない。 */}
+                      {locked ? (
+                        <Text style={[captionStyle, styles.lockedMark]} accessibilityLabel={isChild ? "まだ かえないよ" : "まだ購入できません"}>
+                          🔒
+                        </Text>
+                      ) : (
                         <Text style={[captionStyle, !affordable && styles.insufficientText]}>
                           {affordable ? `${item.points_cost}pt` : `あと${item.points_cost - balance}pt`}
                         </Text>
@@ -281,6 +293,7 @@ const styles = StyleSheet.create({
   cellChild: { borderRadius: theme.radius.childXl, minHeight: 96 },
   cellDisabled: { opacity: 0.45 },
   cellRarity: { marginTop: theme.spacing.s1 },
+  lockedMark: { textAlign: "center" },
   insufficientText: { color: theme.colors.neutralTextSecondary },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
   modalCard: { width: "84%", maxWidth: 360 },
