@@ -35,7 +35,6 @@ export default function ChildGratitudeHubScreen() {
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [balance, setBalance] = useState(0);
-  const [maxBalance, setMaxBalance] = useState(50);
   const [rows, setRows] = useState<LogRow[]>([]);
 
   const buildRows = (sent: GratitudePointWithCounterpart[], received: GratitudePointWithCounterpart[]): LogRow[] => {
@@ -83,18 +82,24 @@ export default function ChildGratitudeHubScreen() {
     void load();
   }, [load]);
 
-  // [2026-08-27改訂] 配布額が週50pt→1日3ptになった（20260827180000_gratitude_daily_allowance.sql）。
-  // 配布額そのものはクライアントから取得できない仕様（13e章「呼び出し本人の残存原資のみ返す」）
-  // なので、ゲージの分母は従来どおり「今回観測したbalanceの最大値」で近似する。
-  // ただし3という小さい数になったため、10本固定のゲージをやめて**1ポイント＝1マス**にした。
-  // 「あと2こ」が ■■□ とそのまま読める。その日すでに使ったあとに初めて開いた場合は
-  // 分母が実際より小さく出るが、これは近似である以上避けられない（従来からの制約）。
-  useEffect(() => {
-    setMaxBalance((prev) => Math.max(prev, balance));
-  }, [balance]);
-
-  const gaugeSize = Math.max(maxBalance, 1);
-  const filledBars = balance;
+  // [2026-09-09削除・本部長／軽微変更ルート] 残り数を表す■□のゲージを廃止した。
+  //
+  // 統括の実機確認「空欄がなん十個もあるけど、最大3個です」。原因は
+  // `useState(50)`という初期値で、**感謝ポイントが「週50pt」だった頃の名残**。
+  // 2026-08-27に「1日3pt」へ変えたとき（20260827180000_gratitude_daily_allowance.sql）
+  // ここだけ取り残されていた。しかも`Math.max(prev, balance)`で増える一方に
+  // 作られていたため、**永久に50個のまま**だった。
+  //
+  // **「3」に直すのではなく、ゲージごと消した。** この画面には分母（1日の配布数）を
+  // 知る手段が無く（API仕様13e章「呼び出し本人の残存原資のみ返す」）、従来は
+  // 「これまでに見た最大値」で当て推量していた。「3」と書き込む方法もあるが、
+  // それはDB側の`gratitude_daily_allowance()`の値をアプリに写すことになり、
+  // 片方を変えたときにまた取り残される（今回とまったく同じ型のズレ）。
+  // **消せば分母を知る必要そのものが無くなる。**
+  //
+  // 失うものは小さい。すぐ上の「きょう あと ◯こ おくれるよ」が同じことを伝えている。
+  // （数字が読めない年齢には■■□のほうが分かりやすいという利点はあり、統括にも
+  // その旨を伝えたうえで「消す」との判断だった。）
 
   return (
     <Screen tone="child">
@@ -114,10 +119,6 @@ export default function ChildGratitudeHubScreen() {
         <>
           <View style={styles.gaugeBox}>
             <Text style={theme.typography.childBody}>きょう あと {balance}こ おくれるよ</Text>
-            <Text style={styles.gaugeBar}>
-              {"■".repeat(Math.max(filledBars, 0))}
-              {"□".repeat(Math.max(gaugeSize - filledBars, 0))}
-            </Text>
             <AppButton
               label="ありがとうを おくる"
               tone="child"
@@ -174,7 +175,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
     borderRadius: theme.radius.childXl,
   },
-  gaugeBar: { marginTop: theme.spacing.s2, fontSize: 18, letterSpacing: 2, color: theme.colors.brandPrimaryStrong },
   noteLabel: { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
   dateLabel: { fontSize: 12, color: theme.colors.neutralTextSecondary },
 });
