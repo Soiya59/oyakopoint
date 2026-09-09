@@ -3,7 +3,6 @@ import { Tabs } from "expo-router";
 import { Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import theme from "@/theme/theme";
-import { createTabBarButton } from "@/components/TabBarButton";
 
 /**
  * みまもりメンバー向け下部タブ: [👨‍👩‍👧‍👦かぞく] [🌟じぶん]
@@ -34,9 +33,6 @@ export default function SupporterTabsLayout() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
-        // [2026-09-09追加・本部長／軽微変更ルート] 子どものタブと同じ理由・同じ部品。
-        // 詳細は src/components/TabBarButton.tsx のコメント参照。
-        tabBarButton: createTabBarButton(theme.colors.supporterAccent, theme.colors.supporterAccentSoft),
       }}
     >
       {/* 決定2（35.1節）: 起動後・ログイン後に最初に開くタブは「かぞく」。
