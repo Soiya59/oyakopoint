@@ -33,6 +33,18 @@ export default function SupporterTabsLayout() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
+        // [2026-09-09追加・本部長／軽微変更ルート] 統括の実機確認「選択していることが
+        // もっとわかりやすくしてほしい」。従来はtabBarActiveTintColorによる色の違い
+        // だけで、**絵文字アイコンは色が変わらない**ため実質12pxのラベルの色だけが
+        // 手がかりだった。
+        //
+        // **React Navigationの組み込みオプションを使う。自作のtabBarButtonは使わない。**
+        // 一度は自作の部品で「下線＋背景」を入れたが（`1d73014`）、下線用の3pxの帯を
+        // 足したことでタブの高さ（80 + 端末の下余白）に収まらなくなり、**中身が下へ
+        // 押し出されて見えなくなった**（統括の実機報告により`ed9cc49`で撤回）。
+        // 型チェックもlintも通り、ビルドも成功していた。**見た目は実機でしか分からない。**
+        // 統括判断により、高さを一切変えない「背景の色付けだけ」にした。
+        tabBarActiveBackgroundColor: theme.colors.supporterAccentSoft,
       }}
     >
       {/* 決定2（35.1節）: 起動後・ログイン後に最初に開くタブは「かぞく」。
