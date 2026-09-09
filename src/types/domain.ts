@@ -522,7 +522,7 @@ export interface FamilyBoardReactionWithPostBody extends FamilyBoardReaction {
 /** sticker_catalog テーブルの1行（全家族共通グローバルカタログ、12種固定）。 */
 export interface StickerCatalogItem {
   id: string;
-  shape: "beetle" | "butterfly" | "flower";
+  shape: "beetle" | "butterfly" | "flower" | "dragon";
   rarity: "bronze" | "silver" | "gold" | "crystal";
   sticker_key: string;
   display_name: string;

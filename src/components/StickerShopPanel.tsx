@@ -55,6 +55,9 @@ const shapeLabel: Record<StickerShape, { child: string; parent: string }> = {
   beetle: { child: "カブトムシ", parent: "カブトムシ" },
   butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
   flower: { child: "はな", parent: "小さな花" },
+  // [2026-09-09追加・本部長／実装メモ177章] ドラゴンは外来語のため、子ども向け・
+  // 大人向けとも「ドラゴン」で統一する（クリスタルと同じ理由。173.3章参照）。
+  dragon: { child: "ドラゴン", parent: "ドラゴン" },
 };
 
 const rarityLabel: Record<StickerRarity, { child: string; parent: string }> = {

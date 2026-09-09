@@ -53,6 +53,8 @@ const stickerShapeLabel: Record<StickerShape, { child: string; parent: string }>
   beetle: { child: "カブトムシ", parent: "カブトムシ" },
   butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
   flower: { child: "はな", parent: "小さな花" },
+  // [2026-09-09追加・本部長／実装メモ177章] StickerShopPanel.tsxと同じ表記。
+  dragon: { child: "ドラゴン", parent: "ドラゴン" },
 };
 
 const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string }> = {

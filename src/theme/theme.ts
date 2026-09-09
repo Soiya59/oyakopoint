@@ -322,7 +322,10 @@ export const gachaPlateSize = {
 // [2026-09-08改訂・本部長／実装メモ173章] 最上位レアリティの呼び名を統括判断で
 // 「虹（rainbow）」から「クリスタル（crystal）」に改称した（絵を作り直したことで
 // クリスタル感が出たため）。4段階の構成自体は変わらない。
-export const stickerShapes = ["beetle", "butterfly", "flower"] as const;
+// [2026-09-09改訂・本部長／実装メモ177章] やること5-9のうち「ドラゴン」のみを
+// 追加し、形4種（beetle/butterfly/flower/dragon）×レアリティ4段＝16種類にした。
+// どんぐり（acorn）・とり（bird）・くるま（car）は今回対象外のまま。
+export const stickerShapes = ["beetle", "butterfly", "flower", "dragon"] as const;
 export type StickerShape = (typeof stickerShapes)[number];
 
 export const stickerRarities = ["bronze", "silver", "gold", "crystal"] as const;

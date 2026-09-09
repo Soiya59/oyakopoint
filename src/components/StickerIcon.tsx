@@ -66,6 +66,16 @@ import flowerGoldSm from "../../assets/stickers/flower_gold@sm.png";
 import flowerCrystalFull from "../../assets/stickers/flower_crystal.png";
 import flowerCrystalSm from "../../assets/stickers/flower_crystal@sm.png";
 
+// [2026-09-09追加・本部長／実装メモ177章] やること5-9のうち「ドラゴン」のみ追加。
+import dragonBronzeFull from "../../assets/stickers/dragon_bronze.png";
+import dragonBronzeSm from "../../assets/stickers/dragon_bronze@sm.png";
+import dragonSilverFull from "../../assets/stickers/dragon_silver.png";
+import dragonSilverSm from "../../assets/stickers/dragon_silver@sm.png";
+import dragonGoldFull from "../../assets/stickers/dragon_gold.png";
+import dragonGoldSm from "../../assets/stickers/dragon_gold@sm.png";
+import dragonCrystalFull from "../../assets/stickers/dragon_crystal.png";
+import dragonCrystalSm from "../../assets/stickers/dragon_crystal@sm.png";
+
 const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof beetleBronzeFull; sm: typeof beetleBronzeSm }>> = {
   beetle: {
     bronze: { full: beetleBronzeFull, sm: beetleBronzeSm },
@@ -84,6 +94,12 @@ const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof 
     silver: { full: flowerSilverFull, sm: flowerSilverSm },
     gold: { full: flowerGoldFull, sm: flowerGoldSm },
     crystal: { full: flowerCrystalFull, sm: flowerCrystalSm },
+  },
+  dragon: {
+    bronze: { full: dragonBronzeFull, sm: dragonBronzeSm },
+    silver: { full: dragonSilverFull, sm: dragonSilverSm },
+    gold: { full: dragonGoldFull, sm: dragonGoldSm },
+    crystal: { full: dragonCrystalFull, sm: dragonCrystalSm },
   },
 };
 
@@ -113,10 +129,10 @@ export function StickerIcon({ shape, rarity, size, highRes = false }: StickerIco
   // まるごと表示できなくなった。**
   //
   // 実際に起こりうる。(1) `assets/stickers/`には7形ぶんの画像があるのに、この表には
-  // beetle・butterfly・flowerの3形しか無い（acorn・bird・dragon・carは未登録。
-  // やること5-9でカタログに載せた瞬間ここを通る）。(2) DBのレアリティを2026-09-08に
-  // rainbow→crystalへ改称したように、DB側の値が先に変わってアプリが追いつく前の
-  // 一瞬でも同じことが起きる。
+  // beetle・butterfly・flower・dragonの4形しか無い（2026-09-09にドラゴンのみ登録。
+  // acorn・bird・carは引き続き未登録。やること5-9でカタログに載せた瞬間ここを通る）。
+  // (2) DBのレアリティを2026-09-08にrainbow→crystalへ改称したように、DB側の値が
+  // 先に変わってアプリが追いつく前の一瞬でも同じことが起きる。
   //
   // **1枚の絵が出ないことと、画面がまるごと出ないことは重さが違う。**前者に倒す。
   const images = STICKER_IMAGES[shape]?.[rarity];
