@@ -149,6 +149,12 @@ export function StickerShopPanel({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selected, setSelected] = useState<StickerCatalogItem | null>(null);
+  // [2026-09-09修正・本部長] `confirming`は購入確認モーダルの連打ガード。**必ず早期リターン
+  // （下の loading / error）より前で宣言すること。** 当初これを下の handleConfirm の直前に
+  // 置いてしまい、読み込み中は1個・完了後は2個とフックの数が描画ごとに変わって、
+  // Reactが例外を投げメダル購入画面が表示できなくなった（本番障害。統括の実機報告
+  // 「メダル購入画面が写らない。PCでもスマホでも同じ」）。型チェックはこの誤りを検出しない。
+  const [confirming, setConfirming] = useState(false);
   const lockedIdSet = new Set(lockedCatalogIds);
 
   if (loadState === "loading") return <SkeletonList count={3} />;
@@ -172,7 +178,6 @@ export function StickerShopPanel({
   // 2026-09-08、購入上限の撤廃〉のため、DBは正しく2件目を受け付けていた）。
   // あわせて、awaitしている間の連打も塞ぐ（`purchasing`の反映を待たずに2回押せる隙間が
   // あったため、ローカルなガードを重ねる）。
-  const [confirming, setConfirming] = useState(false);
   const handleConfirm = async () => {
     if (!selected || confirming) return;
     setConfirming(true);
