@@ -9,7 +9,7 @@ import { Text } from "react-native";
 import { useSession } from "@/lib/session";
 import { removeMember } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
-import { HELP_SUPPORTER_URL, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
 
 /** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
  *  2026-09-09に統括が決定。app/parent/family.tsxと同一アドレス。 */
@@ -60,7 +60,7 @@ export default function SupporterSettingsScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>設定</Text>
 
       {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
@@ -71,8 +71,15 @@ export default function SupporterSettingsScreen() {
       </Text>
       <View style={{ marginTop: theme.spacing.s2 }}>
         <ExternalLinkRow tone="supporter" label="使い方ガイド（みまもり向け）" url={HELP_SUPPORTER_URL} />
-        <ExternalLinkRow tone="supporter" label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
-        <ExternalLinkRow tone="supporter" label="利用規約" url={TERMS_URL} />
+        {/* [2026-09-09追加・統括判断] 規約類が未公開の間はこの2本を出さない
+            （LEGAL_PAGES_PUBLISHED）。押しても404になるため。制定日が決まり
+            ページを書き出したら、定数をtrueにするだけで出る。 */}
+        {LEGAL_PAGES_PUBLISHED && (
+          <>
+            <ExternalLinkRow tone="supporter" label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
+            <ExternalLinkRow tone="supporter" label="利用規約" url={TERMS_URL} />
+          </>
+        )}
       </View>
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s3 }]}>
         お問い合わせ: {CONTACT_EMAIL}
@@ -114,7 +121,7 @@ export default function SupporterSettingsScreen() {
         <Text style={{ marginTop: theme.spacing.s4, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/self")} />
     </Screen>
   );
 }

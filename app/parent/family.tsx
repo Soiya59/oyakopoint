@@ -22,7 +22,7 @@ import {
 import type { FamilyInvite } from "@/types/domain";
 import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
-import { HELP_CHILD_URL, HELP_PARENT_URL, HELP_SUPPORTER_URL, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+import { HELP_CHILD_URL, HELP_PARENT_URL, HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
 
 /** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
  *  2026-09-09に統括が決定。宣伝部CLAUDE.md記載のPlay Console公開用アドレスと同一。 */
@@ -629,8 +629,15 @@ export default function FamilyScreen() {
         <ExternalLinkRow label="使い方ガイド（保護者向け）" url={HELP_PARENT_URL} />
         <ExternalLinkRow label="使い方ガイド（みまもり向け）" url={HELP_SUPPORTER_URL} />
         <ExternalLinkRow label="使い方ガイド（子ども向け）" url={HELP_CHILD_URL} />
-        <ExternalLinkRow label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
-        <ExternalLinkRow label="利用規約" url={TERMS_URL} />
+        {/* [2026-09-09追加・統括判断] 規約類が未公開の間はこの2本を出さない
+            （LEGAL_PAGES_PUBLISHED）。押しても404になるため。制定日が決まり
+            ページを書き出したら、定数をtrueにするだけで出る。 */}
+        {LEGAL_PAGES_PUBLISHED && (
+          <>
+            <ExternalLinkRow label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
+            <ExternalLinkRow label="利用規約" url={TERMS_URL} />
+          </>
+        )}
       </View>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
         お問い合わせ: {CONTACT_EMAIL}

@@ -8,7 +8,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { hasAgreedToCurrentTerms, recordTermsConsent } from "@/data/api";
 import { openExternalUrl } from "@/lib/externalLink";
-import { PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+import { LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
 import { useSession } from "@/lib/session";
 
 /**
@@ -172,16 +172,25 @@ export function TermsConsentModal({ role, onAgreed }: TermsConsentModalProps) {
         </Text>
 
         {/* [やること.md 2-28] 子ども向け画面には外部URLを開く導線を置かない。 */}
+        {/* [2026-09-09追加・統括判断] 規約類が未公開の間はリンクを出さない
+            （LEGAL_PAGES_PUBLISHED）。押しても404になるため。禁止事項の要点は
+            このモーダルの中に書いてあるので、リンクが無くても内容は伝わる。 */}
         {!isChild && (
           <>
-            <Pressable onPress={() => openLink(TERMS_URL)} style={{ marginTop: theme.spacing.s4 }}>
-              <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>利用規約を全文で見る</Text>
-            </Pressable>
-            <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)} style={{ marginTop: theme.spacing.s2 }}>
-              <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>プライバシーポリシーを見る</Text>
-            </Pressable>
-            {linkErrorMessage && (
-              <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{linkErrorMessage}</Text>
+            {/* 規約類が未公開の間はこの2本のリンクだけを出さない。**チェックボックスと
+                同意ボタンは常に出す**（ここを一緒に隠すと大人が同意できなくなる）。 */}
+            {LEGAL_PAGES_PUBLISHED && (
+              <>
+                <Pressable onPress={() => openLink(TERMS_URL)} style={{ marginTop: theme.spacing.s4 }}>
+                  <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>利用規約を全文で見る</Text>
+                </Pressable>
+                <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)} style={{ marginTop: theme.spacing.s2 }}>
+                  <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>プライバシーポリシーを見る</Text>
+                </Pressable>
+                {linkErrorMessage && (
+                  <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{linkErrorMessage}</Text>
+                )}
+              </>
             )}
 
             <Pressable
