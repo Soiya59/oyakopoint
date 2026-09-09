@@ -1,0 +1,44 @@
+/* 自動生成ファイルではない（tools/convert_help_docs.py が参照する共通CSS）。
+   値は oyakopoint-app/src/theme/theme.ts のデザイントークンを踏襲している。
+   theme.tsの値を変えたときは、このファイルもあわせて見直すこと（正本はtheme.ts）。 */
+:root {
+  --brand: #10B981;
+  --brand-strong: #059669;
+  --brand-soft: #ECFDF5;
+  --bg: #FBF9F4;
+  --surface: #FFFFFF;
+  --border: #E5E5E5;
+  --text: #171717;
+  --text-secondary: #737373;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+}
+.page { max-width: 680px; margin: 0 auto; padding: 24px 20px 64px; }
+h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+h2 { font-size: 18px; font-weight: 700; margin: 32px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+h3 { font-size: 16px; font-weight: 700; margin: 20px 0 8px; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 12px; padding-left: 1.4em; }
+li { margin: 0 0 6px; }
+table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13.5px; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--brand-soft); font-weight: 700; }
+blockquote { margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); color: var(--text-secondary); }
+code { background: #F2F2F2; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+a { color: var(--brand-strong); }
+.meta { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 24px; }
+.notice { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 24px; }
+.help-index-list { list-style: none; padding: 0; margin: 24px 0 0; }
+.help-index-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.help-index-list a { font-weight: 700; font-size: 16px; text-decoration: none; }
+.help-index-list .desc { display: block; color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+.foot-nav { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.foot-nav a { margin-right: 16px; }
