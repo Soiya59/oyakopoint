@@ -14,8 +14,8 @@ import type { StickerCatalogItem } from "@/types/domain";
  * 参照: 画面一覧・遷移図.md C30、主要画面ワイヤーフレーム.md 32.1節・34章
  *
  * コレクションだなの「じぶんのシール」（app/child/collector-shelf.tsx）から遷移する
- * 入口に加え、2026-09-07（実装メモ144章）からはごほうびこうかんじょ
- * （app/child/(tabs)/rewards.tsx、C9）からも遷移できる。木を飾るシール（12種）を
+ * 入口に加え、「じぶん」タブの「メダル」タイル（app/child/(tabs)/self.tsx、
+ * 2026-09-10・実装メモ188章で移設）からも遷移できる。木を飾るシール（12種）を
  * ポイントで買う。買う前の確認はStickerShopPanel内のインライン確認モーダルで行う
  * （決定10）。
  *
