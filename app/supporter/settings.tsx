@@ -8,6 +8,12 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useSession } from "@/lib/session";
 import { removeMember } from "@/data/api";
+import ExternalLinkRow from "@/components/ExternalLinkRow";
+import { HELP_SUPPORTER_URL, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+
+/** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
+ *  2026-09-09に統括が決定。app/parent/family.tsxと同一アドレス。 */
+const CONTACT_EMAIL = "soiyalab.contact@gmail.com";
 
 /**
  * S13 設定（みまもりメンバー）
@@ -56,6 +62,21 @@ export default function SupporterSettingsScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
       <Text style={theme.typography.supporterTitle}>設定</Text>
+
+      {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
+          利用規約への外部リンクと、運営者への連絡先。app/parent/family.tsxと同じ
+          構成（みまもり向けガイドのみ1本）。実装メモ.md 181章参照。 */}
+      <Text style={[theme.typography.supporterTitle, { fontSize: 16, marginTop: theme.spacing.s4 }]}>
+        使い方・お問い合わせ
+      </Text>
+      <View style={{ marginTop: theme.spacing.s2 }}>
+        <ExternalLinkRow tone="supporter" label="使い方ガイド（みまもり向け）" url={HELP_SUPPORTER_URL} />
+        <ExternalLinkRow tone="supporter" label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
+        <ExternalLinkRow tone="supporter" label="利用規約" url={TERMS_URL} />
+      </View>
+      <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s3 }]}>
+        お問い合わせ: {CONTACT_EMAIL}
+      </Text>
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
         <AppButton tone="supporter" label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />

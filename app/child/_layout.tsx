@@ -5,6 +5,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
 import theme from "@/theme/theme";
+import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsentGate";
 
 // [2026-09-01追加・実装メモ.md 108章] NFCタグの人ごと化（要件定義書07-2章「作り直し：
 // タグの人ごと化」）により、C13/C14（このパス）には子ども以外（保護者・みまもり
@@ -48,9 +49,18 @@ const NFC_PATHS_ANY_ROLE = ["/child/nfc-scan", "/child/nfc-complete"];
  * `NFC_PATHS_ANY_ROLE`・`notChildSession`の分岐参照。それ以外の`/child/`配下の画面
  * （C5等）は、このコメントの元の記述どおり`"child"`以外なら引き続きトップへ戻す。
  */
+/**
+ * [2026-09-09追加・実装メモ.md 181章] 利用規約への同意取得＋Play Families
+ * 安全リマインダー（やること.md 2-22）のゲート。`NFC_PATHS_ANY_ROLE`
+ * （C13/C14）は対象外にする——この2画面はNFCタグの読み取り→完了報告のみで
+ * 自由記述のUGC（お絵かき・掲示板・感謝メッセージ等）を作らないため、
+ * サマリー表#7「子どもが自由形式のやりとりを始める前」の要求に該当せず、
+ * 物理タグをかざした直後に法的な同意モーダルで止めるのは体験として不釣り合い
+ * と判断した。それ以外の`/child/`配下（C5等、実際にUGCを作る画面）は対象。
+ */
 export default function ChildLayout() {
   const { state } = useAppData();
-  const { logoutChild, status } = useSession();
+  const { logoutChild, status, client } = useSession();
   const pathname = usePathname();
   const isNfcPath = NFC_PATHS_ANY_ROLE.includes(pathname);
   const me = state.members.find((m) => m.id === state.activeChildMemberId);
@@ -64,6 +74,8 @@ export default function ChildLayout() {
     ? status === "signedOut" || status === "parentNoFamily"
     : status !== "child";
   const shouldRedirect = staleSession || notChildSession;
+
+  const consent = useTermsConsentGate(status === "child" && !isNfcPath && !shouldRedirect, client);
 
   useEffect(() => {
     if (!shouldRedirect) return;
@@ -80,6 +92,19 @@ export default function ChildLayout() {
         <View style={{ flex: 1 }} />
       </Screen>
     );
+  }
+
+  if (status === "child" && !isNfcPath) {
+    if (consent.loading) {
+      return (
+        <Screen tone="child">
+          <View style={{ flex: 1 }} />
+        </Screen>
+      );
+    }
+    if (consent.needsConsent) {
+      return <TermsConsentModal role="child" onAgreed={consent.markAgreed} />;
+    }
   }
 
   return <Slot />;

@@ -3,6 +3,7 @@ import { Slot, router } from "expo-router";
 import { View } from "react-native";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
+import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsentGate";
 
 /**
  * [2026-09-04追加・実装メモ.md 125章] `app/child/_layout.tsx`（子どもセッション以外を
@@ -30,9 +31,15 @@ import Screen from "@/components/Screen";
  *   しないため、この経路では空欄は発生しない。
  * - `status === "supporter"` / `"child"` で保護者パスに来た場合は、それぞれ
  *   自分のホームへ送る（誤って自分のロールと違う画面に留まらせないため）。
+ *
+ * [2026-09-09追加・実装メモ.md 181章] 利用規約への同意取得＋Play Families
+ * 安全リマインダー（やること.md 2-22）のゲートをここに追加した。
+ * `status === "parent"` が確定したあと、Slotを描画する前に
+ * `useTermsConsentGate`で同意状況を確認し、未同意ならSlotの代わりに
+ * `TermsConsentModal`を描画する（同意するまでP7等の本来の画面には進めない）。
  */
 export default function ParentLayout() {
-  const { status } = useSession();
+  const { status, client } = useSession();
 
   const redirectTo: string | null =
     status === "signedOut" || status === "parentNoFamily"
@@ -43,6 +50,8 @@ export default function ParentLayout() {
       ? "/child/home"
       : null; // "loading" と "parent" はリダイレクトしない
 
+  const consent = useTermsConsentGate(status === "parent", client);
+
   useEffect(() => {
     if (redirectTo) router.replace(redirectTo);
   }, [redirectTo]);
@@ -50,6 +59,16 @@ export default function ParentLayout() {
   // "parent"のときだけ本来の画面（Slot配下、家族名を含む）を描画する。
   // それ以外（"loading"を含む）はリダイレクト完了までホーム本体を描画しない。
   if (status === "parent") {
+    if (consent.loading) {
+      return (
+        <Screen tone="parent">
+          <View style={{ flex: 1 }} />
+        </Screen>
+      );
+    }
+    if (consent.needsConsent) {
+      return <TermsConsentModal role="parent" onAgreed={consent.markAgreed} />;
+    }
     return <Slot />;
   }
 

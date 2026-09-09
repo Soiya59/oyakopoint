@@ -347,6 +347,24 @@
 -- 175章時点でローカルDocker環境に適用済み・実測済み。本番へは未適用
 -- （`20260916010000`とあわせて本部長の操作を待つ）。
 --
+-- [2026-09-09追加・開発部] 利用規約への同意取得＋Play Families安全リマインダー
+-- （やること.md 2-22、市場調査部レポート サマリー表#1・#7、開発部/成果物/
+-- 実装メモ.md 181章、マイグレーション`20260918010000_terms_consent.sql`）に伴い、
+-- 新規テーブル`terms_consents`を追加した（join_consentsと同じ設計：追記専用、
+-- SELECTポリシー2本のみでINSERT/UPDATE/DELETEポリシーは無し、書き込みは
+-- SECURITY DEFINER関数`record_terms_consent()`のみに閉じる）。
+-- S1（27→28）・S3（54→56本、下記2本を追加）・S4（58→61件、
+-- `current_terms_consent_version`・`has_agreed_to_current_terms`・
+-- `record_terms_consent`を追加）を更新した。terms_consents_select_by_parentの
+-- 条件式`(family_id = current_family_id()) AND is_current_user_parent()`は
+-- join_consents_select_by_parentと文字通り同一、terms_consents_select_ownの
+-- 条件式`family_member_id = current_family_member_id()`はjoin_consents_
+-- select_ownと文字通り同一のため、いずれもハッシュが一致することをローカル
+-- Dockerで実測して確認した（104章の教訓どおり、手計算ではなく実測。96.5章の
+-- 遵守）。A層にA26（保護者: terms_consentsに他家族の行が見えない）を追加した
+-- （A23〜A25と同じ形）。本マイグレーションは181章時点でローカルDocker環境に
+-- 適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -387,8 +405,10 @@ GRANT INSERT ON _r TO authenticated;
 -- より23→24。
 -- [2026-09-07再更新] sticker_catalog・ornament_sticker_purchases・member_badges
 -- （開発部/成果物/実装メモ.md 138章）の追加により24→27。
+-- [2026-09-09再更新] terms_consents（開発部/成果物/実装メモ.md 181章）の追加に
+-- より27→28。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '27', count(*)::text, count(*) = 27
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '28', count(*)::text, count(*) = 28
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -422,6 +442,9 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 --     163章）で`chore_completions_insert_self`・`reward_redemptions_insert_scoped`
 --     の2本にscope='family'分岐への担当者条件を追加した（本数は変わらず
 --     ハッシュのみ変化）。54本のまま。
+--     2026-09-09更新、利用規約への同意取得＋Play Families安全リマインダー
+--     （開発部/成果物/実装メモ.md 181章）でterms_consentsの2ポリシーを追加。
+--     54→56本。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -565,6 +588,13 @@ WITH expected(t, p, c, h) AS (VALUES
   -- chores_write_supporter_shared_by_creatorと条件式が文字通り同一のため同じハッシュ。
   ('rewards','rewards_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
   ('sticker_catalog','sticker_catalog_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
+  -- [2026-09-09追加] 利用規約への同意取得＋Play Families安全リマインダー
+  -- （やること.md 2-22、開発部/成果物/実装メモ.md 181章）。join_consentsと
+  -- 完全に同じ設計（追記専用、SECURITY DEFINER関数のみが書き込む）のため、
+  -- 2ポリシーとも条件式がjoin_consentsの対応ポリシーと文字通り同一で、
+  -- 同じハッシュになることをローカルDockerで実測して確認した。
+  ('terms_consents','terms_consents_select_by_parent','SELECT','a64bcea5635a1759018a24e6bf16edc5'),
+  ('terms_consents','terms_consents_select_own','SELECT','a81cabc4ac6fc746a840a3457e019f8e'),
   ('weekly_family_digests','weekly_family_digests_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47')
 ),
 actual_p AS (
@@ -581,7 +611,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー54本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー56本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -616,6 +646,12 @@ WITH expected(f) AS (VALUES
   -- 同じくLANGUAGE SQLでSECURITY DEFINERではないため、新規関数作成時にauthenticatedへ
   -- のEXECUTE権限が自動付与される（34.5章の既知の挙動）。明示的なREVOKEは行っていない。
   ('current_join_consent_version'),
+  -- [2026-09-09追加] current_terms_consent_version（利用規約への同意取得＋Play
+  -- Families安全リマインダー、やること.md 2-22、開発部/成果物/実装メモ.md
+  -- 181章）。current_join_consent_version等と同じくLANGUAGE SQLでSECURITY
+  -- DEFINERではないため、新規関数作成時にauthenticatedへのEXECUTE権限が
+  -- 自動付与される（34.5章の既知の挙動）。明示的なREVOKEは行っていない。
+  ('current_terms_consent_version'),
   ('decorate_tree_with_gacha_prize'),
   -- [2026-09-07追加] decorate_tree_with_sticker（木を飾るステッカー購入とバッジ、
   -- 設計部/成果物/スキーマ設計.sql 47.3章、開発部/成果物/実装メモ.md 138章）。
@@ -690,7 +726,13 @@ WITH expected(f) AS (VALUES
   -- スタンプ〈絵文字〉リアクションの取消・切替、開発部/成果物/実装メモ.md
   -- 159章）。toggle_chore_reaction_stamp()等と同じくSECURITY DEFINERであり、
   -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
-  ('toggle_family_board_reaction_stamp')
+  ('toggle_family_board_reaction_stamp'),
+  -- [2026-09-09追加] 利用規約への同意取得＋Play Families安全リマインダー
+  -- （やること.md 2-22、開発部/成果物/実装メモ.md 181章）の2関数。いずれも
+  -- join_family_with_invite_code()等と同じくSECURITY DEFINERであり、
+  -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('has_agreed_to_current_terms'),
+  ('record_terms_consent')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -703,7 +745,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数58件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数61件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1043,6 +1085,21 @@ INSERT INTO _r SELECT 'A層', 'A25 保護者: member_badgesに他家族の行が
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM member_badges WHERE family_id <> current_family_id();
+
+-- [2026-09-09追加] A26 terms_consents（利用規約への同意取得＋Play Families
+-- 安全リマインダー、やること.md 2-22、開発部/成果物/実装メモ.md 181章）。
+-- 家族間で分離されるべき新規テーブルのため、既存のA01〜A25と同じ形で追加する。
+-- join_consents（A23）と異なり子ども・みまもりも書き込み経路
+-- （record_terms_consent()）を持つが、terms_consents_select_by_parentの
+-- 条件式は「保護者からfamily_idで絞る」点でjoin_consentsと同一のため、
+-- A23と同じ「保護者ロール代表1本」の検査で十分（保護者以外の視点からの
+-- 追加検査が要らない理由もA23と同じ: みまもり・子どもの「自分の行しか
+-- 見えない」懸念はterms_consents_select_ownの存在だけで自明に満たされ、
+-- 他家族分離の懸念とは性質が異なる）。
+INSERT INTO _r SELECT 'A層', 'A26 保護者: terms_consentsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM terms_consents WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する

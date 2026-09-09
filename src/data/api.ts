@@ -2630,3 +2630,35 @@ export async function fetchBadgeTierThresholds(client: SupabaseClient, badgeKey:
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as number[] };
 }
+
+// ============================================================
+// 利用規約への同意＋Play Families安全リマインダー（やること.md 2-22、
+// 市場調査部レポート サマリー表#1・#7、開発部/成果物/実装メモ.md 181章）。
+// supabase/migrations/20260918010000_terms_consent.sql参照。
+// join_family_with_invite_code/acceptFamilyInviteと違い、参加時ではなく
+// 「ログインするたびに1回だけ確認する」導線のため、保護者・みまもりの
+// デフォルトクライアントだけでなく子ども専用クライアント（session.client）
+// からも呼べるよう、呼び出し元のclientをそのまま受け取る設計にする。
+// ============================================================
+
+/**
+ * 現在ログイン中のメンバーが、現行バージョンの利用規約＋安全リマインダーに
+ * 同意済みかどうか。`has_agreed_to_current_terms()`（SECURITY DEFINER）。
+ */
+export async function hasAgreedToCurrentTerms(client: SupabaseClient): Promise<ApiResult<boolean>> {
+  const { data, error } = await client.rpc("has_agreed_to_current_terms");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: Boolean(data) };
+}
+
+/**
+ * 利用規約＋安全リマインダーへの同意を記録する。`consentVersion`は
+ * src/components/TermsConsentGate.tsx の TERMS_CONSENT_VERSION を渡すこと。
+ * DB側 current_terms_consent_version() と一致しない場合、check_violation
+ * （「アプリが古い可能性があります…」）で拒否される。
+ */
+export async function recordTermsConsent(client: SupabaseClient, consentVersion: number): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("record_terms_consent", { p_consent_version: consentVersion });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}

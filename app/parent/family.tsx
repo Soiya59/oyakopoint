@@ -21,6 +21,12 @@ import {
 } from "@/data/api";
 import type { FamilyInvite } from "@/types/domain";
 import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
+import ExternalLinkRow from "@/components/ExternalLinkRow";
+import { HELP_CHILD_URL, HELP_PARENT_URL, HELP_SUPPORTER_URL, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+
+/** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
+ *  2026-09-09に統括が決定。宣伝部CLAUDE.md記載のPlay Console公開用アドレスと同一。 */
+const CONTACT_EMAIL = "soiyalab.contact@gmail.com";
 
 /** 表示名の最大文字数（MemberAvatarの頭文字表示・木の内訳表示が崩れない長さ）。 */
 const NAME_MAX_LENGTH = 12;
@@ -611,6 +617,24 @@ export default function FamilyScreen() {
         onPress={saveFamilyName}
         disabled={savingFamilyName || !familyName.trim() || familyName.trim() === state.family.name}
       />
+
+      {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
+          利用規約への外部リンクと、運営者への連絡先（Apple 1.2 "Published contact
+          information"）。ログアウト・家族の削除の直前に置く（宣伝部の要望どおり）。
+          実装メモ.md 181章参照。利用規約（TERMS_URL）は本部長の指示により、
+          宣伝部が原稿を完成させ次第公開される予定のURLへ先にリンクを張ってある
+          （2026-09-09時点ではまだ404）。 */}
+      <Text style={[theme.typography.parentBodyMedium, styles.settingsHeading]}>使い方・お問い合わせ</Text>
+      <View style={{ marginTop: theme.spacing.s2 }}>
+        <ExternalLinkRow label="使い方ガイド（保護者向け）" url={HELP_PARENT_URL} />
+        <ExternalLinkRow label="使い方ガイド（みまもり向け）" url={HELP_SUPPORTER_URL} />
+        <ExternalLinkRow label="使い方ガイド（子ども向け）" url={HELP_CHILD_URL} />
+        <ExternalLinkRow label="プライバシーポリシー" url={PRIVACY_POLICY_URL} />
+        <ExternalLinkRow label="利用規約" url={TERMS_URL} />
+      </View>
+      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
+        お問い合わせ: {CONTACT_EMAIL}
+      </Text>
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
         <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />

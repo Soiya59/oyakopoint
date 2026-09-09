@@ -3,6 +3,7 @@ import { Slot, router } from "expo-router";
 import { View } from "react-native";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
+import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsentGate";
 
 /**
  * [2026-09-04追加・実装メモ.md 125章] `app/parent/_layout.tsx`と対の、みまもり
@@ -18,9 +19,13 @@ import Screen from "@/components/Screen";
  * - `status === "signedOut"` / `"parentNoFamily"` は `"/"`（P1トップ画面）へ戻す。
  * - `status === "parent"` / `"child"` でみまもりパスに来た場合は、それぞれ自分の
  *   ホームへ送る。
+ *
+ * [2026-09-09追加・実装メモ.md 181章] `app/parent/_layout.tsx`と対の、利用規約
+ * への同意取得＋Play Families安全リマインダーのゲート（やること.md 2-22）。
+ * 経緯・設計はそちらのコメント・src/components/TermsConsentGate.tsxを参照。
  */
 export default function SupporterLayout() {
-  const { status } = useSession();
+  const { status, client } = useSession();
 
   const redirectTo: string | null =
     status === "signedOut" || status === "parentNoFamily"
@@ -31,6 +36,8 @@ export default function SupporterLayout() {
       ? "/child/home"
       : null; // "loading" と "supporter" はリダイレクトしない
 
+  const consent = useTermsConsentGate(status === "supporter", client);
+
   useEffect(() => {
     if (redirectTo) router.replace(redirectTo);
   }, [redirectTo]);
@@ -38,6 +45,16 @@ export default function SupporterLayout() {
   // "supporter"のときだけ本来の画面（Slot配下、家族名を含む）を描画する。
   // それ以外（"loading"を含む）はリダイレクト完了までホーム本体を描画しない。
   if (status === "supporter") {
+    if (consent.loading) {
+      return (
+        <Screen tone="supporter">
+          <View style={{ flex: 1 }} />
+        </Screen>
+      );
+    }
+    if (consent.needsConsent) {
+      return <TermsConsentModal role="supporter" onAgreed={consent.markAgreed} />;
+    }
     return <Slot />;
   }
 
