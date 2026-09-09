@@ -341,8 +341,9 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     const isStale = () => myGeneration !== loadGenerationRef.current;
 
     // [background=true の場合] 「初回の読み込み」ではなく「裏での取り直し」のため、
-    // setLoading(true)を呼ばない。呼ぶと4画面（app/parent/approvals.tsx・
-    // app/supporter/activity.tsx・app/{parent,child}/supporter-chores.tsx）が
+    // setLoading(true)を呼ばない。呼ぶと3画面（app/parent/approvals.tsx・
+    // app/supporter/activity.tsx・app/parent/supporter-chores.tsx）が
+    // ※2026-09-09にapp/child/supporter-chores.tsx（C19）を削除したため4画面→3画面
     // `loading`をそのままローカルのloadStateへ写しており、SkeletonListに
     // 一瞬切り替わってしまう（統括指摘「画面がちらつかないこと」に抵触するため）。
     if (!background) setLoading(true);

@@ -72,7 +72,6 @@ export default function FamilyActivityScreen() {
     .filter((c) => c.reported_by !== myId)
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
-  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
 
   // [2026-09-10改訂・実装メモ.md 157章] おくったスタンプをもういちど押すと取消、
   // ちがうスタンプを押すと切替になる（統括指示）。
@@ -110,6 +109,18 @@ export default function FamilyActivityScreen() {
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         おうちのひとにも「がんばったね」をおくってみよう
       </Text>
+
+      {/* [2026-09-09変更・本部長／軽微変更ルート] 統括の実機確認「やることリストへ戻るが
+          一番したなので、報告がたまっていくと、みれない。よって、一番上にもってきてほしい」。
+          報告カードは増え続けるため、下端に置いた戻る導線は**使い込むほど遠ざかる**。
+          件数に左右されない見出しの直下へ移した。
+          文言も統括指示により「やることリストへもどる」→「ホームがめんへもどる」。 */}
+      <AppButton
+        label="ホームがめんへもどる"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s3 }}
+        onPress={() => router.replace("/child/home")}
+      />
 
       {reactableCompletions.length === 0 && (
         <EmptyState tone="child" emoji="🌱" title="まだきろくがないよ" />
@@ -169,15 +180,14 @@ export default function FamilyActivityScreen() {
         );
       })}
 
-      {hasAnySupporter && (
-        <Pressable onPress={() => router.push("/child/supporter-chores")}>
-          <Text style={[theme.typography.childBody, styles.supporterLink]}>
-            👀 みまもりメンバーのクエストをみる →
-          </Text>
-        </Pressable>
-      )}
-
-      <AppButton label="やることリストへもどる" variant="secondary" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/child/home")} />
+      {/* [2026-09-09削除・本部長／軽微変更ルート] 「👀 みまもりメンバーのクエストをみる →」
+          （C19 app/child/supporter-chores.tsx）への導線を外した。統括「これはいらないと
+          思うけどどうかな？」に本部長も同意。C19はおじいちゃん・おばあちゃんが登録した
+          自分用のクエスト（ダイエット・運動・勉強）を**タップもできず眺めるだけ**の画面で、
+          保育園児に意味のある情報とは言いがたい。みまもりの人が実際にやった報告は
+          この画面の一覧に出ており、社会的に意味のある部分は既に見えている。
+          **入口はここだけだったため、画面（C19）自体も削除した。**誰も行けない画面を
+          残すのは95章で問題になったパターンのため（S10廃止時と同じ方針）。 */}
 
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>
@@ -283,7 +293,6 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   commentLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   dateLabel: { marginTop: theme.spacing.s1, fontSize: 12, color: theme.colors.neutralTextSecondary },
-  supporterLink: { textAlign: "center", marginTop: theme.spacing.s4, color: theme.colors.supporterAccent },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
   stampBtn: {
     width: theme.tapTarget.child,
