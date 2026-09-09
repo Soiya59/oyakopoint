@@ -77,8 +77,16 @@ export function ChoreSuggestionsModal({ visible, onClose, onSelect }: ChoreSugge
                 <Text style={theme.typography.parentBody}>
                   {s.emoji} {s.title}
                 </Text>
+                {/* [2026-09-09改訂・本部長／軽微変更ルート] 頻度ラベル（毎日／週1くらい／
+                    たまに）の表示をやめた。統括の指摘「頻度について毎日とか週1くらいとか
+                    書いてあるけど、それはいらないかな？」。**アプリ側から「毎日」という
+                    区分が既に消えている**（2026-09-08、子どものクエスト一覧を★お気に入りで
+                    分ける形に変えた。実装メモ155章）ため、おすすめ集だけがアプリに存在しない
+                    考え方を名乗っている状態だった。もともと表示専用で、選んで登録しても
+                    繰り返し設定には一切影響しない（要件定義書07-16章4-1節決定2）。
+                    データ側（choreSuggestions.tsのfrequency）は市場調査の出典として残す。 */}
                 <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-                  {s.points}pt（目安）{s.frequency}
+                  {s.points}pt（目安）
                 </Text>
               </Pressable>
             ))}
