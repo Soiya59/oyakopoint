@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import MemberAvatar from "@/components/MemberAvatar";
+import ParentTabHeader from "@/components/ParentTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
@@ -102,24 +103,10 @@ export default function ParentFamilyTabScreen() {
 
   return (
     <Screen tone="parent">
-      <View style={styles.headerRow}>
-        {me &&
-          (childProfiles.length > 0 ? (
-            <Pressable style={styles.headerMe} onPress={goToChildSwitch} hitSlop={8}>
-              <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
-              <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.headerMe}>
-              <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
-              <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
-            </View>
-          ))}
-        <Text style={[theme.typography.parentTitle, styles.headerFamilyName]}>{state.family.name}</Text>
-        <Pressable onPress={() => router.push("/parent/inbox")} hitSlop={8} style={styles.bellHit}>
-          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
-        </Pressable>
-      </View>
+      {/* [2026-09-10] 4タブ共通のヘッダー部品に統一（src/components/ParentTabHeader.tsx）。
+          統括の実機確認「じぶんとかんりの左上のアイコンから、子供モードに飛べない」を受け、
+          ここにだけあった子どもモードへの導線を共通部品へ移した。 */}
+      <ParentTabHeader inboxCount={inboxCount} />
 
       <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
         <Card style={{ marginTop: theme.spacing.s4 }}>

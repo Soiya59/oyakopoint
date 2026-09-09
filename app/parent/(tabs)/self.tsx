@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
-import MemberAvatar from "@/components/MemberAvatar";
+import ParentTabHeader from "@/components/ParentTabHeader";
 import MyPointsCard from "@/components/MyPointsCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
@@ -48,6 +48,10 @@ export default function ParentSelfTabScreen() {
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す
     // （旧`app/parent/home.tsx`と同じ理由でこのタイルだけ12pxに縮める）。
+    // [2026-09-10追加・統括指示「通帳をじぶんにいれてほしい」] 187章のタブ化で
+    // 12タイルのうち通帳の1枚だけが落ちていた。上の「じぶんのポイント」カードを
+    // 押せば通帳へ行けるが、**タイルとしては消えていた**ため戻す。
+    { emoji: "📔", label: "通帳", path: "/parent/points" },
     { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
     // 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れるため明示的に改行する
@@ -57,18 +61,12 @@ export default function ParentSelfTabScreen() {
 
   return (
     <Screen tone="parent">
-      <View style={styles.headerRow}>
-        {myMember && (
-          <View style={styles.headerMe}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={36} />
-            <Text style={theme.typography.parentTitle}>{myMember.display_name}</Text>
-          </View>
-        )}
-        <Text style={[theme.typography.parentTitle, styles.headerFamilyName]}>{state.family.name}</Text>
-        <Pressable onPress={() => router.push("/parent/inbox")} hitSlop={8} style={styles.bellHit}>
-          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
-        </Pressable>
-      </View>
+      {/* [2026-09-10・本部長／軽微変更ルート] 共通ヘッダーに差し替えた。統括の実機確認
+          「じぶんとかんりの左上のアイコンから、子供モードに飛べない」。187章のタブ化で
+          「かぞく」タブにだけ子どもモードへの導線が付いていて、ここでは絵が置かれて
+          いるだけだった。**同じ見た目なのに押せたり押せなかったりする**のは最も
+          紛らわしいので、4タブとも同じ部品を使う。 */}
+      <ParentTabHeader inboxCount={inboxCount} />
 
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
 

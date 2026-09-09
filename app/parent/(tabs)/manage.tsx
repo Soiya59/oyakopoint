@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
-import MemberAvatar from "@/components/MemberAvatar";
+import ParentTabHeader from "@/components/ParentTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
@@ -41,18 +41,12 @@ export default function ParentManageTabScreen() {
 
   return (
     <Screen tone="parent">
-      <View style={styles.headerRow}>
-        {myMember && (
-          <View style={styles.headerMe}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={36} />
-            <Text style={theme.typography.parentTitle}>{myMember.display_name}</Text>
-          </View>
-        )}
-        <Text style={[theme.typography.parentTitle, styles.headerFamilyName]}>{state.family.name}</Text>
-        <Pressable onPress={() => router.push("/parent/inbox")} hitSlop={8} style={styles.bellHit}>
-          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
-        </Pressable>
-      </View>
+      {/* [2026-09-10・本部長／軽微変更ルート] 共通ヘッダーに差し替えた。統括の実機確認
+          「じぶんとかんりの左上のアイコンから、子供モードに飛べない」。187章のタブ化で
+          「かぞく」タブにだけ子どもモードへの導線が付いていて、ここでは絵が置かれて
+          いるだけだった。**同じ見た目なのに押せたり押せなかったりする**のは最も
+          紛らわしいので、4タブとも同じ部品を使う。 */}
+      <ParentTabHeader inboxCount={inboxCount} />
 
       <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>家族の管理</Text>
       <View style={{ marginTop: theme.spacing.s2 }}>
