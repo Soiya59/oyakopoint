@@ -105,7 +105,25 @@ export default function FamilyActivityScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childHeadline}>👨‍👩‍👧‍👦 かぞくのがんばり</Text>
+      {/* [2026-09-09追加・本部長／軽微変更ルート] 統括の実機確認「こどものありがとう
+          ポイントを送る画面が、通帳にある。これはわかりにくい。かぞくをひらくと、
+          完了報告があるとおもうけど、その一番上に（かぞくのがんばりの右側の空欄）
+          配置するのはどうだろうか」。
+          子どもの導線だけが弱かった。保護者・みまもりはホームに「💌 感謝ポイント」の
+          タイルがあるのに（P7/S1）、子どもは通帳（C8）の右上の小さな文字リンク
+          「💌おくる」1本きりだった。しかも通帳は「自分のポイントの記録」を見る場所で、
+          ありがとうを送るのは他人に向けた行為であり、噛み合っていない。
+          この画面（C18）は家族が何をしたかを見て反応する場所なので、ここが自然。
+          通帳側の導線は残す（そこから探す人の道を塞がないため）。
+          行はflexWrapにしてある。狭い端末では見出しを切らずに、リンクごと次の行へ
+          落ちるようにするため（子ども向け画面で見出しが「かぞくのがんば…」と
+          省略されるのは避けたい）。 */}
+      <View style={styles.titleRow}>
+        <Text style={theme.typography.childHeadline}>👨‍👩‍👧‍👦 かぞくのがんばり</Text>
+        <Pressable onPress={() => router.push("/child/gratitude")} hitSlop={8}>
+          <Text style={styles.gratitudeLink}>💌 ありがとうをおくる →</Text>
+        </Pressable>
+      </View>
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         おうちのひとにも「がんばったね」をおくってみよう
       </Text>
@@ -296,6 +314,8 @@ const styles = StyleSheet.create({
   // `supporterAccentSoft`の控えめな配色で区別する（画面一覧・遷移図.md C18行参照）。
   cardSupporterTint: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  titleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: theme.spacing.s2 },
+  gratitudeLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   commentLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   dateLabel: { marginTop: theme.spacing.s1, fontSize: 12, color: theme.colors.neutralTextSecondary },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
