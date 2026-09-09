@@ -155,7 +155,7 @@ export default function ChildGratitudeHubScreen() {
               戻る手段がこの画面に無いことが判明した。C13/C14/C6等の既存画面と同じ
               「やることリストへもどる」パターンをそのまま踏襲した。 */}
           <AppButton
-            label="やることリストへもどる"
+            label="もどる"
             tone="child"
             fullWidth
             style={{ marginTop: theme.spacing.s6 }}

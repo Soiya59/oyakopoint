@@ -108,7 +108,7 @@ export default function ChildFamilyTreeScreen() {
       )}
 
       <AppButton
-        label="やることリストへもどる"
+        label="もどる"
         variant="secondary"
         style={{ marginTop: theme.spacing.s6 }}
         onPress={() => router.replace("/child/home")}

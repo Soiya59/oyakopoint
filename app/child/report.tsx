@@ -36,7 +36,7 @@ export default function ChildReportScreen() {
     return (
       <Screen tone="child">
         <Text style={theme.typography.childBody}>クエストが見つかりませんでした</Text>
-        <AppButton label="やることリストへもどる" tone="child" onPress={() => router.replace("/child/home")} />
+        <AppButton label="もどる" tone="child" onPress={() => router.replace("/child/home")} />
       </Screen>
     );
   }
@@ -112,7 +112,7 @@ export default function ChildReportScreen() {
             またあした ためしてね
           </Text>
         </View>
-        <AppButton label="やることリストへもどる" tone="child" fullWidth onPress={() => router.replace("/child/home")} />
+        <AppButton label="もどる" tone="child" fullWidth onPress={() => router.replace("/child/home")} />
       </Screen>
     );
   }

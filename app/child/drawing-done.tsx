@@ -25,7 +25,7 @@ export default function ChildDrawingDoneScreen() {
           だれかが みつけてくれるまで{"\n"}ないしょだよ
         </Text>
         <AppButton
-          label="ホームに もどる"
+          label="もどる"
           tone="child"
           fullWidth
           style={{ marginTop: theme.spacing.s8 }}

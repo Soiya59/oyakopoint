@@ -59,7 +59,7 @@ export default function ChildTreeDecorateScreen() {
       <Screen tone="child">
         <Text style={theme.typography.childBody}>たいしょうが みつかりませんでした</Text>
         <AppButton
-          label="やることリストへもどる"
+          label="もどる"
           tone="child"
           style={{ marginTop: theme.spacing.s6 }}
           onPress={() => router.replace("/child/home")}

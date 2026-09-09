@@ -29,7 +29,7 @@ export default function ChildInboxScreen() {
       <InboxPanel tone="child" memberId={state.activeChildMemberId} />
 
       <AppButton
-        label="やることリストへもどる"
+        label="もどる"
         tone="child"
         variant="secondary"
         style={{ marginTop: theme.spacing.s6 }}

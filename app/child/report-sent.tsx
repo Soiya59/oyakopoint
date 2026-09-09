@@ -119,7 +119,7 @@ export default function ReportSentScreen() {
       </View>
 
       <AppButton
-        label="やることリストへもどる"
+        label="もどる"
         tone="child"
         fullWidth
         style={{ marginTop: theme.spacing.s8 }}
