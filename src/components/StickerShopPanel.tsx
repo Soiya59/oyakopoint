@@ -202,10 +202,19 @@ export function StickerShopPanel({
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
-      <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s4 }}>
+      {/* [2026-09-09改訂] 生き物どうしの間隔をs4→s6に広げた（上記の見出しの改訂と
+          あわせて区切りを作る）。 */}
+      <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s6 }}>
         {byShape.map(({ shape, items }) => (
           <View key={shape}>
-            <Text style={[captionStyle, styles.shapeHeading]}>{isChild ? shapeLabel[shape].child : shapeLabel[shape].parent}</Text>
+            {/* [2026-09-09改訂・本部長／軽微変更ルート] 統括の実機確認「なんか各生き物の
+                区切りがわかりにくい気がする」。原因は、**形の見出しと、行の下の説明
+                （「きんは、ぎんを だれかが かうと ひらくよ」）が同じ大きさ・同じ色**
+                だったこと。どちらもcaptionStyle＋neutralTextSecondaryで、どこで
+                一つの生き物が終わって次が始まるのかが読み取れなかった。
+                見出しだけbodyMediumStyle＋濃い文字色にして、**強い見出しで始まり、
+                弱い説明で終わる**という上下関係を作る。 */}
+            <Text style={[bodyMediumStyle, styles.shapeHeading]}>{isChild ? shapeLabel[shape].child : shapeLabel[shape].parent}</Text>
             <View style={styles.row}>
               {items.map((item, index) => {
                 const affordable = balance >= item.points_cost;
@@ -342,7 +351,7 @@ export function StickerShopPanel({
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  shapeHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
+  shapeHeading: { color: theme.colors.neutralTextPrimary, marginBottom: theme.spacing.s2 },
   row: { flexDirection: "row", gap: theme.spacing.s2 },
   arrow: { color: theme.colors.neutralTextSecondary, alignSelf: "center" },
   rowUnlockHint: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
