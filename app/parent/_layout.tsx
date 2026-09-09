@@ -45,7 +45,7 @@ export default function ParentLayout() {
     status === "signedOut" || status === "parentNoFamily"
       ? "/"
       : status === "supporter"
-      ? "/supporter/home"
+      ? "/supporter/family"
       : status === "child"
       ? "/child/home"
       : null; // "loading" と "parent" はリダイレクトしない

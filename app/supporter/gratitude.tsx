@@ -98,7 +98,7 @@ export default function SupporterGratitudeHubScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>感謝ポイント</Text>
 
       {toast && (
@@ -187,7 +187,7 @@ export default function SupporterGratitudeHubScreen() {
             label="ホームへ戻る"
             variant="ghost"
             style={{ marginTop: theme.spacing.s6 }}
-            onPress={() => router.replace("/supporter/home")}
+            onPress={() => router.replace("/supporter/self")}
           />
         </>
       )}

@@ -108,7 +108,7 @@ export default function SupporterHistoryScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>きろく</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: theme.spacing.s3 }}>
@@ -238,7 +238,7 @@ export default function SupporterHistoryScreen() {
         label="ホームへ戻る"
         variant="ghost"
         style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.replace("/supporter/home")}
+        onPress={() => router.replace("/supporter/self")}
       />
     </Screen>
   );

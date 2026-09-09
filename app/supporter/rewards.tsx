@@ -73,7 +73,7 @@ export default function SupporterRewardsScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <View style={styles.header}>
         <Text style={theme.typography.supporterTitle}>じぶんのごほうび</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/reward-edit")} />
@@ -223,7 +223,7 @@ export default function SupporterRewardsScreen() {
         </Card>
       </Pressable>
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/supporter/home")} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/supporter/self")} />
     </Screen>
   );
 }

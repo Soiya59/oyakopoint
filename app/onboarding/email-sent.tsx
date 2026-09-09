@@ -48,7 +48,7 @@ export default function EmailSentScreen() {
     if (status === "parent") {
       router.replace("/parent/home");
     } else if (status === "supporter") {
-      router.replace("/supporter/home");
+      router.replace("/supporter/family");
     } else if (status === "child") {
       router.replace("/child/home");
     } else if (status === "parentNoFamily") {

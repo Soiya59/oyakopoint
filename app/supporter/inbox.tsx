@@ -18,7 +18,7 @@ export default function SupporterInboxScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/family")} />
 
       <Text style={theme.typography.supporterTitle}>🔔 とどいたもの</Text>
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
@@ -32,7 +32,7 @@ export default function SupporterInboxScreen() {
         label="ホームへ戻る"
         variant="ghost"
         style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.replace("/supporter/home")}
+        onPress={() => router.replace("/supporter/family")}
       />
     </Screen>
   );

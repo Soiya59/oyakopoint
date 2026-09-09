@@ -33,8 +33,13 @@
  * したがって本フック自体はロールを判別せず`family_home_card`の生データをそのまま
  * 返し、「source==='weekly_digest'の場合にまとめメッセージを表示するか、それとも
  * 空状態として扱うか」はP7/C5とS1で異なる判断になるため、呼び出し側
- * （app/parent/home.tsx・app/child/(tabs)/home.tsx・app/supporter/home.tsx）の
+ * （app/parent/home.tsx・app/child/(tabs)/home.tsx・app/supporter/(tabs)/family.tsx）の
  * 表示ロジックに委ねる（本フックはデータ取得のみに責務を絞る）。
+ *
+ * [2026-09-09追記・実装メモ.md 182章] S1みまもりホーム廃止（35章）に伴い、S1固有の
+ * 判断（上記段落）を引き継いだ呼び出し元は`app/supporter/home.tsx`から
+ * `app/supporter/(tabs)/family.tsx`へ移った。判断ロジック自体（S1は
+ * weekly_digestへフォールバックしない）は変更していない。
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";

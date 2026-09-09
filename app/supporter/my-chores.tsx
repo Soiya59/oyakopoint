@@ -122,7 +122,7 @@ export default function SupporterMyChoresScreen() {
     // app/parent/my-chores.tsx と同じ。
     <View style={{ flex: 1 }}>
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
+      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <View style={styles.header}>
         <Text style={theme.typography.supporterTitle}>じぶんのクエスト</Text>
         <AppButton tone="supporter" label="＋ 新規" variant="secondary" onPress={() => router.push("/supporter/chore-edit")} />
@@ -273,7 +273,7 @@ export default function SupporterMyChoresScreen() {
         </>
       )}
 
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
+      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/self")} />
     </Screen>
 
     {celebration && (

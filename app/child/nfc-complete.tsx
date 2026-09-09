@@ -52,7 +52,7 @@ export default function NfcCompleteScreen() {
     result === "approved" ? ownerMemberId ?? "" : ""
   );
 
-  const homePath = isChild ? "/child/home" : isSupporter ? "/supporter/home" : "/parent/home";
+  const homePath = isChild ? "/child/home" : isSupporter ? "/supporter/family" : "/parent/home";
   const goHome = () => router.replace(homePath);
 
   // 主要画面ワイヤーフレーム.md 7.6.4節「演出タイムラインと自動遷移」: 即時加点状態

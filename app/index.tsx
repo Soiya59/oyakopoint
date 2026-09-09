@@ -24,8 +24,10 @@ export default function WelcomeScreen() {
       router.replace("/parent/home");
     } else if (status === "supporter") {
       // [2026-08-22追加] みまもりメンバー（要件定義書07-7章）。ログイン済みの場合は
-      // 保護者と同様に自動的に専用ホーム（S1）へ遷移する。
-      router.replace("/supporter/home");
+      // 保護者と同様に自動的に専用ホーム（かぞくタブ）へ遷移する。
+      // [2026-09-09変更・実装メモ.md 182章] S1廃止（35章）に伴い遷移先を
+      // `/supporter/family`（かぞくタブ、初期表示）へ変更。
+      router.replace("/supporter/family");
     } else if (status === "child") {
       router.replace("/child/home");
     }

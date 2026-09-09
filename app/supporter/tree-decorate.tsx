@@ -52,7 +52,7 @@ export default function SupporterTreeDecorateScreen() {
     return (
       <Screen tone="supporter">
         <Text style={theme.typography.supporterBody}>対象が見つかりませんでした</Text>
-        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
+        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/family")} />
       </Screen>
     );
   }

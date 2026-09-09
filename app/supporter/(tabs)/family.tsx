@@ -5,32 +5,41 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
+import { StageDot } from "@/components/FamilyTree";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
-import ScreenBackLink from "@/components/ScreenBackLink";
+import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
+import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
- * S2 完了報告一覧・リアクション（みまもりメンバービュー）
- * 参照: 画面一覧・遷移図.md 2.5節S2・3.12節、P8（app/parent/approvals.tsx）と同一構成
+ * S2 かぞく区画の入口（完了報告一覧・リアクション。旧S1みまもりホームの
+ * 「まとめ」要素を吸収）
+ * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 35.6.1節、
+ * 画面一覧・遷移図.md 2.5節S2・3.12節
  *
- * P8「見る」「（任意で）スタンプ／コメントを贈る」の2操作をそのまま踏襲する。
- * 対象は家族全員の完了報告（自分専用choreも含め、`chore_completions_select_scoped`
- * RLSにより`family_id`が一致する全ての完了報告がこのクエリ結果に含まれるため、
- * クライアント側で追加のフィルタは不要）。
+ * [2026-09-09改訂・実装メモ.md 182章] S1みまもりホーム廃止（35章）に伴い、
+ * このファイル（旧`app/supporter/activity.tsx`）を「かぞく」タブの入口画面に
+ * 昇格させた。「新しい画面を作らない。既存のS2に、現行S1が持つ『まとめ』要素を
+ * ヘッダーとして追加するだけで成立する」（35.6.1節）という設計方針のとおり、
+ * S2本体（完了報告一覧・スタンプ・コメント・取消）のロジックは変更していない。
+ * 旧S1が持っていた「共通ヘッダー（アバター＋家族名＋ベル）」「家族の木・
+ * コレクションへのショートカット」「かぞくのけいじばんカード」の3つを、
+ * 完了報告一覧の上に追加した。「最近のようす」プレビュー（旧S1）は、
+ * タブ化によって『かぞくタブを開く＝もう完了報告一覧そのものにいる』状態に
+ * なるため削除した（35.6.1節「プレビューという概念自体が不要になる」）。
  *
- * [2026-08-23改訂] 要件定義書07-7章4回目のスコープ変更により、みまもりメンバーは
- * 家族共有choreへの参加機能自体を持たなくなった。これに伴い🤝／🎯バッジ
- * （旧デザイントークン.md 1.7節）も廃止したため、本画面のバッジ表示コードを削除した
- * （5回目のスコープ変更で自分専用choreの完了報告が家族全員に公開されるようになった
- * 後も、🤝／🎯バッジは復活させない。可視性・リアクションの変更にとどめる）。
+ * URLが `/supporter/activity` → `/supporter/family` に変わる。旧URLへの
+ * リンクは家族の掲示板等の外部通知には含まれておらず（実装メモ182章で確認済み）、
+ * アプリ内の参照はすべて本改修で書き換えた。
  */
 type LoadState = "loading" | "error" | "ready";
 
-export default function SupporterActivityScreen() {
+export default function SupporterFamilyScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
@@ -38,9 +47,6 @@ export default function SupporterActivityScreen() {
   const [sendingComment, setSendingComment] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
 
-  // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
-  // 主要画面ワイヤーフレーム.md 28.6節。みまもりメンバーは自分の報告のみ取り消せ、
-  // 確認ダイアログは無い（常に本人操作のため。28.0節決定5）。
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
@@ -56,14 +62,38 @@ export default function SupporterActivityScreen() {
     if (!loading) setLoadState(loadError ? "error" : "ready");
   }, [loading, loadError]);
 
+  // [2026-09-09追加・35.5節] 共通ヘッダー（左: アバター＋自分の名前・非タップ。
+  // みまもりメンバーには子ども選択機能を拡張しない。中央: 家族名。右: ベル→S22）。
+  const myMember = state.members.find((m) => m.id === myId);
+  const inboxCount = countRecentInbox(state, myId, Date.now() - 24 * 60 * 60 * 1000);
+
+  // [2026-09-09追加・35.6.1節] 「入口の上部ウィジェットから常時アクセス」。
+  // useFamilyTreeSummaryは元々「P7/C5/S1ホームウィジェット用の軽量版」として
+  // 設計されていたが、旧S1では未使用だった（src/hooks/useFamilyTree.ts冒頭コメント）。
+  // 新しい通信は発生しない（P7が既に使っているのと同じ1回のGET）。
+  const { season: treeSeason } = useFamilyTreeSummary();
+
+  const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
+  const hasBoardPost = card?.source === "board_post";
+  const cardAuthorName = hasBoardPost
+    ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
+    : null;
+  const cardTime =
+    hasBoardPost && card.board_post_created_at
+      ? new Date(card.board_post_created_at).toLocaleString("ja-JP", {
+          month: "numeric",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+
   const completions = [...state.completions].sort(
     (a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()
   );
 
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
-  // 取消、違うスタンプをタップすると切替になる（統括指示）。
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
     setReactionError(null);
     const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
@@ -113,8 +143,77 @@ export default function SupporterActivityScreen() {
 
   return (
     <Screen tone="supporter">
-      <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/home")} />
-      <Text style={theme.typography.supporterTitle}>かぞくのようす</Text>
+      <View style={styles.headerRow}>
+        {myMember && (
+          <View style={styles.headerMe}>
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} />
+            <Text style={theme.typography.supporterTitle}>{myMember.display_name}</Text>
+          </View>
+        )}
+        <Text style={[theme.typography.supporterTitle, styles.headerFamilyName]}>{state.family.name}</Text>
+        <Pressable onPress={() => router.push("/supporter/inbox")} hitSlop={8} style={styles.bellHit}>
+          <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
+        </Pressable>
+      </View>
+
+      {/* [2026-09-09追加・35.6.1節「アイコン横1列のショートカット（21.1節・22.1節と同型）」] */}
+      <View style={styles.widgetRow}>
+        <Pressable onPress={() => router.push("/supporter/family-tree")} style={styles.widgetItem}>
+          <Card tone="supporter" style={styles.widgetCard}>
+            <StageDot color={theme.treeColors.foliageBase} size={32} stage={treeSeason?.current_stage ?? 0} />
+            <View style={{ flex: 1, marginLeft: theme.spacing.s2 }}>
+              <Text style={theme.typography.supporterBodyMedium}>🌳 家族の木</Text>
+              <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
+                いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
+              </Text>
+            </View>
+          </Card>
+        </Pressable>
+        <Pressable onPress={() => router.push("/supporter/collector-shelf")} style={styles.widgetItem}>
+          <Card tone="supporter" style={styles.widgetCard}>
+            <Text style={{ fontSize: 28 }}>🗄️</Text>
+            <Text style={[theme.typography.supporterBodyMedium, { marginLeft: theme.spacing.s2 }]}>コレクション</Text>
+          </Card>
+        </Pressable>
+      </View>
+
+      {cardLoadState === "error" ? (
+        <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={theme.typography.supporterBodyMedium}>かぞくのけいじばん</Text>
+          <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
+        </Card>
+      ) : (
+        <Pressable onPress={() => router.push("/supporter/family-board")}>
+          <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.supporterBodyMedium}>📮 かぞくのけいじばん</Text>
+              <Text style={theme.typography.supporterBodyMedium}>›</Text>
+            </View>
+            {cardLoadState === "loading" ? (
+              <View style={styles.digestSkeleton} />
+            ) : hasBoardPost ? (
+              <>
+                {cardAuthorName !== null && (
+                  <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+                )}
+                <Text style={{ marginTop: theme.spacing.s1 }}>{card.message}</Text>
+                {cardTime !== null && (
+                  <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                    {cardTime}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={{ marginTop: theme.spacing.s2 }}>
+                まだ書き込みはありません。家族のようすを、ひとことシェアしてみませんか
+              </Text>
+            )}
+          </Card>
+        </Pressable>
+      )}
+
+      {/* ここから下は既存S2本体（変更なし）。 */}
+      <Text style={[theme.typography.supporterBodyMedium, styles.sectionHeading]}>完了報告一覧</Text>
 
       {loadState === "loading" && <SkeletonList count={3} />}
 
@@ -145,9 +244,6 @@ export default function SupporterActivityScreen() {
                   <Text style={theme.typography.supporterCaption}>
                     {formatDateTimeShort(c.reported_at)}
                   </Text>
-                  {/* [2026-09-03追加] 28.6節。「じぶん」の行（報告から1分以内のみ）に
-                      「取消」リンクを追加する。他者の報告への取消権限は無い（07-7章）ため
-                      確認ダイアログは無い（常に本人操作、28.0節決定5）。 */}
                   {isOwnCard && isWithinCancelWindow(c.reported_at) && (
                     <Pressable
                       onPress={(e) => {
@@ -194,12 +290,9 @@ export default function SupporterActivityScreen() {
           );
         })}
 
-      {/* [2026-09-03追加] 28.6節「取消成功」のスナックバー相当（1.5秒で自動消滅）。 */}
       {cancelFlashMessage && (
         <Text style={[theme.typography.supporterCaption, styles.cancelFlash]}>{cancelFlashMessage}</Text>
       )}
-
-      <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/home")} />
 
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>
@@ -320,10 +413,17 @@ export default function SupporterActivityScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  headerMe: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },
+  bellHit: { minHeight: theme.tapTarget.supporterPrimary, justifyContent: "center", paddingLeft: theme.spacing.s2 },
+  notifBadge: { fontSize: 17, fontWeight: "700" },
+  widgetRow: { flexDirection: "row", gap: theme.spacing.s3, marginTop: theme.spacing.s4 },
+  widgetItem: { flex: 1 },
+  widgetCard: { flexDirection: "row", alignItems: "center" },
   card: { marginTop: theme.spacing.s3 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   cardMeta: { marginTop: theme.spacing.s2 },
-  // [2026-09-03追加] 28.6節。
   cardMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
   cancelRowError: { marginTop: 2, color: theme.colors.statusBlocking },
@@ -345,6 +445,19 @@ const styles = StyleSheet.create({
   },
   stampEmoji: { fontSize: 18 },
   commentLink: { color: theme.colors.supporterAccent, fontWeight: "700" },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  digestSkeleton: {
+    marginTop: theme.spacing.s2,
+    height: 18,
+    borderRadius: theme.radius.parentMd,
+    backgroundColor: theme.colors.neutralBorder,
+    opacity: 0.6,
+  },
+  sectionHeading: {
+    marginTop: theme.spacing.s6,
+    marginBottom: theme.spacing.s2,
+    color: theme.colors.supporterAccent,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

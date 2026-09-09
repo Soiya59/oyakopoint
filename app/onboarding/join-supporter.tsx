@@ -154,7 +154,7 @@ export default function JoinSupporterScreen() {
       );
       return;
     }
-    router.replace("/supporter/home");
+    router.replace("/supporter/family");
   };
 
   if (previewState === "loading") {
