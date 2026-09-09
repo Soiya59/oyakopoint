@@ -52,7 +52,13 @@ export const ALL_MEMBERS_ID = "__all__";
 const stickerShapeLabel: Record<StickerShape, { child: string; parent: string }> = {
   beetle: { child: "カブトムシ", parent: "カブトムシ" },
   butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
-  flower: { child: "はな", parent: "小さな花" },
+  // [2026-09-09変更・統括判断] 「小さな花」→「おはな」。大人向け・子ども向けとも同じ。
+  // メダルは4種とも同じ大きさで、花だけ「小さな」と名乗る理由が無かった
+  // （カブトムシ・ちょうちょ・ドラゴンは大きさを言っていない）。
+  // 「はな」ではなく「おはな」にしたのは、**ひらがなの「はな」は鼻とも読める**ため。
+  // 絵を見る前に何のことか分かるようにした。DB側の表示名も
+  // 20260919010000_flower_display_name_ohana.sql で「どうのおはな」等に揃えてある。
+  flower: { child: "おはな", parent: "おはな" },
   // [2026-09-09追加・本部長／実装メモ177章] StickerShopPanel.tsxと同じ表記。
   dragon: { child: "ドラゴン", parent: "ドラゴン" },
 };
