@@ -43,7 +43,7 @@ export function ChoreSuggestionsModal({ visible, onClose, onSelect }: ChoreSugge
           </View>
 
           <Text style={[theme.typography.parentBody, styles.intro]}>
-            ポイントはめやすです。おうちに合わせて選んだあと、自由に変えられます。
+            ポイントは目安です。おうちに合わせて選んだあと、自由に変えられます。
           </Text>
 
           <View style={styles.filterRow}>
@@ -78,7 +78,7 @@ export function ChoreSuggestionsModal({ visible, onClose, onSelect }: ChoreSugge
                   {s.emoji} {s.title}
                 </Text>
                 <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-                  {s.points}pt（めやす）{s.frequency}
+                  {s.points}pt（目安）{s.frequency}
                 </Text>
               </Pressable>
             ))}

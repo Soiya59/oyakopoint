@@ -215,9 +215,9 @@ export default function RewardEditScreen() {
       </Text>
 
       {/* [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.0節決定6。プレフィル直後のみ、
-          「ポイントはめやすである」ことを軽い注記として重ねて伝える。 */}
+          「ポイントは目安である」ことを軽い注記として重ねて伝える。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>
-        {recommendation ? "コスト（めやす。自由に変更できます）" : "コスト（1以上の整数）"}
+        {recommendation ? "コスト（目安。自由に変更できます）" : "コスト（1以上の整数）"}
       </Text>
       <TextInput
         value={costText}
