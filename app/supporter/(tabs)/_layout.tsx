@@ -54,6 +54,10 @@ export default function SupporterTabsLayout() {
     >
       {/* 決定2（35.1節）: 起動後・ログイン後に最初に開くタブは「かぞく」。
           Tabsは最初に列挙したScreenを初期タブとして扱う（子どもの(tabs)と同じ挙動）。 */}
+      {/* [2026-09-09・統括指示「かぞくじぶん木にして」] 並びは かぞく → じぶん → 木。
+          当初は「主役を中央に」という理由で かぞく → 木 → じぶん にしていたが、
+          統括の指示で木を最後にした。**じぶんまでが自分と家族の日常で、木はその結果**
+          という並びになり、左から右へ意味が流れる。 */}
       <Tabs.Screen
         name="family"
         options={{
@@ -61,21 +65,18 @@ export default function SupporterTabsLayout() {
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>👨‍👩‍👧‍👦</Text>,
         }}
       />
-      {/* [2026-09-09追加・実装メモ.md 186章] 「木」タブ。中身は既存の
-          `app/supporter/family-tree.tsx`をそのまま委譲表示する（新しい画面を
-          作らない。`app/supporter/(tabs)/tree.tsx`参照）。 */}
-      <Tabs.Screen
-        name="tree"
-        options={{
-          title: "木",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌳</Text>,
-        }}
-      />
       <Tabs.Screen
         name="self"
         options={{
           title: "じぶん",
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌟</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="tree"
+        options={{
+          title: "木",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌳</Text>,
         }}
       />
     </Tabs>
