@@ -66,12 +66,15 @@ export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
   }
   try {
     const url = buildWebAppUrl("/child/nfc-scan", { tagValue });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // NDEFReaderはWeb NFC APIの型定義が標準のlibに無いためanyで受ける。
+    // [2026-09-09] 元は@typescript-eslint/no-explicit-anyのdisableコメントだったが、
+    // 本プロジェクトのESLintはフックの規則2つに絞っており同ルールを読み込まないため、
+    // 「定義の無いルールへのdisable」としてエラーになる。理由を残す普通のコメントにした。
     const ndef = new (window as any).NDEFReader();
     await ndef.write({ records: [{ recordType: "url", data: url }] });
     return { ok: true, tagValue };
   } catch (e) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // catchのeはunknownのためanyで受けてnameを読む（上と同じ理由でdisableコメントは外した）。
     const name = (e as any)?.name;
     if (name === "NotAllowedError" || name === "AbortError") {
       return { ok: false, errorReason: "cancelled" };

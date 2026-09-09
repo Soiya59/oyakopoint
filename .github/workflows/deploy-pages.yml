@@ -23,6 +23,13 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      # [2026-09-09追加・本部長] フックの規則違反をここで止める。
+      # 2026-09-09、useStateを早期リターンより後ろに置いたままデプロイし、
+      # 本番でメダル購入画面が表示できなくなった（実装メモ177章）。
+      # `tsc --noEmit`は型の問題ではないこの誤りを検出しない。
+      # **lintが落ちたらデプロイもしない。**この順序を入れ替えないこと。
+      - run: npm run lint
+      - run: npx tsc --noEmit
       - run: npx expo export -p web
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}

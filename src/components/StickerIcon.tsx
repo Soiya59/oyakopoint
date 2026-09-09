@@ -30,7 +30,7 @@
  * 無くなり不要になった。呼び出し側からも`uid`の指定を取り除いた（149章）。
  */
 import React from "react";
-import { Image } from "react-native";
+import { Image, View } from "react-native";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 
 // ---- 12種×2解像度の静的import ----
@@ -106,7 +106,27 @@ export interface StickerIconProps {
 }
 
 export function StickerIcon({ shape, rarity, size, highRes = false }: StickerIconProps) {
-  const images = STICKER_IMAGES[shape][rarity];
+  // [2026-09-09追加・本部長／軽微変更ルート] 対応する画像が無いときに落ちないようにする。
+  //
+  // 従来は`STICKER_IMAGES[shape][rarity].full`と素で辿っていたため、**表に無い形か
+  // 段階が1つ来ただけで例外になり、この絵を含む画面（メダル購入・コレクション・木）が
+  // まるごと表示できなくなった。**
+  //
+  // 実際に起こりうる。(1) `assets/stickers/`には7形ぶんの画像があるのに、この表には
+  // beetle・butterfly・flowerの3形しか無い（acorn・bird・dragon・carは未登録。
+  // やること5-9でカタログに載せた瞬間ここを通る）。(2) DBのレアリティを2026-09-08に
+  // rainbow→crystalへ改称したように、DB側の値が先に変わってアプリが追いつく前の
+  // 一瞬でも同じことが起きる。
+  //
+  // **1枚の絵が出ないことと、画面がまるごと出ないことは重さが違う。**前者に倒す。
+  const images = STICKER_IMAGES[shape]?.[rarity];
+  if (!images) {
+    if (__DEV__) {
+      console.warn(`StickerIcon: 画像が未登録です（shape=${shape} rarity=${rarity}）`);
+    }
+    // 場所だけ確保して何も描かない（周りのレイアウトを崩さないため）。
+    return <View style={{ width: size, height: size }} />;
+  }
   const source = highRes || size > SM_THRESHOLD ? images.full : images.sm;
   return <Image source={source} resizeMode="contain" style={{ width: size, height: size }} />;
 }
