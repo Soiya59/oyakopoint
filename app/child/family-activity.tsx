@@ -148,6 +148,21 @@ export default function FamilyActivityScreen() {
                     </Pressable>
                   );
                 })}
+                {/* [2026-09-09追加・本部長／軽微変更ルート] 統括の実機確認「保護者画面と
+                    同じように+コメントという記載をしてもいいかも。いまは、開かないと
+                    コメントができるとわからないので」。P8保護者・S17みまもりのカードには
+                    元から同じ位置に「＋コメント」があったのに、C19子どもだけ無く、
+                    カードを開くまでひとことを送れることが分からなかった。
+                    **本日子ども同士のリアクションを解禁したばかりで（175章）、
+                    使えることが見えないと機能が無いのと同じになる。**
+                    文言は「＋コメント」ではなく「＋ひとこと」にした。子ども向け画面は
+                    この機能を一貫して「ひとこと」と呼んでおり（開いた先の見出しも
+                    「ひとことおくる（にんい）」）、カードだけ大人の語にすると
+                    押した先で呼び名が変わってしまうため。 */}
+                <Text style={{ flex: 1 }} />
+                <Pressable onPress={() => openDetail(c)} hitSlop={8}>
+                  <Text style={styles.commentLink}>＋ひとこと</Text>
+                </Pressable>
               </View>
             </Card>
           </Pressable>
@@ -266,6 +281,7 @@ const styles = StyleSheet.create({
   // `supporterAccentSoft`の控えめな配色で区別する（画面一覧・遷移図.md C18行参照）。
   cardSupporterTint: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
   cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
+  commentLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   dateLabel: { marginTop: theme.spacing.s1, fontSize: 12, color: theme.colors.neutralTextSecondary },
   supporterLink: { textAlign: "center", marginTop: theme.spacing.s4, color: theme.colors.supporterAccent },
   stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
