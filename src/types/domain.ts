@@ -144,7 +144,9 @@ export interface ChoreCompletion {
   // 承認/差し戻しという状態遷移自体が無くなり、chore_completionsはINSERTのみの
   // 追記専用ログになった（UPDATE経路自体が存在しない）。
   points: number;
-  photo_url: string | null;
+  // [2026-09-09削除] 証拠写真機能の残骸撤去（やること.md 5-4、開発部/成果物/
+  // 実装メモ.md 180章）。photo_url列はDBから削除済み（マイグレーション
+  // 20260917020000_drop_chore_photos.sql）。
   note: string | null; // 子どもが完了報告時に書くひとことメモ（任意）
   reported_at: string;
   // [2026-08-23削除] みまもりメンバー対応（要件定義書07-7章、スキーマ設計.sql 21章）で

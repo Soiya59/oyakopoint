@@ -719,7 +719,6 @@ function reducer(state: State, action: Action): State {
         chore_emoji: chore.emoji,
         reported_by: action.reportedBy,
         points: chore.points,
-        photo_url: null,
         note: action.note,
         reported_at: now,
       };

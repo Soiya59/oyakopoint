@@ -44,13 +44,14 @@ export default function ChildReportScreen() {
 
   /**
    * API仕様.md 4章「完了報告」相当。
-   * 手順2（写真添付・任意）: supabase.storage.from('chore-photos').upload(...)
-   * 手順3: supabase.from('chore_completions').insert({ chore_id, reported_by, note })
+   * 手順: supabase.from('chore_completions').insert({ chore_id, reported_by, note })
    *
    * [2026-08-29] 証拠写真機能の廃止（2026-08-24決定）により、写真アップロードの手順と
    * 「アップロード失敗時は静かに写真無しで続行する」という設計はまるごと削除した。
-   * Storageバケット `chore-photos` が未作成、またはアップロードに失敗した場合でも、
-   * 写真無しで完了報告そのものは継続できるようにしている。
+   * [2026-09-09削除] Storageバケット `chore-photos` 自体・`chore_completions.photo_url`
+   * 列もDBから削除した（やること.md 5-4、開発部/成果物/実装メモ.md 180章、マイグレーション
+   * 20260917020000_drop_chore_photos.sql）。以下の「失敗時は静かに写真無しで続行する」
+   * 設計の記述は、当時発見された不具合の経緯として残す。
    *
    * [2026-08-20判明・本部長] この「失敗時は静かに写真無しで続行する」設計により、
    * 実際にStorageアップロードが常に失敗していた不具合（子ども用JWTがPostgRESTの

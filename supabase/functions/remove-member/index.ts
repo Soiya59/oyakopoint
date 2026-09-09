@@ -21,11 +21,11 @@
  *     family_member_pins.member_id・push_tokens.member_id は
  *     family_members(id) への CASCADE のため、families削除→
  *     family_members削除の連鎖でさらに連動する）。
- *   - Supabase Storage バケット chore-photos: delete_familyモードでの
- *     証拠写真削除。StorageオブジェクトはRLS対象外のためservice_role
- *     （storage管理API）で実施する（3.4章・5章のフォルダ構成
- *     {family_id}/{completion_id}.jpg に基づき、family_idフォルダごと
- *     削除する）。
+ *   [2026-09-09削除] Supabase Storage バケット chore-photos の削除処理は撤去した。
+ *   証拠写真機能の残骸撤去（やること.md 5-4、開発部/成果物/実装メモ.md 180章）で
+ *   chore-photosバケット自体をDBから削除した（マイグレーション
+ *   20260917020000_drop_chore_photos.sql）ため、delete_familyモードでバケットを
+ *   探して削除する処理は対象が存在せず不要になった。
  *
  * 認証: 必須（保護者のJWT）。
  * なぜservice_roleが必要か: family_membersにDELETEポリシーを一切定義して
@@ -48,8 +48,6 @@ import { jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabaseAdmin.ts";
 import { env } from "../_shared/env.ts";
 import { resolveFamilyMemberCaller, ParentAuthError } from "../_shared/parentAuth.ts";
-
-const CHORE_PHOTOS_BUCKET = "chore-photos"; // 認証・データ管理設計書.md 5章
 
 Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflight(req);
@@ -188,35 +186,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "forbidden" }, 403);
   }
 
-  // Supabase Storageの証拠写真を削除する（5章のフォルダ構成
-  // {family_id}/{completion_id}.jpg に従い、family_idフォルダごと削除）。
-  //
-  // [実装判断] Storage削除に失敗しても families 行の削除（退会処理本体）は
-  // 継続する。Storageのライフサイクルルール（5章、90日で自動削除）が
-  // 最終的な安全網になるため、Storage側の一時的な失敗で保護者の削除
-  // リクエストそのものをブロックしない方が妥当と判断した。失敗はログに
-  // 残す。
-  try {
-    const { data: files, error: listError } = await admin.storage
-      .from(CHORE_PHOTOS_BUCKET)
-      .list(caller.familyId);
-
-    if (listError) {
-      console.error("remove-member: storage list failed", listError);
-    } else if (files && files.length > 0) {
-      const paths = files.map(
-        (f: { name: string }) => `${caller.familyId}/${f.name}`
-      );
-      const { error: removeError } = await admin.storage
-        .from(CHORE_PHOTOS_BUCKET)
-        .remove(paths);
-      if (removeError) {
-        console.error("remove-member: storage remove failed", removeError);
-      }
-    }
-  } catch (storageException) {
-    console.error("remove-member: storage cleanup threw", storageException);
-  }
+  // [2026-09-09削除] Supabase Storageの証拠写真削除処理は撤去した。証拠写真機能の
+  // 残骸撤去（やること.md 5-4、開発部/成果物/実装メモ.md 180章）でchore-photos
+  // バケット自体を削除した（マイグレーション20260917020000_drop_chore_photos.sql）
+  // ため、対象が存在せず不要になった。
 
   // families行をDELETE。ON DELETE CASCADEで家族に紐づく全データが削除される
   // （このファイル冒頭コメント参照）。
