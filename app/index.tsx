@@ -21,7 +21,7 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     if (status === "parent") {
-      router.replace("/parent/home");
+      router.replace("/parent");
     } else if (status === "supporter") {
       // [2026-08-22追加] みまもりメンバー（要件定義書07-7章）。ログイン済みの場合は
       // 保護者と同様に自動的に専用ホーム（かぞくタブ）へ遷移する。
@@ -89,7 +89,7 @@ export default function WelcomeScreen() {
             <AppButton
               label="保護者ホームを見る"
               variant="ghost"
-              onPress={() => router.push("/parent/home")}
+              onPress={() => router.push("/parent")}
             />
             <AppButton
               label="子どもホームを見る"

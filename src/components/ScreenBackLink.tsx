@@ -21,7 +21,7 @@ import theme from "@/theme/theme";
 
 export interface ScreenBackLinkProps {
   tone: "parent" | "supporter";
-  /** 押したときの遷移。ホームへ戻す場合は router.replace("/parent/home") 等を渡す。 */
+  /** 押したときの遷移。ホームへ戻す場合は router.replace("/parent") 等を渡す。 */
   onPress: () => void;
   /** 既定は「← ホームへ戻る」。別の場所へ戻す画面はここで上書きする。 */
   label?: string;

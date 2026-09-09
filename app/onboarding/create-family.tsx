@@ -36,7 +36,7 @@ export default function CreateFamilyScreen() {
     }
     await refreshParentMember();
     setSubmitting(false);
-    router.replace("/parent/home");
+    router.replace("/parent");
   };
 
   return (

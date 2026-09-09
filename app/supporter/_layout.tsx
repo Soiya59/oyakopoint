@@ -31,7 +31,7 @@ export default function SupporterLayout() {
     status === "signedOut" || status === "parentNoFamily"
       ? "/"
       : status === "parent"
-      ? "/parent/home"
+      ? "/parent"
       : status === "child"
       ? "/child/home"
       : null; // "loading" と "supporter" はリダイレクトしない

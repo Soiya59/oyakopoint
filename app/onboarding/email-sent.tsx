@@ -46,7 +46,7 @@ export default function EmailSentScreen() {
   // 経路だけがそこを通らないため、同じ判定を持たせる必要があった。
   useEffect(() => {
     if (status === "parent") {
-      router.replace("/parent/home");
+      router.replace("/parent");
     } else if (status === "supporter") {
       router.replace("/supporter/family");
     } else if (status === "child") {

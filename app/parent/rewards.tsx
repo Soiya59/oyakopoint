@@ -66,7 +66,7 @@ export default function RewardsListScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <View style={styles.header}>
         <Text style={theme.typography.parentTitle}>ごほうび管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/reward-edit")} />
@@ -153,7 +153,7 @@ export default function RewardsListScreen() {
       )}
 
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

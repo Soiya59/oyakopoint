@@ -43,7 +43,7 @@ export default function ParentFamilyTreeScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <View style={styles.headerRow}>
         <Text style={theme.typography.parentTitle}>家族の木</Text>
         <Text style={{ flex: 1 }} />
@@ -119,7 +119,7 @@ export default function ParentFamilyTreeScreen() {
         </Card>
       )}
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

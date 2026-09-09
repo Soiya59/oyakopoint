@@ -143,7 +143,7 @@ export default function ApprovalsScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <View style={styles.header}>
         <Text style={theme.typography.parentTitle}>完了報告</Text>
         <Text style={{ color: theme.colors.neutralTextSecondary }}>新着{newCount}件</Text>
@@ -265,7 +265,7 @@ export default function ApprovalsScreen() {
       )}
 
       {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
 
       {/* [2026-09-03追加] 28.4節「確認モーダル（自分以外の報告を取り消す場合）」。
           22.4節の削除確認モーダルと同じ構成・トーン。 */}

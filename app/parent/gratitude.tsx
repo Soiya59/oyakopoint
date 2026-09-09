@@ -101,7 +101,7 @@ export default function ParentGratitudeHubScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>感謝ポイント</Text>
 
       {toast && (
@@ -197,7 +197,7 @@ export default function ParentGratitudeHubScreen() {
             label="ホームへ戻る"
             variant="ghost"
             style={{ marginTop: theme.spacing.s6 }}
-            onPress={() => router.replace("/parent/home")}
+            onPress={() => router.replace("/parent")}
           />
         </>
       )}

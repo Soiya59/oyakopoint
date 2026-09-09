@@ -320,7 +320,7 @@ export default function FamilyScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>設定</Text>
 
       <Card style={{ marginTop: theme.spacing.s4 }}>
@@ -675,7 +675,7 @@ export default function FamilyScreen() {
         「家族を削除する」はオーナーにのみ表示されます。
       </Text>
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

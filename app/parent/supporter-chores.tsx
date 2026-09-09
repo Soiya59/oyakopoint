@@ -58,7 +58,7 @@ export default function ParentSupporterChoresScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>かぞくのみまもりメンバーのクエスト</Text>
 
       {loadState === "loading" && (
@@ -126,7 +126,7 @@ export default function ParentSupporterChoresScreen() {
         みんなの参考にどうぞ。ここから直接完了報告・編集・交換はできません
       </Text>
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

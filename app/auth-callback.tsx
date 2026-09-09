@@ -54,7 +54,7 @@ export default function AuthCallbackScreen() {
 
   useEffect(() => {
     if (status === "parent") {
-      router.replace("/parent/home");
+      router.replace("/parent");
     } else if (status === "supporter") {
       // [2026-08-22追加] みまもりメンバーが既存アカウントで再ログインした場合
       // （例: ログアウト後に再度マジックリンクを踏んだ等）。

@@ -21,7 +21,7 @@ export default function ParentInboxScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
 
       <Text style={theme.typography.parentTitle}>🔔 とどいたもの</Text>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
@@ -34,7 +34,7 @@ export default function ParentInboxScreen() {
         label="ホームへ戻る"
         variant="ghost"
         style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.replace("/parent/home")}
+        onPress={() => router.replace("/parent")}
       />
     </Screen>
   );

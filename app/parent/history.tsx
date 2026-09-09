@@ -109,7 +109,7 @@ export default function ParentHistoryScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>きろく</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: theme.spacing.s3 }}>
@@ -241,7 +241,7 @@ export default function ParentHistoryScreen() {
       )}
 
       {/* [2026-08-16修正・本部長] P16・P8と同じ理由でホームへ戻るボタンを追加した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

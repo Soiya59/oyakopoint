@@ -60,7 +60,7 @@ export default function ParentMyRewardsScreen() {
 
   return (
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>じぶんのごほうび</Text>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>いま {balance}pt</Text>
 
@@ -145,7 +145,7 @@ export default function ParentMyRewardsScreen() {
         </Card>
       </Pressable>
 
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
   );
 }

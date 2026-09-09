@@ -122,7 +122,7 @@ export default function ParentMyChoresScreen() {
     // 固定できない。ここでflex:1のViewを一枚かぶせ、その基準で全面に重ねる。
     <View style={{ flex: 1 }}>
     <Screen tone="parent">
-      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/home")} />
+      <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>じぶんのクエスト</Text>
 
       {/* [2026-09-06追加] 28.11.1節「さっきの記録」。該当が無ければブロックごと
@@ -275,7 +275,7 @@ export default function ParentMyChoresScreen() {
           「ホームへ戻る」ボタン（ghost variant・router.back()）のパターンをそのまま
           踏襲した。ワイヤーフレームには画面下部の戻る導線までは明記されていないが、
           既存の他の一覧画面との一貫性を優先した。 */}
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>
 
     {snackbar && (

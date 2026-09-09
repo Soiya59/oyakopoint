@@ -60,7 +60,7 @@ export default function ParentTreeDecorateScreen() {
     return (
       <Screen tone="parent">
         <Text style={theme.typography.parentBody}>対象が見つかりませんでした</Text>
-        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent/home")} />
+        <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
       </Screen>
     );
   }
