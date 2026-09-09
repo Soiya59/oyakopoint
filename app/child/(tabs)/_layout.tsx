@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import { Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import theme from "@/theme/theme";
+import { createTabBarButton } from "@/components/TabBarButton";
 
 /**
  * 子ども向け下部タブ: [🏠やる] [📅きろく] [💰つうちょう] [🎁ごほうび]
@@ -44,6 +45,11 @@ export default function ChildTabsLayout() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
+        // [2026-09-09追加・本部長／軽微変更ルート] 統括の実機確認「選択していることが
+        // もっとわかりやすくしてほしい。下線か、軽く色付けしてほしい」。従来は
+        // tabBarActiveTintColorによる色の違いだけで、絵文字アイコンは色が変わらない
+        // ため実質12pxのラベルの色だけが手がかりだった。下線＋淡い背景を足す。
+        tabBarButton: createTabBarButton(theme.colors.brandPrimaryStrong, theme.colors.brandPrimarySoft),
       }}
     >
       <Tabs.Screen
