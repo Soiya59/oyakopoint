@@ -50,7 +50,9 @@ export default function ParentStickerShopScreen() {
     const res = await purchase(catalogId);
     if (!res.ok) {
       setPurchaseError(res.error.message);
-      return;
+      // [2026-09-09変更] 失敗時はfalseを返し、確認モーダルを開いたままにして
+      // エラー文言を見せる（従来どおりの挙動）。
+      return false;
     }
     const item = catalog.find((c) => c.id === catalogId);
     setSnackbar(`${item?.display_name ?? "メダル"}を購入しました。コレクションに追加されました`);
@@ -59,6 +61,9 @@ export default function ParentStickerShopScreen() {
       setSnackbar(null);
       router.back();
     }, SNACKBAR_DISPLAY_MS);
+    // [2026-09-09追加] 成功をパネルに伝えて確認モーダルを閉じさせる。閉じないと
+    // スナックバーがモーダルの裏に隠れて見えず、しかも「買う」をもう一度押せてしまう。
+    return true;
   };
 
   return (

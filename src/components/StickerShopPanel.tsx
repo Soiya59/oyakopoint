@@ -112,7 +112,14 @@ export interface StickerShopPanelProps {
   purchasing: boolean;
   purchaseErrorMessage: string | null;
   onRetry: () => void;
-  onConfirmPurchase: (catalogId: string) => void;
+  /**
+   * 購入を実行する。**成功したらtrueを返すこと。**
+   * [2026-09-09変更・本部長／軽微変更ルート] 従来は`void`で、パネル側が結果を知る手段が
+   * 無かったため、購入が成功しても確認モーダルが開いたまま残っていた。統括の実機報告
+   * 「メダルを買った後にもう1回メダルを買うっていう画面がポップアップされて間違えて
+   * 押してしまった。間違えて押してしまったら、メダルは2枚購入されていた」。
+   */
+  onConfirmPurchase: (catalogId: string) => Promise<boolean>;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -158,9 +165,23 @@ export function StickerShopPanel({
       .filter((c): c is StickerCatalogItem => !!c),
   }));
 
-  const handleConfirm = () => {
-    if (!selected) return;
-    onConfirmPurchase(selected.id);
+  // [2026-09-09変更・本部長／軽微変更ルート] 購入の成否を待って、成功したら確認モーダルを
+  // 閉じる。従来は結果を待たずに投げっぱなしだったため、購入後も同じ「◯ptで購入します。
+  // よろしいですか？」が「買う」ボタン付きで残り、もう一度押せば本当に2枚目が買えた
+  // （本番で1.2秒差の二重購入を確認。DB側は「何枚でも買える」が確定仕様〈統括判断
+  // 2026-09-08、購入上限の撤廃〉のため、DBは正しく2件目を受け付けていた）。
+  // あわせて、awaitしている間の連打も塞ぐ（`purchasing`の反映を待たずに2回押せる隙間が
+  // あったため、ローカルなガードを重ねる）。
+  const [confirming, setConfirming] = useState(false);
+  const handleConfirm = async () => {
+    if (!selected || confirming) return;
+    setConfirming(true);
+    try {
+      const ok = await onConfirmPurchase(selected.id);
+      if (ok) setSelected(null);
+    } finally {
+      setConfirming(false);
+    }
   };
 
   return (
@@ -269,8 +290,8 @@ export function StickerShopPanel({
                       <AppButton
                         label={isChild ? "かう" : "買う"}
                         tone={tone}
-                        loading={purchasing}
-                        disabled={purchasing}
+                        loading={purchasing || confirming}
+                        disabled={purchasing || confirming}
                         onPress={handleConfirm}
                         style={{ flex: 1 }}
                       />
@@ -278,7 +299,7 @@ export function StickerShopPanel({
                         label="やめておく"
                         tone={tone}
                         variant="ghost"
-                        disabled={purchasing}
+                        disabled={purchasing || confirming}
                         onPress={() => setSelected(null)}
                         style={{ flex: 1 }}
                       />
