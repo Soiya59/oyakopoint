@@ -29,8 +29,29 @@ export default function EmailSentScreen() {
   const { email, intent } = useLocalSearchParams<{ email?: string; intent?: string }>();
   const { status } = useSession();
 
+  // [2026-09-09修正・本部長／軽微変更ルート] 宣伝部からの申し送り（件1）で指摘された
+  // 不具合を修正した。**指摘は両方とも事実だった。**
+  //
+  // 従来の条件は `status === "parentNoFamily" || status === "parent"` のみで、
+  //   (1) `"supporter"`（既に家族に所属しているみまもりメンバー）が抜けていたため、
+  //       再ログインするとこの画面のまま**どこへも進めない行き止まり**になっていた。
+  //   (2) `"parent"`（既に家族を持つ保護者）まで一律に create-family / join-family へ
+  //       送っていたため、再ログインすると「家族名を入力」に迷い込んでいた。
+  //       2つ目の家族は作れない（DB側の一意制約で「すでに家族に参加しています」に
+  //       なる）ので実害は限定的だが、行き先として誤っている。
+  //
+  // 遷移先の判定は `app/index.tsx`（根元の画面）と同じ考え方に揃えた。**家族に所属
+  // 済みならそのロールのホームへ、まだ家族が無い保護者だけを onboarding へ送る。**
+  // 根元の画面は元々ロールごとに正しく振り分けていたのに、メールでログインし直す
+  // 経路だけがそこを通らないため、同じ判定を持たせる必要があった。
   useEffect(() => {
-    if (status === "parentNoFamily" || status === "parent") {
+    if (status === "parent") {
+      router.replace("/parent/home");
+    } else if (status === "supporter") {
+      router.replace("/supporter/home");
+    } else if (status === "child") {
+      router.replace("/child/home");
+    } else if (status === "parentNoFamily") {
       router.replace(intent === "join" ? "/onboarding/join-family" : "/onboarding/create-family");
     }
   }, [status, intent]);
