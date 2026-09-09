@@ -5,14 +5,12 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
-import { StageDot } from "@/components/FamilyTree";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
-import { useFamilyTreeSummary } from "@/hooks/useFamilyTree";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
@@ -50,6 +48,12 @@ import type { ChoreCompletion, StampKey } from "@/types/domain";
  *    「P7ホームの完了報告カード→/parent/approvals」と同型（本部長案A採用）。
  * 表示している5件のスタンプ・コメント・取消の機能はそのまま維持している
  * （completions配列自体は変えず、描画直前にslice(0, 5)しているだけ）。
+ *
+ * [2026-09-09再々改訂・実装メモ.md 186章] 統括の実機確認「コレクションはどこ？
+ * 木はどこ？って少しなった」を受け、上記2番目にあった「家族の木・コレクション」の
+ * ショートカット行を削除した。木は常設の第3タブ（`app/supporter/(tabs)/tree.tsx`）、
+ * コレクションは「じぶん」タブのタイル（`self.tsx`）にそれぞれ移設済み。「かぞく」
+ * タブは「家族の動きを見る場所」（家族の掲示板・完了報告）に絞った。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -80,12 +84,6 @@ export default function SupporterFamilyScreen() {
   // みまもりメンバーには子ども選択機能を拡張しない。中央: 家族名。右: ベル→S22）。
   const myMember = state.members.find((m) => m.id === myId);
   const inboxCount = countRecentInbox(state, myId, Date.now() - 24 * 60 * 60 * 1000);
-
-  // [2026-09-09追加・35.6.1節] 「入口の上部ウィジェットから常時アクセス」。
-  // useFamilyTreeSummaryは元々「P7/C5/S1ホームウィジェット用の軽量版」として
-  // 設計されていたが、旧S1では未使用だった（src/hooks/useFamilyTree.ts冒頭コメント）。
-  // 新しい通信は発生しない（P7が既に使っているのと同じ1回のGET）。
-  const { season: treeSeason } = useFamilyTreeSummary();
 
   const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
   const hasBoardPost = card?.source === "board_post";
@@ -217,26 +215,9 @@ export default function SupporterFamilyScreen() {
         </Pressable>
       )}
 
-      {/* [2026-09-09並べ替え・実装メモ.md 183章] 並び順2番目「家族の木・コレクション」。 */}
-      <View style={styles.widgetRow}>
-        <Pressable onPress={() => router.push("/supporter/family-tree")} style={styles.widgetItem}>
-          <Card tone="supporter" style={styles.widgetCard}>
-            <StageDot color={theme.treeColors.foliageBase} size={32} stage={treeSeason?.current_stage ?? 0} />
-            <View style={{ flex: 1, marginLeft: theme.spacing.s2 }}>
-              <Text style={theme.typography.supporterBodyMedium}>🌳 家族の木</Text>
-              <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
-                いま「{theme.treeStages[treeSeason?.current_stage ?? 0].name}」
-              </Text>
-            </View>
-          </Card>
-        </Pressable>
-        <Pressable onPress={() => router.push("/supporter/collector-shelf")} style={styles.widgetItem}>
-          <Card tone="supporter" style={styles.widgetCard}>
-            <Text style={{ fontSize: 28 }}>🗄️</Text>
-            <Text style={[theme.typography.supporterBodyMedium, { marginLeft: theme.spacing.s2 }]}>コレクション</Text>
-          </Card>
-        </Pressable>
-      </View>
+      {/* [2026-09-09削除・実装メモ.md 186章] 旧「家族の木・コレクション」ショートカット行
+          （並び順2番目）は削除した。木は常設タブへ、コレクションは「じぶん」タブへ移設済み
+          （経緯はファイル冒頭のコメント参照）。 */}
 
       {/* [2026-09-09追加・実装メモ.md 183章] 並び順3番目「完了報告（新着◯件）」。
           `app/parent/home.tsx`のpendingCardと同一の見た目・数え方（直近24時間）。
@@ -459,9 +440,6 @@ const styles = StyleSheet.create({
   headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },
   bellHit: { minHeight: theme.tapTarget.supporterPrimary, justifyContent: "center", paddingLeft: theme.spacing.s2 },
   notifBadge: { fontSize: 17, fontWeight: "700" },
-  widgetRow: { flexDirection: "row", gap: theme.spacing.s3, marginTop: theme.spacing.s4 },
-  widgetItem: { flex: 1 },
-  widgetCard: { flexDirection: "row", alignItems: "center" },
   // [2026-09-09追加・実装メモ.md 183章] `app/parent/home.tsx`のpendingCard/pendingCountと
   // 同一のスタイル（統括指示「保護者と同じやつ」）。
   pendingCard: {

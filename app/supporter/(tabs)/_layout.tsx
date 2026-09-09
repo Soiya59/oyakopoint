@@ -5,18 +5,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import theme from "@/theme/theme";
 
 /**
- * みまもりメンバー向け下部タブ: [👨‍👩‍👧‍👦かぞく] [🌟じぶん]
+ * みまもりメンバー向け下部タブ: [👨‍👩‍👧‍👦かぞく] [🌳木] [🌟じぶん]
  * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 35章
  * （35.1節「区画の最終決定」・35.9節「みまもりメンバーから先に導入する」）
  *
  * [2026-09-09追加・実装メモ.md 182章] S1みまもりホーム廃止に伴うタブ化第1弾。
  * `app/child/(tabs)/_layout.tsx`と同じ実装パターン（expo-routerの`(tabs)`
  * ルートグループ）をそのまま踏襲する（本部長指示「新しい仕組みを持ち込まない」）。
- * タブ数はみまもりメンバーには「かんり」区画が無いため2つ（35.4節末尾
- * 「かんり区画はみまもりメンバーには存在しない」）。
  *
  * タブアイコンは35.12節のとおり4章の既存絵文字を再利用し、新しい絵・色は追加しない
  * （👨‍👩‍👧‍👦＝旧P14「家族」タイルで既出、🌟＝ポイント表示で既出）。
+ *
+ * [2026-09-09追加・実装メモ.md 186章] 統括の実機確認「コレクションはどこ？木は
+ * どこ？って少しなった」を受け、2タブ→3タブに変更した。木を「かぞく」タブの中の
+ * 小さなショートカットから、常設の第3タブへ昇格させた（🌳＝`family.tsx`の
+ * 「家族の木」ショートカットで既出）。コレクションは「じぶん」タブのタイルへ移設
+ * （`self.tsx`参照）。並び順は かぞく→木→じぶん（統括「木がメインどころでもあるし」
+ * を受け、主役を中央に配置）。
  */
 export default function SupporterTabsLayout() {
   const insets = useSafeAreaInsets();
@@ -54,6 +59,16 @@ export default function SupporterTabsLayout() {
         options={{
           title: "かぞく",
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>👨‍👩‍👧‍👦</Text>,
+        }}
+      />
+      {/* [2026-09-09追加・実装メモ.md 186章] 「木」タブ。中身は既存の
+          `app/supporter/family-tree.tsx`をそのまま委譲表示する（新しい画面を
+          作らない。`app/supporter/(tabs)/tree.tsx`参照）。 */}
+      <Tabs.Screen
+        name="tree"
+        options={{
+          title: "木",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌳</Text>,
         }}
       />
       <Tabs.Screen

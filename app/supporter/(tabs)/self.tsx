@@ -22,6 +22,11 @@ import { useGachaProgress } from "@/hooks/useGacha";
  *
  * タイルは35.4節の並び順（実測: クエスト1位→お絵かき2位→ごほうび3位→感謝ポイント
  * →きろく）のとおり。設定（S13）は35.7節決定5により末尾固定。
+ *
+ * [2026-09-09追加・実装メモ.md 186章] 統括の実機確認「コレクションはどこ？」を受け、
+ * 「かぞく」タブにあったコレクションのショートカットをここへ移設した
+ * （タイルが並ぶ画面のほうが、小さなショートカットより見つけやすいという統括判断）。
+ * 遷移先URL（`/supporter/collector-shelf`）・画面自体は変更していない。
  */
 export default function SupporterSelfScreen() {
   const { state, memberPoints } = useAppData();
@@ -37,6 +42,8 @@ export default function SupporterSelfScreen() {
     { emoji: "🧹", label: "クエスト", path: "/supporter/my-chores" },
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
+    // [2026-09-09追加・実装メモ.md 186章] 「かぞく」タブから移設したコレクション。
+    { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },
     { emoji: "💌", label: "感謝\nポイント", path: "/supporter/gratitude" },
     { emoji: "📅", label: "きろく", path: "/supporter/history" },
     // 35.7節決定5「みまもりメンバーの設定（S13）はじぶん区画の末尾に固定配置する」。
