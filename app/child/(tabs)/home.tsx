@@ -5,18 +5,32 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
+import ChildTabHeader from "@/components/ChildTabHeader";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import MemberAvatar from "@/components/MemberAvatar";
 import { useGachaProgress } from "@/hooks/useGacha";
-import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 
 /**
- * C5 やることリスト（ホーム）（主要5画面のひとつ）
- * 参照: 主要画面ワイヤーフレーム.md 1章
+ * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
+ * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 36章（36.5.1節）、
+ * 開発部/成果物/実装メモ.md 188章
+ *
+ * [2026-09-10改訂・実装メモ.md 188章] 子ども下部タブ4区画化（36章）に伴い、
+ * 旧「やる」タブから、かぞく・じぶん・木タブへ移った要素（かぞくのけいじばん
+ * カード、4タイル＝おえかき・木・コレクション・かぞく）を取り除き、
+ * 「🎁 ごほうびを みにいく」ウィジェット（36.3節決定2）を1つ追加した。
+ * ファイル名・URL（`/child/home`）は変更していない（36.11節1）。
+ *
+ * ヘッダーは`ChildTabHeader`（4タブ共通部品、36.4節）に差し替えた。
+ * 🌟残高の軽量表示（`pointsRow`）は36.12節・本部長回答の決定1のとおり、
+ * じぶんタブに残高カードを新設したあとも**そのまま残す**（削除しない）。
+ * クエストをやる→ポイントが増える、という結びつきがこの仕組みの中心であり、
+ * じぶんタブと数字が2か所に出るのは重複ではなく意味が違う
+ * （クエスト側＝いま増えた実感、じぶん側＝残高の確認と通帳への入口）。
+ *
  * 状態: 読み込み中・空・通常・上限到達（個別カード）・通信エラー を実装。
  * 上限到達カードは赤・グレーアウトにせず達成トーンで表現する（デザイントークン.md 1.4）。
  */
@@ -38,23 +52,8 @@ export default function ChildHomeScreen() {
     canDrawNow: gachaCanDrawNow,
     reload: reloadGachaProgress,
   } = useGachaProgress(state.activeChildMemberId);
-  // [2026-08-28追加・家族の書き込みボード07-14章第1段階] 「かぞくのけいじばん」カード
-  // （主要画面ワイヤーフレーム.md 22.1.2節、C5新規）。07-8章の週次まとめメッセージは
-  // 元々C5に無かった（大人向けの文体だったため対象外）が、07-14章により書き込み内容は
-  // 家族自身の言葉になったため子ども向け画面にも表示できるようになった
-  // （22.1.2節「07-8章のコンセプト自体は『大人向け』だったが…」）。P7と同じ
-  // `family_home_card` Viewを同一クエリで使う（API仕様.md 13.3章）。
-  const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
-  const cardMessage =
-    cardLoadState === "error"
-      ? "かぞくのけいじばんは、またあとでみてね"
-      : cardLoadState === "loading"
-      ? null
-      : card?.message ?? "かぞくのけいじばんは、またあとでみてね";
-  const cardAuthorName =
-    card?.source === "board_post"
-      ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
-      : null;
+  // [2026-09-10削除・実装メモ.md 188章] 「かぞくのけいじばん」カードは
+  // かぞくタブ（`app/child/(tabs)/family.tsx`）へ移設した（36.5.2節）。
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -146,24 +145,11 @@ export default function ChildHomeScreen() {
 
   return (
     <Screen tone="child">
-      {/* [2026-08-23修正・本部長] 「ベルマークがアカウント切り替えにつながっていて、
-          新着のお知らせだと思っていたので分かりにくい」とユーザーが実機で発見した。
-          ベル（🔔・新着リアクション件数）は「きろく」タブ（届いたリアクションを
-          確認できる）へ、左上のアバター・名前はアカウント切り替えへ、と役割を
-          入れ替えた（ベル＝お知らせ、自分の名前をタップ＝自分の切り替え、という
-          一般的なアプリの配置パターンに合わせた）。 */}
-      <View style={styles.headerRow}>
-        <Pressable style={styles.headerLeft} onPress={() => router.push("/child/profile-switch")}>
-          <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
-          <Text style={theme.typography.childBody}>{me.display_name}</Text>
-        </Pressable>
-        {/* [2026-08-29変更] 飛び先を「きろく」から「とどいたよ」（C29）へ。きろくには
-            リアクションしか出ず、感謝ポイントを数に入れると押しても何のことか分からなく
-            なるため、もらったものだけを1本にまとめた専用画面を用意した。 */}
-        <Pressable onPress={() => router.push("/child/inbox")}>
-          <Text style={styles.notifBadge}>🔔{newReactionCount}</Text>
-        </Pressable>
-      </View>
+      {/* [2026-09-10変更・実装メモ.md 188章] 4タブ共通のヘッダー部品に統一した
+          （`src/components/ChildTabHeader.tsx`、36.4節）。保護者側（187章・`645a203`）
+          で「かぞく」タブにだけアバターの押し先が付いていた壊れ方の再発を避けるため、
+          子どもは最初から共通部品にする。 */}
+      <ChildTabHeader inboxCount={newReactionCount} />
 
       <View style={styles.pointsRow}>
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>
@@ -209,55 +195,17 @@ export default function ChildHomeScreen() {
         onPress={() => router.push("/child/gacha")}
       />
 
-      {/* [2026-08-28追加] 「かぞくのできごと」カード（主要画面ワイヤーフレーム.md
-          22.1.2節）。ガチャウィジェットほどの視覚的重みは持たせない控えめなカードに
-          とどめる（22.1.2節「配置場所」）。通信エラー時のみタップ不可。 */}
-      <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>
-        <Card tone="child" style={styles.familyBoardCard}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={theme.typography.childBody}>💬 かぞくのけいじばん</Text>
-            {cardLoadState !== "error" && <Text style={theme.typography.childBody}>›</Text>}
-          </View>
-          {cardMessage === null ? (
-            <View style={styles.digestSkeleton} />
-          ) : (
-            <>
-              {cardAuthorName !== null && (
-                <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
-              )}
-              <Text style={{ marginTop: theme.spacing.s1 }}>{cardMessage}</Text>
-            </>
-          )}
+      {/* [2026-09-10追加・実装メモ.md 188章] ごほうびウィジェット（36.3節決定2の
+          一次導線）。件数計算はせず固定文言のみ（本部長回答2「まず固定文言で出して、
+          物足りなければ足す」）。正式な所属先（じぶんタブのタイル先頭、`self.tsx`）も
+          別途用意しており、これは頻度に応える軽量なショートカットという位置づけ。
+          ガチャウィジェットの直後・★おきにいりのクエスト区分の直前に置く
+          （「やる→もらう」の順に読める並び、36.5.1節ワイヤーフレーム）。 */}
+      <Pressable onPress={() => router.push("/child/rewards")}>
+        <Card tone="child" style={styles.rewardsWidgetCard}>
+          <Text style={theme.typography.childBody}>🎁 ごほうびを みにいく →</Text>
         </Card>
       </Pressable>
-
-      {/* [2026-08-27整理・本部長] 第2〜5段階で機能を足すたびに文字リンクを1行ずつ
-          継ぎ足した結果、リンク4行が画面の中央を占め、**子どもの一番の仕事である
-          「お手伝いの報告」が画面の下へ押し出されていた**（ユーザーの実機指摘）。
-          あわせて、UIUXデザイン部CLAUDE.mdの「子ども向け画面は文字よりアイコン・色を
-          優先する」という原則にも反していた（4行とも素の文字リンクだった）。
-          アイコンを主役にした横1列に集約し、4行を1行に減らす。 */}
-      <View style={styles.shortcutRow}>
-        {[
-          // [2026-09-08変更・本部長／実装メモ.md 166章] 統括指示により並び順を
-          // 「よく使うものを左に」へ変更（かぞく→木→おえかき→コレクション から
-          // おえかき→木→コレクション→かぞく へ）。
-          { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
-          // [2026-08-29変更・本部長] ラベルを段階名（種／芽／若木／花／実）から「木」固定へ。
-          // 「いまどこまで育ったか」をホームで見せる狙いで段階名を出していたが、実機では
-          // 「🌳 花」と表示され、**何のボタンなのかが分からない**とユーザーが指摘した
-          // （ボタンのラベルは行き先を示すもので、状態を示すものではない）。
-          // 段階名は遷移先のC20と、保護者ホームの木ウィジェットで引き続き確認できる。
-          { emoji: "🌳", label: "木", path: "/child/family-tree" },
-          { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
-          { emoji: "👨‍👩‍👧‍👦", label: "かぞく", path: "/child/family-activity" },
-        ].map((s2) => (
-          <Pressable key={s2.path} onPress={() => router.push(s2.path as never)} style={styles.shortcutItem}>
-            <Text style={styles.shortcutEmoji}>{s2.emoji}</Text>
-            <Text style={styles.shortcutLabel}>{s2.label}</Text>
-          </Pressable>
-        ))}
-      </View>
 
       <View style={{ marginTop: theme.spacing.s2 }}>
         {loadState === "loading" && <SkeletonList count={4} />}
@@ -395,9 +343,6 @@ export default function ChildHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
-  notifBadge: { fontSize: 16, fontWeight: "700" },
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
   // [2026-09-03追加] 28.5a節「さっき とどけた ほうこく」。達成演出（紙吹雪等）は
   // 持たせず、既存のカードと同系色にとどめる控えめなブロック（トーン設計メモ）。
@@ -413,58 +358,9 @@ const styles = StyleSheet.create({
   recentCancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
   recentRowError: { marginTop: 2, color: theme.colors.brandPrimaryStrong },
   recentFlash: { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
-  familyBoardCard: { marginTop: theme.spacing.s3 },
-  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  digestSkeleton: {
-    marginTop: theme.spacing.s2,
-    height: 18,
-    borderRadius: theme.radius.childXl,
-    backgroundColor: theme.colors.neutralBorder,
-    opacity: 0.6,
-  },
-  // [2026-08-27追加] 4本の文字リンクを置き換えた横1列のショートカット。
-  // 子ども向けタップ領域56dp（デザイントークン.md 1.7節）を高さで確保する。
-  // [2026-09-08改訂・本部長／軽微変更ルート] 統括の実機確認「お絵かきとか少し窮屈かも」。
-  // 従来はspace-aroundで、白い四角が中身の文字幅ちょうどに縮んでいた。そのため
-  // 「おえかき」「木」「かぞく」は文字が枠にぴったり接する一方、「コレクション」だけ
-  // 幅広という不揃いな並びになっていた。flex:1で4つを等幅にし、余っていた横方向の
-  // 空白を4枚に配り直す。「コレクション」が今の幅（画面の約1/4）で収まっているので、
-  // 等幅にしても文字が入らなくなることはなく、他の3枚だけが広くなる。
-  shortcutRow: {
-    flexDirection: "row",
-    gap: theme.spacing.s2,
-    marginTop: theme.spacing.s3,
-  },
-  // [2026-09-08変更・本部長／実装メモ.md 166章] 統括指示「背景と同じで押せると
-  // 分かりにくいので、1つずつ白のしかくで囲んでもよいかも」に対応。既存のCard
-  // コンポーネント（src/components/Card.tsx）のbaseスタイルと同じ背景色・枠線色・
-  // 角丸（子ども向けはchildXl）を流用した。4つをまとめて1つの箱にはせず、1つずつ
-  // 個別に囲む（統括指示「押せるものが4つあることがはっきりします」）。
-  // minWidth/minHeightは変更前と同じtheme.tapTarget.child（56dp）を維持しており、
-  // 白い四角にしたことでタップ領域が変更前より狭くなってはいない。
-  shortcutItem: {
-    // [2026-09-08改訂] 等幅（上のshortcutRowのコメント参照）。上下にも余白を入れて、
-    // 絵文字とラベルが枠の上下に接しないようにする。minHeightは従来どおり
-    // theme.tapTarget.child（56dp）で、タップ領域は狭くなっていない。
-    flex: 1,
-    minWidth: theme.tapTarget.child,
-    minHeight: theme.tapTarget.child,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: theme.spacing.s2,
-    paddingHorizontal: theme.spacing.s1,
-    backgroundColor: theme.colors.neutralSurface,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-    borderRadius: theme.radius.childXl,
-  },
-  shortcutEmoji: { fontSize: 30 },
-  shortcutLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: theme.colors.brandPrimaryStrong,
-    marginTop: 2,
-  },
+  // [2026-09-10追加・実装メモ.md 188章] ごほうびウィジェット（36.3節）。
+  // 既存のCardのbaseスタイル（背景色・枠線色・角丸）をそのまま使い、上マージンだけ足す。
+  rewardsWidgetCard: { marginTop: theme.spacing.s3 },
   sectionHeading: { marginTop: theme.spacing.s4, marginBottom: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   dailySectionHeading: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   // [2026-09-08変更・実装メモ.md 154章] 2列グリッド（grid）→1件1行の縦並び（list）。

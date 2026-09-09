@@ -5,13 +5,27 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import theme from "@/theme/theme";
 
 /**
- * 子ども向け下部タブ: [🏠やる] [📅きろく] [💰つうちょう] [🎁ごほうび]
- * 参照: 主要画面ワイヤーフレーム.md 1章 C5ワイヤーフレーム、画面一覧・遷移図.md 3.5章
+ * 子ども向け下部タブ: [🏠クエスト] [👨‍👩‍👧‍👦かぞく] [🌟じぶん] [🌳木]
+ * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 36章（36.1節）、
+ * 開発部/成果物/実装メモ.md 188章
  *
- * [2026-08-15追加] 実施履歴カレンダー（C15、要件定義書07-3章）への導線として
- * 「きろく」タブを追加した（画面一覧・遷移図.md 3.5章「下部タブは[🏠やる][📅きろく]
- * [💰つうちょう][🎁ごほうび]の4つに拡張する」）。下部タブアイコンは📅で固定し、
- * 他の絵文字（🎉等の達成系）と混同しないようにする（デザイントークン.md 4章）。
+ * [2026-09-10改訂・実装メモ.md 188章] 子ども下部タブ4区画化。旧4タブ
+ * （やる／ごほうび／きろく／つうちょう）を、保護者・みまもりメンバーと同じ
+ * 「クエスト／かぞく／じぶん／木」の構成へ再編した（3ロールで区画の骨格を揃える。
+ * 子どもだけ初期表示が「クエスト」で非対称なのは統括方針どおり）。
+ * ごほうび・きろく・つうちょうは独立タブから「じぶん」タブのタイルへ移設した
+ * （`app/child/(tabs)/self.tsx`参照）。実体ファイル（`rewards.tsx`・`points.tsx`・
+ * `history.tsx`）は`(tabs)/`の外（`app/child/`直下）へ移設済みで、URL自体は
+ * 変わっていない（`/child/rewards`・`/child/points`・`/child/history`のまま）。
+ *
+ * `home.tsx`はファイル名を変えず中身だけ再編した（36.11節1「C7・C14の遷移先
+ * `/child/home`は変更不要」のとおり。子どもはホーム自体を廃止しないため
+ * リダイレクトのスタブは不要）。
+ *
+ * 下記のタブバー本体のスタイル（高さ・余白・アイコンの出し方）は一切変更していない。
+ * 2026-09-09に本部長が自作の部品で下部タブを壊した教訓（実装メモ184章）があるため、
+ * 既存のこのファイルの`screenOptions`をそのまま維持し、`Tabs.Screen`の列挙だけを
+ * 差し替えた。
  *
  * [2026-08-22修正・本部長] tabBarStyleの高さ・paddingBottomを固定値にしていたため、
  * ホームインジケーター/ジェスチャーバーのある実機（iPhone X以降・Android等）で
@@ -58,35 +72,35 @@ export default function ChildTabsLayout() {
         tabBarActiveBackgroundColor: theme.colors.brandPrimarySoft,
       }}
     >
+      {/* Tabsは最初に列挙したScreenを初期タブとして扱う（保護者・みまもりの(tabs)と
+          同じ挙動）。統括確定「タブは4つのまま、並びはクエスト→かぞく→じぶん→木、
+          初期表示はクエスト」（36.1節決定1）。 */}
       <Tabs.Screen
         name="home"
         options={{
-          title: "やる",
+          title: "クエスト",
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🏠</Text>,
         }}
       />
-      {/* [2026-09-08・統括指示] タブの並びを「やる→ごほうび→きろく→つうちょう」に変更。
-          従来は「やる→きろく→つうちょう→ごほうび」で、毎日使う「ごほうび」が
-          いちばん端にあった。使う頻度の順に並べ直したもの。 */}
       <Tabs.Screen
-        name="rewards"
+        name="family"
         options={{
-          title: "ごほうび",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🎁</Text>,
+          title: "かぞく",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>👨‍👩‍👧‍👦</Text>,
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="self"
         options={{
-          title: "きろく",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📅</Text>,
+          title: "じぶん",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌟</Text>,
         }}
       />
       <Tabs.Screen
-        name="points"
+        name="tree"
         options={{
-          title: "つうちょう",
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>💰</Text>,
+          title: "木",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🌳</Text>,
         }}
       />
     </Tabs>

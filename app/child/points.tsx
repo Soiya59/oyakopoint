@@ -19,6 +19,13 @@ import { useMemberBadgeRows } from "@/hooks/useBadges";
  *
  * [2026-09-07追加] バッジ区画（要件定義書07-19-9b章、主要画面ワイヤーフレーム.md
  * 32.4節）。残高表示の直後・履歴リストの直前に常時表示する。
+ *
+ * [2026-09-10移設・実装メモ.md 188章] 子ども下部タブ4区画化（UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 36章）に伴い、独立タブ`app/child/(tabs)/points.tsx`
+ * から`(tabs)/`外（本ファイル）へ移設した。URL自体は`/child/points`のまま変わって
+ * いない。「じぶん」タブの残高カードから`router.push`で到達する画面になったため、
+ * 冒頭に「← もどる」（`router.back()`）を新設した（`app/child/drawing.tsx`と
+ * 同じ既存パターン）。それ以外の内容は変更していない。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -38,7 +45,11 @@ export default function ChildPointsScreen() {
 
   return (
     <Screen tone="child">
-      <View style={styles.headerRow}>
+      <Pressable onPress={() => router.back()}>
+        <Text style={theme.typography.childBody}>← もどる</Text>
+      </Pressable>
+
+      <View style={[styles.headerRow, { marginTop: theme.spacing.s3 }]}>
         <Text style={theme.typography.childBody}>🌟 {me.display_name}の つうちょう</Text>
         {/* [2026-08-16追加] 主要画面ワイヤーフレーム.md 4章ワイヤーフレーム（子どもビューC8）
             「[💌ありがとうをおくる] ← 感謝ポイントを贈る導線（C16へ）」対応。
@@ -95,7 +106,7 @@ export default function ChildPointsScreen() {
                     「{entry.note}」
                   </Text>
                 )}
-                {/* 届いたリアクション（スタンプ／コメント）をチップとして併記。空なら何も出さない
+                {/* 届いたリアクション（スタンプ／コメント）をチップとして併記。空なら何も表示しない
                     （主要画面ワイヤーフレーム.md 4章「リアクションが1件も無い履歴行は何も表示しない」） */}
                 {entry.reactions.length > 0 && (
                   <View style={styles.reactionRow}>

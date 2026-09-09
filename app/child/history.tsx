@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { WeekBar, MonthCalendar } from "@/components/HistoryCalendar";
@@ -25,6 +26,13 @@ import {
  *
  * 子どもビューは要件定義書07-3章5「比較を煽らない見せ方」に基づき、常に自分の
  * 実施履歴のみを表示する（きょうだいとの比較・切り替えUIは持たない。8.0決定3）。
+ *
+ * [2026-09-10移設・実装メモ.md 188章] 子ども下部タブ4区画化（UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 36章）に伴い、独立タブ`app/child/(tabs)/history.tsx`
+ * から`(tabs)/`外（本ファイル）へ移設した。URL自体は`/child/history`のまま変わって
+ * いない。「じぶん」タブのタイルから`router.push`で到達する画面になったため、
+ * 冒頭に「← もどる」（`router.back()`）を新設した（`app/child/drawing.tsx`と
+ * 同じ既存パターン）。それ以外の内容は変更していない。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -87,7 +95,11 @@ export default function ChildHistoryScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childBody}>📅 {me.display_name}の きろく</Text>
+      <Pressable onPress={() => router.back()}>
+        <Text style={theme.typography.childBody}>← もどる</Text>
+      </Pressable>
+
+      <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s3 }]}>📅 {me.display_name}の きろく</Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>

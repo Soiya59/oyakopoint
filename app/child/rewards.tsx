@@ -12,6 +12,20 @@ import { useAppData } from "@/data/store";
  * 残高で買えるものは行全体をタップして交換可、足りないものは「あと◯pt」表示（交換不可はボタンでなく前向きな不足表示に）。
  * [2026-09-08修正・実装メモ.md 154章] 2列カード→1件1行に変更。行のタップ対象は
  * 交換可のときのみ有効（あと◯pt表示の行はタップしても反応しない、従来どおり）。
+ *
+ * [2026-09-10移設・実装メモ.md 188章] 子ども下部タブ4区画化（UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 36章）に伴い、独立タブ`app/child/(tabs)/rewards.tsx`
+ * から`(tabs)/`外（本ファイル）へ移設した。URL自体は`/child/rewards`のまま変わって
+ * いない（`(tabs)`はexpo-routerのルートグループでURLセグメントを追加しないため）。
+ * 「じぶん」タブのタイル、および「クエスト」タブの新設ウィジェットの2箇所から
+ * `router.push`で到達する画面になったため、タブでなくなったことに伴い冒頭に
+ * 「← もどる」（`router.back()`）を新設した（`app/child/drawing.tsx`・
+ * `app/child/collector-shelf.tsx`と同じ既存パターン）。
+ *
+ * **「🪙 メダルを かいに いく →」導線（2026-09-07追加・実装メモ144章）は削除した。**
+ * `app/child/(tabs)/self.tsx`の「じぶん」タブへ独立したタイルとして移設した
+ * （統括指示「メダルもごほうびから出してほしい」、36.0節本部長訂正・36.2節）。
+ * 遷移先URL（`/child/sticker-shop`）・画面自体は変更していない。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -37,24 +51,12 @@ export default function ChildRewardsScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childBody}>🎁 ごほうびこうかんじょ</Text>
-      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s1 }]}>いま {balance}pt もってるよ</Text>
-
-      {/* [2026-09-07追加・本部長／実装メモ.md 144章] 統括の実機確認「ステッカーは購入できる
-          場所がなくなったかも／ごほうびから飛べたらよいかも」対応。ごほうび交換画面（C9）から
-          シール購入画面（C30）への導線を追加した。既存のコレクションだな経由の導線
-          （じぶんのシールタブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
-      <Pressable onPress={() => router.push("/child/sticker-shop")} style={styles.stickerLink} hitSlop={8}>
-        <Text style={theme.typography.childBody}>
-          {/* [2026-09-08・統括指示] 絵文字は🧩→🏅→🪙と変えた。🏅は紐が付いた
-              首から下げるメダルで、木に貼る丸いメダルの絵と合わないため。
-              あわせて絵文字だけ一回り大きくする。 */}
-          <Text style={{ fontSize: 22 }}>🪙</Text> メダルを かいに いく →
-        </Text>
-        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-          ためた ぽいんとで、きに かざる メダルが かえるよ
-        </Text>
+      <Pressable onPress={() => router.back()}>
+        <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
+
+      <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s3 }]}>🎁 ごほうびこうかんじょ</Text>
+      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s1 }]}>いま {balance}pt もってるよ</Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -76,10 +78,6 @@ export default function ChildRewardsScreen() {
         <View style={styles.list}>
           {rewards.map((r) => {
             const canAfford = balance >= r.cost;
-            // [2026-09-09修正・本部長／軽微変更ルート] 1行おきの縞模様を撤回した。
-            // 統括の指摘はクエスト（C5）についてのものだったが、同じ理由がここにも
-            // そのまま当てはまり、子どもの2つの一覧で見た目が食い違うのを避けるため
-            // あわせて外した。理由はhome.tsxのrenderCardのコメント参照。
             const rowStyle = [styles.row];
             const rowContent = (
               <>
@@ -89,10 +87,6 @@ export default function ChildRewardsScreen() {
                 </Text>
                 <Text style={[theme.typography.parentCaption, styles.costText]}>{r.cost}pt</Text>
                 {canAfford ? (
-                  // [2026-09-08修正] 従来は「こうかん」の緑ボタンだけがタップ対象だった。
-                  // 行全体がタップ対象になったため、ボタン文言は無くし、home.tsxの
-                  // pointLabel（+◯pt）と同様に「タップできる状態」であることを
-                  // シェブロン（parent/my-chores.tsxのchevronと同じ既存パターン）で示す。
                   <Text style={styles.chevron}>›</Text>
                 ) : (
                   <View style={styles.notEnoughBox}>
@@ -122,15 +116,6 @@ export default function ChildRewardsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // [2026-09-07追加] シール購入への導線カード（実装メモ144章）。既存のcardスタイルと
-  // 同じ背景・角丸を使い、横幅いっぱいに広げただけ。
-  stickerLink: {
-    marginTop: theme.spacing.s4,
-    backgroundColor: theme.colors.neutralSurface,
-    borderRadius: theme.radius.childXl,
-    padding: theme.spacing.s4,
-    minHeight: theme.tapTarget.child,
-  },
   // [2026-09-08変更・実装メモ.md 154章] 2列グリッド（grid）→1件1行の縦並び（list）。
   list: { gap: theme.spacing.s2, marginTop: theme.spacing.s4 },
   row: {
@@ -142,8 +127,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.s4,
     paddingVertical: theme.spacing.s2,
   },
-  // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。
-  // 絵文字のfontSizeは変更前のcard内の値（32）をそのまま維持。
   rowEmoji: { fontSize: 32 },
   rowTitle: { flex: 1, marginLeft: theme.spacing.s3 },
   costText: { marginLeft: theme.spacing.s2 },
