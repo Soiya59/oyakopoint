@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Text } from "react-native";
+import type { StyleProp, TextStyle } from "react-native";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -69,10 +70,91 @@ const AGREE_BUTTON_LABEL = "同意して始める";
 const RETRY_ERROR = "記録できませんでした。もう一度お試しください。";
 const LINK_ERROR = "開けませんでした。もう一度お試しください。";
 
-const CHILD_INTRO = "はじめに、やくそくを かくにんしてね。";
+// [文言の出典・2026-09-11差し替え] 子ども向け表示（タイトル・以下のCHILD_*定数・
+// CHILD_PROHIBITED_GROUPS）は 宣伝部/成果物/利用規約_子ども版（2026-09-09）.md
+// 1章「表示する本文」（▼▼▼ 表示ここから ▼▼▼ 〜 ▲▲▲ 表示ここまで ▲▲▲、
+// および直後の「ボタンの文言」）から一字一句そのまま転記した（やること.md 4-15、
+// 統括決定2026-09-11「子どもの初回モーダルの文面を、宣伝部の子ども版に差し替える」）。
+// 表示順は同文書「実装への差し替え指示（コード参照・2026-09-11追記）」節の
+// 11行の対応表のとおり（開発部/成果物/実装メモ.md 196章で1行ずつ照合済み）。
+// 差し替え前の仮文言（開発部が起草したもの）はgit履歴に残る。
+const CHILD_TITLE = "おやこポイントの やくそく";
+const CHILD_INTRO =
+  "これは 「おやこポイント」を つかう ときの やくそくだよ。\nおうちの ひとと いっしょに よんでね。";
+
+/** 子ども向け禁止事項の1グループ（見出し＋項目）。 */
+type ChildProhibitedGroup = { heading: string; items: string[] };
+
+// 大人版PROHIBITED_ITEMSの7項目のうち5項目のみを子ども向けに翻訳し、2グループに
+// 分けたもの（原稿2章「大人版との対応表」、3章「落とした項目とその理由」）。
+// 5-5（宣伝・勧誘の禁止）・5-6（法律違反・著作権侵害の禁止）は原稿の判断により
+// 子ども版に含めていない。**この2項目を勝手に戻さないこと。**大人版
+// PROHIBITED_ITEMS（7項目）は変更しない。
+const CHILD_PROHIBITED_GROUPS: ChildProhibitedGroup[] = [
+  {
+    heading: "みんなが たのしく つかうために",
+    items: [
+      "**いやな きもちに なることは かかないでね**（わるぐちや、からかいや、なかまはずれに することなど）。たのしい きもちに なることを かこうね。",
+      "**うそは かかないでね**。ほかの ひとの ふりを することも しないでね。",
+      "**こわい えや、らんぼうな え、はずかしい えは かかないでね**。かぞくが みても うれしい えを かこうね。",
+      "**じぶんや ほかの ひとの じゅうしょ・でんわばんごう・ほいくえんや がっこうの なまえは かかないでね**。",
+    ],
+  },
+  {
+    heading: "コードは たいせつに",
+    items: ["**おうちの ひとから もらった「コード」は、ほかの ひとには おしえないでね**。だいじな コードだよ。"],
+  },
+];
+
+const CHILD_HELP_HEADING = "わからないときは";
+// Play Families 安全リマインダー（サマリー表#7）の子ども向け翻訳2文＋結び文1文
+// （原稿5-2章・5-3章）。3文をまとめて1つのテキストブロックとして描画する
+// （原稿「実装への差し替え指示」表示順8・9。新しい表示要素は増やさない）。
 const CHILD_SAFETY_REMINDER =
-  "こまったことが あったら、ひとりで かかえこまずに、おうちの人に はなしてね。";
+  "**インターネットで だれかと やりとりする ときは、きを つけてね**。かきこみや、え は、とおくに いる かぞくにも とどくよ。おもいがけない ことが おきる ことも あるよ。\n\nわからないことが あったら、おうちの ひとに きいてね。";
+// ボタン直前の確認文（原稿1章フレーム末尾、表示順10）。見出しを付けず、他の
+// 地の文と同じ扱いで表示する（原稿「実装する人へ」の注記）。
+const CHILD_CONFIRM_PROMPT = "これを よんで、まもると おもったら、したの ボタンを おしてね。";
 const CHILD_BUTTON_LABEL = "わかった！";
+
+/**
+ * 子ども向け本文中の`**太字**`をそのまま画面の太字表示に変換する（アスタリスク
+ * 記号自体は表示しない）。原稿1章「実装する人へ」の指示に対応。子ども向け
+ * ボディ（theme.typography.childBody）は基準のfontWeightが既に"700"のため、
+ * 非太字部分を"400"に落とすことで太字部分との強弱をつける（新しいトークン・
+ * 新しい色・新しい大きさは作らず、既存のtypographyが使っている"400"/"700"の
+ * 2値のみを使う）。
+ */
+function ChildRichText({ text, style }: { text: string; style?: StyleProp<TextStyle> }) {
+  const segments = text.split("**");
+  return (
+    <Text style={style}>
+      {segments.map((segment, index) =>
+        index % 2 === 1 ? (
+          <Text key={index} style={{ fontWeight: "700" }}>
+            {segment}
+          </Text>
+        ) : (
+          <Text key={index} style={{ fontWeight: "400" }}>
+            {segment}
+          </Text>
+        )
+      )}
+    </Text>
+  );
+}
+
+// [2026-09-11・本部長判断] 見出し3つ（小見出し）の見た目は、原稿1章の指定
+// 「タイトルより小さい・目立たない見た目でよい」を満たせば足りるとして、
+// UIUXデザイン部へは回さず既存パターンを踏襲する。app/child/(tabs)/home.tsx の
+// styles.sectionHeading（「★ おきにいりのクエスト」等の区分見出し）と同じ考え方
+// ＝ 子ども向けボディ（childBody）に marginTop/marginBottom と
+// neutralTextSecondary色を重ねるだけで、新しいトークンは作らない。
+const childSectionHeadingStyle: StyleProp<TextStyle> = {
+  marginTop: theme.spacing.s4,
+  marginBottom: theme.spacing.s2,
+  color: theme.colors.neutralTextSecondary,
+};
 
 export type TermsConsentRole = "parent" | "supporter" | "child";
 
@@ -155,21 +237,45 @@ export function TermsConsentModal({ role, onAgreed }: TermsConsentModalProps) {
   return (
     <Screen tone={role}>
       <Card tone={role} style={{ marginTop: theme.spacing.s6 }}>
-        <Text style={titleStyle}>{isChild ? "やくそく" : "利用規約への同意"}</Text>
+        <Text style={titleStyle}>{isChild ? CHILD_TITLE : "利用規約への同意"}</Text>
         <Text style={[bodyStyle, { marginTop: theme.spacing.s3 }]}>{isChild ? CHILD_INTRO : ADULT_INTRO}</Text>
 
-        <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
-          {PROHIBITED_ITEMS.map((item, index) => (
-            <View key={index} style={{ flexDirection: "row" }}>
-              <Text style={bodyStyle}>{"・"}</Text>
-              <Text style={[bodyStyle, { flex: 1, marginLeft: theme.spacing.s1 }]}>{item}</Text>
-            </View>
-          ))}
-        </View>
+        {isChild ? (
+          <View style={{ marginTop: theme.spacing.s2 }}>
+            {CHILD_PROHIBITED_GROUPS.map((group, groupIndex) => (
+              <View key={groupIndex}>
+                <Text style={[bodyStyle, childSectionHeadingStyle]}>{group.heading}</Text>
+                <View style={{ gap: theme.spacing.s2 }}>
+                  {group.items.map((item, itemIndex) => (
+                    <View key={itemIndex} style={{ flexDirection: "row" }}>
+                      <Text style={bodyStyle}>{"・"}</Text>
+                      <ChildRichText text={item} style={[bodyStyle, { flex: 1, marginLeft: theme.spacing.s1 }]} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
+            {PROHIBITED_ITEMS.map((item, index) => (
+              <View key={index} style={{ flexDirection: "row" }}>
+                <Text style={bodyStyle}>{"・"}</Text>
+                <Text style={[bodyStyle, { flex: 1, marginLeft: theme.spacing.s1 }]}>{item}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
-        <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>
-          {isChild ? CHILD_SAFETY_REMINDER : ADULT_SAFETY_REMINDER}
-        </Text>
+        {isChild ? (
+          <>
+            <Text style={[bodyStyle, childSectionHeadingStyle]}>{CHILD_HELP_HEADING}</Text>
+            <ChildRichText text={CHILD_SAFETY_REMINDER} style={bodyStyle} />
+            <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>{CHILD_CONFIRM_PROMPT}</Text>
+          </>
+        ) : (
+          <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>{ADULT_SAFETY_REMINDER}</Text>
+        )}
 
         {/* [やること.md 2-28] 子ども向け画面には外部URLを開く導線を置かない。 */}
         {/* [2026-09-09追加・統括判断] 規約類が未公開の間はリンクを出さない
