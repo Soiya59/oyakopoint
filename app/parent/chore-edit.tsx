@@ -83,7 +83,6 @@ export default function ChoreEditScreen() {
   const [pointsText, setPointsText] = useState(
     chore ? String(chore.points) : copySource ? String(copySource.points) : recommendation ? String(recommendation.points) : ""
   );
-  const [categoryId, setCategoryId] = useState<string | null>(chore?.category_id ?? copySource?.category_id ?? null);
   // [2026-09-02追加] 要件定義書07-16章4-1節「頻度→繰り返し設定の変換仕様」決定1〜3
   // （2026-09-02改訂・本部長差し戻し対応）: おすすめはすべてis_repeatable=trueに変換し、
   // daily_limitは未指定（空欄）のままにする（DBトリガーが保存時に1を補完する）。
@@ -214,7 +213,6 @@ export default function ChoreEditScreen() {
     setIssuedSnackbar("解除しました");
   };
 
-  const categories = state.categories;
   // [2026-09-08修正・統括指示] 担当者の選択肢からみまもりメンバーを除く。
   // 統括の指摘「クエストの担当者に、みまもりメンバーを選べなくてよい。誰でも可能と
   // 選択しても、見守りメンバーに反映されないので」。家族共有（scope='family'）の
@@ -258,7 +256,10 @@ export default function ChoreEditScreen() {
     const pointsNum = Number(pointsText);
     const dailyLimitNum = isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null;
     return {
-      category_id: categoryId,
+      // [2026-09-11・統括指示「外しておいて」／本部長・軽微変更ルート]
+      // カテゴリーの入力欄を画面から外したため、常にnullを送る。経緯は下の
+      // 「カテゴリーを外した理由」のコメント参照。列・表は残してある。
+      category_id: null,
       title: title.trim(),
       emoji,
       points: pointsNum,
@@ -492,25 +493,22 @@ export default function ChoreEditScreen() {
       />
 
       {/* カテゴリー */}
-      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>カテゴリー</Text>
-      <View style={styles.chipRow}>
-        <Pressable
-          onPress={() => setCategoryId(null)}
-          style={[styles.chip, categoryId === null && styles.chipSelected]}
-        >
-          <Text>未選択</Text>
-        </Pressable>
-        {categories.map((cat) => (
-          <Pressable
-            key={cat.id}
-            onPress={() => setCategoryId(cat.id)}
-            style={[styles.chip, categoryId === cat.id && styles.chipSelected]}
-          >
-            {cat.color ? <View style={[styles.colorDot, { backgroundColor: cat.color }]} /> : null}
-            <Text>{cat.name}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* [2026-09-11削除・統括指示「外しておいて」／本部長・軽微変更ルート]
+          カテゴリーの入力欄（「未選択」＋categoriesのチップ）をここから外した。
+
+          外した理由（本部長が調査して統括に報告した事実）:
+          - 本番の`categories`は0件。**カテゴリーを作る画面がアプリのどこにも無く**、
+            作る手段が存在しないため「未選択」以外の選択肢が出ることが無かった
+          - 保存した`category_id`を読んでいる画面が1つも無い。並べ替えにも絞り込みにも
+            見出しにも使われていない（`grep -rn "category_id" app/ src/`で確認）
+          - 本番のchores 29件すべて`category_id`がNULL
+          - そもそも本アプリの要件ではなく、元にした family-todo から引き継いだもの
+            （設計部/成果物/スキーマ設計.sql 465〜471行「要件定義書05章では明記されて
+            いないが…family-todoのcategoriesをfamily_id対応させて踏襲する」）
+
+          **表`categories`と列`chores.category_id`は残してある。**列を落とすのは
+          元に戻せないため、まず画面から消す判断（本部長が統括に提示し了承）。
+          将来カテゴリーが必要になったら、まず「カテゴリーを作る画面」から要る。 */}
 
       {/* 繰り返し設定 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>繰り返し設定</Text>
@@ -1014,7 +1012,6 @@ const styles = StyleSheet.create({
   // チップ。既存のNFCタグ発行モーダル（memberRowDisabled）と同じopacity: 0.5を
   // 再利用するが、disabledは付けない（タップは常に有効、39.3.1節）。
   chipDeemphasized: { opacity: 0.5 },
-  colorDot: { width: 10, height: 10, borderRadius: 5, marginRight: theme.spacing.s1 },
   // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節
   // 決定16] 保存結果表示中、フォーム全体を操作できないように淡色化する。既存の
   // dimmed（opacity: 0.6）・memberRowDisabled（opacity: 0.5）と同種の値を流用する。
