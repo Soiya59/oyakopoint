@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/StatusViews";
 import RewardSuggestionsModal from "@/components/RewardSuggestionsModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRows";
 
 /**
  * P12 ごほうび管理一覧（スタブ／簡易実装）
@@ -31,6 +32,11 @@ export default function RewardsListScreen() {
   // （Pressableトグル・▾/▸・件数表示・画面固有useState・永続化しない）をそのまま
   // 流用する。既定は「開いている」（07-20章決定2）。
   const [othersOpen, setOthersOpen] = useState(true);
+  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38章] 「同じ内容」
+  // まとめ(c)の開閉状態。app/parent/chores.tsxと同じ仕組み（画面固有useState・
+  // 永続化しない）。キーは「区分名:グルーピングキー」。
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (key: string) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // [2026-08-29修正・本部長] 家族共有（scope='family'）のみ。理由は
   // app/parent/chores.tsx の同じ修正のコメントを参照（みまもりメンバーの自分専用の
@@ -52,16 +58,63 @@ export default function RewardsListScreen() {
   const mine = managed.filter((r) => r.created_by === myMemberId);
   const others = managed.filter((r) => r.created_by !== myMemberId);
 
-  const renderRow = (r: (typeof managed)[number]) => (
-    <Pressable key={r.id} onPress={() => router.push({ pathname: "/parent/reward-edit", params: { id: r.id } })}>
-      <Card style={{ marginTop: theme.spacing.s3, flexDirection: "row", justifyContent: "space-between" }}>
-        <Text>
-          {r.emoji} {r.name}
-        </Text>
-        <Text style={{ color: theme.colors.neutralTextSecondary }}>{r.cost}pt</Text>
-      </Card>
-    </Pressable>
-  );
+  // [2026-09-11改訂・要件定義書07-24章決定2／主要画面ワイヤーフレーム.md 38.5節決定4]
+  // 担当者名を既存の右側テキスト（{cost}pt）の末尾に「・」区切りで追記する。
+  // まとめられていない単独の行にも常に表示する（indentはfalseのまま）。
+  // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
+  const renderRow = (r: (typeof managed)[number], indent = false) => {
+    const assigneeLabel = resolveAssigneeLabel(r.assigned_to, state.members, "誰でも交換可");
+    return (
+      <Pressable key={r.id} onPress={() => router.push({ pathname: "/parent/reward-edit", params: { id: r.id } })}>
+        <Card
+          style={{
+            marginTop: theme.spacing.s3,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            ...(indent ? { marginLeft: theme.spacing.s3 } : null),
+          }}
+        >
+          <Text>
+            {r.emoji} {r.name}
+          </Text>
+          <Text style={{ color: theme.colors.neutralTextSecondary }}>
+            {r.cost}pt{assigneeLabel ? `・${assigneeLabel}` : ""}
+          </Text>
+        </Card>
+      </Pressable>
+    );
+  };
+
+  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38.3節・38.4節]
+  // 「同じ内容」まとめ(c)。sectionKeyは「わたしが登録」「かぞくが登録」いずれかの
+  // 区分名で、区分の内側だけでグルーピングする（区分をまたがない、38.2節）。
+  // グルーピング判定は名前・ポイントの完全一致（07-24章決定1）。
+  const renderSection = (items: typeof managed, sectionKey: string) => {
+    const groups = groupDuplicateRows(items, (r) => `${r.name.trim()} ${r.cost}`, state.members);
+    return groups.map((g) => {
+      if (g.items.length < 2) {
+        return renderRow(g.items[0]);
+      }
+      const groupKey = `${sectionKey}:${g.key}`;
+      const isOpen = !!openGroups[groupKey];
+      const head = g.items[0];
+      return (
+        <View key={groupKey}>
+          <Pressable onPress={() => toggleGroup(groupKey)}>
+            <Card style={{ marginTop: theme.spacing.s3, flexDirection: "row", justifyContent: "space-between" }}>
+              <Text>
+                {isOpen ? "▾" : "▸"} {head.emoji} {head.name}
+              </Text>
+              <Text style={{ color: theme.colors.neutralTextSecondary }}>
+                {head.cost}pt（{g.items.length}）
+              </Text>
+            </Card>
+          </Pressable>
+          {isOpen && g.items.map((r) => renderRow(r, true))}
+        </View>
+      );
+    });
+  };
 
   return (
     <Screen tone="parent">
@@ -119,7 +172,7 @@ export default function RewardsListScreen() {
       {mine.length > 0 && (
         <View>
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしが登録</Text>
-          {mine.map(renderRow)}
+          {renderSection(mine, "mine")}
         </View>
       )}
 
@@ -132,7 +185,7 @@ export default function RewardsListScreen() {
               {othersOpen ? "▾" : "▸"} かぞくが登録（{others.length}）
             </Text>
           </Pressable>
-          {othersOpen && others.map(renderRow)}
+          {othersOpen && renderSection(others, "others")}
         </View>
       )}
 

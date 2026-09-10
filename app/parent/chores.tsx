@@ -10,6 +10,7 @@ import ChoreSuggestionsModal from "@/components/ChoreSuggestionsModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
+import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRows";
 
 /**
  * P10 お手伝い管理一覧（スタブ／簡易実装）
@@ -30,6 +31,13 @@ export default function ChoresListScreen() {
   // 件数表示・画面固有useState・永続化しない）をそのまま流用する。ただし既定は
   // finishedOpenとは逆で「開いている」（07-20章決定2の理由参照）。
   const [othersOpen, setOthersOpen] = useState(true);
+  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38章] 「同じ内容」
+  // まとめ(c)の開閉状態。07-20章・既存の「終わった単発のクエスト」と同じく画面固有の
+  // useStateで持ち、永続化しない（画面遷移のたびにリセットしてよい、07-24章「対象外」）。
+  // キーは「区分名:グルーピングキー」（例: "mine:はみがき 1"）とし、(a)(b)の開閉状態
+  // （finishedOpen/othersOpen）とは独立に管理する（38.4節「入れ子構造」）。
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (key: string) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
   // 27.1・27.2節）。P10の空状態限定で開くモーダル。選択するとP11へプレフィル遷移する
   // だけで、モーダル側にDB書き込みは一切発生しない。
@@ -67,25 +75,72 @@ export default function ChoresListScreen() {
   const mine = active.filter((c) => c.created_by === myMemberId);
   const others = active.filter((c) => c.created_by !== myMemberId);
 
-  const renderRow = (c: Chore, dimmed: boolean) => (
-    <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
-      <Card
-        style={{
-          marginTop: theme.spacing.s3,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          ...(dimmed ? { opacity: 0.6 } : null),
-        }}
-      >
-        <Text>
-          {c.emoji} {c.title}
-        </Text>
-        <Text style={{ color: theme.colors.neutralTextSecondary }}>
-          {c.points}pt {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
-        </Text>
-      </Card>
-    </Pressable>
-  );
+  // [2026-09-11改訂・要件定義書07-24章決定2／主要画面ワイヤーフレーム.md 38.5節決定4]
+  // 担当者名を、既存の右側テキスト（「・単発」「・1日◯回」等）の末尾に「・」区切りで
+  // 追記する。まとめられていない単独の行にも常に表示する（indentはfalseのまま）。
+  // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
+  const renderRow = (c: Chore, dimmed: boolean, indent = false) => {
+    const assigneeLabel = resolveAssigneeLabel(c.assigned_to, state.members, "誰でも実行可");
+    return (
+      <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
+        <Card
+          style={{
+            marginTop: theme.spacing.s3,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            ...(indent ? { marginLeft: theme.spacing.s3 } : null),
+            ...(dimmed ? { opacity: 0.6 } : null),
+          }}
+        >
+          <Text>
+            {c.emoji} {c.title}
+          </Text>
+          <Text style={{ color: theme.colors.neutralTextSecondary }}>
+            {c.points}pt {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
+            {assigneeLabel ? `・${assigneeLabel}` : ""}
+          </Text>
+        </Card>
+      </Pressable>
+    );
+  };
+
+  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38.3節・38.4節]
+  // 「同じ内容」まとめ(c)。sectionKeyは「わたしが登録」「かぞくが登録」「終わった単発の
+  // クエスト」いずれかの区分名で、区分の内側だけでグルーピングする（区分をまたがない、
+  // 38.2節）。グルーピング判定は名前・ポイントの完全一致（07-24章決定1）。
+  const renderSection = (items: Chore[], dimmed: boolean, sectionKey: string) => {
+    const groups = groupDuplicateRows(items, (c) => `${c.title.trim()} ${c.points}`, state.members);
+    return groups.map((g) => {
+      if (g.items.length < 2) {
+        return renderRow(g.items[0], dimmed);
+      }
+      const groupKey = `${sectionKey}:${g.key}`;
+      const isOpen = !!openGroups[groupKey];
+      const head = g.items[0];
+      return (
+        <View key={groupKey}>
+          <Pressable onPress={() => toggleGroup(groupKey)}>
+            <Card
+              style={{
+                marginTop: theme.spacing.s3,
+                flexDirection: "row",
+                justifyContent: "space-between",
+                ...(dimmed ? { opacity: 0.6 } : null),
+              }}
+            >
+              <Text>
+                {isOpen ? "▾" : "▸"} {head.emoji} {head.title}
+              </Text>
+              <Text style={{ color: theme.colors.neutralTextSecondary }}>
+                {head.points}pt（{g.items.length}）
+              </Text>
+            </Card>
+          </Pressable>
+          {isOpen && g.items.map((c) => renderRow(c, dimmed, true))}
+        </View>
+      );
+    });
+  };
 
   return (
     <Screen tone="parent">
@@ -145,7 +200,7 @@ export default function ChoresListScreen() {
       {mine.length > 0 && (
         <View>
           <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしが登録</Text>
-          {mine.map((c) => renderRow(c, false))}
+          {renderSection(mine, false, "mine")}
         </View>
       )}
 
@@ -158,7 +213,7 @@ export default function ChoresListScreen() {
               {othersOpen ? "▾" : "▸"} かぞくが登録（{others.length}）
             </Text>
           </Pressable>
-          {othersOpen && others.map((c) => renderRow(c, false))}
+          {othersOpen && renderSection(others, false, "others")}
         </View>
       )}
 
@@ -175,7 +230,7 @@ export default function ChoresListScreen() {
               一度実施されたので、子どもの画面にも表示されなくなっています。
             </Text>
           )}
-          {finishedOpen && finished.map((c) => renderRow(c, true))}
+          {finishedOpen && renderSection(finished, true, "finished")}
         </View>
       )}
 
