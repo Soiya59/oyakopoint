@@ -3,6 +3,7 @@ import { Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import ChildBackLink from "@/components/ChildBackLink";
 import theme from "@/theme/theme";
 import { inviteLookup } from "@/data/api";
 
@@ -11,6 +12,9 @@ import { inviteLookup } from "@/data/api";
  * 参照: API仕様.md 2c章手順1 Edge Function `invite-lookup`
  *
  * 取得したプロフィール一覧（ニックネーム＋アバター色のみ）をC2へパラメータで渡す。
+ *
+ * [2026-09-10追加・やること.md 4-13] 画面の先頭に「← もどる」を置いた（ChildBackLink）。
+ * P1（ようこそ）から router.push で来る。
  */
 export default function ChildInviteCodeScreen() {
   const [code, setCode] = useState("");
@@ -44,7 +48,8 @@ export default function ChildInviteCodeScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childHeadline}>コードをいれてね</Text>
+      <ChildBackLink />
+      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s3 }]}>コードをいれてね</Text>
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>
         おうちのひとに もらった コード
       </Text>

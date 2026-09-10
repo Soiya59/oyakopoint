@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
+import ChildBackLink from "@/components/ChildBackLink";
 import theme from "@/theme/theme";
 import { childLogin } from "@/data/api";
 import { useSession } from "@/lib/session";
@@ -10,6 +11,9 @@ import { useSession } from "@/lib/session";
  * C3 PIN入力（本人確認）
  * 参照: API仕様.md 2c章手順2 Edge Function `child-login`
  * 認証・データ管理設計書.md 3.2章のレスポンス（成功/423ロック/401失敗/404/409）に対応する。
+ *
+ * [2026-09-10追加・やること.md 4-13] 画面の先頭に「← もどる」を置いた（ChildBackLink）。
+ * C2（プロフィール選択）と app/child/profile-switch.tsx の2系統から router.push で来る。
  */
 export default function PinInputScreen() {
   const { inviteCode, memberId, displayName } = useLocalSearchParams<{
@@ -71,7 +75,8 @@ export default function PinInputScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childHeadline}>あんしょうばんごう</Text>
+      <ChildBackLink />
+      <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s3 }]}>あんしょうばんごう</Text>
       {displayName ? (
         <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s1, textAlign: "center" }]}>
           {displayName}
