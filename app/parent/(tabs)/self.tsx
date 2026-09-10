@@ -7,6 +7,7 @@ import GachaHomeWidget from "@/components/GachaHomeWidget";
 import ParentTabHeader from "@/components/ParentTabHeader";
 import MyPointsCard from "@/components/MyPointsCard";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -38,7 +39,8 @@ export default function ParentSelfTabScreen() {
     useGachaProgress(state.activeParentMemberId);
 
   const myMember = state.members.find((m) => m.id === state.activeParentMemberId);
-  const inboxCount = countRecentInbox(state, state.activeParentMemberId, Date.now() - 24 * 60 * 60 * 1000);
+  const inboxSince = useUnreadSince("inbox", state.activeParentMemberId);
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
@@ -52,6 +54,11 @@ export default function ParentSelfTabScreen() {
     // 12タイルのうち通帳の1枚だけが落ちていた。上の「じぶんのポイント」カードを
     // 押せば通帳へ行けるが、**タイルとしては消えていた**ため戻す。
     { emoji: "📔", label: "通帳", path: "/parent/points" },
+    // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
+    // 画面（/parent/sticker-shop）は2026-09-07から3ロールとも存在するが、タイルが
+    // 無く、コレクション画面かごほうび画面の奥からしか行けなかった。通帳（上の行）と
+    // 同じ取りこぼし。子どもの「じぶん」タブと同じ🪙・同じ呼び名にそろえる。
+    { emoji: "🪙", label: "メダル", path: "/parent/sticker-shop" },
     { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
     { emoji: "📅", label: "きろく", path: "/parent/history" },
     // 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れるため明示的に改行する

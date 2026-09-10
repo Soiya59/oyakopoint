@@ -10,6 +10,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 
@@ -116,8 +117,9 @@ export default function ChildHomeScreen() {
   // `InboxPanel.countRecentInbox`（保護者/みまもり側と共通の1本化された計算）へ
   // 差し替えた。これにより家族の書き込みボードへのリアクションも自動的に合算対象へ
   // 加わる（主要画面ワイヤーフレーム.md 22.2.2節「並び順・件数上限」）。
-  const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newReactionCount = countRecentInbox(state, me.id, oneDayAgoMs);
+  // [2026-09-11変更・実装メモ.md 190章] 「24時間以内」→「最後に『とどいたよ』を見てから」。
+  const inboxSince = useUnreadSince("inbox", me.id);
+  const newReactionCount = countRecentInbox(state, me.id, inboxSince);
 
   // [2026-08-27修正・本部長] 実施済みの「単発」を一覧から外す。単発のchoreには「終わり」が
   // 無く、実施後も「✅ おわったよ」のまま永久に「きろくずみ」へ並び続けていた

@@ -7,6 +7,7 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import InboxPanel from "@/components/InboxPanel";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useMarkSeen } from "@/hooks/useLastSeen";
 
 /**
  * P34 とどいたもの（保護者）
@@ -18,6 +19,11 @@ import { useAppData } from "@/data/store";
  */
 export default function ParentInboxScreen() {
   const { state } = useAppData();
+  // [2026-09-11追加・実装メモ.md 190章] この画面を開いたことを記録し、
+  // ベル／新着件数を未読方式で数えられるようにする。**入口がどこであったかは問わない**
+  // （統括の指摘。「新着◯件」カードからでも「最近の報告」の行からでも同じ画面に来る）。
+  useMarkSeen("inbox", state.activeParentMemberId);
+
 
   return (
     <Screen tone="parent">

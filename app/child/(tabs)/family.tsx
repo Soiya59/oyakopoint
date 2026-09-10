@@ -8,6 +8,7 @@ import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState } from "@/components/StatusViews";
 import ChildTabHeader from "@/components/ChildTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
@@ -49,7 +50,8 @@ export default function ChildFamilyTabScreen() {
   const myId = state.activeChildMemberId;
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
-  const inboxCount = countRecentInbox(state, myId, Date.now() - 24 * 60 * 60 * 1000);
+  const inboxSince = useUnreadSince("inbox", myId);
+  const inboxCount = countRecentInbox(state, myId, inboxSince);
 
   // [2026-09-10移設・実装メモ.md 188章] 旧`app/child/(tabs)/home.tsx`の
   // 「かぞくのけいじばん」カード（C27、22.1.2節）。P7/S2と同じ`family_home_card`

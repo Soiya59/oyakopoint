@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import MemberAvatar from "@/components/MemberAvatar";
 import ParentTabHeader from "@/components/ParentTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
@@ -75,10 +76,14 @@ export default function ParentFamilyTabScreen() {
         })
       : null;
 
-  const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const inboxCount = countRecentInbox(state, state.activeParentMemberId, oneDayAgoMs);
+  // [2026-09-11変更・実装メモ.md 190章] 「24時間以内の件数」→「最後に見てからの未読件数」。
+  // ベル（とどいたよ）と完了報告は行き先も中身も違うため、基準時刻を別々に持つ。
+  // 片方を開いただけでもう片方まで消える、という事故を避けるため（統括と確認済み）。
+  const inboxSince = useUnreadSince("inbox", state.activeParentMemberId);
+  const completionsSince = useUnreadSince("completions", state.activeParentMemberId);
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
   const newCount = state.completions.filter(
-    (c) => new Date(c.reported_at).getTime() >= oneDayAgoMs
+    (c) => new Date(c.reported_at).getTime() >= completionsSince
   ).length;
   // [2026-09-10・実装メモ187章] 「最近の報告5件」（本部長指示の区画表どおり。旧P7は3件だった）。
   const recent = [...state.completions]

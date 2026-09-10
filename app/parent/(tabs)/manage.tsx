@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ParentTabHeader from "@/components/ParentTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -31,7 +32,8 @@ type ManageRow = { emoji: string; label: string; path: string };
 export default function ParentManageTabScreen() {
   const { state } = useAppData();
   const myMember = state.members.find((m) => m.id === state.activeParentMemberId);
-  const inboxCount = countRecentInbox(state, state.activeParentMemberId, Date.now() - 24 * 60 * 60 * 1000);
+  const inboxSince = useUnreadSince("inbox", state.activeParentMemberId);
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
 
   const rows: ManageRow[] = [
     { emoji: "🧺", label: "クエスト管理", path: "/parent/chores" },

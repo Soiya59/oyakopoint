@@ -7,6 +7,7 @@ import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
@@ -83,7 +84,9 @@ export default function SupporterFamilyScreen() {
   // [2026-09-09追加・35.5節] 共通ヘッダー（左: アバター＋自分の名前・非タップ。
   // みまもりメンバーには子ども選択機能を拡張しない。中央: 家族名。右: ベル→S22）。
   const myMember = state.members.find((m) => m.id === myId);
-  const inboxCount = countRecentInbox(state, myId, Date.now() - 24 * 60 * 60 * 1000);
+  // [2026-09-11変更・実装メモ.md 190章] 保護者ホームと同じ2本立て（inbox／completions）。
+  const inboxSince = useUnreadSince("inbox", myId);
+  const inboxCount = countRecentInbox(state, myId, inboxSince);
 
   const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
   const hasBoardPost = card?.source === "board_post";
@@ -106,8 +109,8 @@ export default function SupporterFamilyScreen() {
 
   // [2026-09-09追加・実装メモ.md 183章] 「完了報告（新着◯件）」カード。
   // `app/parent/home.tsx`のpendingCardと同一の数え方（直近24時間）。
-  const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newCount = completions.filter((c) => new Date(c.reported_at).getTime() >= oneDayAgoMs).length;
+  const completionsSince = useUnreadSince("completions", myId);
+  const newCount = completions.filter((c) => new Date(c.reported_at).getTime() >= completionsSince).length;
   // [2026-09-09追加・実装メモ.md 183章] 統括指示「全部記載するとキリがないので5件でよい」。
   // 6件目以降は`/supporter/activity`（復活させた全件一覧）で見られる。
   const recentCompletions = completions.slice(0, 5);

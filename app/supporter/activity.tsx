@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useMarkSeen } from "@/hooks/useLastSeen";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
@@ -33,6 +34,11 @@ type LoadState = "loading" | "error" | "ready";
 
 export default function SupporterActivityScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError } = useAppData();
+  // [2026-09-11追加・実装メモ.md 190章] この画面を開いたことを記録し、
+  // ベル／新着件数を未読方式で数えられるようにする。**入口がどこであったかは問わない**
+  // （統括の指摘。「新着◯件」カードからでも「最近の報告」の行からでも同じ画面に来る）。
+  useMarkSeen("completions", state.activeParentMemberId);
+
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");

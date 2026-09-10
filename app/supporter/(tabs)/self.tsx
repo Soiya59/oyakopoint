@@ -6,6 +6,7 @@ import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -34,7 +35,8 @@ export default function SupporterSelfScreen() {
     useGachaProgress(state.activeParentMemberId);
 
   const myMember = state.members.find((m) => m.id === state.activeParentMemberId);
-  const inboxCount = countRecentInbox(state, state.activeParentMemberId, Date.now() - 24 * 60 * 60 * 1000);
+  const inboxSince = useUnreadSince("inbox", state.activeParentMemberId);
+  const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
@@ -42,6 +44,9 @@ export default function SupporterSelfScreen() {
     { emoji: "🧹", label: "クエスト", path: "/supporter/my-chores" },
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
+    // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
+    // 保護者の「じぶん」タブと同じ理由・同じ🪙（app/parent/(tabs)/self.tsx参照）。
+    { emoji: "🪙", label: "メダル", path: "/supporter/sticker-shop" },
     // [2026-09-09追加・実装メモ.md 186章] 「かぞく」タブから移設したコレクション。
     { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },
     { emoji: "💌", label: "感謝\nポイント", path: "/supporter/gratitude" },

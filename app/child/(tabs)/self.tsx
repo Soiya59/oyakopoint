@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ChildTabHeader from "@/components/ChildTabHeader";
 import { countRecentInbox } from "@/components/InboxPanel";
+import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -43,7 +44,8 @@ type ShortcutItem = { emoji: string; label: string; path: string };
 export default function ChildSelfTabScreen() {
   const { state, memberPoints, fullLedger } = useAppData();
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
-  const inboxCount = countRecentInbox(state, me.id, Date.now() - 24 * 60 * 60 * 1000);
+  const inboxSince = useUnreadSince("inbox", me.id);
+  const inboxCount = countRecentInbox(state, me.id, inboxSince);
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const latestEntry = fullLedger(me.id)[0] ?? null;
 
