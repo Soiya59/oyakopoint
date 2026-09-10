@@ -255,29 +255,34 @@ export default function ChildHomeScreen() {
           // app/parent/my-chores.tsx の renderRow と同じ「main用Pressable」「トグル用
           // Pressable」を兄弟要素として並べる構成をそのまま踏襲し、ネストしたPressable
           // にはしていない（押し間違い防止。同ファイルで実績のある構成）。
-          // [2026-09-09修正・本部長／軽微変更ルート] 1行おきの縞模様を撤回した。
-          // 2026-09-08に統括の要望「行ごとに微妙に色を変えてもいいかも」で入れた
-          // ものだが、実機で見た統括から「なんか見にくい。全部白にもどしてもよいかな？」
-          // との指摘があり、本部長も同意した。**行と行の間にすでに余白があり、
-          // 1件ずつ分かれて見えている**ため、色を変える必要が無く、淡い生成り色の行が
-          // 汚れのように見えていた。indexは受け取るが縞模様には使わない（呼び出し側の
-          // `.map((x, i) => renderCard(x, i))`はそのままにし、変更範囲を広げない）。
-          const renderCard = (
-            { chore, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean },
-            _index: number
-          ) => {
+          // [2026-09-11修正・本部長／主要画面ワイヤーフレーム.md 37章・実装メモ.md 194章]
+          // 1件1行の1列カード（154章）から、2026-09-08より前と同じ2列カードグリッドへ
+          // 戻した。1列化は「上下矢印での並べ替え」の前提だったが、同日中に並べ替え機能
+          // そのものを作らないことが決まった（155章。★おきにいりを押した順に並ぶ仕組みで
+          // 代用）ため、1列でなければならない理由はすでに消滅していた。
+          // 区分の分け方（daily/rest→todo/done、上のフィルタ）は一切変更していない
+          // （37.1a節・37.13節）。名前はnumberOfLines={1}→{2}に変更（37.3節決定3）。
+          // 達成バッジの文言「✅ きろくずみ」・1行おきの縞模様の不採用（155章で撤回済み）は
+          // そのまま維持する（37.7節決定7、37.0節）。
+          const renderCard = ({
+            chore,
+            done,
+          }: {
+            chore: (typeof withDaily)[number]["chore"];
+            done: boolean;
+          }) => {
             const isDaily = state.dailyFlaggedChoreIds.includes(chore.id);
             return (
-              <View key={chore.id} style={[styles.row, done && styles.rowDone]}>
+              <View key={chore.id} style={[styles.card, done && styles.cardDone]}>
                 <Pressable
                   disabled={done}
                   onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
-                  style={styles.rowMain}
+                  style={styles.cardMain}
                 >
-                  <Text style={styles.rowEmoji}>{chore.emoji}</Text>
+                  <Text style={styles.cardEmoji}>{chore.emoji}</Text>
                   <Text
-                    style={[theme.typography.childBody, styles.rowTitle]}
-                    numberOfLines={1}
+                    style={[theme.typography.childBody, styles.cardTitle]}
+                    numberOfLines={2}
                     ellipsizeMode="tail"
                   >
                     {chore.title}
@@ -286,10 +291,10 @@ export default function ChildHomeScreen() {
                     // [2026-08-27] 実施済みの「1回だけ」設定（is_repeatable=false）のchoreは
                     // 上のフィルタで一覧から外れるようになったため、ここへ来るのは
                     // 「くり返す」設定でその日の上限に達したものだけになった。
-                    // [2026-09-08修正] 1行化にともない「✅ きょうは\nがんばったね」の
-                    // 2行文言は収まらないため、状態を示す「きろくずみ」（parent/my-chores.tsx
-                    // の doneLabel と同じ言い方）に短縮した。状態表示（達成済みであること）
-                    // 自体は維持している。
+                    // [2026-09-11・実装メモ.md 37章決定7] 2列に戻したあとも達成バッジの
+                    // 文言は2行「✅ きょうは／がんばったね」へは戻さず、154章で短縮した
+                    // 「✅ きろくずみ」のまま据え置く（本部長の判断、統括の依頼はレイアウトの
+                    // 話であって文言の話ではない）。
                     <Text style={styles.doneLabel} numberOfLines={1}>
                       ✅ きろくずみ
                     </Text>
@@ -321,19 +326,19 @@ export default function ChildHomeScreen() {
                   <Text style={[theme.typography.childBody, styles.sectionHeading, styles.dailySectionHeading]}>
                     ★ おきにいりのクエスト
                   </Text>
-                  <View style={styles.list}>{daily.map((x, i) => renderCard(x, i))}</View>
+                  <View style={styles.grid}>{daily.map(renderCard)}</View>
                 </>
               )}
               {todo.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading]}>クエスト</Text>
-                  <View style={styles.list}>{todo.map((x, i) => renderCard(x, i))}</View>
+                  <View style={styles.grid}>{todo.map(renderCard)}</View>
                 </>
               )}
               {done.length > 0 && (
                 <>
                   <Text style={[theme.typography.childBody, styles.sectionHeading]}>きろくずみ</Text>
-                  <View style={styles.list}>{done.map((x, i) => renderCard(x, i))}</View>
+                  <View style={styles.grid}>{done.map(renderCard)}</View>
                 </>
               )}
             </>
@@ -365,28 +370,35 @@ const styles = StyleSheet.create({
   rewardsWidgetCard: { marginTop: theme.spacing.s3 },
   sectionHeading: { marginTop: theme.spacing.s4, marginBottom: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   dailySectionHeading: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  // [2026-09-08変更・実装メモ.md 154章] 2列グリッド（grid）→1件1行の縦並び（list）。
-  list: { gap: theme.spacing.s2 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
+  // [2026-09-11変更・主要画面ワイヤーフレーム.md 37章・実装メモ.md 194章] 1件1行の
+  // 縦並び（list/row、154章）から、2026-09-08より前と同じ2列カードグリッド
+  // （grid/card）へ戻した。値は2026-09-08より前の実装（`旧2列レイアウト_2026-09-08
+  // 以前.txt`）と同一。
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
+  card: {
+    width: "47%",
     minHeight: theme.tapTarget.childPrimary,
     backgroundColor: theme.colors.neutralSurface,
     borderRadius: theme.radius.childXl,
-    paddingHorizontal: theme.spacing.s4,
-    paddingVertical: theme.spacing.s2,
+    alignItems: "center",
+    padding: theme.spacing.s4,
   },
-  rowMain: { flex: 1, flexDirection: "row", alignItems: "center" },
-  rowDone: {
+  // [37.3a節決定8〜10] gridはalignItemsを指定していないため既定値"stretch"になり、
+  // 同じ行（flexWrapの1ライン）のカードは最も背の高いカードに高さが揃う。
+  // cardMainのflex:1がその余白を吸収し、下の★トグル（dailyToggleWrap）を
+  // 常にカード下端に固定する。
+  cardMain: { flex: 1, alignItems: "center", justifyContent: "center" },
+  cardDone: {
     backgroundColor: theme.colors.brandPrimarySoft,
   },
-  // [2026-09-08追加・本部長／実装メモ.md 155章] 1行おきの縞模様。新しい色は足さず、
-  // 絵文字のfontSizeは変更前のcardMain内の値（32）をそのまま維持。
-  rowEmoji: { fontSize: 32 },
-  rowTitle: { flex: 1, marginLeft: theme.spacing.s3 },
-  pointLabel: { marginLeft: theme.spacing.s2, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  doneLabel: { marginLeft: theme.spacing.s2, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  dailyToggleWrap: { marginLeft: theme.spacing.s3, paddingVertical: theme.spacing.s1 },
+  cardEmoji: { fontSize: 32 },
+  // [37.3節決定3] numberOfLines={1}→{2}。2行でも収まらなければ末尾を省略する。
+  // 文字サイズ（theme.typography.childBody）は変更しない。
+  cardTitle: { marginTop: theme.spacing.s1, textAlign: "center" },
+  pointLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  doneLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  // [37.4節決定4] hitSlopに加え、paddingVerticalで単独の当たり判定の余白を確保する。
+  dailyToggleWrap: { marginTop: theme.spacing.s1, paddingVertical: theme.spacing.s2 },
   dailyToggle: { fontSize: 11, color: theme.colors.neutralTextSecondary },
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
 });
