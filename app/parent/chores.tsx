@@ -53,7 +53,6 @@ export default function ChoresListScreen() {
   // 中身は記録ではなくクエスト一覧である。クエストの話はクエスト管理に集める。
   // 表示条件は従来のタイルと同じ（画面一覧・遷移図.md P25「家族にみまもりメンバーが
   // 1人もいない場合は導線自体を表示しない」）。
-  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const active = managed.filter((c) => !isOneOffFinished(c));
   const finished = managed.filter((c) => isOneOffFinished(c));
 
@@ -180,23 +179,10 @@ export default function ChoresListScreen() {
         </View>
       )}
 
-      {/* [2026-09-02追加・統括指示] みまもりメンバーのクエスト一覧（P25）への導線。
-          保護者ホームの「みまもりの記録」タイルをここへ移した。中身は記録ではなく
-          クエスト一覧なので、クエストの話はこの画面に集める。 */}
-      {hasAnySupporter && (
-        <Pressable
-          onPress={() => router.push("/parent/supporter-chores")}
-          style={{ marginTop: theme.spacing.s6 }}
-          hitSlop={8}
-        >
-          <Card>
-            <Text style={theme.typography.parentBodyMedium}>👀 みまもりのクエスト →</Text>
-            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-              みまもりメンバーが登録しているクエストを見られます。
-            </Text>
-          </Card>
-        </Pressable>
-      )}
+      {/* [2026-09-11削除・統括指示／実装メモ.md 191章] みまもりメンバーのクエスト・
+          ごほうび一覧（P25）への導線は、かんりタブの「👀 みまもり（参考）」へ移した。
+          P25はクエストとごほうびの両方を1画面で見せるため、この画面とごほうび管理の
+          両方にぶら下がっており、同じ画面への入口が2つある状態だった。 */}
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>

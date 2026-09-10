@@ -35,9 +35,22 @@ export default function ParentManageTabScreen() {
   const inboxSince = useUnreadSince("inbox", state.activeParentMemberId);
   const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
 
+  // [2026-09-11追加・統括指示「管理タブにみまもりの内容を確認できる選択があったほうが
+  // よいかな？ いまはクエストやご褒美管理の中にある」／実装メモ.md 191章]
+  // `/parent/supporter-chores`（P25）はクエストとごほうびの**両方**を1画面で見せるため、
+  // クエスト管理の下にもごほうび管理の下にも属していなかった。入口が2つに分かれていた
+  // ものをここへ集め、両方の管理画面からは外した（入口を1つにする）。
+  // 呼び名「みまもり（参考）」は統括の案。すぐ下の「設定」の中にみまもりメンバーの
+  // 招待・退会があるため、「みまもり」だけだとそちらと読み違えられる。「（参考）」が
+  // 見るだけの画面であることを示し、画面末尾の脚注「みんなの参考にどうぞ」ともそろう。
+  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
   const rows: ManageRow[] = [
     { emoji: "🧺", label: "クエスト管理", path: "/parent/chores" },
     { emoji: "🏆", label: "ごほうび管理", path: "/parent/rewards" },
+    // みまもりメンバーがいない家族では出さない（従来のリンク2つと同じ条件）。
+    ...(hasAnySupporter
+      ? [{ emoji: "👀", label: "みまもり（参考）", path: "/parent/supporter-chores" }]
+      : []),
     { emoji: "⚙️", label: "設定", path: "/parent/family" },
   ];
 

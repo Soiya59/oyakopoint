@@ -41,7 +41,6 @@ export default function RewardsListScreen() {
   // クエストとごほうびの両方を出すのに、入口がクエスト管理（P10）にしか
   // なかった（2026-09-02、本部長がP10側だけに導線を付けたため）。
   // 表示条件はP10側と同じ（みまもりメンバーがいる家庭のみ）。
-  const hasAnySupporter = state.members.some((m) => m.role === "supporter" && m.is_active);
 
   // [2026-08-30追加] 要件定義書07-15章・主要画面ワイヤーフレーム.md 24章（決定1・
   // 決定2）。「わたしが登録」「かぞくが登録」の2グループに分ける。判定は
@@ -137,21 +136,10 @@ export default function RewardsListScreen() {
         </View>
       )}
 
-      {hasAnySupporter && (
-        <Pressable
-          onPress={() => router.push("/parent/supporter-chores")}
-          style={{ marginTop: theme.spacing.s6 }}
-          hitSlop={8}
-        >
-          <Card>
-            <Text style={theme.typography.parentBodyMedium}>🎁 みまもりのごほうび →</Text>
-            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
-              みまもりメンバーが登録しているごほうびを見られます。
-            </Text>
-          </Card>
-        </Pressable>
-      )}
-
+      {/* [2026-09-11削除・統括指示／実装メモ.md 191章] みまもりメンバーのクエスト・
+          ごほうび一覧（P25）への導線は、かんりタブの「👀 みまもり（参考）」へ移した。
+          P25はクエストとごほうびの両方を1画面で見せるため、この画面とごほうび管理の
+          両方にぶら下がっており、同じ画面への入口が2つある状態だった。 */}
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
     </Screen>

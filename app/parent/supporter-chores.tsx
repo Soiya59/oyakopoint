@@ -59,7 +59,14 @@ export default function ParentSupporterChoresScreen() {
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
-      <Text style={theme.typography.parentTitle}>かぞくのみまもりメンバーのクエスト</Text>
+      {/* [2026-09-11変更・統括指示／実装メモ.md 191章] ページの題と区分見出しを分けた。
+          従来はクエストの見出しがページの題（parentTitle）を兼ねており、下の
+          「🎁 みまもりのごほうび」（parentBodyMedium・絵文字あり）と大きさも形も
+          そろっていなかった。この画面はクエストとごほうびの両方を見せるので、
+          ページの題は両方を含む言葉にし、クエストはごほうびと同じ高さの区分見出しへ下げる。
+          呼び名「みまもり（参考）」は統括の案（かんりタブの行名と同じ言葉）。 */}
+      <Text style={theme.typography.parentTitle}>みまもり（参考）</Text>
+      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>🧹 みまもりのクエスト</Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
@@ -85,7 +92,12 @@ export default function ParentSupporterChoresScreen() {
                 <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
                   {chores.map((c) => (
                     <View key={c.id} style={styles.item}>
-                      <Text style={{ fontSize: 18 }}>{c.emoji}</Text>
+                      {/* [2026-09-11変更・統括指示／実装メモ.md 191章] 絵文字が未設定の
+                          クエストは行が空白のままだった（ごほうび側は`?? "🎁"`で埋まっていた）。
+                          デザイントークン.md 628行が定める既定`quest.emoji || "📝"`にそろえる。
+                          `??`ではなく`||`なのは、未設定が空文字（型はstringでnullではない）
+                          で入っているため。`??`ではすり抜ける。 */}
+                      <Text style={{ fontSize: 18 }}>{c.emoji || "📝"}</Text>
                       <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
                       <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
                     </View>
