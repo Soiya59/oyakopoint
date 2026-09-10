@@ -26,16 +26,16 @@ import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRo
 export default function ChoresListScreen() {
   const { state, isOneOffFinished } = useAppData();
   const [finishedOpen, setFinishedOpen] = useState(false);
-  // [2026-09-07追加・要件定義書07-20章決定2] 「かぞくが登録」の折りたたみ。既存の
-  // 「終わった単発のクエスト」（finishedOpen）と同じ仕組み（Pressableトグル・▾/▸・
-  // 件数表示・画面固有useState・永続化しない）をそのまま流用する。ただし既定は
-  // finishedOpenとは逆で「開いている」（07-20章決定2の理由参照）。
-  const [othersOpen, setOthersOpen] = useState(true);
+  // [2026-09-11削除・要件定義書07-26章決定5／主要画面ワイヤーフレーム.md 39.0節]
+  // 「かぞくが登録」の折りたたみ（othersOpen、07-20章決定2）はP10については役目を
+  // 終えた。「わたしが登録／かぞくが登録」という区分自体が無くなったため
+  // （07-26章決定1）、開閉する対象がそもそも存在しない。S5・S8側は対象外のまま
+  // 変更していない（07-26章決定7）。
   // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38章] 「同じ内容」
-  // まとめ(c)の開閉状態。07-20章・既存の「終わった単発のクエスト」と同じく画面固有の
+  // まとめ(c)の開閉状態。既存の「終わった単発のクエスト」と同じく画面固有の
   // useStateで持ち、永続化しない（画面遷移のたびにリセットしてよい、07-24章「対象外」）。
-  // キーは「区分名:グルーピングキー」（例: "mine:はみがき 1"）とし、(a)(b)の開閉状態
-  // （finishedOpen/othersOpen）とは独立に管理する（38.4節「入れ子構造」）。
+  // キーは「区分名:グルーピングキー」（例: "active:はみがき 1"）とし、(a)の開閉状態
+  // （finishedOpen）とは独立に管理する（38.4節「入れ子構造」）。
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (key: string) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
@@ -64,16 +64,22 @@ export default function ChoresListScreen() {
   const active = managed.filter((c) => !isOneOffFinished(c));
   const finished = managed.filter((c) => isOneOffFinished(c));
 
-  // [2026-08-30追加] 要件定義書07-15章・主要画面ワイヤーフレーム.md 24章（決定1・
-  // 決定2・決定5）。「終わった単発のクエスト」折りたたみは対象にせず、有効な
-  // クエスト（active）のみを「わたしが登録」「かぞくが登録」の2グループに分ける
-  // （先に有効/終了で分け、有効な行だけをわたし/かぞくで分ける＝決定5）。
-  // 判定は created_by === 自分のfamily_member_id のみ（役割・人数に依存しない、
-  // 07-15章前提5）。登録者不明（created_by===null）・他の保護者の行は「かぞくが登録」
-  // 側に混ぜる（07-15章4章）。一覧の各行には登録者を示す表示を一切追加しない（決定1）。
+  // [2026-09-11削除・要件定義書07-26章決定1／主要画面ワイヤーフレーム.md 39.1.1節]
+  // 「わたしが登録」「かぞくが登録」の2グループへの分割（mine/others）は廃止した。
+  // activeをそのまま単一配列として描画する。並び順は変更しない（取得元クエリが
+  // 既に.order("created_at")のため、区分の分割をやめれば自然に古い順の1本に戻る、
+  // 07-26章決定4）。
   const myMemberId = state.activeParentMemberId;
-  const mine = active.filter((c) => c.created_by === myMemberId);
-  const others = active.filter((c) => c.created_by !== myMemberId);
+
+  // [2026-09-11追加・要件定義書07-26章決定3／主要画面ワイヤーフレーム.md 39.1.2節]
+  // 登録者の行内表示（左側テキストの末尾に「・登録:◯◯」）。自分の場合は省略、
+  // 自分以外の特定メンバーはその表示名、不明（created_by IS NULL）は「記録なし」。
+  // グループ見出し(c)には出さない（決定5）ため、renderRowにのみ実装する。
+  const resolveRegistrantSuffix = (c: Chore): string => {
+    if (c.created_by === myMemberId) return "";
+    const label = c.creator?.display_name ?? "記録なし";
+    return `・登録:${label}`;
+  };
 
   // [2026-09-11改訂・要件定義書07-24章決定2／主要画面ワイヤーフレーム.md 38.5節決定4]
   // 担当者名を、既存の右側テキスト（「・単発」「・1日◯回」等）の末尾に「・」区切りで
@@ -94,6 +100,7 @@ export default function ChoresListScreen() {
         >
           <Text>
             {c.emoji} {c.title}
+            {resolveRegistrantSuffix(c)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary }}>
             {c.points}pt {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
@@ -104,10 +111,11 @@ export default function ChoresListScreen() {
     );
   };
 
-  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38.3節・38.4節]
-  // 「同じ内容」まとめ(c)。sectionKeyは「わたしが登録」「かぞくが登録」「終わった単発の
-  // クエスト」いずれかの区分名で、区分の内側だけでグルーピングする（区分をまたがない、
-  // 38.2節）。グルーピング判定は名前・ポイントの完全一致（07-24章決定1）。
+  // [2026-09-11追加・要件定義書07-24章／主要画面ワイヤーフレーム.md 38.3節・38.4節
+  // （39.1.3節がP10向けに上書き）] 「同じ内容」まとめ(c)。sectionKeyは「実施中の
+  // 全件（active）」「終わった単発のクエスト（finished）」いずれかの区分名で、
+  // 区分の内側だけでグルーピングする（区分をまたがない、38.2節）。グルーピング判定は
+  // 名前・ポイントの完全一致（07-24章決定1）。
   const renderSection = (items: Chore[], dimmed: boolean, sectionKey: string) => {
     const groups = groupDuplicateRows(items, (c) => `${c.title.trim()} ${c.points}`, state.members);
     return groups.map((g) => {
@@ -154,7 +162,7 @@ export default function ChoresListScreen() {
           したが、一覧の一番下に置いたため、クエストやごほうびの件数が増えるほど埋もれる
           という指摘を受け、「＋新規追加」の直下（一覧より上）へ移動した。見た目・文言・
           variant="secondary"は変更していない。位置のみの変更。 */}
-      {!(mine.length === 0 && others.length === 0 && finished.length === 0) && (
+      {!(active.length === 0 && finished.length === 0) && (
         <AppButton
           label="🔍 おすすめを見る"
           variant="secondary"
@@ -172,7 +180,7 @@ export default function ChoresListScreen() {
           1件でもある状態では表示しない」に従い空状態限定だったが、この方針は本件で
           統括判断により変更された（07-16章7.の記述はこの変更で古くなった。文書更新は
           企画部に依頼中）。0件時の見せ方（EmptyState＋案内文＋ボタン）自体は変更しない。 */}
-      {mine.length === 0 && others.length === 0 && finished.length === 0 && (
+      {active.length === 0 && finished.length === 0 && (
         <>
           <EmptyState emoji="📝" title="まだクエストが登録されていません。「＋ 新規追加」から最初のクエストを作ってみましょう" />
           {/* [2026-09-02追加] 主要画面ワイヤーフレーム.md 27.1節どおり、EmptyState
@@ -197,25 +205,9 @@ export default function ChoresListScreen() {
         }}
       />
 
-      {mine.length > 0 && (
-        <View>
-          <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>わたしが登録</Text>
-          {renderSection(mine, false, "mine")}
-        </View>
-      )}
-
-      {others.length > 0 && (
-        <View>
-          {/* [2026-09-07追加・要件定義書07-20章] 折りたたみ。既定は開いている（決定2）。
-              見出し文言・開閉記号・件数併記は「終わった単発のクエスト」と同型。 */}
-          <Pressable onPress={() => setOthersOpen((v) => !v)} hitSlop={8}>
-            <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>
-              {othersOpen ? "▾" : "▸"} かぞくが登録（{others.length}）
-            </Text>
-          </Pressable>
-          {othersOpen && renderSection(others, false, "others")}
-        </View>
-      )}
+      {/* [2026-09-11改訂・要件定義書07-26章決定1／主要画面ワイヤーフレーム.md 39.1節]
+          「わたしが登録」「かぞくが登録」の見出し・区切りを外し、1本の一覧に統合する。 */}
+      {active.length > 0 && renderSection(active, false, "active")}
 
       {finished.length > 0 && (
         <View style={{ marginTop: theme.spacing.s6 }}>
@@ -254,12 +246,5 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.s2,
     textAlign: "center",
     color: theme.colors.neutralTextSecondary,
-  },
-  // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.0節決定3。app/parent/home.tsxの
-  // sectionHeadingと同じスタイルを流用する（新規トークンを増やさない）。
-  sectionHeading: {
-    marginTop: theme.spacing.s6,
-    marginBottom: theme.spacing.s2,
-    color: theme.colors.brandPrimaryStrong,
   },
 });

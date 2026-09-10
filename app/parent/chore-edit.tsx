@@ -20,6 +20,7 @@ import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findChoreSuggestionById } from "@/data/choreSuggestions";
+import { saveSequentially } from "@/lib/sequentialSave";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -54,32 +55,56 @@ type NfcModalStep = "list" | "selectMember" | "writing" | "writeFailed" | "unsup
 // 廃止」参照）。
 
 export default function ChoreEditScreen() {
-  const { id, recId } = useLocalSearchParams<{ id?: string; recId?: string }>();
+  const { id, recId, copyFrom } = useLocalSearchParams<{ id?: string; recId?: string; copyFrom?: string }>();
   const { state, refresh } = useAppData();
   const { client } = useSession();
   const isEditMode = !!id;
   const chore = isEditMode ? state.chores.find((c) => c.id === id) : undefined;
 
+  // [2026-09-11追加・要件定義書07-26章決定8〜9／主要画面ワイヤーフレーム.md 39.2.2節]
+  // コピー機能。P11編集モード内の「コピーして新規登録」から`copyFrom`（コピー元の
+  // chore.id）付きで新規作成モードへ遷移してくる。担当者以外の全項目を引き継ぐ
+  // （担当者は引き継がない、決定9）。`recId`（おすすめ集プレフィル）と同時に付くことは
+  // 想定しないが、仮に両方付いた場合は`copyFrom`を優先する（39.2.2節）。
+  const copySource = !isEditMode && copyFrom ? state.chores.find((c) => c.id === copyFrom) : undefined;
+
   // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
   // 27.0節決定5・27.3節）。P10のおすすめ集モーダルから遷移した場合のみ`recId`が付く。
   // 新規作成モード（idパラメータ無し）のときだけ有効にする（編集モードでは無視する）。
-  const recommendation = !isEditMode && recId ? findChoreSuggestionById(recId) : undefined;
+  const recommendation = !isEditMode && !copySource && recId ? findChoreSuggestionById(recId) : undefined;
 
   // [重要] Reactのフック規則（同一コンポーネントインスタンスの全レンダーで同じ順番・同じ数の
   // フックを呼ぶ）を守るため、下記「編集モードなのにchoreが見つからない」場合の早期returnは
   // 必ずすべてのuseState呼び出しの後に置くこと（先頭付近に置くとレンダーによってフック呼び出し数が
   // 変わり、Reactが実行時エラーを投げる）。
   // ---- フォーム項目（スキーマ設計.sql 4章 chores参照） ----
-  const [title, setTitle] = useState(chore?.title ?? recommendation?.title ?? "");
-  const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? recommendation?.emoji ?? null);
-  const [pointsText, setPointsText] = useState(chore ? String(chore.points) : recommendation ? String(recommendation.points) : "");
-  const [categoryId, setCategoryId] = useState<string | null>(chore?.category_id ?? null);
+  const [title, setTitle] = useState(chore?.title ?? copySource?.title ?? recommendation?.title ?? "");
+  const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? copySource?.emoji ?? recommendation?.emoji ?? null);
+  const [pointsText, setPointsText] = useState(
+    chore ? String(chore.points) : copySource ? String(copySource.points) : recommendation ? String(recommendation.points) : ""
+  );
+  const [categoryId, setCategoryId] = useState<string | null>(chore?.category_id ?? copySource?.category_id ?? null);
   // [2026-09-02追加] 要件定義書07-16章4-1節「頻度→繰り返し設定の変換仕様」決定1〜3
   // （2026-09-02改訂・本部長差し戻し対応）: おすすめはすべてis_repeatable=trueに変換し、
   // daily_limitは未指定（空欄）のままにする（DBトリガーが保存時に1を補完する）。
-  const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? (recommendation ? true : false));
-  const [dailyLimitText, setDailyLimitText] = useState(chore?.daily_limit != null ? String(chore.daily_limit) : "");
+  const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? copySource?.is_repeatable ?? (recommendation ? true : false));
+  const [dailyLimitText, setDailyLimitText] = useState(
+    chore?.daily_limit != null ? String(chore.daily_limit) : copySource?.daily_limit != null ? String(copySource.daily_limit) : ""
+  );
+  // 編集モード専用（単一選択、変更なし。要件定義書07-26章決定18）。
   const [assignedTo, setAssignedTo] = useState<string | null>(chore?.assigned_to ?? null);
+  // [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md 39.3節]
+  // 新規登録モード専用の複数選択状態。担当者はコピーでも引き継がない（決定9）ため、
+  // copySourceの有無に関わらず常に空配列から始める。編集モードでは一切使わない。
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節]
+  // 2人以上を選んで保存し、途中で失敗したときの結果表示。succeeded/failedは
+  // メンバーの表示名（決定15）。failedAssigneeIdsは再試行のためだけに保持する
+  // 内部状態で、表示には使わない。
+  const [saveResult, setSaveResult] = useState<{ succeeded: string[]; failed: string[]; errorMessage: string | null } | null>(
+    null
+  );
+  const [failedAssigneeIds, setFailedAssigneeIds] = useState<string[]>([]);
 
   const [saving, setSaving] = useState(false);
   // [2026-08-29追加・本部長／軽微変更ルート] クエストの削除。ユーザー要望
@@ -225,6 +250,24 @@ export default function ChoreEditScreen() {
     router.replace("/parent/chores");
   };
 
+  // [2026-09-11追加・要件定義書07-26章決定9・決定17・決定20／主要画面ワイヤーフレーム.md
+  // 39.2.2節・39.3.4節] 担当者（assignee）1人分の保存用の入力を組み立てる。呼び出しの
+  // たびに現在のフォーム値から組み立て直すため、再試行時もフォームの値をそのまま使う
+  // （決定16：結果表示中はフォームを固定するため、値がずれる心配はない）。
+  const buildChoreInput = (assignee: string | null) => {
+    const pointsNum = Number(pointsText);
+    const dailyLimitNum = isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null;
+    return {
+      category_id: categoryId,
+      title: title.trim(),
+      emoji,
+      points: pointsNum,
+      is_repeatable: isRepeatable,
+      daily_limit: dailyLimitNum,
+      assigned_to: assignee,
+    };
+  };
+
   const save = async () => {
     const validationError = validate();
     if (validationError) {
@@ -241,32 +284,88 @@ export default function ChoreEditScreen() {
       return;
     }
     setErrorMessage(null);
+
+    // 編集モード: 単一選択（assignedTo）のまま、従来どおり1回だけ更新する。
+    if (chore) {
+      setSaving(true);
+      const res = await updateChore(client, chore.id, buildChoreInput(assignedTo));
+      setSaving(false);
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      await refresh();
+      // 保存成功後はP10（お手伝い管理一覧）へ戻る（依頼内容5.）
+      router.replace("/parent/chores");
+      return;
+    }
+
+    // 新規作成モード: 0人・1人選択時は現行と完全に同じ（要件定義書07-26章決定17）。
+    const assigneeIds: (string | null)[] = selectedAssignees.length > 0 ? selectedAssignees : [null];
+    if (assigneeIds.length === 1) {
+      setSaving(true);
+      const res = await createChore(client, state.family.id, buildChoreInput(assigneeIds[0]));
+      setSaving(false);
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      await refresh();
+      router.replace("/parent/chores");
+      return;
+    }
+
+    // 新規作成モード・2人以上: 逐次保存し、失敗した時点で止める。既に保存が成功した
+    // 行は取り消さない（要件定義書07-26章決定20）。ロジック本体は画面に依存しない
+    // src/lib/sequentialSave.ts に切り出してあり、検証はsequentialSave.verify.tsで
+    // 行っている（開発部/成果物/実装メモ.md参照）。
     setSaving(true);
-
-    const pointsNum = Number(pointsText);
-    const dailyLimitNum = isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null;
-
-    const input = {
-      category_id: categoryId,
-      title: title.trim(),
-      emoji,
-      points: pointsNum,
-      is_repeatable: isRepeatable,
-      daily_limit: dailyLimitNum,
-      assigned_to: assignedTo,
-    };
-
-    const res = chore
-      ? await updateChore(client, chore.id, input)
-      : await createChore(client, state.family.id, input);
-
+    const familyId = state.family.id;
+    const outcome = await saveSequentially(
+      assigneeIds as string[], // 2人以上のときは「誰でも」(null)を含まない
+      (mid) => members.find((m) => m.id === mid)?.display_name ?? "",
+      (mid) => createChore(client, familyId, buildChoreInput(mid))
+    );
     setSaving(false);
-    if (!res.ok) {
-      setErrorMessage(res.error.message);
+    if (outcome.remainingIds.length > 0) {
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      setFailedAssigneeIds(outcome.remainingIds);
       return;
     }
     await refresh();
-    // 保存成功後はP10（お手伝い管理一覧）へ戻る（依頼内容5.）
+    router.replace("/parent/chores");
+  };
+
+  // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節]
+  // 「未保存のメンバーだけ、もう一度保存する」。既に成功したメンバーは再作成しない。
+  const retryFailedAssignees = async () => {
+    if (!state.family.id || failedAssigneeIds.length === 0) return;
+    setSaving(true);
+    const familyId = state.family.id;
+    const outcome = await saveSequentially(
+      failedAssigneeIds,
+      (mid) => members.find((m) => m.id === mid)?.display_name ?? "",
+      (mid) => createChore(client, familyId, buildChoreInput(mid)),
+      saveResult?.succeeded ?? []
+    );
+    setSaving(false);
+    if (outcome.remainingIds.length > 0) {
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      setFailedAssigneeIds(outcome.remainingIds);
+      return;
+    }
+    setSaveResult(null);
+    setFailedAssigneeIds([]);
+    await refresh();
+    router.replace("/parent/chores");
+  };
+
+  // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節]
+  // 「ここまでの分でよい（一覧へ戻る）」。未保存だったメンバーの行は作成しない。
+  const finishWithSucceededOnly = async () => {
+    setSaveResult(null);
+    setFailedAssigneeIds([]);
+    await refresh();
     router.replace("/parent/chores");
   };
 
@@ -311,17 +410,38 @@ export default function ChoreEditScreen() {
         </Card>
       )}
 
+      {/* [2026-09-11追加・要件定義書07-26章決定9・決定11／主要画面ワイヤーフレーム.md
+          39.2.2節決定9] コピー元の表示バナー。24.2節の登録・最終編集Card、27.3節の
+          おすすめ集プレフィル表示と表示条件が排他（chore/copySource/recommendationの
+          有無で分岐）のため、同じCardコンポーネント・同じ位置を流用する。担当者は
+          コピーしていないこと（決定9）を、次の担当チップが空から始まることでも重ねて
+          示す（39.2.2節決定9の3点セット）。 */}
+      {!chore && copySource && (
+        <Card style={styles.metaCard} tone="parent">
+          <Text style={theme.typography.parentBody}>
+            🧾 「{copySource.title}」の内容をコピーしました。保存するまで、元のクエストは変わりません
+          </Text>
+        </Card>
+      )}
+
       {/* [2026-09-02追加] クエストのおすすめ集からのプレフィル表示（要件定義書07-16章
           UIUX申し送り、主要画面ワイヤーフレーム.md 27.0節決定6・27.3節）。24.2節の
           登録・最終編集Cardと表示条件が排他（chore有無で分岐）のため、同じCard
           コンポーネント・同じ位置を流用する。編集モードでは表示しない。 */}
-      {!chore && recommendation && (
+      {!chore && !copySource && recommendation && (
         <Card style={styles.metaCard} tone="parent">
           <Text style={theme.typography.parentBody}>
             🍀 おすすめの「{recommendation.title}」をもとに入力しました。内容は自由に変えられます
           </Text>
         </Card>
       )}
+
+      {/* [2026-09-11追加・要件定義書07-26章決定20・決定16／主要画面ワイヤーフレーム.md
+          39.3.4節決定16] 保存結果（saveResult）が出ている間は、フォーム全体を操作
+          できないようにする（二重登録防止）。pointerEvents="none"＋opacity 0.5は
+          src/components/FamilyTree.tsx等で既に使われている既存パターンの流用で、
+          新しい部品・新しい色は追加していない。 */}
+      <View pointerEvents={saveResult ? "none" : "auto"} style={saveResult ? styles.formDisabled : undefined}>
 
       {/* タイトル */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
@@ -429,40 +549,134 @@ export default function ChoreEditScreen() {
       )}
 
       {/* 担当 */}
-      <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>担当（未指定=誰でも実行可）</Text>
-      <View style={styles.chipRow}>
-        <Pressable
-          onPress={() => setAssignedTo(null)}
-          style={[styles.chip, assignedTo === null && styles.chipSelected]}
-        >
-          <Text>誰でも実行可</Text>
-        </Pressable>
-        {members.map((m) => (
-          <Pressable
-            key={m.id}
-            onPress={() => setAssignedTo(m.id)}
-            style={[styles.chip, assignedTo === m.id && styles.chipSelected]}
-          >
-            <Text>{m.display_name}</Text>
-          </Pressable>
-        ))}
+      {isEditMode ? (
+        // 編集モード: 単一選択のまま変更しない（要件定義書07-26章決定18）。
+        <>
+          <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>担当（未指定=誰でも実行可）</Text>
+          <View style={styles.chipRow}>
+            <Pressable
+              onPress={() => setAssignedTo(null)}
+              style={[styles.chip, assignedTo === null && styles.chipSelected]}
+            >
+              <Text>誰でも実行可</Text>
+            </Pressable>
+            {members.map((m) => (
+              <Pressable
+                key={m.id}
+                onPress={() => setAssignedTo(m.id)}
+                style={[styles.chip, assignedTo === m.id && styles.chipSelected]}
+              >
+                <Text>{m.display_name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : (
+        // [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md
+        // 39.3.1節・39.3.2節] 新規登録モードのみ、特定メンバーを複数選択できる
+        // トグル式チップに変更する。「誰でも実行可」との排他は、選択中は淡色表示にする
+        // がタップは常に有効なままにする（決定12）。見た目は既存のchip/chipSelectedを
+        // そのまま流用し、新しい部品・新しいチェックマークは追加しない（決定19対象外）。
+        <>
+          <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>
+            {selectedAssignees.length >= 2 ? "担当（複数選択可・未指定=誰でも実行可）" : "担当（未指定=誰でも実行可）"}
+          </Text>
+          <View style={styles.chipRow}>
+            <Pressable
+              onPress={() => setSelectedAssignees([])}
+              style={[
+                styles.chip,
+                selectedAssignees.length === 0 && styles.chipSelected,
+                selectedAssignees.length > 0 && styles.chipDeemphasized,
+              ]}
+            >
+              <Text>誰でも実行可</Text>
+            </Pressable>
+            {members.map((m) => {
+              const selected = selectedAssignees.includes(m.id);
+              return (
+                <Pressable
+                  key={m.id}
+                  onPress={() =>
+                    setSelectedAssignees((prev) => (prev.includes(m.id) ? prev.filter((mid) => mid !== m.id) : [...prev, m.id]))
+                  }
+                  style={[styles.chip, selected && styles.chipSelected]}
+                >
+                  <Text>{m.display_name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {/* [2026-09-11追加・要件定義書07-26章決定10／主要画面ワイヤーフレーム.md
+              39.2.3節決定10] コピー直後のみ、担当を選び直すことを促す軽いガイダンス
+              （警告ではない。ブロックしない）。 */}
+          {copySource && (
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              コピー元の担当をそのまま使わず、担当を選び直すことをおすすめします
+            </Text>
+          )}
+          {/* [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md
+              39.3.2節決定13] 2人以上選んだときだけ、選択中のメンバー名を案内する。 */}
+          {selectedAssignees.length >= 2 && (
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              {selectedAssignees.length}人ぶん登録します：
+              {selectedAssignees.map((mid) => members.find((m) => m.id === mid)?.display_name ?? "").join("・")}
+            </Text>
+          )}
+        </>
+      )}
+
       </View>
 
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
 
-      <AppButton
-        label={saving ? "保存中…" : "保存する"}
-        loading={saving}
-        disabled={saving}
-        style={{ marginTop: theme.spacing.s6 }}
-        onPress={save}
-      />
+      {/* [2026-09-11改訂・要件定義書07-26章決定17・決定20／主要画面ワイヤーフレーム.md
+          39.3.3節決定14] 0人・1人選択時は「保存する」（変更なし）。2人以上選択時のみ
+          「◯人ぶん保存する」に変える。保存結果（saveResult）が出ている間は、この
+          ボタン自体を隠す（決定16。再度押すと成功済みメンバーの行を重複作成しうるため）。 */}
+      {!saveResult && (
+        <AppButton
+          label={
+            !isEditMode && selectedAssignees.length >= 2
+              ? saving
+                ? `${selectedAssignees.length}人ぶん保存中…`
+                : `${selectedAssignees.length}人ぶん保存する`
+              : saving
+              ? "保存中…"
+              : "保存する"
+          }
+          loading={saving}
+          disabled={saving}
+          style={{ marginTop: theme.spacing.s6 }}
+          onPress={save}
+        />
+      )}
+
+      {/* [2026-09-11追加・要件定義書07-26章決定8／主要画面ワイヤーフレーム.md 39.2.1節
+          決定6・7] 「コピーして新規登録」。編集モードのみ表示し、保存するボタンと
+          NFCカードの間に独立したCardとして置く。既存AppButtonのvariant="secondary"
+          （削除のdanger・保存のprimaryいずれとも異なる）をそのまま使い、新しい色・
+          新しい部品は追加しない。 */}
+      {!saveResult && chore && (
+        <Card style={styles.copyCard} tone="parent">
+          <Text style={theme.typography.parentBody}>内容をコピーして、新しく登録できます</Text>
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            担当は引き継ぎません
+          </Text>
+          <AppButton
+            label="📄 コピーして新規登録"
+            variant="secondary"
+            style={{ marginTop: theme.spacing.s3 }}
+            onPress={() => router.push({ pathname: "/parent/chore-edit", params: { copyFrom: chore.id } })}
+          />
+        </Card>
+      )}
 
       {/* NFCタグ管理（人ごと化版・2026-09-01改訂。主要画面ワイヤーフレーム.md 7.6.1章）
           新規作成モード（choreがまだ存在しない）では対象のchore_idが無いため表示しない。 */}
-      {chore && (
+      {!saveResult && chore && (
         <Card style={styles.nfcCard} tone="parent">
           <Text style={theme.typography.parentBodyMedium}>NFCタグ</Text>
           <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
@@ -486,7 +700,7 @@ export default function ChoreEditScreen() {
         </Card>
       )}
 
-      {isEditMode && chore && (
+      {!saveResult && isEditMode && chore && (
         <View style={{ marginTop: theme.spacing.s8 }}>
           {confirmingDelete ? (
             <View style={{ gap: theme.spacing.s2 }}>
@@ -520,7 +734,50 @@ export default function ChoreEditScreen() {
         </View>
       )}
 
-      <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      {!saveResult && (
+        <AppButton label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
+      )}
+
+      {/* [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節
+          決定15] 一部保存に失敗したときの結果表示。配色はstatusPendingSoft/
+          statusPending（アンバー、承認待ちカードと同じ既存トークン）を使い、
+          statusBlocking（赤）は使わない（見守り・達成のトーンで表現する全社共通
+          ルールに基づく判断）。この間は通常の保存ボタン・NFCカード・削除セクション・
+          戻るボタンをすべて隠す（上のとおり）。 */}
+      {saveResult && (
+        <Card style={styles.partialFailCard} tone="parent">
+          {saveResult.succeeded.length > 0 && (
+            <Text style={theme.typography.parentBody}>✅ {saveResult.succeeded.join("・")} の分は保存できました</Text>
+          )}
+          <Text
+            style={[
+              theme.typography.parentBody,
+              saveResult.succeeded.length > 0 ? { marginTop: theme.spacing.s2 } : undefined,
+            ]}
+          >
+            ⏳ {saveResult.failed.join("・")} の分はまだ保存できていません
+          </Text>
+          {saveResult.errorMessage && (
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }]}>
+              （{saveResult.errorMessage}）
+            </Text>
+          )}
+          <AppButton
+            label={saving ? "保存中…" : `${saveResult.failed.join("・")} の分だけ、もう一度保存する`}
+            loading={saving}
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s4 }}
+            onPress={retryFailedAssignees}
+          />
+          <AppButton
+            label="ここまでの分でよい（一覧へ戻る）"
+            variant="secondary"
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s2 }}
+            onPress={finishWithSucceededOnly}
+          />
+        </Card>
+      )}
 
       {/* NFCタグ管理モーダル（人ごと化版・2026-09-01改訂）
           主要画面ワイヤーフレーム.md 7.6.1章「一覧→（＋新規発行）→メンバー選択→書き込み」 */}
@@ -752,8 +1009,29 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
   },
   chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
+  // [2026-09-11追加・要件定義書07-26章決定16／主要画面ワイヤーフレーム.md 39.3.1節
+  // 決定12] 新規登録モードで特定メンバーを1人以上選んでいる間の「誰でも実行可」
+  // チップ。既存のNFCタグ発行モーダル（memberRowDisabled）と同じopacity: 0.5を
+  // 再利用するが、disabledは付けない（タップは常に有効、39.3.1節）。
+  chipDeemphasized: { opacity: 0.5 },
   colorDot: { width: 10, height: 10, borderRadius: 5, marginRight: theme.spacing.s1 },
+  // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節
+  // 決定16] 保存結果表示中、フォーム全体を操作できないように淡色化する。既存の
+  // dimmed（opacity: 0.6）・memberRowDisabled（opacity: 0.5）と同種の値を流用する。
+  formDisabled: { opacity: 0.5 },
   nfcCard: { marginTop: theme.spacing.s4 },
+  // [2026-09-11追加・要件定義書07-26章決定8／主要画面ワイヤーフレーム.md 39.2.1節
+  // 決定6] コピー用Card。nfcCardと同種の枠（強調色は使わない）。
+  copyCard: { marginTop: theme.spacing.s4 },
+  // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節
+  // 決定15] 一部保存失敗の結果Card。赤（statusBlocking）ではなくアンバー
+  // （statusPendingSoft/statusPending、承認待ち件数カード等で既に使われている
+  // 既存トークン）を使う。見守り・達成のトーンで表現する全社共通ルールに基づく。
+  partialFailCard: {
+    marginTop: theme.spacing.s6,
+    backgroundColor: theme.colors.statusPendingSoft,
+    borderColor: theme.colors.statusPending,
+  },
   // [2026-09-01追加・実装メモ.md 108章] NFCタグの人ごと化に伴う発行済み一覧の行。
   tagRow: {
     flexDirection: "row",
