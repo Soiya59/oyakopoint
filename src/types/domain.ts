@@ -54,7 +54,7 @@ export interface Chore {
   family_id: string;
   category_id: string | null;
   title: string;
-  emoji: string;
+  emoji: string | null;
   points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
@@ -124,7 +124,7 @@ export interface ReportChoreCompletionByNfcTagResult {
   completion_id: string;
   chore_id: string;
   chore_title: string;
-  chore_emoji: string;
+  chore_emoji: string | null;
   points: number;
   member_id: string;
   member_display_name: string;
@@ -138,7 +138,7 @@ export interface ChoreCompletion {
   family_id: string;
   chore_id: string | null;
   chore_title: string;
-  chore_emoji: string;
+  chore_emoji: string | null;
   reported_by: string; // family_members.id
   // [削除] status/review_note/reviewed_by/reviewed_at（スキーマ設計.sql 5章「[廃止]」参照）。
   // 承認/差し戻しという状態遷移自体が無くなり、chore_completionsはINSERTのみの
@@ -198,7 +198,7 @@ export interface Reward {
   id: string;
   family_id: string;
   name: string;
-  emoji: string;
+  emoji: string | null;
   cost: number;
   description: string | null;
   is_active: boolean;
@@ -251,7 +251,7 @@ export interface LedgerEntry {
   // 「増えた」履歴として扱う。スキーマ設計.sql 14章参照）。
   kind: "earn" | "spend" | "gratitude";
   label: string;
-  emoji: string;
+  emoji: string | null;
   points: number; // earn/gratitudeは+、spendは-の絶対値を格納しUI側で符号を付ける
   occurredAt: string;
   // [変更] 2026-08-15改訂: 承認フロー廃止に伴い「承認済み」等のstatusLabelは廃止した

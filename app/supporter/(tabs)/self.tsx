@@ -40,13 +40,18 @@ export default function SupporterSelfScreen() {
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
+  // [2026-09-11並び替え・統括指示] 保護者の「じぶん」タブと同じ並びにそろえた
+  // （クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく）。
+  // 統括の指示は保護者の画面についてのものだったが、みまもりも同じタイルを持つため
+  // 本部長の判断で合わせている（167.1章「みまもりの表記を保護者に揃えた」と同じ考え方）。
+  // 通帳はみまもりに無く、設定は35.7節決定5により末尾固定なので、その2点だけ異なる。
   const shortcuts: { emoji: string; label: string; path: string }[] = [
     { emoji: "🧹", label: "クエスト", path: "/supporter/my-chores" },
-    { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
     // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
     // 保護者の「じぶん」タブと同じ理由・同じ🪙（app/parent/(tabs)/self.tsx参照）。
     { emoji: "🪙", label: "メダル", path: "/supporter/sticker-shop" },
+    { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     // [2026-09-09追加・実装メモ.md 186章] 「かぞく」タブから移設したコレクション。
     { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },
     { emoji: "💌", label: "感謝\nポイント", path: "/supporter/gratitude" },

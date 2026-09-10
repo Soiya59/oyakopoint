@@ -44,26 +44,29 @@ export default function ParentSelfTabScreen() {
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
+  // [2026-09-11並び替え・統括指示] 並びは統括の指定どおり
+  // クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく→通帳。
+  // （4列なので1行目・2行目がそれぞれこの並びになる）
   const shortcuts: ShortcutItem[] = [
     { emoji: "🧹", label: "クエスト", path: "/parent/my-chores" },
     { emoji: "🎁", label: "ごほうび", path: "/parent/my-rewards" },
+    // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
+    // 画面（/parent/sticker-shop）は2026-09-07から3ロールとも存在するが、タイルが
+    // 無く、コレクション画面かごほうび画面の奥からしか行けなかった。通帳（下の行）と
+    // 同じ取りこぼし。子どもの「じぶん」タブと同じ🪙・同じ呼び名にそろえる。
+    { emoji: "🪙", label: "メダル", path: "/parent/sticker-shop" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す
     // （旧`app/parent/home.tsx`と同じ理由でこのタイルだけ12pxに縮める）。
+    { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
+    // 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れるため明示的に改行する
+    // （旧`app/parent/home.tsx`と同じ理由）。
+    { emoji: "💌", label: "感謝\nポイント", path: "/parent/gratitude" },
+    { emoji: "📅", label: "きろく", path: "/parent/history" },
     // [2026-09-10追加・統括指示「通帳をじぶんにいれてほしい」] 187章のタブ化で
     // 12タイルのうち通帳の1枚だけが落ちていた。上の「じぶんのポイント」カードを
     // 押せば通帳へ行けるが、**タイルとしては消えていた**ため戻す。
     { emoji: "📔", label: "通帳", path: "/parent/points" },
-    // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
-    // 画面（/parent/sticker-shop）は2026-09-07から3ロールとも存在するが、タイルが
-    // 無く、コレクション画面かごほうび画面の奥からしか行けなかった。通帳（上の行）と
-    // 同じ取りこぼし。子どもの「じぶん」タブと同じ🪙・同じ呼び名にそろえる。
-    { emoji: "🪙", label: "メダル", path: "/parent/sticker-shop" },
-    { emoji: "🗄️", label: "コレクション", path: "/parent/collector-shelf", labelSize: 12 },
-    { emoji: "📅", label: "きろく", path: "/parent/history" },
-    // 4列（タイル幅75px）だと6文字は収まらず「感謝ポイン／ト」と割れるため明示的に改行する
-    // （旧`app/parent/home.tsx`と同じ理由）。
-    { emoji: "💌", label: "感謝\nポイント", path: "/parent/gratitude" },
   ];
 
   return (

@@ -95,8 +95,8 @@ export default function ParentSupporterChoresScreen() {
                       {/* [2026-09-11変更・統括指示／実装メモ.md 191章] 絵文字が未設定の
                           クエストは行が空白のままだった（ごほうび側は`?? "🎁"`で埋まっていた）。
                           デザイントークン.md 628行が定める既定`quest.emoji || "📝"`にそろえる。
-                          `??`ではなく`||`なのは、未設定が空文字（型はstringでnullではない）
-                          で入っているため。`??`ではすり抜ける。 */}
+                          未設定はDB上NULL（`chores.emoji TEXT NULL`）なので`??`でも動くが、
+                          トークンが定める形が`||`であり、空文字が入っても拾える広いほうに合わせる。 */}
                       <Text style={{ fontSize: 18 }}>{c.emoji || "📝"}</Text>
                       <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
                       <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
