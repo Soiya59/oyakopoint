@@ -20,8 +20,8 @@
         "distribution": "store"
       },
       "android": {
-        "distribution": "internal",
-        "buildType": "apk"
+        "distribution": "store",
+        "buildType": "app-bundle"
       }
     }
   },
