@@ -55,6 +55,7 @@ import type {
   StampKey,
   StickerCatalogItem,
   StickerPurchaseWithCatalog,
+  StickerTierReset,
   WeeklyFamilyDigest,
 } from "@/types/domain";
 
@@ -2629,6 +2630,46 @@ export async function fetchBadgeTierThresholds(client: SupabaseClient, badgeKey:
   const { data, error } = await client.rpc("badge_tier_thresholds", { p_badge_key: badgeKey });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as number[] };
+}
+
+// ============================================================
+// 14.8 メダルの段階リセット（要件定義書07-25-1章決定19〜29、UIUXデザイン部
+// 40章、設計部/成果物/スキーマ設計.sql 52章、2026-09-11新設）
+// ============================================================
+
+/**
+ * P14「メダルの設定」・買う画面（P37/C30/S23）の両方が使う生データ取得。
+ * `sticker_tier_resets_select_same_family`（family_id一致、ロール制限なし。
+ * 設計部52.3章）により家族の誰でも読める。専用View・RPCは追加しない
+ * （設計部52.6章・52.7章の判断。集計はクライアント側で行う既存方針を踏襲）。
+ */
+export async function fetchStickerTierResets(client: SupabaseClient, familyId: string): Promise<ApiResult<StickerTierReset[]>> {
+  const { data, error } = await client.from("sticker_tier_resets").select("*").eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as StickerTierReset[] };
+}
+
+export interface ResetStickerTierResult {
+  reset_id: string;
+  shape: string;
+  reset_at: string;
+  reset_by: string;
+}
+
+/**
+ * P14「メダルの設定」（要件定義書07-25-1章決定20〜27、UIUXデザイン部40.1節）。
+ * `reset_sticker_tier()`（SECURITY DEFINER・保護者限定、設計部52.4章）を呼ぶ。
+ * 保護者以外が呼ぶと`insufficient_privilege`。存在しない形を渡すと
+ * `foreign_key_violation`。取り消しAPIは存在しない（決定24）。「ぜんぶ」は
+ * クライアントが対象shapeの数だけ本関数を繰り返し呼び出すことで実現する
+ * （設計部決定52-5、配列引数の一括RPCは不採用）。
+ */
+export async function resetStickerTier(client: SupabaseClient, shape: string): Promise<ApiResult<ResetStickerTierResult>> {
+  const { data, error } = await client.rpc("reset_sticker_tier", { p_shape: shape });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: { code: "unknown_error", message: "リセット結果を取得できませんでした" } };
+  return { ok: true, data: row as ResetStickerTierResult };
 }
 
 // ============================================================

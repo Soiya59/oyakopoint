@@ -573,6 +573,20 @@ export interface StickerPurchaseWithCatalog extends OrnamentStickerPurchase {
   } | null;
 }
 
+/**
+ * sticker_tier_resets テーブルの1行（要件定義書07-25-1章決定20〜27、
+ * 設計部/成果物/スキーマ設計.sql 52.2章、2026-09-11新設）。
+ * 段階購入制（07-19-14章決定32〜34）の判定起点を家族×形ごとにリセットする
+ * 追記専用ログ。UPDATE・DELETEは無い（取り消し不可、決定24）。
+ */
+export interface StickerTierReset {
+  id: string;
+  family_id: string;
+  shape: string;
+  reset_at: string;
+  reset_by: string;
+}
+
 /** member_badges テーブルの1行（累計到達バッジの記録。到達したら消えない）。 */
 export interface MemberBadge {
   id: string;

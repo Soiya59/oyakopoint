@@ -407,8 +407,12 @@ GRANT INSERT ON _r TO authenticated;
 -- （開発部/成果物/実装メモ.md 138章）の追加により24→27。
 -- [2026-09-09再更新] terms_consents（開発部/成果物/実装メモ.md 181章）の追加に
 -- より27→28。
+-- [2026-09-11再更新] メダルの段階リセット（要件定義書07-25-1章決定20〜27、
+-- 設計部/成果物/スキーマ設計.sql 52章、開発部/成果物/実装メモ.md 200章）に伴い、
+-- sticker_tier_resetsを追加。28→29。設計部52.10章の見込み（28→29）と一致した
+-- （ローカルDockerで実測。96.5章の遵守）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '28', count(*)::text, count(*) = 28
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '29', count(*)::text, count(*) = 29
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -445,6 +449,14 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 --     2026-09-09更新、利用規約への同意取得＋Play Families安全リマインダー
 --     （開発部/成果物/実装メモ.md 181章）でterms_consentsの2ポリシーを追加。
 --     54→56本。
+--     2026-09-11更新、メダルの段階リセット（要件定義書07-25-1章決定19〜29、
+--     設計部/成果物/スキーマ設計.sql 52.3章、開発部/成果物/実装メモ.md 200章）で
+--     sticker_tier_resetsのSELECTポリシー1本のみを追加。INSERT/UPDATE/DELETE
+--     ポリシーは定義しない（決定24「取り消しは実装しない」をRLSレベルでも
+--     担保する設計）。条件式`family_id = current_family_id()`はロールによる
+--     絞り込みを持たない多数の既存SELECTポリシーと文字通り同一のため、
+--     ハッシュも同一の値を引き写せる（104章の教訓）。56→57本。設計部52.10章の
+--     見込み（56→57）と一致した（ローカルDockerで実測。96.5章の遵守）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -588,6 +600,12 @@ WITH expected(t, p, c, h) AS (VALUES
   -- chores_write_supporter_shared_by_creatorと条件式が文字通り同一のため同じハッシュ。
   ('rewards','rewards_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
   ('sticker_catalog','sticker_catalog_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
+  -- [2026-09-11追加] メダルの段階リセット（設計部/成果物/スキーマ設計.sql
+  -- 52.3章、開発部/成果物/実装メモ.md 200章）。SELECT条件式
+  -- `family_id = current_family_id()`は既存の多数のSELECTポリシーと
+  -- 文字通り同一のためハッシュを引き写せる（104章の教訓）。ローカルDockerで
+  -- 実測して確認した。
+  ('sticker_tier_resets','sticker_tier_resets_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   -- [2026-09-09追加] 利用規約への同意取得＋Play Families安全リマインダー
   -- （やること.md 2-22、開発部/成果物/実装メモ.md 181章）。join_consentsと
   -- 完全に同じ設計（追記専用、SECURITY DEFINER関数のみが書き込む）のため、
@@ -611,7 +629,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー56本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー57本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -711,6 +729,13 @@ WITH expected(f) AS (VALUES
   -- draw_gacha()等と同じくSECURITY DEFINERであり、39.7章の方針どおりPUBLIC/anonから
   -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   ('report_chore_completion_by_nfc_tag'),
+  -- [2026-09-11追加] reset_sticker_tier（メダルの段階リセット、要件定義書
+  -- 07-25-1章決定20〜27、設計部/成果物/スキーマ設計.sql 52.4章、開発部/成果物/
+  -- 実装メモ.md 200章）。draw_gacha()等と同じくSECURITY DEFINERであり、
+  -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  -- purchase_sticker(UUID)はシグネチャ無変更のCREATE OR REPLACEのため、この
+  -- 一覧には変化を及ぼさない（増減±0、設計部52.10章の見込みどおり）。
+  ('reset_sticker_tier'),
   ('reward_redemptions_before_insert'),('rewards_before_write'),
   ('set_updated_at'),
   -- [2026-09-07追加] purchase_sticker（設計部/成果物/スキーマ設計.sql 47.2章、
@@ -745,7 +770,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数61件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数62件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1100,6 +1125,15 @@ INSERT INTO _r SELECT 'A層', 'A26 保護者: terms_consentsに他家族の行�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM terms_consents WHERE family_id <> current_family_id();
+
+-- [2026-09-11追加] A27 sticker_tier_resets（メダルの段階リセット、要件定義書
+-- 07-25-1章決定20〜27、設計部/成果物/スキーマ設計.sql 52.10章推奨、開発部/
+-- 成果物/実装メモ.md 200章）。family_idを持つ家族間分離対象の新規テーブルの
+-- ため、既存のA01〜A26と同じ形で追加する。
+INSERT INTO _r SELECT 'A層', 'A27 保護者: sticker_tier_resetsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM sticker_tier_resets WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する

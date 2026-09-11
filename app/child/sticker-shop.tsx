@@ -6,7 +6,15 @@ import StickerShopPanel from "@/components/StickerShopPanel";
 import StickerPurchaseResultView from "@/components/StickerPurchaseResultView";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { computeLockedCatalogIds, useFamilyStickerPurchasesForLock, useStickerCatalog, useStickerPurchaseAction } from "@/hooks/useStickers";
+import {
+  computeEverPurchasedShapeRarities,
+  computeLatestResetByShape,
+  computeLockedCatalogIds,
+  useFamilyStickerPurchasesForLock,
+  useFamilyStickerTierResets,
+  useStickerCatalog,
+  useStickerPurchaseAction,
+} from "@/hooks/useStickers";
 import type { StickerCatalogItem } from "@/types/domain";
 
 /**
@@ -36,6 +44,15 @@ export default function ChildStickerShopScreen() {
     purchases: familyPurchases,
     reload: reloadFamilyPurchases,
   } = useFamilyStickerPurchasesForLock(state.family.id);
+  // [2026-09-11新設・要件定義書07-25-1章決定20〜29、設計部/成果物/スキーマ設計.sql
+  // 52章] メダルの段階リセット。買う画面は「一度も買ったことがない」と
+  // 「リセットにより未達に戻った」を見分ける必要がある（決定9）ため、
+  // sticker_tier_resetsの生データも取得する。
+  const {
+    loadState: tierResetsLoadState,
+    resets: tierResets,
+    reload: reloadTierResets,
+  } = useFamilyStickerTierResets(state.family.id);
   const { purchasing, purchase } = useStickerPurchaseAction();
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   // [2026-09-09新設・34章] 購入結果ビューに切り替えるための状態。購入APIの戻り値
@@ -44,14 +61,20 @@ export default function ChildStickerShopScreen() {
   const [purchaseResult, setPurchaseResult] = useState<{ item: StickerCatalogItem; purchaseId: string } | null>(null);
 
   const loadState =
-    catalogLoadState === "error" || familyPurchasesLoadState === "error"
+    catalogLoadState === "error" || familyPurchasesLoadState === "error" || tierResetsLoadState === "error"
       ? "error"
-      : catalogLoadState === "loading" || familyPurchasesLoadState === "loading"
+      : catalogLoadState === "loading" || familyPurchasesLoadState === "loading" || tierResetsLoadState === "loading"
       ? "loading"
       : "ready";
+  // [2026-09-11改訂・決定22] 形ごとの直近リセット時刻を求め、段階購入制の
+  // EXISTS判定にそのまま加味する（DB側purchase_sticker()と同じ条件式）。
+  const resetAtByShape = computeLatestResetByShape(tierResets);
   // [要件定義書07-19-14章「決定32・33」] 段階購入制。家族としてまだ解放されて
   // いないカタログIDを、カタログ一覧と家族全員の購入記録から導出する。
-  const lockedCatalogIds = computeLockedCatalogIds(catalog, familyPurchases);
+  const lockedCatalogIds = computeLockedCatalogIds(catalog, familyPurchases, resetAtByShape);
+  // [2026-09-11新設・決定28、40.2節決定9] 「一度も買ったことがない」と
+  // 「リセットで未達に戻った」を見分けるための、reset_atを問わない生の購入実績。
+  const everPurchasedShapeRarities = computeEverPurchasedShapeRarities(familyPurchases);
 
   const handleConfirmPurchase = async (catalogId: string) => {
     setPurchaseError(null);
@@ -113,11 +136,14 @@ export default function ChildStickerShopScreen() {
         catalog={catalog}
         balance={balance}
         lockedCatalogIds={lockedCatalogIds}
+        everPurchasedShapeRarities={everPurchasedShapeRarities}
+        resetAtByShape={resetAtByShape}
         purchasing={purchasing}
         purchaseErrorMessage={purchaseError}
         onRetry={() => {
           reloadCatalog();
           reloadFamilyPurchases();
+          reloadTierResets();
         }}
         onConfirmPurchase={handleConfirmPurchase}
       />

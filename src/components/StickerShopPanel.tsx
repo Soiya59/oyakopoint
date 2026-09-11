@@ -47,11 +47,12 @@ import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { StickerShape, StickerRarity } from "@/theme/theme";
 import type { StickerCatalogItem } from "@/types/domain";
+import { formatDateChildJp, formatDateJp, toJstDateString } from "@/lib/calendarDates";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
 
-const shapeLabel: Record<StickerShape, { child: string; parent: string }> = {
+export const shapeLabel: Record<StickerShape, { child: string; parent: string }> = {
   beetle: { child: "カブトムシ", parent: "カブトムシ" },
   butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
   // [2026-09-09変更・統括判断] 「小さな花」→「おはな」。大人向け・子ども向けとも同じ。
@@ -66,7 +67,7 @@ const shapeLabel: Record<StickerShape, { child: string; parent: string }> = {
   dragon: { child: "ドラゴン", parent: "ドラゴン" },
 };
 
-const rarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
+export const rarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
   bronze: { child: "どう", parent: "銅" },
   silver: { child: "ぎん", parent: "銀" },
   gold: { child: "きん", parent: "金" },
@@ -91,8 +92,24 @@ const requiredLowerRarity: Record<StickerRarity, StickerRarity | null> = {
  * その行でまだ開いていない最初のレアリティ（＝次に開くもの）と、それを開くために
  * 必要な「ひとつ下のレアリティ」を差し込んだ1文を返す。行がすべて開放済みなら
  * `null`（＝1行ごと表示しない）。
+ *
+ * [2026-09-11改訂・要件定義書07-25-1章決定28、UIUXデザイン部/成果物/主要画面
+ * ワイヤーフレーム.md 40.2節決定9〜11、設計部/成果物/スキーマ設計.sql 52.6章]
+ * 「まだ一度も買ったことがない」（通常の家族解放待ち）と「リセットにより
+ * 未達に戻った」を見分け、後者には既存文の末尾に括弧書きのサフィックスを足す
+ * （決定10、新しい文構造は作らない）。判定は「ひとつ下のレアリティの生の
+ * 購入実績（`everPurchasedSet`、reset_atを問わない）があるか」で行う
+ * （52.6章）。`firstLocked`は既に`lockedIdSet`＝リセット加味後の判定に基づく
+ * ため、生の購入実績があるのに現在ロックされている＝リセットにより未達に
+ * 戻った状態だと機械的に判定できる。
  */
-function nextUnlockMessage(tone: Tone, items: StickerCatalogItem[], lockedIdSet: Set<string>): string | null {
+function nextUnlockMessage(
+  tone: Tone,
+  items: StickerCatalogItem[],
+  lockedIdSet: Set<string>,
+  everPurchasedSet: Set<string>,
+  resetAtByShape: Record<string, string>
+): string | null {
   const firstLocked = items.find((item) => lockedIdSet.has(item.id));
   if (!firstLocked) return null;
   const requiredRarity = requiredLowerRarity[firstLocked.rarity];
@@ -100,6 +117,17 @@ function nextUnlockMessage(tone: Tone, items: StickerCatalogItem[], lockedIdSet:
   const isChild = tone === "child";
   const nextLabel = isChild ? rarityLabel[firstLocked.rarity].child : rarityLabel[firstLocked.rarity].parent;
   const requiredLabel = isChild ? rarityLabel[requiredRarity].child : rarityLabel[requiredRarity].parent;
+
+  const resetAt = resetAtByShape[firstLocked.shape];
+  const wasReset = resetAt !== undefined && everPurchasedSet.has(`${firstLocked.shape}:${requiredRarity}`);
+
+  if (wasReset) {
+    const dateStr = toJstDateString(resetAt);
+    return isChild
+      ? `${nextLabel}は、${requiredLabel}を だれかが かうと また ひらくよ（${formatDateChildJp(dateStr)}に いちから やりなおしたよ）`
+      : `${nextLabel}は、${requiredLabel}を家族の誰かが買うと、また購入できるようになります（${formatDateJp(dateStr)}にリセットしました）`;
+  }
+
   return isChild
     ? `${nextLabel}は、${requiredLabel}を だれかが かうと ひらくよ`
     : `${nextLabel}は、${requiredLabel}を家族の誰かが買うと、購入できるようになります`;
@@ -118,6 +146,19 @@ export interface StickerShopPanelProps {
    * 廃止し、本propに置き換えた。
    */
   lockedCatalogIds: string[];
+  /**
+   * [2026-09-11新設・要件定義書07-25-1章決定28、UIUXデザイン部40.2節決定9]
+   * 「ひとつ下のレアリティ」の生の購入実績（reset_atを問わない）を
+   * `${shape}:${rarity}`の形で表した一覧。`computeEverPurchasedShapeRarities`
+   * （src/hooks/useStickers.ts）で導出する。
+   */
+  everPurchasedShapeRarities: string[];
+  /**
+   * [2026-09-11新設・同上、設計部52.7章] 形ごとの直近リセット時刻
+   * （`computeLatestResetByShape`で導出）。リセットされたことが一度も無い形は
+   * キー自体を持たない。
+   */
+  resetAtByShape: Record<string, string>;
   purchasing: boolean;
   purchaseErrorMessage: string | null;
   onRetry: () => void;
@@ -148,6 +189,8 @@ export function StickerShopPanel({
   catalog,
   balance,
   lockedCatalogIds,
+  everPurchasedShapeRarities,
+  resetAtByShape,
   purchasing,
   purchaseErrorMessage,
   onRetry,
@@ -158,6 +201,7 @@ export function StickerShopPanel({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selected, setSelected] = useState<StickerCatalogItem | null>(null);
+  const everPurchasedSet = new Set(everPurchasedShapeRarities);
   // [2026-09-09修正・本部長] `confirming`は購入確認モーダルの連打ガード。**必ず早期リターン
   // （下の loading / error）より前で宣言すること。** 当初これを下の handleConfirm の直前に
   // 置いてしまい、読み込み中は1個・完了後は2個とフックの数が描画ごとに変わって、
@@ -279,7 +323,7 @@ export function StickerShopPanel({
             {/* [2026-09-08改訂・実装メモ164章] 行の下に1行だけ、その行で次に開くものを説明する。
                 行が全部開放済みなら何も出さない。 */}
             {(() => {
-              const message = nextUnlockMessage(tone, items, lockedIdSet);
+              const message = nextUnlockMessage(tone, items, lockedIdSet, everPurchasedSet, resetAtByShape);
               return message ? <Text style={[captionStyle, styles.rowUnlockHint]}>{message}</Text> : null;
             })()}
           </View>

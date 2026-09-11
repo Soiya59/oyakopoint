@@ -14,12 +14,14 @@ import {
   fetchFamilyStickerPurchases,
   fetchMyStickerPurchases,
   fetchStickerCatalog,
+  fetchStickerTierResets,
   moveTreeSticker,
   purchaseSticker,
   type ApiError,
   type PurchaseStickerResult,
 } from "@/data/api";
-import type { StickerCatalogItem, StickerPurchaseWithCatalog } from "@/types/domain";
+import type { StickerCatalogItem, StickerPurchaseWithCatalog, StickerTierReset } from "@/types/domain";
+import type { StickerRarity, StickerShape } from "@/theme/theme";
 
 export type StickerLoadState = "loading" | "error" | "ready";
 
@@ -200,8 +202,8 @@ const requiredLowerRarity: Record<string, string | null> = {
 
 /**
  * 購入画面（P37/C30/S23）用: カタログ12種のうち、家族としてまだ解放されて
- * いない（＝ひとつ下のレアリティを家族の誰も過去に購入したことがない）
- * カタログID一覧を計算する純関数。
+ * いない（＝ひとつ下のレアリティを家族の誰も、直近のリセット以降に購入した
+ * ことがない）カタログID一覧を計算する純関数。
  *
  * [2026-09-08新設・要件定義書07-19-14章「決定32・33・34」・
  * UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 32.0b節「開発部への申し送り」・
@@ -214,24 +216,126 @@ const requiredLowerRarity: Record<string, string | null> = {
  * という判断を踏襲）。`purchase_sticker()`のRPC自体が最終的な検証（決定32〜34）を
  * 行うため、これは画面のボタン非活性表示・理由表示のためのUX的な事前判定に
  * すぎない（最終防衛線はDB側）。
+ *
+ * [2026-09-11改訂・要件定義書07-25-1章決定22、設計部/成果物/スキーマ設計.sql
+ * 52.5章・52.6章、開発部/成果物/実装メモ.md 200章] メダルの段階リセットに伴い、
+ * `resetAtByShape`（形ごとの直近リセット時刻。`computeLatestResetByShape`で
+ * 導出する）を第3引数に追加した。判定条件はDB側`purchase_sticker()`の
+ * `(v_reset_at IS NULL OR osp.purchased_at > v_reset_at)`と完全に同じ形で
+ * 再現する。**`resetAt &&`のように早期に真偽判定してしまうと、一度もリセット
+ * していない家族（＝現時点の全家族）まで巻き込んで全メダルが買えなくなる
+ * 罠がある（52.5章が名指しで警告している三値論理の罠と同型）ため、
+ * `!resetAt || ...`という順序を必ず守ること。** 第3引数を省略した場合は
+ * 空オブジェクト（＝どの形もリセットされていない）として扱われ、従来どおり
+ * 全期間を対象にする。
  */
 export function computeLockedCatalogIds(
   catalog: StickerCatalogItem[],
-  familyPurchases: Pick<StickerPurchaseWithCatalog, "sticker_catalog">[]
+  familyPurchases: Pick<StickerPurchaseWithCatalog, "sticker_catalog" | "purchased_at">[],
+  resetAtByShape: Record<string, string> = {}
 ): string[] {
-  const purchasedShapeRarities = new Set(
-    familyPurchases
-      .map((p) => p.sticker_catalog)
-      .filter((c): c is NonNullable<StickerPurchaseWithCatalog["sticker_catalog"]> => !!c)
-      .map((c) => `${c.shape}:${c.rarity}`)
-  );
   return catalog
     .filter((item) => {
       const required = requiredLowerRarity[item.rarity];
       if (!required) return false; // 銅は無条件（下の段が無い）
-      return !purchasedShapeRarities.has(`${item.shape}:${required}`);
+      const resetAt = resetAtByShape[item.shape];
+      const qualifies = familyPurchases.some((p) => {
+        const c = p.sticker_catalog;
+        if (!c || c.shape !== item.shape || c.rarity !== required) return false;
+        // [三値論理の罠に対する回答] resetAtが無い（一度もリセットされて
+        // いない）場合は無条件に全期間を対象にする。
+        return !resetAt || new Date(p.purchased_at).getTime() > new Date(resetAt).getTime();
+      });
+      return !qualifies;
     })
     .map((item) => item.id);
+}
+
+/**
+ * [2026-09-11新設・要件定義書07-25-1章決定22、設計部/成果物/スキーマ設計.sql
+ * 52.7章] `sticker_tier_resets`の生データ（家族全体）から、形ごとの直近の
+ * リセット時刻（reset_atの最大値）を求める純関数。リセットされたことが
+ * 一度も無い形はキー自体を持たない（＝`resetAtByShape[shape]`は`undefined`）。
+ */
+export function computeLatestResetByShape(resets: Pick<StickerTierReset, "shape" | "reset_at">[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const r of resets) {
+    const current = map[r.shape];
+    if (!current || new Date(r.reset_at).getTime() > new Date(current).getTime()) {
+      map[r.shape] = r.reset_at;
+    }
+  }
+  return map;
+}
+
+/**
+ * [2026-09-11新設・UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 40.2節
+ * 決定9、設計部/成果物/スキーマ設計.sql 52.6章] 「一度も買ったことがない」
+ * （通常の家族解放待ち）と「リセットにより未達に戻った」を見分けるための
+ * 判定材料。`reset_at`を一切問わない、家族の生の購入実績（shape:rarity）の
+ * 集合を返す。決定22によりリセットはornament_sticker_purchasesを一切
+ * 書き換えないため、この集合はリセットの前後で変化しない。
+ */
+export function computeEverPurchasedShapeRarities(
+  familyPurchases: Pick<StickerPurchaseWithCatalog, "sticker_catalog">[]
+): string[] {
+  const set = new Set<string>();
+  for (const p of familyPurchases) {
+    const c = p.sticker_catalog;
+    if (c) set.add(`${c.shape}:${c.rarity}`);
+  }
+  return Array.from(set);
+}
+
+const rarityOrder: Record<StickerRarity, number> = { bronze: 1, silver: 2, gold: 3, crystal: 4 };
+
+/**
+ * [2026-09-11新設・UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 40.1節
+ * 決定4] P14「メダルの設定」の状態表示用: 指定した形について、家族の誰かが
+ * 過去に購入した最上位のレアリティを返す（`reset_at`を問わない、生の購入
+ * 実績）。1件も購入が無ければ`null`（決定5の非活性化判定に使う）。
+ */
+export function computeHighestEverPurchasedRarity(
+  familyPurchases: Pick<StickerPurchaseWithCatalog, "sticker_catalog">[],
+  shape: StickerShape
+): StickerRarity | null {
+  let max: StickerRarity | null = null;
+  for (const p of familyPurchases) {
+    const c = p.sticker_catalog;
+    if (!c || c.shape !== shape) continue;
+    if (!max || rarityOrder[c.rarity] > rarityOrder[max]) max = c.rarity;
+  }
+  return max;
+}
+
+/**
+ * [2026-09-11新設・要件定義書07-25-1章決定20〜27、設計部/成果物/スキーマ設計.sql
+ * 52.3章] `sticker_tier_resets`の家族全体の生データ取得。P14「メダルの設定」・
+ * 買う画面（P37/C30/S23）の両方が使う。`useFamilyStickerPurchasesForLock`と
+ * 同じ「集計はクライアント側」の設計方針（52.1章(D)）を踏襲する。
+ */
+export function useFamilyStickerTierResets(familyId: string) {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [resets, setResets] = useState<StickerTierReset[]>([]);
+
+  const load = useCallback(async () => {
+    if (!familyId) return;
+    setLoadState("loading");
+    const res = await fetchStickerTierResets(client, familyId);
+    if (!res.ok) {
+      setLoadState("error");
+      return;
+    }
+    setResets(res.data);
+    setLoadState("ready");
+  }, [client, familyId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, resets, reload: load };
 }
 
 /**
