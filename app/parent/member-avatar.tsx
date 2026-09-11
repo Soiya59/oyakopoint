@@ -75,6 +75,19 @@ export default function ParentMemberAvatarScreen() {
   const explainText = isProxy
     ? `ここで描いた絵は、${displayName}さんのアバターになります。ガチャに出す絵とは別ものです（ガチャの景品にはなりません）`
     : "ここで描いた絵は、あなたのアバターになります。ガチャに出す絵とは別ものです（ガチャの景品にはなりません）";
+  // [2026-09-11追加・本部長／軽微変更ルート] 描き方のヒント。**統括が実機で描いて
+  // 分かったこと**を、次に使う人が試行錯誤せずに済むよう文言にした。
+  // (1) 顔の輪郭を描くと、背景のメンバーカラーの丸と線が二重になり、小さいサイズ
+  //     （27箇所中13箇所が20〜28px）で潰れる。輪郭を描かなければ目と口に使える
+  //     面積も広がる。統括の言葉「顔の輪郭を記載したら潰れたけど、輪郭を記載
+  //     しなかったらいい感じになった」。
+  // (2) ほっぺの赤い点は統括の提案。実際のアバターで効果が出ている。
+  // **書き出しを「好きなものを描いてください」にしているのは意図的**。企画部07-27章の
+  // 確定仕様は「顔に限定しない（好きなもの）」であり、本部長の初稿は1行目で顔に
+  // 限定してしまっていた。統括の指摘で直した。代理で描く場合も文言は変えない
+  // （描き方のコツであって、誰の絵かとは関係がないため）。
+  const hintText =
+    "好きなものを描いてください。顔を描くなら、輪郭は色の丸がそのまま使えるので目と口だけで十分です。ほっぺに赤い点を打つとかわいくなります。";
 
   return (
     <Screen tone="parent">
@@ -93,6 +106,7 @@ export default function ParentMemberAvatarScreen() {
       )}
 
       <Text style={[theme.typography.parentBody, styles.explain]}>{explainText}</Text>
+      <Text style={[theme.typography.parentBody, styles.explain]}>{hintText}</Text>
 
       {!memberId || !target || !memberAvatarsLoaded ? (
         memberAvatarsError ? (

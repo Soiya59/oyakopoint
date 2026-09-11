@@ -190,6 +190,32 @@ export async function verifyEmailOtp(email: string, code: string): Promise<ApiRe
 }
 
 /**
+ * [2026-09-11新設] 設計部/成果物/認証・データ管理設計書.md 11.4.2章。
+ * Google Play・App Store両方の審査用アカウント専用の入口。supabase.auth.signInWithPassword
+ * をそのまま呼ぶだけで、独自の検証ロジックは持たない（11.1章の却下理由1の
+ * 再発を避けるため）。特定のメールアドレスをコード内でチェックする分岐も
+ * 持たない（11.4章(b)の却下理由の再発を避けるため）——一般アカウントは
+ * パスワードが設定されていないため、このアカウント以外で呼んでも
+ * エラーになるだけで、実害は無い。
+ *
+ * [2026-09-11実測・実装メモ.md 206章] ローカルSupabase（gotrue）で、パスワード未設定
+ * アカウントに対して任意の文字列を渡して実測したところ、`error.code`は
+ * `"invalid_credentials"`（HTTP 400）だった。設計部11.4.2章・11.9章3の想定
+ * （未実測）と一致することを確認した。AUTH_ERRCODEと同様の対応表は
+ * app/onboarding/email.tsx側のエラー文言分岐に反映する。
+ */
+export async function signInWithPassword(email: string, password: string): Promise<ApiResult<null>> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    return {
+      ok: false,
+      error: { code: error.code ?? error.name, message: error.message, status: error.status },
+    };
+  }
+  return { ok: true, data: null };
+}
+
+/**
  * マジックリンクのリダイレクトURL（`?code=...`または`#access_token=...`）を
  * 受け取ってセッションを確立する。
  *

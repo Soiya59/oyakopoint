@@ -1,12 +1,24 @@
 import React, { useState } from "react";
-import { TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
-import { signInWithEmail } from "@/data/api";
+import { signInWithEmail, signInWithPassword } from "@/data/api";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
+
+/**
+ * [2026-09-11新設] Google Play・App Store審査員向けログイン手段。
+ * 設計部/成果物/認証・データ管理設計書.md 11.4.2章、UIUXデザイン部/成果物/
+ * 主要画面ワイヤーフレーム.md 42章の決定に対応。一般家族にはパスワードが
+ * 設定されていないため、この文言は「パスワードを忘れた」という誤解を
+ * 生まないように書かれている（42.3節決定8）。
+ */
+const REVIEW_LOGIN_ERROR_MESSAGE =
+  "メールアドレスとパスワードの組み合わせを確認できませんでした。ふだんのログインでは、パスワードは使いません。メールでログインする場合は、上の「送信する」からお進みください。";
+/** 29.2節・29.4節の既存の通信エラー文言をそのまま流用する（42.3節決定9）。 */
+const REVIEW_LOGIN_NETWORK_ERROR_MESSAGE = "通信エラーが発生しました。もう一度お試しください。";
 
 /**
  * P2 メールアドレス入力
@@ -32,6 +44,13 @@ export default function EmailInputScreen() {
   const [sending, setSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // [2026-09-11新設] 審査員向け「パスワードでログイン」。設計部11.4.2章・
+  // UIUXデザイン部42章。reviewLoginVisibleは開閉トグル（決定4）、初期値false。
+  const [reviewLoginVisible, setReviewLoginVisible] = useState(false);
+  const [reviewPassword, setReviewPassword] = useState("");
+  const [reviewSending, setReviewSending] = useState(false);
+  const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
+
   const submit = async () => {
     if (!email.trim()) return;
     setSending(true);
@@ -44,6 +63,44 @@ export default function EmailInputScreen() {
       return;
     }
     router.push({ pathname: "/onboarding/email-sent", params: { email, intent: intent ?? "create" } });
+  };
+
+  /**
+   * [2026-09-11新設] トグルの開閉。閉じるときは入力済みのパスワードと
+   * 表示中のエラー文言を破棄する（UIUX42.2節決定7、「無かったことにする」）。
+   */
+  const toggleReviewLogin = () => {
+    setReviewLoginVisible((prev) => {
+      if (prev) {
+        setReviewPassword("");
+        setReviewErrorMessage(null);
+      }
+      return !prev;
+    });
+  };
+
+  /**
+   * [2026-09-11新設] 審査員向けパスワードログインの実行。
+   * `signInWithPassword`が成立すると、`src/lib/session.tsx`の`onAuthStateChange`が
+   * 既存の仕組みでそのまま発火し`/parent`へ遷移する（設計部11.4.2章）ため、
+   * ここでの画面遷移コードは不要。
+   */
+  const submitReviewLogin = async () => {
+    if (!email.trim() || !reviewPassword) return;
+    setReviewSending(true);
+    setReviewErrorMessage(null);
+    const res = await signInWithPassword(email.trim(), reviewPassword);
+    setReviewSending(false);
+    if (!res.ok) {
+      // [実装メモ.md 206章で実測] パスワード誤り・未設定アカウントはいずれも
+      // error.code === "invalid_credentials"（HTTP 400）。それ以外（ネットワーク
+      // 断等）はAuthRetryableFetchError等になりcodeがundefinedのためnameへ
+      // フォールバックし、"invalid_credentials"と一致しない。この判定で
+      // UIUX42.3節の文言と29.2節の通信エラー文言を区別する。
+      setReviewErrorMessage(
+        res.error.code === "invalid_credentials" ? REVIEW_LOGIN_ERROR_MESSAGE : REVIEW_LOGIN_NETWORK_ERROR_MESSAGE
+      );
+    }
   };
 
   return (
@@ -77,10 +134,77 @@ export default function EmailInputScreen() {
       <AppButton
         label={sending ? "送信中…" : "送信する"}
         loading={sending}
-        disabled={sending || !email.trim()}
+        disabled={sending || reviewSending || !email.trim()}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={submit}
       />
+
+      {/* [2026-09-11新設] 審査員向け「パスワードでログイン」。設計部11.4.2章の
+          (d)常時表示リンク方式。UIUXデザイン部42.4節決定10により、既存の
+          「送信する」ボタン・注記文言より後（画面の実際の最下部）に配置する。
+          タップ連打・秒数計測等の検出ロジックは持たない（隠し入口ではない）。 */}
+      <View style={styles.reviewLoginDivider} />
+      <Pressable
+        onPress={toggleReviewLogin}
+        disabled={sending || reviewSending}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        accessibilityRole="button"
+      >
+        <Text style={[theme.typography.parentCaption, styles.reviewLoginLinkText]}>
+          {reviewLoginVisible ? "▾" : "▸"} パスワードでログイン
+        </Text>
+      </Pressable>
+
+      {reviewLoginVisible && (
+        <>
+          <View style={{ marginTop: theme.spacing.s3 }}>
+            <TextInput
+              value={reviewPassword}
+              onChangeText={setReviewPassword}
+              placeholder="パスワード"
+              secureTextEntry
+              editable={!reviewSending}
+              style={{
+                borderWidth: 1,
+                borderColor: theme.colors.neutralBorder,
+                borderRadius: theme.radius.parentMd,
+                padding: theme.spacing.s3,
+                backgroundColor: theme.colors.neutralSurface,
+              }}
+            />
+          </View>
+
+          {reviewErrorMessage && (
+            <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>
+              {reviewErrorMessage}
+            </Text>
+          )}
+
+          <AppButton
+            label={reviewSending ? "たしかめています…" : "パスワードでログインする"}
+            variant="secondary"
+            loading={reviewSending}
+            disabled={sending || reviewSending || !reviewPassword}
+            style={{ marginTop: theme.spacing.s3 }}
+            onPress={submitReviewLogin}
+          />
+        </>
+      )}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  // [2026-09-11追加] `app/parent/family.tsx`の`settingsDivider`と同じ値
+  // （UIUXデザイン部42.2節決定5）。
+  reviewLoginDivider: {
+    marginTop: theme.spacing.s6,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+  },
+  reviewLoginLinkText: {
+    marginTop: theme.spacing.s3,
+    color: theme.colors.neutralTextSecondary,
+    textDecorationLine: "underline",
+  },
+});
