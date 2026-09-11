@@ -36,6 +36,7 @@ import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } fro
 import { MemberAvatar } from "./MemberAvatar";
 import { StickerIcon } from "./StickerIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
+import { useAppData } from "@/data/store";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { BadgeRow } from "@/hooks/useBadges";
@@ -326,6 +327,10 @@ function PastTreeColorLegend({
 }) {
   const isChild = tone === "child";
   const captionStyle = captionStyleFor(tone);
+  // [2026-09-11追加・要件定義書07-27章 決定9] アバターを自分で描いた絵にできる
+  // ようにする機能。27箇所すべてのMemberAvatarで同じ見た目にするため、この
+  // コンポーネントの内部だけで完結させる（呼び出し元への新しいprop追加はしない）。
+  const { memberAvatars } = useAppData();
 
   const contributors = useMemo(() => {
     const reporterIds = new Set(dots.map((d) => d.reported_by));
@@ -351,7 +356,7 @@ function PastTreeColorLegend({
       <View style={styles.legendRows}>
         {contributors.map((m) => (
           <View key={m.id} style={styles.legendRow}>
-            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} lineData={memberAvatars[m.id]} />
             <Text style={captionStyle}>{m.display_name}</Text>
           </View>
         ))}
@@ -387,6 +392,8 @@ function MemberSelectionChips({
 }) {
   const isChild = tone === "child";
   const captionStyle = captionStyleFor(tone);
+  // [2026-09-11追加・要件定義書07-27章 決定9] 上のPastTreeColorLegendと同じ理由。
+  const { memberAvatars } = useAppData();
 
   return (
     <View style={styles.stickerMemberRow}>
@@ -408,7 +415,7 @@ function MemberSelectionChips({
             accessibilityRole="button"
             accessibilityState={{ selected: m.id === selectedMemberId }}
           >
-            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} lineData={memberAvatars[m.id]} />
             <Text style={captionStyle}>{m.id === myMemberId ? (isChild ? "じぶん" : "自分") : m.display_name}</Text>
           </Pressable>
         ))}
@@ -1036,6 +1043,8 @@ function FamilyStickerDetailCard({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const { shape, rarity, owned } = entry;
+  // [2026-09-11追加・要件定義書07-27章 決定9] 上のPastTreeColorLegendと同じ理由。
+  const { memberAvatars } = useAppData();
 
   const ownerCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1052,7 +1061,7 @@ function FamilyStickerDetailCard({
           <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
             {ownerCounts.map(({ member, count }) => (
               <View key={member.id} style={styles.legendRow}>
-                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} />
+                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} />
                 <Text style={captionStyle}>
                   {member.display_name}
                   {count > 1 ? ` ×${count}` : ""}

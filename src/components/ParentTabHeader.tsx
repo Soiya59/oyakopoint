@@ -23,7 +23,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
 export function ParentTabHeader({ inboxCount }: { inboxCount: number }) {
-  const { state } = useAppData();
+  const { state, memberAvatars } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
   const childProfiles = state.members
     .filter((m) => m.is_active && m.role === "child")
@@ -40,7 +40,7 @@ export function ParentTabHeader({ inboxCount }: { inboxCount: number }) {
 
   const nameBlock = me ? (
     <>
-      <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
+      <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} lineData={memberAvatars[me.id]} />
       <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
     </>
   ) : null;

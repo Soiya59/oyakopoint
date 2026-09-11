@@ -54,7 +54,7 @@ const NAME_MAX_LENGTH = 12;
  * マイグレーションは追加していない。
  */
 export default function FamilyScreen() {
-  const { state, refresh } = useAppData();
+  const { state, refresh, memberAvatars } = useAppData();
   const { client, parentMember, logoutParent } = useSession();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -348,7 +348,7 @@ export default function FamilyScreen() {
               <Text style={{ color: theme.colors.brandPrimaryStrong }}>色を変更しました</Text>
             )}
             <View style={{ flexDirection: "row", alignItems: isEditingColor ? "flex-start" : "center", gap: theme.spacing.s3 }}>
-            <MemberAvatar name={m.display_name} color={m.avatar_color} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} />
             <View style={{ flex: 1 }}>
               {editingId === m.id ? (
                 <>
@@ -469,6 +469,22 @@ export default function FamilyScreen() {
                   label="色を変更"
                   variant="secondary"
                   onPress={() => startEditColor(m.id, m.avatar_color)}
+                  disabled={processingId !== null || anyEditOpen}
+                />
+                {/* [2026-09-11追加・要件定義書07-27章 決定10] アバターを自分で描いた絵に
+                    できるようにする機能。名前変更・色変更と同じく役割を問わず保護者が
+                    全員に対して行える（決定12）。「絵を描く」ボタンは名前・色編集の
+                    インライン展開とは異なり、別画面（P38）へ遷移する
+                    （主要画面ワイヤーフレーム.md 43.2節 決定10）。 */}
+                <AppButton
+                  label={memberAvatars[m.id] ? "絵をなおす" : "絵を描く"}
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/parent/member-avatar",
+                      params: { memberId: m.id, displayName: m.display_name },
+                    })
+                  }
                   disabled={processingId !== null || anyEditOpen}
                 />
                 {m.role === "child" && (

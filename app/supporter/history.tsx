@@ -32,7 +32,7 @@ import type { DailySummaryEntry } from "@/types/domain";
 type LoadState = "loading" | "error" | "ready";
 
 export default function SupporterHistoryScreen() {
-  const { state, dailySummary } = useAppData();
+  const { state, dailySummary, memberAvatars } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [expanded, setExpanded] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null); // null = 家族全体
@@ -201,7 +201,7 @@ export default function SupporterHistoryScreen() {
                 const member = state.members.find((m) => m.id === c.reported_by);
                 return (
                   <View key={c.id} style={styles.row}>
-                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
+                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} />
                     <Text style={[theme.typography.supporterBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>
@@ -217,7 +217,7 @@ export default function SupporterHistoryScreen() {
                 const emoji = state.rewards.find((rw) => rw.id === r.reward_id)?.emoji ?? "🎁";
                 return (
                   <View key={r.id} style={styles.row}>
-                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} />
+                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} />
                     <Text style={[theme.typography.supporterBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>

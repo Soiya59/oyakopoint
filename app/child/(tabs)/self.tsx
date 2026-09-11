@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ChildTabHeader from "@/components/ChildTabHeader";
+import MemberAvatar from "@/components/MemberAvatar";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
@@ -42,7 +43,7 @@ type ShortcutItem = { emoji: string; label: string; path: string };
  * 目立つ場所に置かない」という既存原則の維持）。
  */
 export default function ChildSelfTabScreen() {
-  const { state, memberPoints, fullLedger } = useAppData();
+  const { state, memberPoints, fullLedger, memberAvatars } = useAppData();
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const inboxSince = useUnreadSince("inbox", me.id);
   const inboxCount = countRecentInbox(state, me.id, inboxSince);
@@ -60,6 +61,19 @@ export default function ChildSelfTabScreen() {
   return (
     <Screen tone="child">
       <ChildTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-11追加・要件定義書07-27章 決定9・18、主要画面ワイヤーフレーム.md
+          43.2節 決定9] アバターを自分で描いた絵にできるようにする機能の入口。
+          タブヘッダー直下・残高カードより上に配置する。 */}
+      <Pressable onPress={() => router.push("/child/my-avatar")}>
+        <Card tone="child" style={styles.avatarCard}>
+          <MemberAvatar name={me.display_name} color={me.avatar_color} size={64} lineData={memberAvatars[me.id]} />
+          <Text style={theme.typography.childBody}>{me.display_name}</Text>
+          <Text style={[theme.typography.childBody, styles.avatarLink]}>
+            {memberAvatars[me.id] ? "えを なおす →" : "えを かく →"}
+          </Text>
+        </Card>
+      </Pressable>
 
       <Pressable onPress={() => router.push("/child/points")}>
         <Card tone="child" style={styles.balanceCard}>
@@ -92,6 +106,8 @@ export default function ChildSelfTabScreen() {
 }
 
 const styles = StyleSheet.create({
+  avatarCard: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
+  avatarLink: { color: theme.colors.brandPrimaryStrong },
   balanceCard: { marginTop: theme.spacing.s3 },
   balanceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   chevron: { fontSize: 24, color: theme.colors.neutralTextSecondary },

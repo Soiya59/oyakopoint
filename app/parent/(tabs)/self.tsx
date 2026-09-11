@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import ParentTabHeader from "@/components/ParentTabHeader";
+import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
@@ -34,7 +35,7 @@ type ShortcutItem = { emoji: string; label: string; path: string; labelSize?: nu
  * 区画は元々1列のタイル構成のため、列を分ける理由が無くなった）。
  */
 export default function ParentSelfTabScreen() {
-  const { state, memberPoints } = useAppData();
+  const { state, memberPoints, memberAvatars } = useAppData();
   const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
     useGachaProgress(state.activeParentMemberId);
 
@@ -78,6 +79,22 @@ export default function ParentSelfTabScreen() {
           紛らわしいので、4タブとも同じ部品を使う。 */}
       <ParentTabHeader inboxCount={inboxCount} />
 
+      {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
+          決定9・11] アバターを自分で描いた絵にできるようにする機能の入口
+          （自分の分。`family.tsx`側の代理入口〈決定10〕とは別に、こちらからも
+          自分自身のP38〈`member-avatar`〉へ到達できる、決定11）。 */}
+      {myMember && (
+        <Pressable onPress={() => router.push({ pathname: "/parent/member-avatar", params: { memberId: myMember.id, displayName: myMember.display_name } })}>
+          <Card style={styles.avatarCard}>
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={64} lineData={memberAvatars[myMember.id]} />
+            <Text style={theme.typography.parentBody}>{myMember.display_name}</Text>
+            <Text style={[theme.typography.parentBody, styles.avatarLink]}>
+              {memberAvatars[myMember.id] ? "アバターを描きなおす →" : "アバターを描く →"}
+            </Text>
+          </Card>
+        </Pressable>
+      )}
+
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
 
       <GachaHomeWidget
@@ -106,6 +123,8 @@ export default function ParentSelfTabScreen() {
 }
 
 const styles = StyleSheet.create({
+  avatarCard: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
+  avatarLink: { color: theme.colors.brandPrimaryStrong },
   headerMe: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },
   headerRow: { flexDirection: "row", alignItems: "center" },

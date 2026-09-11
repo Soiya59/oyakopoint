@@ -7,6 +7,7 @@ import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { StickerIcon } from "./StickerIcon";
+import { useAppData } from "@/data/store";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 
 /**
@@ -1064,11 +1065,15 @@ export function FamilyTreeBreakdownList({
   breakdown: FamilyTreeMemberBreakdown[];
   countLabel?: string;
 }) {
+  // [2026-09-11追加・要件定義書07-27章 決定9] アバターを自分で描いた絵にできる
+  // ようにする機能。27箇所すべてのMemberAvatarで同じ見た目にするため、この
+  // コンポーネントの内部だけで完結させる（呼び出し元への新しいprop追加はしない）。
+  const { memberAvatars } = useAppData();
   return (
     <View style={{ gap: theme.spacing.s2 }}>
       {breakdown.map((row) => (
         <View key={row.member_id} style={styles.breakdownRow}>
-          <MemberAvatar name={row.display_name} color={row.avatar_color} size={28} />
+          <MemberAvatar name={row.display_name} color={row.avatar_color} size={28} lineData={memberAvatars[row.member_id]} />
           <Text style={[theme.typography.parentBody, styles.breakdownName]}>{row.display_name}</Text>
           <Text style={theme.typography.parentBodyMedium}>
             {row.completion_count}

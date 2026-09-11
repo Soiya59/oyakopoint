@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { inviteLookup, InviteLookupChild } from "@/data/api";
+import type { FamilyDrawingLineData } from "@/types/domain";
 
 /**
  * C12 プロフィール切替（共有端末用）
@@ -35,6 +36,10 @@ export default function ProfileSwitchScreen() {
   const { childSession, logoutChild } = useSession();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [children, setChildren] = useState<InviteLookupChild[]>([]);
+  // [2026-09-11追加・実装メモ205.8章] この画面はinvite-lookupを自分で
+  // 呼んでいる（URLパラメータ経由ではない）ため、child_avatarsをそのまま
+  // 使ってよい。
+  const [avatars, setAvatars] = useState<Record<string, FamilyDrawingLineData>>({});
 
   const load = async () => {
     if (!childSession) return;
@@ -45,6 +50,7 @@ export default function ProfileSwitchScreen() {
       return;
     }
     setChildren(res.data.children);
+    setAvatars(res.data.child_avatars ?? {});
     setLoadState("ready");
   };
 
@@ -54,9 +60,26 @@ export default function ProfileSwitchScreen() {
   }, [childSession?.inviteCode]);
 
   const selectProfile = async (c: InviteLookupChild) => {
-    // 別プロフィールに切り替える前に、いま有効な子どもJWTセッションを破棄する
-    // （child-loginで新しいJWTを取得し直すまでの一時的な未ログイン状態）。
-    await logoutChild();
+    // [2026-09-11修正・本部長／軽微変更ルート] **ここで`logoutChild()`を呼ぶのをやめた。**
+    //
+    // 従来は「新しいJWTを取り直すまでの一時的な未ログイン状態」として、切り替え先を
+    // 選んだ時点で今のセッションを破棄していた。しかしその結果、**次のPIN入力画面(C3)で
+    // 「← もどる」を押すと、ようこそ画面（P1「家族を新しくつくる…」）に飛ばされていた。**
+    // 統括が実機で発見（2026-09-11）。
+    //
+    // 理屈: `ChildBackLink`は`router.canGoBack()`がtrueなら`router.back()`する。このとき
+    // スタックに残っているのは`/child/home`だが、**セッションを先に捨てているのでそこに
+    // 留まれず`/`へ送られ、未ログインのP1がそのまま表示され続ける**（`app/index.tsx`は
+    // statusがsignedOutのとき転送先が無い）。端末の再起動で直って見えたのは、
+    // 保護者セッションが別に残っていたため。
+    //
+    // 先に破棄する必要が無いことは確認済み: PIN入力画面(`app/child-auth/pin-input.tsx`)は
+    // `useLocalSearchParams`から`inviteCode`/`memberId`/`displayName`を受け取るだけで、
+    // **現在の子どもセッションを一切読まない**（使うのは書き込み側の`loginChild`のみ）。
+    // PINが通った時点で`loginChild`が新しいセッションに入れ替える。
+    //
+    // 副次的な改善: PIN画面まで来て気が変わってやめた場合も、**元の子のままでいられる**
+    // （従来は黙ってログアウトされていた）。
     router.replace({
       pathname: "/child-auth/pin-input",
       params: { inviteCode: childSession?.inviteCode, memberId: c.member_id, displayName: c.display_name },
@@ -106,7 +129,12 @@ export default function ProfileSwitchScreen() {
                 borderColor: theme.colors.brandPrimary,
               }}
             >
-              <MemberAvatar name={c.display_name} color={c.avatar_color} size={64} />
+              <MemberAvatar
+                name={c.display_name}
+                color={c.avatar_color}
+                size={64}
+                lineData={avatars[c.member_id] ?? null}
+              />
               <Text style={theme.typography.childBody}>{c.display_name}</Text>
             </Pressable>
           ))}

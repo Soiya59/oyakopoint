@@ -39,7 +39,8 @@ const webTouchActionNoneStyle: ViewStyle =
 
 const MIN_POINT_DISTANCE_PX = 4;
 
-function pointsToPolylineString(p: number[], size: number): string {
+/** [2026-09-11追加・要件定義書07-27章] MemberAvatarからも再利用するためexportする。 */
+export function pointsToPolylineString(p: number[], size: number): string {
   const out: string[] = [];
   for (let i = 0; i < p.length - 1; i += 2) {
     const x = (p[i] / 1000) * size;
@@ -47,6 +48,35 @@ function pointsToPolylineString(p: number[], size: number): string {
     out.push(`${x},${y}`);
   }
   return out.join(" ");
+}
+
+/**
+ * [2026-09-11追加・要件定義書07-27章決定18・主要画面ワイヤーフレーム.md 43.4節]
+ * `backgroundColor`が既定値（`theme.colors.neutralSurface`、家族の絵の既存画面）以外に
+ * 指定されているときだけ「アバター用途」とみなす。新しいboolean propを増やさず、
+ * `backgroundColor`の値だけで判定できるようにする（43.4節決定18・19の指示どおり）。
+ */
+export function isCustomDrawingBackground(backgroundColor: string): boolean {
+  return backgroundColor !== theme.colors.neutralSurface;
+}
+
+/**
+ * [2026-09-11追加・要件定義書07-27章決定19] `DrawingThumbnail`・`MemberAvatar`が
+ * 共有する「表示サイズ帯ごとの線の太さ」ルール（主要画面ワイヤーフレーム.md 43.4節）。
+ * `isCustom`（`isCustomDrawingBackground`の結果）がfalseのとき（家族の絵の既存画面）は
+ * 呼び出し側で使わず、既存の固定2ptをそのまま使うこと。
+ *   - 20〜28px: 1.5pt固定（line.wは無視）
+ *   - 32〜40px: 2pt固定（line.wは無視）
+ *   - 48px以上: line.w（無ければ4=ふつうへフォールバック、決定20）に応じて
+ *     2→1.5pt・4→2pt・7→3pt
+ */
+export function avatarLineDisplayStrokeWidth(size: number, w: number | undefined): number {
+  if (size <= 28) return 1.5;
+  if (size <= 40) return 2;
+  const effectiveW = w ?? theme.defaultDrawingStrokeWidth;
+  if (effectiveW === 2) return 1.5;
+  if (effectiveW === 7) return 3;
+  return 2;
 }
 
 interface DrawingCanvasProps {
@@ -66,6 +96,13 @@ interface DrawingCanvasProps {
   onStrokeEnd: (line: FamilyDrawingLine) => void;
   /** 上限到達時・保存中などにtrueにして新規ストロークの開始をブロックする。 */
   disabled?: boolean;
+  /**
+   * [2026-09-11追加・要件定義書07-27章決定17] 円の背景色。未指定時は現状どおり
+   * `theme.colors.neutralSurface`（白固定）。アバター用の新規部品は対象メンバーの
+   * `avatar_color`をこのpropへ渡す（既存の家族の絵の呼び出し元は無改修で今までどおり
+   * 白背景のまま動作する）。
+   */
+  backgroundColor?: string;
 }
 
 export function DrawingCanvas({
@@ -75,7 +112,9 @@ export function DrawingCanvas({
   lines,
   onStrokeEnd,
   disabled = false,
+  backgroundColor = theme.colors.neutralSurface,
 }: DrawingCanvasProps) {
+  const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
   const colorRef = useRef(color);
   colorRef.current = color;
@@ -172,53 +211,113 @@ export function DrawingCanvas({
       {...panResponder.panHandlers}
     >
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={theme.colors.neutralSurface} />
-        {lines.map((line, idx) => (
-          <Polyline
-            key={idx}
-            points={pointsToPolylineString(line.p, size)}
-            fill="none"
-            stroke={line.c}
-            // [2026-09-05変更] `line.w`（無ければ決定25のとおり4=ふつうへフォールバック）
-            // を使う。以前は固定4pt。
-            strokeWidth={line.w ?? theme.defaultDrawingStrokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={backgroundColor} />
+        {lines.map((line, idx) => {
+          const displayStrokeWidth = line.w ?? theme.defaultDrawingStrokeWidth;
+          // [2026-09-11追加・要件定義書07-27章決定18] 白い線のふち取りは、背景色が
+          // 既定（白）以外のときだけ付ける（既存の家族の絵の見た目は変えない）。
+          const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
+          return (
+            <React.Fragment key={idx}>
+              {needsWhiteOutline && (
+                <Polyline
+                  points={pointsToPolylineString(line.p, size)}
+                  fill="none"
+                  stroke={theme.colors.neutralTextPrimary}
+                  strokeWidth={displayStrokeWidth + 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              <Polyline
+                points={pointsToPolylineString(line.p, size)}
+                fill="none"
+                stroke={line.c}
+                // [2026-09-05変更] `line.w`（無ければ決定25のとおり4=ふつうへフォールバック）
+                // を使う。以前は固定4pt。
+                strokeWidth={displayStrokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </React.Fragment>
+          );
+        })}
         {livePoints.length >= 2 && (
-          <Polyline
-            points={pointsToPolylineString(livePoints, size)}
-            fill="none"
-            stroke={color}
-            // [2026-09-05変更] 描画中のライブプレビューも選択中の太さを反映する。
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <>
+            {isCustomBackground && color === "#FFFFFF" && (
+              <Polyline
+                points={pointsToPolylineString(livePoints, size)}
+                fill="none"
+                stroke={theme.colors.neutralTextPrimary}
+                strokeWidth={strokeWidth + 1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+            <Polyline
+              points={pointsToPolylineString(livePoints, size)}
+              fill="none"
+              stroke={color}
+              // [2026-09-05変更] 描画中のライブプレビューも選択中の太さを反映する。
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
         )}
       </Svg>
     </View>
   );
 }
 
-/** コレクター棚等での小さい静止プレビュー用（非インタラクティブ）。上限到達時の自分の絵一覧に使う。 */
-export function DrawingThumbnail({ lineData, size = 72 }: { lineData: FamilyDrawingLineData; size?: number }) {
+/**
+ * コレクター棚等での小さい静止プレビュー用（非インタラクティブ）。上限到達時の自分の絵一覧に使う。
+ * [2026-09-11変更・要件定義書07-27章決定17〜19] `backgroundColor`propを追加。未指定時は
+ * 現状どおり`theme.colors.neutralSurface`（白固定）。`backgroundColor`が既定値以外
+ * （＝アバター表示用途）のときに限り、白い線のふち取り（決定18）と表示サイズ帯別の太さ
+ * （決定19、`avatarLineDisplayStrokeWidth`）を適用する。既定背景（白、家族の絵の既存画面）の
+ * ときは`strokeWidth={2}`固定のまま変更しない。
+ */
+export function DrawingThumbnail({
+  lineData,
+  size = 72,
+  backgroundColor = theme.colors.neutralSurface,
+}: {
+  lineData: FamilyDrawingLineData;
+  size?: number;
+  backgroundColor?: string;
+}) {
+  const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   return (
     <View style={[styles.circle, styles.thumbnail, { width: size, height: size, borderRadius: size / 2 }]}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={theme.colors.neutralSurface} />
-        {lineData.lines.map((line, idx) => (
-          <Polyline
-            key={idx}
-            points={pointsToPolylineString(line.p, size)}
-            fill="none"
-            stroke={line.c}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={backgroundColor} />
+        {lineData.lines.map((line, idx) => {
+          const displayStrokeWidth = isCustomBackground ? avatarLineDisplayStrokeWidth(size, line.w) : 2;
+          const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
+          return (
+            <React.Fragment key={idx}>
+              {needsWhiteOutline && (
+                <Polyline
+                  points={pointsToPolylineString(line.p, size)}
+                  fill="none"
+                  stroke={theme.colors.neutralTextPrimary}
+                  strokeWidth={displayStrokeWidth + 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              <Polyline
+                points={pointsToPolylineString(line.p, size)}
+                fill="none"
+                stroke={line.c}
+                strokeWidth={displayStrokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </React.Fragment>
+          );
+        })}
       </Svg>
     </View>
   );

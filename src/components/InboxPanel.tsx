@@ -106,7 +106,7 @@ function boardPostExcerpt(body: string, max = 20): string {
 }
 
 export function InboxPanel({ tone, memberId }: InboxPanelProps) {
-  const { state } = useAppData();
+  const { state, memberAvatars } = useAppData();
   const isChild = tone === "child";
 
   const bodyStyle =
@@ -204,7 +204,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         return (
           <Card key={it.id} tone={tone} style={styles.card}>
             <View style={styles.row}>
-              <MemberAvatar name={from?.display_name ?? "?"} color={from?.avatar_color} size={32} />
+              <MemberAvatar name={from?.display_name ?? "?"} color={from?.avatar_color} size={32} lineData={from ? memberAvatars[from.id] : undefined} />
               <View style={styles.main}>
                 <Text style={bodyStyle}>{from?.display_name ?? "だれか"}から</Text>
                 <Text style={[bodyStyle, styles.headline]}>{it.headline}</Text>

@@ -35,6 +35,7 @@ import AppButton from "./AppButton";
 import Card from "./Card";
 import MemberAvatar from "./MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "./StatusViews";
+import { useAppData } from "@/data/store";
 import theme from "@/theme/theme";
 import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
 
@@ -250,6 +251,10 @@ export function FamilyBoardHistoryPanel({
   // 持たないため、supporterはparent側のトーン（控えめな表現）を流用する
   // （app/supporter/history.tsxの既存の呼び出しと同じ扱い）。
   const stateTone: "parent" | "child" = isChild ? "child" : "parent";
+  // [2026-09-11追加・要件定義書07-27章 決定9] アバターを自分で描いた絵にできる
+  // ようにする機能。27箇所すべてのMemberAvatarで同じ見た目にするため、この
+  // コンポーネントの内部だけで完結させる（呼び出し元への新しいprop追加はしない）。
+  const { memberAvatars } = useAppData();
 
   // 22.4節: 保護者の是正削除のみ確認モーダルを挟む（本人の取消は挟まない）。
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -372,6 +377,7 @@ export function FamilyBoardHistoryPanel({
                     name={post.family_members?.display_name ?? "?"}
                     color={post.family_members?.avatar_color}
                     size={24}
+                    lineData={memberAvatars[post.author_member_id]}
                   />
                   <Text style={[bodyMediumStyle, { marginLeft: theme.spacing.s2, flex: 1 }]}>
                     {post.family_members?.display_name ?? "?"}

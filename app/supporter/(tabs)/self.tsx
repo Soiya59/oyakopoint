@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
+import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
@@ -30,7 +31,7 @@ import { useGachaProgress } from "@/hooks/useGacha";
  * 遷移先URL（`/supporter/collector-shelf`）・画面自体は変更していない。
  */
 export default function SupporterSelfScreen() {
-  const { state, memberPoints } = useAppData();
+  const { state, memberPoints, memberAvatars } = useAppData();
   const { loadState: gachaLoadState, remaining: gachaRemaining, canDrawNow: gachaCanDrawNow } =
     useGachaProgress(state.activeParentMemberId);
 
@@ -65,7 +66,7 @@ export default function SupporterSelfScreen() {
       <View style={styles.headerRow}>
         {myMember && (
           <View style={styles.headerMe}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} />
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} lineData={memberAvatars[myMember.id]} />
             <Text style={theme.typography.supporterTitle}>{myMember.display_name}</Text>
           </View>
         )}
@@ -74,6 +75,20 @@ export default function SupporterSelfScreen() {
           <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
         </Pressable>
       </View>
+
+      {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
+          決定9] アバターを自分で描いた絵にできるようにする機能の入口。 */}
+      {myMember && (
+        <Pressable onPress={() => router.push("/supporter/my-avatar")}>
+          <Card style={styles.avatarCard}>
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={64} lineData={memberAvatars[myMember.id]} />
+            <Text style={theme.typography.supporterBody}>{myMember.display_name}</Text>
+            <Text style={[theme.typography.supporterBody, styles.avatarLink]}>
+              {memberAvatars[myMember.id] ? "アバターを描きなおす →" : "アバターを描く →"}
+            </Text>
+          </Card>
+        </Pressable>
+      )}
 
       <MyPointsCard tone="supporter" points={myPoints} memberId={state.activeParentMemberId} />
 
@@ -101,6 +116,8 @@ export default function SupporterSelfScreen() {
 }
 
 const styles = StyleSheet.create({
+  avatarCard: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
+  avatarLink: { color: theme.colors.supporterAccent },
   headerRow: { flexDirection: "row", alignItems: "center" },
   headerMe: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },

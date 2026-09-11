@@ -59,7 +59,7 @@ import type { ChoreCompletion, StampKey } from "@/types/domain";
 type LoadState = "loading" | "error" | "ready";
 
 export default function SupporterFamilyScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, memberAvatars } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -169,7 +169,7 @@ export default function SupporterFamilyScreen() {
       <View style={styles.headerRow}>
         {myMember && (
           <View style={styles.headerMe}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} />
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} lineData={memberAvatars[myMember.id]} />
             <Text style={theme.typography.supporterTitle}>{myMember.display_name}</Text>
           </View>
         )}
@@ -258,7 +258,7 @@ export default function SupporterFamilyScreen() {
             <Pressable key={c.id} onPress={() => openDetail(c)}>
               <Card tone="supporter" style={styles.card}>
                 <View style={styles.cardTop}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
+                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
                   <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.supporterBodyMedium}>

@@ -41,7 +41,7 @@ import { formatDateTimeShort } from "@/lib/calendarDates";
  * （外部・アプリ内の古いリンクを生かすため。実装メモ187章の`/parent/home`と同じ扱い）。
  */
 export default function ChildFamilyTabScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, memberAvatars } = useAppData();
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
@@ -152,7 +152,7 @@ export default function ChildFamilyTabScreen() {
           <Pressable key={c.id} onPress={() => openDetail(c)}>
             <Card tone="child" style={isSupporterCard ? { ...styles.card, ...styles.cardSupporterTint } : styles.card}>
               <View style={styles.cardTop}>
-                <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
+                <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
                 <Text style={theme.typography.childBody}>{member?.display_name}</Text>
                 <Text style={{ flex: 1 }} />
                 <Text style={theme.typography.childBody}>

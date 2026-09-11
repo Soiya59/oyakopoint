@@ -33,7 +33,7 @@ import type { ChoreCompletion, StampKey } from "@/types/domain";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ApprovalsScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, refresh } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, refresh, memberAvatars } = useAppData();
   // [2026-09-11追加・実装メモ.md 190章] この画面を開いたことを記録し、
   // ベル／新着件数を未読方式で数えられるようにする。**入口がどこであったかは問わない**
   // （統括の指摘。「新着◯件」カードからでも「最近の報告」の行からでも同じ画面に来る）。
@@ -196,7 +196,7 @@ export default function ApprovalsScreen() {
                 }
               >
                 <View style={styles.cardTop}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} />
+                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
                   <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.parentBodyMedium}>

@@ -31,7 +31,7 @@ const EXAMPLE_CHIPS = ["にもつをもってくれた", "てつだってくれ�
 type ScreenState = "form" | "sending" | "success" | "networkError";
 
 export default function ChildGratitudeSendScreen() {
-  const { state } = useAppData();
+  const { state, memberAvatars } = useAppData();
   const { client } = useSession();
   const myId = state.activeChildMemberId;
 
@@ -133,7 +133,7 @@ export default function ChildGratitudeSendScreen() {
             onPress={() => setRecipientId(m.id)}
             style={[styles.memberChip, recipientId === m.id && styles.memberChipSelected]}
           >
-            <MemberAvatar name={m.display_name} color={m.avatar_color} size={40} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={40} lineData={memberAvatars[m.id]} />
             <Text style={{ marginTop: theme.spacing.s1 }}>{m.display_name}</Text>
           </Pressable>
         ))}

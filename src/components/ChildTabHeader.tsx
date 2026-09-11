@@ -23,7 +23,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
 export function ChildTabHeader({ inboxCount }: { inboxCount: number }) {
-  const { state } = useAppData();
+  const { state, memberAvatars } = useAppData();
   const me = state.members.find((m) => m.id === state.activeChildMemberId);
 
   return (
@@ -31,7 +31,7 @@ export function ChildTabHeader({ inboxCount }: { inboxCount: number }) {
       <Pressable style={styles.headerLeft} onPress={() => router.push("/child/profile-switch")} hitSlop={8}>
         {me && (
           <>
-            <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} />
+            <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} lineData={memberAvatars[me.id]} />
             <Text style={theme.typography.childBody}>{me.display_name}</Text>
           </>
         )}

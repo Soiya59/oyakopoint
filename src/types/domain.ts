@@ -383,6 +383,20 @@ export interface FamilyDrawing {
   title: string | null;
 }
 
+// [新設・2026-09-11] メンバーのアバターを自分で描いた絵にできるようにする
+// （要件定義書07-27章 決定1〜22、スキーマ設計.sql 54章）。family_drawingsとは
+// 完全に独立したテーブル（決定6〜8）。line_dataの形式はFamilyDrawingLineDataと
+// 共通だが、検証関数（is_valid_avatar_line_data()）・許可パレットは別物
+// （スキーマ設計.sql 54.3章）。
+
+/** member_avatars テーブルの1行。select("member_id, line_data, updated_at")で
+ *  取得するため（スキーマ設計.sql 54.7章）family_idは含まない。 */
+export interface MemberAvatarRow {
+  member_id: string;
+  line_data: FamilyDrawingLineData;
+  updated_at: string;
+}
+
 // [新設・2026-08-26・第3段階] ガチャ（要件定義書07-13-1章、スキーマ設計.sql
 // 33a章 gacha_member_progress_summary／33c章 gacha_preset_ornaments／
 // 33d章 gacha_draws・draw_gacha()、API仕様.md 12.1・12.3章）。

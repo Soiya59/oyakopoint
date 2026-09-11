@@ -28,6 +28,7 @@ import type {
   ChoreReaction,
   DailySummaryEntry,
   FamilyBoardReactionWithPostBody,
+  FamilyDrawingLineData,
   FamilyMember,
   GratitudePoint,
   LedgerEntry,
@@ -162,6 +163,27 @@ export interface DataContextValue {
   hasReactedWithStamp: (completionId: string, reactedBy: string, stampKey: StampKey) => boolean;
   /** 実施履歴カレンダー（API仕様.md 6a章）向け。chore_completion_daily_summary View 相当。 */
   dailySummary: (fromDate: string, toDate: string) => DailySummaryEntry[];
+  /**
+   * [2026-09-11追加・要件定義書07-27章、スキーマ設計.sql 54.7章・54.10章・54.13章(4)]
+   * メンバーごとのアバター線データ（`member_avatars.line_data`）。`member_id`キー。
+   * 行が無いメンバーはこのオブジェクトにキー自体が存在しない（＝未設定、決定1）。
+   * **意図的に`useBackgroundAutoRefresh`が駆動する15秒間隔の背景更新（`load()`）には
+   * 載せない**（54.7章「頻度をfamily_members本体の背景更新サイクルから切り離す」）。
+   * セッション確立時・familyId確定時に1回だけ家族分をまとめて取得し、以降は
+   * 保存・削除のたびに`setMemberAvatarLocal`/`clearMemberAvatarLocal`で楽観的に
+   * 更新する（サーバーへの再取得を発生させない）。
+   */
+  memberAvatars: Record<string, FamilyDrawingLineData>;
+  /** 初回取得が完了したか（実接続時のみ意味を持つ。読み込み中スケルトンの判定に使う）。 */
+  memberAvatarsLoaded: boolean;
+  /** 直近の取得で発生した通信エラー（実接続時のみ）。 */
+  memberAvatarsError: string | null;
+  /** member_avatarsを家族分まとめて再取得する（読み込みエラー時の「もういちど」用）。 */
+  refreshMemberAvatars: () => Promise<void>;
+  /** 保存成功後、サーバーへの再取得を発生させずローカルキャッシュだけ更新する。 */
+  setMemberAvatarLocal: (memberId: string, lineData: FamilyDrawingLineData) => void;
+  /** 「色にもどす」（DELETE）成功後、ローカルキャッシュから当該メンバーの行を除く。 */
+  clearMemberAvatarLocal: (memberId: string) => void;
 }
 
 const AppDataContext = createContext<DataContextValue | null>(null);
@@ -308,6 +330,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  // [2026-09-11追加・要件定義書07-27章、スキーマ設計.sql 54.7章・54.10章] member_avatars。
+  // 意図的にload()（下記、useBackgroundAutoRefreshの対象）とは別系統にする。
+  const [memberAvatars, setMemberAvatarsState] = useState<Record<string, FamilyDrawingLineData>>({});
+  const [memberAvatarsLoaded, setMemberAvatarsLoaded] = useState(false);
+  const [memberAvatarsError, setMemberAvatarsError] = useState<string | null>(null);
 
   // [2026-08-22変更] みまもりメンバー（session.status === "supporter"）対応。
   // 認証方式・family_membersの持ち方が保護者と全く同じ（06章・07-7章）ため、
@@ -499,6 +526,57 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     { enabled: Boolean(familyId) && loadedOnce }
   );
 
+  /**
+   * [2026-09-11追加・要件定義書07-27章、スキーマ設計.sql 54.7章・54.10章・54.13章(4)]
+   * `member_avatars`を家族分まとめて取得する。**意図的に`useBackgroundAutoRefresh`には
+   * 配線しない**（上のload()と違い15秒間隔での再取得は行わない）。理由:
+   * 54.1章が明らかにした「絵は多くの画面で必要だが、15秒間隔の画面遷移のたびに
+   * 取り直す必要はない」という整理のとおり、`family_members`本体の背景更新サイクルから
+   * 頻度を切り離すことが、通信量削減（決定54-1）の核心だから。familyIdが変わった
+   * とき（セッション確立時・家族切替時）にのみ1回取得し、以降は保存・削除の
+   * たびに`setMemberAvatarLocal`/`clearMemberAvatarLocal`で楽観的に更新する
+   * （43.4節決定22「新しい読み込みスピナー・空白時間を追加しない」を満たすため）。
+   */
+  const loadMemberAvatars = useCallback(async () => {
+    if (!familyId) return;
+    const res = await api.fetchMemberAvatars(session.client, familyId);
+    if (!res.ok) {
+      setMemberAvatarsError(res.error.message);
+      setMemberAvatarsLoaded(true);
+      return;
+    }
+    const map: Record<string, FamilyDrawingLineData> = {};
+    for (const row of res.data) map[row.member_id] = row.line_data;
+    setMemberAvatarsState(map);
+    setMemberAvatarsError(null);
+    setMemberAvatarsLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId, session.client]);
+
+  useEffect(() => {
+    if (familyId) {
+      void loadMemberAvatars();
+    } else {
+      setMemberAvatarsState({});
+      setMemberAvatarsLoaded(false);
+      setMemberAvatarsError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]);
+
+  const setMemberAvatarLocal = useCallback((memberId: string, lineData: FamilyDrawingLineData) => {
+    setMemberAvatarsState((prev) => ({ ...prev, [memberId]: lineData }));
+  }, []);
+
+  const clearMemberAvatarLocal = useCallback((memberId: string) => {
+    setMemberAvatarsState((prev) => {
+      if (!(memberId in prev)) return prev;
+      const next = { ...prev };
+      delete next[memberId];
+      return next;
+    });
+  }, []);
+
   // [2026-08-16修正・本部長] 実機で保護者→子どもへログインを切り替えた際、
   // "Cannot read properties of undefined (reading 'display_name')" というクラッシュを
   // 発見した。原因は2つ重なっていた。
@@ -650,8 +728,30 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
         ),
       dailySummary: (fromDate, toDate) =>
         dailySummaryRows.filter((r) => r.activity_date >= fromDate && r.activity_date <= toDate),
+      memberAvatars,
+      memberAvatarsLoaded,
+      memberAvatarsError,
+      refreshMemberAvatars: loadMemberAvatars,
+      setMemberAvatarLocal,
+      clearMemberAvatarLocal,
     }),
-    [state, loading, loadError, load, dispatch, memberPoints, ledgers, findChoreByTag, dailySummaryRows]
+    [
+      state,
+      loading,
+      loadError,
+      load,
+      dispatch,
+      memberPoints,
+      ledgers,
+      findChoreByTag,
+      dailySummaryRows,
+      memberAvatars,
+      memberAvatarsLoaded,
+      memberAvatarsError,
+      loadMemberAvatars,
+      setMemberAvatarLocal,
+      clearMemberAvatarLocal,
+    ]
   );
 
   // familyIdが確定していて未読み込みの間はスピナーのみを表示する。
@@ -865,6 +965,22 @@ function computeDailySummary(state: State, fromDate: string, toDate: string): Da
 
 function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
   const [state, dispatchRaw] = useReducer(reducer, initialState);
+  // [2026-09-11追加・要件定義書07-27章] モック実装（Supabase未接続時）では
+  // member_avatarsの取得元が無いため、常に空のメモリ上キャッシュから始め、
+  // 保存・削除操作（setMemberAvatarLocal/clearMemberAvatarLocal）だけをこの
+  // セッション内で反映する（他のモック実装〔gratitude等〕と同じ簡略化方針）。
+  const [memberAvatars, setMemberAvatarsState] = useState<Record<string, FamilyDrawingLineData>>({});
+  const setMemberAvatarLocal = useCallback((memberId: string, lineData: FamilyDrawingLineData) => {
+    setMemberAvatarsState((prev) => ({ ...prev, [memberId]: lineData }));
+  }, []);
+  const clearMemberAvatarLocal = useCallback((memberId: string) => {
+    setMemberAvatarsState((prev) => {
+      if (!(memberId in prev)) return prev;
+      const next = { ...prev };
+      delete next[memberId];
+      return next;
+    });
+  }, []);
 
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
     // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
@@ -900,8 +1016,14 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
           (r) => r.completion_id === completionId && r.reacted_by === reactedBy && r.kind === "stamp" && r.stamp_key === stampKey
         ),
       dailySummary: (fromDate, toDate) => computeDailySummary(state, fromDate, toDate),
+      memberAvatars,
+      memberAvatarsLoaded: true,
+      memberAvatarsError: null,
+      refreshMemberAvatars: async () => {},
+      setMemberAvatarLocal,
+      clearMemberAvatarLocal,
     }),
-    [state, dispatch, ledgers, findChoreByTag]
+    [state, dispatch, ledgers, findChoreByTag, memberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

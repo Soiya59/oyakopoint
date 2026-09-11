@@ -287,6 +287,25 @@ export const drawingLimits = {
   titleWarningThreshold: 5,
 } as const;
 
+// ---- アバター専用の上限値・パレット（要件定義書07-27章、スキーマ設計.sql 54章、
+// 主要画面ワイヤーフレーム.md 43.8節、2026-09-11追加） ----
+// drawingLimits/drawingPalette（family_drawings用）とは意図的に分離する
+// （理由: スキーマ設計.sql 54.3章「7回改訂された実績による巻き添え変更リスクを
+// 避けるため専用関数に分ける」）。値はDB側is_valid_avatar_line_data()の
+// CHECK制約（supabase/migrations/20260924010000_member_avatars.sql）と必ず
+// 一致させること。
+export const avatarDrawingLimits = {
+  maxLines: 150,
+  maxPointsPerLine: 300, // 家族の絵と同じ値、変更なし（54.3章）
+  maxTotalPoints: 3000,
+  maxBytes: 20480, // 20KB
+} as const;
+
+// 値はdrawingPaletteの現行10色と完全一致（is_valid_avatar_line_data()の許可色と
+// 同じ、旧データ保護専用の3色は含めない）。将来どちらか一方だけを拡張する事態に
+// 備え、意図的に別名でexportする（43.8節）。
+export const avatarDrawingPalette = drawingPalette;
+
 // ---- 線の太さ（3段階、2026-09-05追加、07-13-2章拡張） ----
 // 参照: デザイントークン.md「線の太さ（3段階）」・主要画面ワイヤーフレーム.md 21.5b節
 // 決定20（値）・決定22（表示用の点の直径）。値（2/4/7）はDB側is_valid_drawing_line_data()
@@ -467,6 +486,8 @@ export const theme = {
   drawingPalette,
   emailOtpLength,
   drawingLimits,
+  avatarDrawingLimits,
+  avatarDrawingPalette,
   drawingStrokeWidths,
   defaultDrawingStrokeWidth,
   drawingSimplifyTolerance,

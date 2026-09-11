@@ -44,6 +44,7 @@ import type {
   GachaPresetOrnament,
   GachaPrizeKind,
   GratitudePoint,
+  MemberAvatarRow,
   MemberBadge,
   MemberBadgeProgress,
   MemberPoints,
@@ -274,6 +275,14 @@ export interface InviteLookupResult {
   family_id: string;
   family_name: string;
   children: InviteLookupChild[];
+  /**
+   * [2026-09-11追加・実装メモ205.8章] member_id → line_data の辞書。
+   * `InviteLookupChild`には含めない（`app/child-auth/invite-code.tsx`が
+   * `children`をそのままURLパラメータへJSON化して次画面へ渡しているため、
+   * 1件あたり最大20KBの絵をここへ足すとURLが人数分膨らんでしまう）。
+   * 絵が未設定のメンバーはキー自体が存在しない。
+   */
+  child_avatars?: Record<string, FamilyDrawingLineData>;
 }
 
 /** API仕様.md 2a章手順2・2c章手順1: Edge Function `invite-lookup` */
@@ -528,6 +537,57 @@ export async function updateMemberAvatarColor(
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: data as FamilyMember };
+}
+
+/**
+ * [2026-09-11追加] メンバーのアバター（要件定義書07-27章、スキーマ設計.sql 54章）。
+ * `member_avatars`は`family_members`とは別テーブルのため、既存の
+ * `fetchFamilyBundle`・`fetchParentMember`の`select("*")`には一切影響しない
+ * （54.1章 決定54-1の核心）。
+ *
+ * [取得] 家族分をまとめて1回取得する（54.7章）。呼び出し側
+ * （`src/data/store.tsx`）は`useBackgroundAutoRefresh`が駆動する15秒間隔の
+ * 背景更新にこの取得を載せないこと（54.7章・54.13章(4)）。
+ */
+export async function fetchMemberAvatars(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<MemberAvatarRow[]>> {
+  const { data, error } = await client
+    .from("member_avatars")
+    .select("member_id, line_data, updated_at")
+    .eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as MemberAvatarRow[] };
+}
+
+/**
+ * アバターの絵を保存する（新規に描く・描き直すの両方、決定11〜12）。
+ * `member_id`が`member_avatars`のPRIMARY KEYのため、`.upsert()`は
+ * `INSERT ... ON CONFLICT (member_id) DO UPDATE`として動作する（54.7章）。
+ * `family_id`は送らない（`member_avatars_before_write()`トリガーが対象
+ * `member_id`の実際の所属家族へ必ず補正するため、54.2章）。
+ * 権限は`member_avatars_write_self_or_parent`ポリシー（本人または保護者、
+ * 54.5章）がそのまま担保する。
+ */
+export async function saveMemberAvatar(
+  client: SupabaseClient,
+  memberId: string,
+  lineData: FamilyDrawingLineData
+): Promise<ApiResult<null>> {
+  const { error } = await client.from("member_avatars").upsert({ member_id: memberId, line_data: lineData });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * 「色にもどす」（決定5・決定20〜22）。行のDELETEで表す（54.2章・54.6章）。
+ * 対象行が既に存在しない場合もエラーにはならない（削除0件のまま成功扱い）。
+ */
+export async function deleteMemberAvatar(client: SupabaseClient, memberId: string): Promise<ApiResult<null>> {
+  const { error } = await client.from("member_avatars").delete().eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
 }
 
 export async function updateFamilyName(

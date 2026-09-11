@@ -30,7 +30,7 @@ import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
 type ScreenState = "form" | "sending";
 
 export default function ParentGratitudeSendScreen() {
-  const { state } = useAppData();
+  const { state, memberAvatars } = useAppData();
   const { client } = useSession();
   const myId = state.activeParentMemberId;
 
@@ -89,7 +89,7 @@ export default function ParentGratitudeSendScreen() {
             onPress={() => setRecipientId(m.id)}
             style={[styles.memberChip, recipientId === m.id && styles.memberChipSelected]}
           >
-            <MemberAvatar name={m.display_name} color={m.avatar_color} size={28} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={28} lineData={memberAvatars[m.id]} />
             <Text style={{ marginLeft: theme.spacing.s2 }}>{m.display_name}</Text>
           </Pressable>
         ))}

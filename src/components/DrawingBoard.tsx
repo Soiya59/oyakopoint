@@ -365,7 +365,16 @@ export function DrawingBoard({
             strokeWidth={strokeWidth}
             lines={lines}
             onStrokeEnd={handleStrokeEnd}
-            disabled={saving}
+            // [2026-09-11修正・やること.md 2-41「家族の絵の既存不具合」]
+            // 以前は`disabled={saving}`のみで`atCapacity`を渡していなかった。
+            // 「もう描けない」の文言が出たあとも指で線を描くこと自体はでき、
+            // 指を離した瞬間にhandleStrokeEnd（上記）が上限超過分を捨てるため、
+            // 描いた線が消えるだけの分かりにくい挙動になっていた
+            // （線数の上限はDrawingCanvas内部の`theme.drawingLimits.maxLines`
+            // ガード〈116・129行目〉で防げていたが、点数・バイト数の上限は
+            // このガードに掛からず起きていた。1本あたり20点＝6000/300のため、
+            // 通常の使い方では線数より先に点数の上限に当たる）。
+            disabled={saving || atCapacity}
           />
 
           <View style={styles.paletteWrap}>
