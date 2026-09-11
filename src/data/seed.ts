@@ -79,7 +79,7 @@ export const seedCategories: Category[] = [
 ];
 
 // NFCタグのモック値。実機はexpo-crypto等のCrypto.randomUUID()で生成する想定
-// （API仕様.md 3a章手順1、src/lib/nfc.ts の generateNfcTagToken() 参照）だが、
+// （API仕様.md 3a章手順1、src/lib/nfc.shared.ts の generateNfcTagToken() 参照）だが、
 // シード値は再現性のため固定文字列にしている。
 const MOCK_NFC_TOKENS = {
   chore1: "nfc-tag-a1111111-1111-4111-8111-111111111111",

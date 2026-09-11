@@ -11,7 +11,7 @@ import * as Linking from "expo-linking";
  * 使っているのと同じ`process.env.EXPO_BASE_URL`（ビルド時にexperiments.baseUrlから
  * 注入される）を使い、自前でURLを組み立てることでこれを回避する。
  * マジックリンクのリダイレクト先（buildAuthRedirectUrl）・NFCタグに書き込むURL
- * （src/lib/nfc.ts）の両方で使う。
+ * （src/lib/nfc.web.ts）の両方で使う。
  */
 export function buildWebAppUrl(path: string, params: Record<string, string>): string {
   const basePath = process.env.EXPO_BASE_URL ?? "";

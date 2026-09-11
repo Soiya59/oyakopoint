@@ -10,7 +10,7 @@ import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsen
 // [2026-09-01追加・実装メモ.md 108章] NFCタグの人ごと化（要件定義書07-2章「作り直し：
 // タグの人ごと化」）により、C13/C14（このパス）には子ども以外（保護者・みまもり
 // メンバー）もログイン中の端末から到達しうるようになった。既存の物理タグに書き込んだ
-// URLは`/child/nfc-scan`で固定されており変更できない（src/lib/nfc.ts:68、UIUXデザイン部/
+// URLは`/child/nfc-scan`で固定されており変更できない（src/lib/nfc.shared.ts のNFC_SCAN_PATH、UIUXデザイン部/
 // 成果物/主要画面ワイヤーフレーム.md 7.6.4節「移行の制約」）ため、この2画面だけ下記の
 // 「子どもセッション以外はトップへ戻す」ガードの対象から除外する。
 const NFC_PATHS_ANY_ROLE = ["/child/nfc-scan", "/child/nfc-complete"];

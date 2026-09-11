@@ -7,8 +7,14 @@
  * （2026-09-09）でまだ生成されていない（404）。宣伝部が原稿の未記入箇所を
  * 対応中で、近く生成される見込み。本部長の指示により、未生成のままリンクを
  * 張ってよいことになっている。
+ *
+ * [2026-09-11追加・実装メモ187章] `WEB_APP_BASE_URL`としてexportし、
+ * `src/lib/nfc.native.ts`でも同じ本番オリジンを参照する（ネイティブで書き込む
+ * NFCタグのURLを、Web版が書き込むURLと同じ形にするため。window.location.origin
+ * が使えないネイティブ側では、この定数がその代わりになる）。
  */
 const BASE_URL = "https://soiya59.github.io/oyakopoint";
+export const WEB_APP_BASE_URL = BASE_URL;
 
 export const HELP_PARENT_URL = `${BASE_URL}/help/parent.html`;
 export const HELP_SUPPORTER_URL = `${BASE_URL}/help/supporter.html`;

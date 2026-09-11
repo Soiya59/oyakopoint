@@ -6,7 +6,8 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "moduleSuffixes": [".native", ".web", ""]
   },
   "include": [
     "**/*.ts",

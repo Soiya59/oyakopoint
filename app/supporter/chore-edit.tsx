@@ -15,7 +15,7 @@ import {
   revokeChoreNfcTag,
   updatePersonalChore,
 } from "@/data/api";
-import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
+import { generateNfcTagToken, isNfcWriteSupported, writeNfcTag } from "@/lib/nfc";
 import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
@@ -117,7 +117,7 @@ export default function SupporterChoreEditScreen() {
   const openIssueModal = () => {
     if (!chore || myTagCount >= MAX_NFC_TAGS_PER_CHORE_MEMBER) return;
     setIssuedSnackbar(null);
-    if (!isWebNfcSupported()) {
+    if (!isNfcWriteSupported()) {
       setNfcStep("unsupported");
       setModalVisible(true);
       return;

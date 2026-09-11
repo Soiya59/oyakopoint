@@ -8,9 +8,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "jp.soiyalab.oyakopoint"
     },
     "android": {
+      "package": "jp.soiyalab.oyakopoint",
       "adaptiveIcon": {
         "backgroundColor": "#DCEDE2",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -29,7 +31,14 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "おやこポイントは、専用のNFCタグにスマホをかざしてお手伝いの完了を記録するためにNFCを使用します。",
+          "includeNdefEntitlement": true
+        }
+      ]
     ]
   }
 }

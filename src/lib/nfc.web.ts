@@ -1,8 +1,10 @@
 import { Platform } from "react-native";
 import { buildWebAppUrl } from "./authRedirect";
+import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM, generateNfcTagToken } from "./nfc.shared";
+import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
 
 /**
- * NFCタグ書き込み・読み取りのインターフェース定義。
+ * NFCタグ書き込み・読み取りのWeb版実装（ブラウザのWeb NFC API、`NDEFReader`）。
  *
  * 参照:
  * - 設計部/成果物/API仕様.md 3a章「NFCタグ登録（保護者操作、P11拡張モーダル）」
@@ -26,46 +28,44 @@ import { buildWebAppUrl } from "./authRedirect";
  * [対応不可な環境] Web NFC APIはiOS Safari・PC・LAN内配信（httpの非セキュアコンテキスト）
  * では使えない。この場合は`writeNfcTag()`が`errorReason: "unsupported_tag_type"`相当の
  * 失敗を返す代わりに、P11拡張モーダル側で非対応である旨を案内する（呼び出し元
- * app/parent/chore-edit.tsxで`isWebNfcSupported()`を見て導線自体を出し分ける）。
+ * app/parent/chore-edit.tsxで`isNfcWriteSupported()`を見て導線自体を出し分ける）。
+ *
+ * [2026-09-11改訂・実装メモ187章] Expoネイティブビルド対応のため、このファイルを
+ * `src/lib/nfc.ts`から`nfc.web.ts`へ改名し、ネイティブ実装（`nfc.native.ts`、
+ * react-native-nfc-manager使用）を追加した。**このファイルの中身・挙動は
+ * 「関数名`isWebNfcSupported`→`isNfcWriteSupported`への改名」「型定義と
+ * `generateNfcTagToken()`を`nfc.shared.ts`へ切り出し」以外は一切変更していない**
+ * （Web版が本番稼働中で触ってはいけないため）。
  */
 
-export interface NfcWriteResult {
-  ok: boolean;
-  tagValue?: string;
-  errorReason?: "write_failed" | "unsupported_tag_type" | "cancelled";
-}
-
-export interface NfcReadResult {
-  ok: boolean;
-  tagValue?: string;
-  errorReason?: "read_failed";
-}
-
-/** この端末・ブラウザでWeb NFC APIによる書き込みが使えるか。 */
-export function isWebNfcSupported(): boolean {
-  return Platform.OS === "web" && typeof window !== "undefined" && "NDEFReader" in window;
-}
+export type { NfcWriteResult, NfcReadResult };
+export { generateNfcTagToken };
 
 /**
- * 新しいトークンを生成する。
- * API仕様.md 3a章手順1「クライアント側で暗号論的に安全なランダムトークンを生成」に対応。
+ * この端末・ブラウザでNFCタグへの書き込みが使えるか。
+ *
+ * [2026-09-11改名・実装メモ187章] 旧名`isWebNfcSupported`。ネイティブ版
+ * （`nfc.native.ts`）にも同名の関数ができ、`isWebNfcSupported`という名前が
+ * 「Web限定」を想起させ実態と合わなくなるため、呼び出し元
+ * （app/parent/chore-edit.tsx・app/supporter/chore-edit.tsx）とあわせて改名した。
+ * この関数自体の判定ロジック（`Platform.OS === "web"`かつ`NDEFReader`の有無）は
+ * 変更していない。
  */
-export function generateNfcTagToken(): string {
-  const hex = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
-  return `${hex()}-${hex().slice(0, 4)}-4${hex().slice(0, 3)}-${hex().slice(0, 4)}-${hex()}${hex().slice(0, 4)}`;
+export function isNfcWriteSupported(): boolean {
+  return Platform.OS === "web" && typeof window !== "undefined" && "NDEFReader" in window;
 }
 
 /**
  * 物理NFCタグへ、このchoreの報告画面を開くURLを書き込む（保護者操作、P11拡張モーダル）。
  * Web NFC API非対応の端末（iOS・PC・LAN内http配信）では書き込めないため、
- * 呼び出し前に`isWebNfcSupported()`で確認すること。
+ * 呼び出し前に`isNfcWriteSupported()`で確認すること。
  */
 export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
-  if (!isWebNfcSupported()) {
+  if (!isNfcWriteSupported()) {
     return { ok: false, errorReason: "unsupported_tag_type" };
   }
   try {
-    const url = buildWebAppUrl("/child/nfc-scan", { tagValue });
+    const url = buildWebAppUrl(NFC_SCAN_PATH, { [NFC_TAG_VALUE_PARAM]: tagValue });
     // NDEFReaderはWeb NFC APIの型定義が標準のlibに無いためanyで受ける。
     // [2026-09-09] 元は@typescript-eslint/no-explicit-anyのdisableコメントだったが、
     // 本プロジェクトのESLintはフックの規則2つに絞っており同ルールを読み込まないため、

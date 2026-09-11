@@ -15,7 +15,7 @@ import {
   revokeChoreNfcTag,
   updateChore,
 } from "@/data/api";
-import { generateNfcTagToken, isWebNfcSupported, writeNfcTag } from "@/lib/nfc";
+import { generateNfcTagToken, isNfcWriteSupported, writeNfcTag } from "@/lib/nfc";
 import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
@@ -154,7 +154,7 @@ export default function ChoreEditScreen() {
   const openIssueModal = () => {
     if (!chore) return;
     setIssuedSnackbar(null);
-    if (!isWebNfcSupported()) {
+    if (!isNfcWriteSupported()) {
       setNfcStep("unsupported");
       setModalVisible(true);
       return;
@@ -173,7 +173,8 @@ export default function ChoreEditScreen() {
     // API仕様.md 3a-2章手順2「クライアント側で暗号論的に安全なランダムトークンを生成」
     const newToken = generateNfcTagToken();
     // [2026-08-18実装] Web NFC API（Android Chrome限定）で実際に物理タグへ書き込む。
-    // src/lib/nfc.ts参照。ここでのawaitは実際にタグをタップするまで待機し続ける。
+    // [2026-09-11] ネイティブビルドでは src/lib/nfc.native.ts が同じ関数を提供する
+    // （Web版は src/lib/nfc.web.ts）。ここでのawaitは実際にタグをタップするまで待機し続ける。
     const result = await writeNfcTag(newToken);
     if (result.ok && result.tagValue) {
       // API仕様.md 3a-2章手順4「chore×memberに紐づけ」相当。

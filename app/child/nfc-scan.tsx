@@ -19,7 +19,8 @@ import { reportChoreCompletionByNfcTag, PG_ERRCODE } from "@/data/api";
  * 主要画面ワイヤーフレーム.md 7.6.3節「本部長レビューで確定」）。
  *
  * [3ロール共通・固有名詞を出さない] 既存の物理タグに書き込まれたURLは
- * `/child/nfc-scan`で固定されており変更できない（src/lib/nfc.ts:68）ため、子ども・
+ * `/child/nfc-scan`で固定されており変更できない（src/lib/nfc.web.ts、
+ * NFC_SCAN_PATH＝src/lib/nfc.shared.ts）ため、子ども・
  * 保護者・みまもりメンバーのいずれがログイン中でもこの画面に到達する
  * （app/child/_layout.tsxのガード解除、108章参照）。C13では「タグをよみとっています」
  * の表示のみで、クエスト名・持ち主名等の固有名詞は一切出さない（7.6.3節）。
