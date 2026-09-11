@@ -468,6 +468,13 @@ export default function FamilyScreen() {
               ) : isEditingColor ? (
                 <>
                   <Text style={theme.typography.parentBodyMedium}>新しい色を選んでください</Text>
+                  {/* [2026-09-11追加] デザイントークン.md 1.3節 決定12〜14。
+                      12色化で似た色が隣接するようになったための注意書き。パレット直前に
+                      常時1行表示（タップ時のみ出る「使用中です」表示とは別枠）。
+                      新しい部品・トークンは作らず既存のparentCaption/neutralTextSecondaryを流用。 */}
+                  <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+                    似た色は近くに並べています。小さな丸だけでは見分けにくいことがあるため、名前もあわせてご確認ください。
+                  </Text>
                   <View style={styles.colorGrid}>
                     {colorOptions.map((c) => (
                       <Pressable
