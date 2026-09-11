@@ -44,21 +44,50 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={{ gap: theme.spacing.s3, marginTop: theme.spacing.s8 }}>
-        <AppButton
-          label="家族を新しくつくる"
-          onPress={() => router.push("/onboarding/email?intent=create")}
-        />
-        <AppButton
-          label="招待コードをもってきた（保護者）"
-          variant="secondary"
-          onPress={() => router.push("/onboarding/email?intent=join")}
-        />
+        {/* [2026-09-12・UIUXデザイン部44.2節決定7] status==="parentNoFamily"（メール認証済み・
+            家族未所属）のときは、この3つの認証系ボタン（家族を新しくつくる／招待コードをもって
+            きた／ログインする）を非表示にし、下のdemoBox（家族をつくる／招待コードで参加）に
+            案内を一本化する。この3ボタンは未認証者向けの入口であり、認証済みの
+            parentNoFamilyの人が押すと不要なメール認証をもう一度求めてしまうため。
+            「こどもモードで使う」だけは対象外（別ロールの入口のため常時表示、決定7）。 */}
+        {status !== "parentNoFamily" && (
+          <AppButton
+            label="家族を新しくつくる"
+            onPress={() => router.push("/onboarding/email?intent=create")}
+          />
+        )}
+        {status !== "parentNoFamily" && (
+          <AppButton
+            label="招待コードをもってきた（保護者）"
+            variant="secondary"
+            onPress={() => router.push("/onboarding/email?intent=join")}
+          />
+        )}
         <AppButton
           label="こどもモードで使う"
           variant="secondary"
           onPress={() => router.push("/child-auth/invite-code")}
         />
       </View>
+
+      {/* [2026-09-12追加・UIUXデザイン部44.1節決定1〜4] 審査員がP1（この画面）を
+          見た時点で「すでにアカウントを持っている人」の入口が無く、統括自身が
+          「パスワードでログインがない？」と見つけられなかったことを受けた4つ目の
+          入口。42章のP2最下部リンク（審査員向け・目立たない見た目）とは別物で、
+          こちらは一般利用者も使う「ボタンらしいボタン」として`variant="secondary"`
+          （既存ボタン2・3と同格）にする。区切り線で「これから始める3択」と
+          「すでに始めている人向けの1つ」を視覚的に分ける（決定3）。 */}
+      {status !== "parentNoFamily" && (
+        <>
+          <View style={styles.loginDivider} />
+          <AppButton
+            label="ログインする（保護者・みまもり）"
+            variant="secondary"
+            style={{ marginTop: theme.spacing.s3 }}
+            onPress={() => router.push("/onboarding/email?intent=login")}
+          />
+        </>
+      )}
 
       {status === "parentNoFamily" && (
         <View style={styles.demoBox}>
@@ -107,6 +136,13 @@ const styles = StyleSheet.create({
   hero: { alignItems: "center", marginTop: theme.spacing.s8 },
   logo: { fontSize: 48, marginBottom: theme.spacing.s2 },
   subtitle: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
+  // [2026-09-12追加・UIUXデザイン部44.1節決定3] `app/parent/family.tsx`の
+  // `settingsDivider`と同じ値（42.2節決定5・25.1節等でも使われている）。
+  loginDivider: {
+    marginTop: theme.spacing.s6,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+  },
   demoBox: {
     marginTop: theme.spacing.s8,
     padding: theme.spacing.s3,

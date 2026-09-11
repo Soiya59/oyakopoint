@@ -10,7 +10,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "jp.soiyalab.oyakopoint"
+      "bundleIdentifier": "jp.soiyalab.oyakopoint",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "jp.soiyalab.oyakopoint",

@@ -64,6 +64,12 @@ export default function AuthCallbackScreen() {
         // [2026-08-22追加] S0「招待プレビュー・参加確認」へ。認証は完了済みだが
         // まだfamily_membersに行が無い状態（accept_family_invite未実行）。
         router.replace({ pathname: "/onboarding/join-supporter", params: { token } });
+      } else if (intent === "login") {
+        // [2026-09-12追加・UIUXデザイン部44.2節決定6] P1「ログインする（保護者・
+        // みまもり）」経由で認証した人を、create-family（家族名の新規入力）へ
+        // 決め打ちしない。P1（"/"）へ差し戻し、P1のdemoBox（「家族をつくる」
+        // 「招待コードで参加」の2択）に案内を引き継がせる（依頼2の案イ）。
+        router.replace("/");
       } else {
         router.replace(intent === "join" ? "/onboarding/join-family" : "/onboarding/create-family");
       }
