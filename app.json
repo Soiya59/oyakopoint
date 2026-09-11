@@ -43,7 +43,7 @@
         "react-native-nfc-manager",
         {
           "nfcPermission": "おやこポイントは、専用のNFCタグにスマホをかざしてお手伝いの完了を記録するためにNFCを使用します。",
-          "includeNdefEntitlement": true
+          "includeNdefEntitlement": false
         }
       ]
     ],
