@@ -2,6 +2,7 @@
   "expo": {
     "name": "おやこポイント",
     "slug": "oyakopoint-app",
+    "owner": "soiyalab",
     "scheme": "oyakopoint",
     "version": "1.0.0",
     "orientation": "portrait",
