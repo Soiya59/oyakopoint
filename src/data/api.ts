@@ -2421,10 +2421,16 @@ export async function fetchFamilyBoardReactionsLog(
  * 常に同じ配置（形ごとに1行、レアリティ4段を列に固定）で表示するため、
  * shape→rarity（cost）の順で並べる。SVGの実データはDBに保存しない
  * （`sticker_key`がクライアント側アセット参照キー、theme.stickerCatalogOrder参照）。
+ *
+ * [2026-09-11改訂・要件定義書07-25-1章決定11、設計部/成果物/スキーマ設計.sql
+ * 53.4章・53.9章] 参照先を`sticker_catalog`から`sticker_catalog_effective_prices`
+ * （新設View）に変更した。列構成が完全に一致するため、この1行の変更のみで
+ * 家族ごとの上書き価格（`family_sticker_prices`）が反映された値段を返すように
+ * なる。`StickerShopPanel.tsx`・`useStickers.ts`は無改修（設計部53.9章のとおり）。
  */
 export async function fetchStickerCatalog(client: SupabaseClient): Promise<ApiResult<StickerCatalogItem[]>> {
   const { data, error } = await client
-    .from("sticker_catalog")
+    .from("sticker_catalog_effective_prices")
     .select("*")
     .eq("is_active", true)
     .order("shape")
@@ -2670,6 +2676,65 @@ export async function resetStickerTier(client: SupabaseClient, shape: string): P
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "unknown_error", message: "リセット結果を取得できませんでした" } };
   return { ok: true, data: row as ResetStickerTierResult };
+}
+
+// ============================================================
+// メダルの値段を家族ごとに編集できるようにする（要件定義書07-25-1章決定
+// 10〜18、UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 41章、設計部/
+// 成果物/スキーマ設計.sql 53章、2026-09-11新設）。
+// 画面は`app/parent/sticker-settings.tsx`（メダル管理）。41章は「設定」の
+// 中を前提に書かれているが、業務指示によりこの画面へ読み替える。
+// ============================================================
+
+export interface FamilyStickerPriceRow {
+  shape: string;
+  rarity: "bronze" | "silver" | "gold" | "crystal";
+  points_cost: number;
+}
+
+/**
+ * 現在の有効価格（家族の上書きがあればそれ、無ければ既定値）を取得する。
+ * 設計部53.9章の推奨どおり、`sticker_catalog_effective_prices`を形
+ * `beetle`（カブトムシ）1つに絞って取得する。決定13「同じレアリティなら
+ * 形によらず同額」の前提により、1つの形の4行（銅・銀・金・クリスタル）を
+ * 取得すれば家族の現在の有効価格が過不足なく揃う。
+ */
+export async function fetchFamilyStickerPrices(client: SupabaseClient): Promise<ApiResult<FamilyStickerPriceRow[]>> {
+  const { data, error } = await client
+    .from("sticker_catalog_effective_prices")
+    .select("shape, rarity, points_cost")
+    .eq("shape", "beetle")
+    .eq("is_active", true);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as FamilyStickerPriceRow[] };
+}
+
+export interface SetFamilyStickerPricesResultRow {
+  rarity: "bronze" | "silver" | "gold" | "crystal";
+  points_cost: number;
+  is_override: boolean;
+}
+
+/**
+ * メダルの値段（銅・銀・金・クリスタル）を家族単位でまとめて1回で保存する。
+ * `set_family_sticker_prices()`（SECURITY DEFINER・保護者限定、設計部53.5章）を
+ * 呼ぶ。0pt禁止・単調性（銅≤銀≤金≤クリスタル、決定18）はサーバー側でも
+ * 検証され、違反時は`check_violation`で拒否される。保護者以外が呼ぶと
+ * `insufficient_privilege`。保存値が既定値と一致するレアリティは上書き行が
+ * 削除される（決定9）。
+ */
+export async function setFamilyStickerPrices(
+  client: SupabaseClient,
+  prices: { bronze: number; silver: number; gold: number; crystal: number }
+): Promise<ApiResult<SetFamilyStickerPricesResultRow[]>> {
+  const { data, error } = await client.rpc("set_family_sticker_prices", {
+    p_bronze: prices.bronze,
+    p_silver: prices.silver,
+    p_gold: prices.gold,
+    p_crystal: prices.crystal,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as SetFamilyStickerPricesResultRow[] };
 }
 
 // ============================================================

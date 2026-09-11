@@ -411,8 +411,13 @@ GRANT INSERT ON _r TO authenticated;
 -- 設計部/成果物/スキーマ設計.sql 52章、開発部/成果物/実装メモ.md 200章）に伴い、
 -- sticker_tier_resetsを追加。28→29。設計部52.10章の見込み（28→29）と一致した
 -- （ローカルDockerで実測。96.5章の遵守）。
+-- [2026-09-11再々更新] メダルの値段を家族ごとに編集できるようにする（要件定義書
+-- 07-25-1章決定10〜18、設計部/成果物/スキーマ設計.sql 53章、開発部/成果物/
+-- 実装メモ.md 201章）に伴い、family_sticker_pricesを追加。29→30。設計部53.12章の
+-- 見込み（29→30）と一致した（ローカルDockerで実測。96.5章の遵守。
+-- sticker_catalog_effective_pricesはViewのためS1には数えない）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '29', count(*)::text, count(*) = 29
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '30', count(*)::text, count(*) = 30
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -457,6 +462,13 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 --     絞り込みを持たない多数の既存SELECTポリシーと文字通り同一のため、
 --     ハッシュも同一の値を引き写せる（104章の教訓）。56→57本。設計部52.10章の
 --     見込み（56→57）と一致した（ローカルDockerで実測。96.5章の遵守）。
+--     2026-09-11再更新、メダルの値段を家族ごとに編集できるようにする（要件定義書
+--     07-25-1章決定10〜18、設計部/成果物/スキーマ設計.sql 53.3章、開発部/成果物/
+--     実装メモ.md 201章）でfamily_sticker_pricesのSELECTポリシー1本のみを追加。
+--     INSERT/UPDATE/DELETEポリシーは定義しない（決定17「保護者のみが変更できる」を
+--     書き込み経路のset_family_sticker_prices()〈SECURITY DEFINER〉一本化で
+--     担保する設計）。57→58本。設計部53.12章の見込み（57→58）と一致した
+--     （ローカルDockerで実測。96.5章の遵守）。
 --     追加・削除・改名・条件式の書き換えのいずれも検出する。
 --     ハッシュは USING と WITH CHECK を連結したもののmd5。
 WITH expected(t, p, c, h) AS (VALUES
@@ -553,6 +565,15 @@ WITH expected(t, p, c, h) AS (VALUES
   ('family_members','family_members_insert_by_parent','INSERT','ee67a7d134e4edcb37570a091be74c85'),
   ('family_members','family_members_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_members','family_members_update_scoped','UPDATE','7b019048dc03cf0c2a1674a9664b4b3c'),
+  -- [2026-09-11追加] メダルの値段を家族ごとに編集できるようにする（要件定義書
+  -- 07-25-1章決定10〜18、設計部/成果物/スキーマ設計.sql 53.3章、開発部/成果物/
+  -- 実装メモ.md 201章）。SELECT条件式`family_id = current_family_id()`は
+  -- 既存の多数のSELECTポリシーと文字通り同一のためハッシュを引き写せる
+  -- （104章の教訓）。INSERT/UPDATE/DELETEポリシーは定義しない（決定17
+  -- 「保護者のみが変更できる」を、書き込み経路をset_family_sticker_prices()
+  -- 〈SECURITY DEFINER〉のみに閉じることで担保する設計）。ローカルDockerで
+  -- 実測して確認した。
+  ('family_sticker_prices','family_sticker_prices_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_tree_decorations','family_tree_decorations_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_tree_seasons','family_tree_seasons_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gacha_draws','gacha_draws_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
@@ -629,7 +650,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー57本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー58本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -757,7 +778,15 @@ WITH expected(f) AS (VALUES
   -- join_family_with_invite_code()等と同じくSECURITY DEFINERであり、
   -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   ('has_agreed_to_current_terms'),
-  ('record_terms_consent')
+  ('record_terms_consent'),
+  -- [2026-09-11追加] set_family_sticker_prices（メダルの値段を家族ごとに
+  -- 編集できるようにする、要件定義書07-25-1章決定10〜18、設計部/成果物/
+  -- スキーマ設計.sql 53.5章、開発部/成果物/実装メモ.md 201章）。
+  -- reset_sticker_tier()等と同じくSECURITY DEFINERであり、PUBLIC/anonから
+  -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  -- purchase_sticker(UUID)はシグネチャ無変更のCREATE OR REPLACEのため、この
+  -- 一覧には変化を及ぼさない（増減±0、設計部53.12章の見込みどおり）。
+  ('set_family_sticker_prices')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -770,7 +799,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数62件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数63件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1134,6 +1163,21 @@ INSERT INTO _r SELECT 'A層', 'A27 保護者: sticker_tier_resetsに他家族の
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM sticker_tier_resets WHERE family_id <> current_family_id();
+
+-- [2026-09-11追加] A28 family_sticker_prices（メダルの値段を家族ごとに編集
+-- できるようにする、要件定義書07-25-1章決定10〜18、設計部/成果物/スキーマ
+-- 設計.sql 53.12章推奨、開発部/成果物/実装メモ.md 201章）。family_idを持つ
+-- 家族間分離対象の新規テーブルのため、既存のA01〜A27と同じ形で追加する。
+-- [重要] sticker_catalog_effective_prices（新設View）自体はfamily_id列を
+-- 持たないためこの機械的な検査の対象にできない。Viewのsecurity_invoker=true
+-- が正しく他家族の上書き価格を漏らさないことは、実装メモ.md 201章の
+-- BEGIN...ROLLBACKによる手動検証で別途確認済み（本番運用ではA28がこの
+-- テーブル自体の家族間分離を検査し、Viewの計算ロジックは設計・実装レビュー
+-- と手動検証で担保する2段構え）。
+INSERT INTO _r SELECT 'A層', 'A28 保護者: family_sticker_pricesに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM family_sticker_prices WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
