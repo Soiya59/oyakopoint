@@ -20,7 +20,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.NFC"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -40,6 +43,12 @@
           "includeNdefEntitlement": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ec7bcf7d-b0b5-4b1b-b2a4-1b2df79d2c7f"
+      }
+    }
   }
 }
