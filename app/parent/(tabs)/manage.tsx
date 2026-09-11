@@ -47,6 +47,13 @@ export default function ParentManageTabScreen() {
   const rows: ManageRow[] = [
     { emoji: "🧺", label: "クエスト管理", path: "/parent/chores" },
     { emoji: "🏆", label: "ごほうび管理", path: "/parent/rewards" },
+    // [2026-09-11追加・統括指示「メダル管理はメダル管理として、ごほうび管理の下に
+    // 追加してほしい」／本部長・軽微変更ルート] クエストとごほうびは独立した管理画面を
+    // 持つのに、メダルだけがP14「設定」の奥にあり不揃いだった。UIUX 40章 決定1・
+    // 41章 決定1（設定の中に置く）を取り下げ、`app/parent/sticker-settings.tsx` を
+    // 新設してここへ並べる。2026-09-11に「みまもり（参考）」を設定から出して
+    // ここへ集約した（実装メモ191章）のと同じ整理。
+    { emoji: "🪙", label: "メダル管理", path: "/parent/sticker-settings" },
     // みまもりメンバーがいない家族では出さない（従来のリンク2つと同じ条件）。
     ...(hasAnySupporter
       ? [{ emoji: "👀", label: "みまもり（参考）", path: "/parent/supporter-chores" }]
