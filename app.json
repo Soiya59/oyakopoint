@@ -13,7 +13,10 @@
       "bundleIdentifier": "jp.soiyalab.oyakopoint",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "associatedDomains": [
+        "applinks:soiya59.github.io"
+      ]
     },
     "android": {
       "package": "jp.soiyalab.oyakopoint",
@@ -26,6 +29,23 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.NFC"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "soiya59.github.io",
+              "pathPrefix": "/oyakopoint"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
