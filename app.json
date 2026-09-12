@@ -65,7 +65,8 @@
           "nfcPermission": "おやこポイントは、専用のNFCタグにスマホをかざしてお手伝いの完了を記録するためにNFCを使用します。",
           "includeNdefEntitlement": false
         }
-      ]
+      ],
+      "./plugins/withNfcNdefIntentFilter.js"
     ],
     "extra": {
       "router": {},
