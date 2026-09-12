@@ -1,6 +1,11 @@
 import { Platform } from "react-native";
 import { buildWebAppUrl } from "./authRedirect";
-import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM, generateNfcTagToken } from "./nfc.shared";
+import {
+  ANDROID_PACKAGE_NAME_FALLBACK,
+  NFC_SCAN_PATH,
+  NFC_TAG_VALUE_PARAM,
+  generateNfcTagToken,
+} from "./nfc.shared";
 import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
 
 /**
@@ -32,10 +37,17 @@ import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
  *
  * [2026-09-11改訂・実装メモ187章] Expoネイティブビルド対応のため、このファイルを
  * `src/lib/nfc.ts`から`nfc.web.ts`へ改名し、ネイティブ実装（`nfc.native.ts`、
- * react-native-nfc-manager使用）を追加した。**このファイルの中身・挙動は
- * 「関数名`isWebNfcSupported`→`isNfcWriteSupported`への改名」「型定義と
- * `generateNfcTagToken()`を`nfc.shared.ts`へ切り出し」以外は一切変更していない**
+ * react-native-nfc-manager使用）を追加した。このときは「関数名
+ * `isWebNfcSupported`→`isNfcWriteSupported`への改名」「型定義と
+ * `generateNfcTagToken()`を`nfc.shared.ts`へ切り出し」以外は一切変更していない
  * （Web版が本番稼働中で触ってはいけないため）。
+ *
+ * [2026-09-13追記・実装メモ214章] `writeNfcTag()`が書き込むNDEFレコードに、
+ * AAR（Android Application Record、`recordType: "android.com:pkg"`の
+ * external typeレコード）を2番目として追加した。Web NFC APIの`NDEFReader.write()`
+ * はexternal typeレコードの書き込みに対応しており（W3C Web NFC仕様）、新規の
+ * 依存追加なしで書ける。理由・詳細は実装メモ214章、ネイティブ版の同種の変更は
+ * `nfc.native.ts`のファイル冒頭コメント参照。
  */
 
 export type { NfcWriteResult, NfcReadResult };
@@ -59,6 +71,12 @@ export function isNfcWriteSupported(): boolean {
  * 物理NFCタグへ、このchoreの報告画面を開くURLを書き込む（保護者操作、P11拡張モーダル）。
  * Web NFC API非対応の端末（iOS・PC・LAN内http配信）では書き込めないため、
  * 呼び出し前に`isNfcWriteSupported()`で確認すること。
+ *
+ * [2026-09-13改訂・実装メモ214章] 1番目にURIレコード、2番目にAAR
+ * （Android Application Record）レコードの2レコード構成にした。Android 16/17で
+ * 「NFCで見つかったリンクを開きますか？」の確認ダイアログを飛ばして直接アプリを
+ * 起動させるための対応（詳細はファイル冒頭コメント・実装メモ214章）。順序を
+ * 変えないこと（1番目がURLでないとiPhoneでの起動判定が壊れる）。
  */
 export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
   if (!isNfcWriteSupported()) {
@@ -71,7 +89,15 @@ export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
     // 本プロジェクトのESLintはフックの規則2つに絞っており同ルールを読み込まないため、
     // 「定義の無いルールへのdisable」としてエラーになる。理由を残す普通のコメントにした。
     const ndef = new (window as any).NDEFReader();
-    await ndef.write({ records: [{ recordType: "url", data: url }] });
+    await ndef.write({
+      records: [
+        { recordType: "url", data: url },
+        {
+          recordType: "android.com:pkg",
+          data: new TextEncoder().encode(ANDROID_PACKAGE_NAME_FALLBACK),
+        },
+      ],
+    });
     return { ok: true, tagValue };
   } catch (e) {
     // catchのeはunknownのためanyで受けてnameを読む（上と同じ理由でdisableコメントは外した）。

@@ -1,7 +1,13 @@
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import NfcManager, { Ndef, NfcError, NfcTech } from "react-native-nfc-manager";
 import { WEB_APP_BASE_URL } from "./legalLinks";
-import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM, generateNfcTagToken } from "./nfc.shared";
+import {
+  ANDROID_PACKAGE_NAME_FALLBACK,
+  NFC_SCAN_PATH,
+  NFC_TAG_VALUE_PARAM,
+  generateNfcTagToken,
+} from "./nfc.shared";
 import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
 
 /**
@@ -42,15 +48,30 @@ import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
  * `startWrite`）のみで、読み取り（`readNfcTag`）には影響しない。
  *
  * [Web版との整合性]
- * 書き込むNDEFレコードは、Web版とまったく同じ「chore報告画面へのURL
+ * 書き込むNDEFレコードの1番目は、Web版とまったく同じ「chore報告画面へのURL
  * （URIレコード、`https://soiya59.github.io/oyakopoint/child/nfc-scan?
  * tagValue=...`）」にした。理由:
  * 1. 家族の端末がWeb版・ネイティブ版に一斉移行するとは限らない移行期間中も、
  *    どちらのアプリが書いたタグでも、ネイティブアプリを入れていない端末で
  *    タップすればブラウザが開いて読める（後方互換）。
  * 2. `nfc.shared.ts`のURLの組み立て規則を1箇所に保つ。
+ * 3. iPhoneはNDEFメッセージの1番目のレコードしか見ない（Universal Link経由の
+ *    起動判定も1番目のURIレコードが対象）ため、1番目をURLに固定することが
+ *    iOS側の動作の前提になっている。
  * ネイティブには`window.location.origin`が無いため、`src/lib/legalLinks.ts`が
  * 既に持っている本番オリジン定数（`WEB_APP_BASE_URL`）を再利用した。
+ *
+ * [2026-09-13追記・実装メモ214章・AAR（Android Application Record）の追加]
+ * 2番目のレコードとして、AAR（`TNF_EXTERNAL_TYPE`・type`android.com:pkg`・
+ * payloadがパッケージ名のASCIIバイト列）を追加した。Android 16/17は、URLが
+ * 書かれたNFCタグをタップすると「NFCで見つかったリンクを開きますか？」という
+ * 確認ダイアログを必ず挟む（AOSP `NfcDispatcher.tryNdef()`の`matched Web link -
+ * prompting user`分岐）。同じ`tryNdef()`は**先にAARの有無を調べ、あれば
+ * `tryActivityOrLaunchAppStore()`で処理を終えてWebリンクの確認に進まない**ため、
+ * AARを足すと確認ダイアログ無しでアプリが起動する（実機Pixel 9a・Android 17で
+ * 確認済み。詳細は実装メモ214章）。AARはAndroid固有の仕組みでiPhoneには存在せず、
+ * iPhoneは前述の通り1番目のレコードしか見ないため2番目にAARを置いても無視される
+ * だけで害はない。順序（URLが先・AARが後）を変えないこと。
  *
  * [まだ解決していないこと・実装メモ187章に詳細]
  * OSのNFCタグディスパッチ（URLが書かれたタグをタップしてブラウザで自動的に
@@ -110,15 +131,35 @@ function extractTagValueFromUrl(url: string): string | null {
 }
 
 /**
+ * AAR（Android Application Record）に書き込むAndroidパッケージ名を取得する。
+ *
+ * [2026-09-13新設・実装メモ214章] `app.json`の`android.package`と同じ文字列を
+ * 2箇所に書きたくないため、実行時に`expo-constants`の`Constants.expoConfig`
+ * （standalone/EASビルドでも埋め込みマニフェストから取得できる値。
+ * `node_modules/expo-constants/build/Constants.js`の`expoConfig`ゲッター参照）
+ * から読む。取得できなかった場合（何らかの理由でexpoConfigがnullの場合）のみ、
+ * `nfc.shared.ts`の`ANDROID_PACKAGE_NAME_FALLBACK`（app.jsonと手動で一致させて
+ * いる定数）にフォールバックする。`expo-constants`は元から本プロジェクトの
+ * 依存に含まれており（package.json）、新規依存の追加はしていない。
+ */
+function getAndroidPackageName(): string {
+  return Constants.expoConfig?.android?.package ?? ANDROID_PACKAGE_NAME_FALLBACK;
+}
+
+/**
  * 物理NFCタグへ、このchoreの報告画面を開くURLを書き込む（保護者操作、P11拡張モーダル）。
  * 呼び出し前に`isNfcWriteSupported()`で確認すること（Web版と同じ呼び出し方）。
+ *
+ * [2026-09-13改訂・実装メモ214章] 1番目にURIレコード、2番目にAARレコードの
+ * 2レコード構成にした（ファイル冒頭のコメント参照）。順序を変えないこと。
  */
 export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
   const url = buildNativeTagUrl(tagValue);
   try {
     await NfcManager.start();
     await NfcManager.requestTechnology(NfcTech.Ndef);
-    const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)]);
+    const records = [Ndef.uriRecord(url), Ndef.androidApplicationRecord(getAndroidPackageName())];
+    const bytes = Ndef.encodeMessage(records);
     if (!bytes) {
       return { ok: false, errorReason: "write_failed" };
     }
@@ -143,6 +184,12 @@ export async function writeNfcTag(tagValue: string): Promise<NfcWriteResult> {
  * （ネイティブでは将来これが実際に呼ばれる想定のため）。ただし現時点では
  * `app/child/nfc-scan.tsx`からは呼ばれていない（ファイル冒頭の「まだ解決して
  * いないこと」参照）。**実機での読み取り動作は未検証。**
+ *
+ * [2026-09-13追記・実装メモ214章] `writeNfcTag()`が書き込むレコードを1個から
+ * 2個（URI・AAR）に増やしたが、この関数は`tag?.ndefMessage?.[0]`（先頭の
+ * レコードのみ）しか見ないため無改修で動く。2番目のAARレコードは
+ * `Ndef.TNF_WELL_KNOWN`でも`Ndef.RTD_URI`でもないため、仮に見ても
+ * 下のisType判定でfalseになりURIレコードと誤認することは無い。
  */
 export async function readNfcTag(): Promise<NfcReadResult> {
   try {

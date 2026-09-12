@@ -32,6 +32,18 @@ export const NFC_SCAN_PATH = "/child/nfc-scan";
 export const NFC_TAG_VALUE_PARAM = "tagValue";
 
 /**
+ * Androidパッケージ名のフォールバック値（AAR＝Android Application Record用）。
+ *
+ * [2026-09-13新設・実装メモ214章] `app.json`の`android.package`と必ず一致させること
+ * （2つの場所に書きたくないため、ネイティブ版`nfc.native.ts`では実行時に
+ * `expo-constants`の`Constants.expoConfig?.android?.package`を優先して読み、
+ * 取得できなかった場合にだけこの定数にフォールバックする。Web版`nfc.web.ts`は
+ * `expo-constants`のexpoConfig埋め込みに依存しない静的サイト運用のため、この
+ * 定数をそのまま使う）。
+ */
+export const ANDROID_PACKAGE_NAME_FALLBACK = "jp.soiyalab.oyakopoint";
+
+/**
  * 新しいトークンを生成する。
  * API仕様.md 3a章手順1「クライアント側で暗号論的に安全なランダムトークンを生成」に対応。
  *
