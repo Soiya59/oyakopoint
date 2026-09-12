@@ -164,7 +164,22 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
           id: `board_reaction:${r.id}`,
           fromMemberId: r.reactor_member_id,
           at: r.created_at,
-          headline: stamp ? `${stamp.emoji} ${stamp.label}` : "💬 コメント",
+          // [2026-09-12修正・本部長／軽微変更ルート] **`stamp.label`ではなく
+          // `theme.boardStampLabel(stamp)`を使う。**
+          //
+          // 同じ😊のスタンプは、完了報告では「たすかったよ」、掲示板では「いいね」と
+          // 呼び分ける（2026-09-06の統括指示。掲示板の書き込みは「手伝ってもらった
+          // こと」とは限らないため。`theme.ts`のstampDefinitions参照）。
+          // ここは**掲示板への反応**なので後者を使わなければならないが、完了報告側と
+          // 同じ`stamp.label`のままになっていた。そのため統括が実機で、
+          // **掲示板では「いいね」と出るのに、とどいたもので開くと同じ反応が
+          // 「たすかったよ」に変わる**という食い違いを発見した（2026-09-12）。
+          //
+          // 掲示板側（`FamilyBoardHistoryPanel.tsx`）は最初から`boardStampLabel()`を
+          // 使っており正しい。この関数は用意されていたのに、こちらから呼ばれて
+          // いなかった。**上の`fromReactions`（完了報告への反応）は`stamp.label`の
+          // ままで正しい。**そちらは掲示板ではない。
+          headline: stamp ? `${stamp.emoji} ${theme.boardStampLabel(stamp)}` : "💬 コメント",
           body: null,
           choreLabel: `「${boardPostExcerpt(r.family_board_posts?.body ?? "")}」`,
         };
