@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
 import { AppDataProvider } from "@/data/store";
 import { SessionProvider } from "@/lib/session";
+import { PendingNfcLinkProvider } from "@/lib/pendingNfcLink";
 import { completeEmailSignIn } from "@/data/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import theme from "@/theme/theme";
@@ -39,17 +40,25 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <AppDataProvider>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: theme.colors.neutralBg },
-            }}
-          />
-        </AppDataProvider>
-      </SessionProvider>
+      {/* [2026-09-13追加・実装メモ.md 213章] PendingNfcLinkProviderは
+          SessionProvider（延いてはsrc/data/store.tsxのAppDataProviderが持つ
+          `session.status === "loading"`中は{children}を描画しないゲート）より
+          外側に置く。ゲートより内側だと、Stack（延いてはNavigationContainer配下の
+          ルーティング）が遅れて構築される間に`Linking.getInitialURL()`を呼ぶことに
+          なり、修正の意味が薄れるため。詳細はsrc/lib/pendingNfcLink.tsxのコメント。 */}
+      <PendingNfcLinkProvider>
+        <SessionProvider>
+          <AppDataProvider>
+            <StatusBar style="dark" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.colors.neutralBg },
+              }}
+            />
+          </AppDataProvider>
+        </SessionProvider>
+      </PendingNfcLinkProvider>
     </SafeAreaProvider>
   );
 }

@@ -6,6 +6,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { reportChoreCompletionByNfcTag, PG_ERRCODE } from "@/data/api";
+import { usePendingNfcLink } from "@/lib/pendingNfcLink";
 
 /**
  * C13 NFCタグ読み取り中
@@ -31,6 +32,24 @@ export default function NfcScanScreen() {
   const { status, client } = useSession();
   const pulse = useRef(new Animated.Value(0.4)).current;
   const processedRef = useRef(false);
+  const { consume: consumePendingNfcLink } = usePendingNfcLink();
+
+  // [2026-09-13追加・実装メモ.md 213.9章／本部長差し戻し対応] 「起動時URL由来の
+  // 保留」は、経路（expo-routerが起動時URLの解決に成功して直接この画面に来た場合・
+  // app/index.tsxが213.4章のロジックで転送してきた場合のどちらでも）を問わず、
+  // この画面に到達した時点で必ず消費する。消費しないと、expo-routerが起動時URL
+  // 解決に成功して直接この画面へ来たケース（150msのレースに勝てた場合）で
+  // `PendingNfcLinkProvider`の`tagValue`が文字列のまま残り続け、その後
+  // `app/child/_layout.tsx`のstale-sessionガードや`logoutChild()`等でようこそ画面
+  // （`/`）に戻った瞬間、`app/index.tsx`のeffectが残っていた`tagValue`を拾って
+  // 再度この画面へ遷移し、**同じタグで報告RPCをもう一度投げてしまう**
+  // （`processedRef`は画面ごとのrefのため、再遷移＝再マウントでは二重発火防止の
+  // 役に立たない）。マウント時に必ず`consume()`することで、この画面に来た理由が
+  // どちらであっても「保留」は役目を終えたことにする。
+  useEffect(() => {
+    consumePendingNfcLink();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 呼び出し本人のmember_id。子どもならactiveChildMemberId、保護者・みまもり
   // メンバーならactiveParentMemberId（store.tsxのコメントどおり、いずれか一方のみが
@@ -50,12 +69,19 @@ export default function NfcScanScreen() {
   }, [pulse]);
 
   useEffect(() => {
+    // [2026-09-13追加・実装メモ.md 213章] `status`が確定する前（"loading"）は
+    // `client`（55行目`childClient ?? supabase`）が未確定・未認証の可能性があるため、
+    // 報告RPCを投げない。現状のapp/child/_layout.tsxのガード・
+    // src/data/store.tsxのローディングゲートにより、この画面が
+    // `status === "loading"`のままマウントされることは無い設計だが、
+    // 依頼（やること.md 2-4）により念のための防御として追加した。
+    if (status === "loading") return;
     const t = setTimeout(() => {
       void process();
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagValue]);
+  }, [tagValue, status]);
 
   const process = async () => {
     if (processedRef.current) return;

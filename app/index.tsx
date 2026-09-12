@@ -6,6 +6,8 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { usePendingNfcLink } from "@/lib/pendingNfcLink";
+import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM } from "@/lib/nfc.shared";
 
 /**
  * P1 ようこそ / はじめかた選択
@@ -18,8 +20,28 @@ import { isSupabaseConfigured } from "@/lib/supabase";
  */
 export default function WelcomeScreen() {
   const { status } = useSession();
+  // [2026-09-13追加・実装メモ.md 213章] 閉じた状態からNFCタグ／URLで起動した場合、
+  // expo-router内部の起動時URL解決（150msのレース、詳細はsrc/lib/pendingNfcLink.tsx）が
+  // コールドスタート時に負けることがあり、その場合このP1（ようこそ画面）が
+  // 通常の直接起動と同様にマウントされてしまう。ここでもう一度、レース無しで
+  // 確認した起動時URLを見て、NFC報告のURLであれば通常のロール別ホーム転送より
+  // 優先して`/child/nfc-scan`へ渡す。
+  const { tagValue: pendingNfcTagValue, consume: consumePendingNfcLink } = usePendingNfcLink();
 
   useEffect(() => {
+    // 起動時URLの確認がまだ終わっていない間は、どちらの転送も保留する
+    // （先に役割別ホームへ転送してしまうと、後から分かったNFC遷移が
+    // 上書きされてしまうため）。通常は`Linking.getInitialURL()`の解決の方が
+    // セッション復元（SecureStore読み取り＋Supabase問い合わせ）より速いため、
+    // 実質的な待ち時間はほぼ発生しない想定。
+    if (pendingNfcTagValue === undefined) return;
+
+    if (pendingNfcTagValue) {
+      consumePendingNfcLink();
+      router.replace({ pathname: NFC_SCAN_PATH, params: { [NFC_TAG_VALUE_PARAM]: pendingNfcTagValue } });
+      return;
+    }
+
     if (status === "parent") {
       router.replace("/parent");
     } else if (status === "supporter") {
@@ -31,7 +53,7 @@ export default function WelcomeScreen() {
     } else if (status === "child") {
       router.replace("/child/home");
     }
-  }, [status]);
+  }, [status, pendingNfcTagValue, consumePendingNfcLink]);
 
   return (
     <Screen tone="parent">
