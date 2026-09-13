@@ -206,7 +206,7 @@ export default function ParentHistoryScreen() {
                 const isRoutine = !!chore?.is_repeatable;
                 return (
                   <View key={c.id} style={styles.row}>
-                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} />
+                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                     <Text style={[theme.typography.parentBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>
@@ -224,7 +224,7 @@ export default function ParentHistoryScreen() {
                 const emoji = state.rewards.find((rw) => rw.id === r.reward_id)?.emoji ?? "🎁";
                 return (
                   <View key={r.id} style={styles.row}>
-                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} />
+                    <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                     <Text style={[theme.typography.parentBody, { marginLeft: theme.spacing.s2 }]}>
                       {member?.display_name}
                     </Text>

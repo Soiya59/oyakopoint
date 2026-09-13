@@ -76,7 +76,7 @@ export default function JoinPreviewScreen() {
         <Text style={theme.typography.parentBodyMedium}>{familyName}</Text>
         <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s3 }}>
           {children.map((c) => (
-            <MemberAvatar key={c.member_id} name={c.display_name} color={c.avatar_color} />
+            <MemberAvatar key={c.member_id} name={c.display_name} color={c.avatar_color} expandOnTap />
           ))}
         </View>
       </Card>

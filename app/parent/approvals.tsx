@@ -196,7 +196,7 @@ export default function ApprovalsScreen() {
                 }
               >
                 <View style={styles.cardTop}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
+                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                   <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.parentBodyMedium}>

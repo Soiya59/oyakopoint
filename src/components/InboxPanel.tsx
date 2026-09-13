@@ -219,7 +219,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         return (
           <Card key={it.id} tone={tone} style={styles.card}>
             <View style={styles.row}>
-              <MemberAvatar name={from?.display_name ?? "?"} color={from?.avatar_color} size={32} lineData={from ? memberAvatars[from.id] : undefined} />
+              <MemberAvatar name={from?.display_name ?? "?"} color={from?.avatar_color} size={32} lineData={from ? memberAvatars[from.id] : undefined} expandOnTap />
               <View style={styles.main}>
                 <Text style={bodyStyle}>{from?.display_name ?? "だれか"}から</Text>
                 <Text style={[bodyStyle, styles.headline]}>{it.headline}</Text>

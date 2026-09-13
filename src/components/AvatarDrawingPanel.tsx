@@ -154,7 +154,7 @@ export function AvatarDrawingPanel({
     <View>
       <Text style={[bodyStyle, styles.sectionLabel]}>今のすがた</Text>
       <Card tone={tone} style={styles.currentCard}>
-        <MemberAvatar name={displayName} color={backgroundColor} size={64} lineData={savedLineData} />
+        <MemberAvatar name={displayName} color={backgroundColor} size={64} lineData={savedLineData} expandOnTap />
 
         {savedMessage && <Text style={[bodyStyle, styles.successText]}>{savedMessage}</Text>}
         {resetSuccessMessage && <Text style={[bodyStyle, styles.successText]}>{resetSuccessMessage}</Text>}

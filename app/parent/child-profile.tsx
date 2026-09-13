@@ -145,7 +145,7 @@ export default function ChildProfileScreen() {
             </Text>
           )}
           <View style={{ marginTop: theme.spacing.s3 }}>
-            <MemberAvatar name={displayName || "?"} color={avatarColor} size={48} />
+            <MemberAvatar name={displayName || "?"} color={avatarColor} size={48} expandOnTap />
           </View>
 
           {errorMessage && (

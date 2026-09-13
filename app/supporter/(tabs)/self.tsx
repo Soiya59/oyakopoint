@@ -66,7 +66,7 @@ export default function SupporterSelfScreen() {
       <View style={styles.headerRow}>
         {myMember && (
           <View style={styles.headerMe}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} lineData={memberAvatars[myMember.id]} />
+            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={24} lineData={memberAvatars[myMember.id]} expandOnTap />
             <Text style={theme.typography.supporterTitle}>{myMember.display_name}</Text>
           </View>
         )}

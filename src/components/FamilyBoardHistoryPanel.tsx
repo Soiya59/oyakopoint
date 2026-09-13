@@ -378,6 +378,7 @@ export function FamilyBoardHistoryPanel({
                     color={post.family_members?.avatar_color}
                     size={24}
                     lineData={memberAvatars[post.author_member_id]}
+                    expandOnTap
                   />
                   <Text style={[bodyMediumStyle, { marginLeft: theme.spacing.s2, flex: 1 }]}>
                     {post.family_members?.display_name ?? "?"}

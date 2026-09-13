@@ -348,7 +348,7 @@ export default function FamilyScreen() {
               <Text style={{ color: theme.colors.brandPrimaryStrong }}>色を変更しました</Text>
             )}
             <View style={{ flexDirection: "row", alignItems: isEditingColor ? "flex-start" : "center", gap: theme.spacing.s3 }}>
-            <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} expandOnTap />
             <View style={{ flex: 1 }}>
               {editingId === m.id ? (
                 <>

@@ -1073,7 +1073,7 @@ export function FamilyTreeBreakdownList({
     <View style={{ gap: theme.spacing.s2 }}>
       {breakdown.map((row) => (
         <View key={row.member_id} style={styles.breakdownRow}>
-          <MemberAvatar name={row.display_name} color={row.avatar_color} size={28} lineData={memberAvatars[row.member_id]} />
+          <MemberAvatar name={row.display_name} color={row.avatar_color} size={28} lineData={memberAvatars[row.member_id]} expandOnTap />
           <Text style={[theme.typography.parentBody, styles.breakdownName]}>{row.display_name}</Text>
           <Text style={theme.typography.parentBodyMedium}>
             {row.completion_count}

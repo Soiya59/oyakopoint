@@ -149,7 +149,7 @@ export default function SupporterActivityScreen() {
             <Pressable key={c.id} onPress={() => openDetail(c)}>
               <Card tone="supporter" style={styles.card}>
                 <View style={styles.cardTop}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
+                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                   <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.supporterBodyMedium}>

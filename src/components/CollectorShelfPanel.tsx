@@ -356,7 +356,7 @@ function PastTreeColorLegend({
       <View style={styles.legendRows}>
         {contributors.map((m) => (
           <View key={m.id} style={styles.legendRow}>
-            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} lineData={memberAvatars[m.id]} />
+            <MemberAvatar name={m.display_name} color={m.avatar_color} size={20} lineData={memberAvatars[m.id]} expandOnTap />
             <Text style={captionStyle}>{m.display_name}</Text>
           </View>
         ))}
@@ -1061,7 +1061,7 @@ function FamilyStickerDetailCard({
           <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
             {ownerCounts.map(({ member, count }) => (
               <View key={member.id} style={styles.legendRow}>
-                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} />
+                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
                 <Text style={captionStyle}>
                   {member.display_name}
                   {count > 1 ? ` ×${count}` : ""}

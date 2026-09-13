@@ -152,7 +152,7 @@ export default function ParentFamilyTabScreen() {
             <Pressable key={c.id} onPress={() => router.push("/parent/approvals")}>
               <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} />
+                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                   <Text style={{ marginLeft: theme.spacing.s2 }}>
                     {member?.display_name} {c.chore_emoji} {c.chore_title}
                   </Text>

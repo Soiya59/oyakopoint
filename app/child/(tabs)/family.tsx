@@ -152,7 +152,7 @@ export default function ChildFamilyTabScreen() {
           <Pressable key={c.id} onPress={() => openDetail(c)}>
             <Card tone="child" style={isSupporterCard ? { ...styles.card, ...styles.cardSupporterTint } : styles.card}>
               <View style={styles.cardTop}>
-                <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} />
+                <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
                 <Text style={theme.typography.childBody}>{member?.display_name}</Text>
                 <Text style={{ flex: 1 }} />
                 <Text style={theme.typography.childBody}>
