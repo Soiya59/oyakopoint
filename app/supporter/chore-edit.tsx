@@ -338,7 +338,7 @@ export default function SupporterChoreEditScreen() {
         <Card style={{ marginTop: theme.spacing.s4 }} tone="supporter">
           <Text style={theme.typography.supporterBodyMedium}>NFCタグ</Text>
           <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-            このクエストに対応するタグにスマホをかざすと、完了報告（C13→C14）が起動します。
+            このクエストに対応するタグにスマホをかざすと、完了報告が起動します。
           </Text>
           <AppButton
             tone="supporter"

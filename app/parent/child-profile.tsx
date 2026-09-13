@@ -98,9 +98,6 @@ export default function ChildProfileScreen() {
 
   return (
     <Screen tone="parent">
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>P15</Text>
-      </View>
       <Text style={theme.typography.parentTitle}>子どもプロフィール追加</Text>
 
       {step === "profile" && (
@@ -212,15 +209,6 @@ export default function ChildProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    alignSelf: "flex-start",
-    backgroundColor: theme.colors.brandPrimarySoft,
-    paddingHorizontal: theme.spacing.s3,
-    paddingVertical: theme.spacing.s1,
-    borderRadius: theme.radius.parentMd,
-    marginBottom: theme.spacing.s3,
-  },
-  badgeText: { color: theme.colors.brandPrimaryStrong, fontWeight: "700", fontSize: 12 },
   input: {
     marginTop: theme.spacing.s2,
     borderWidth: 1,

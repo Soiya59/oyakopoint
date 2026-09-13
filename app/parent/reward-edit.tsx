@@ -240,7 +240,6 @@ export default function RewardEditScreen() {
       <Text style={theme.typography.parentTitle}>
         {reward ? `${reward.emoji ?? "🎁"} ごほうびを編集` : "ごほうびを新規登録"}
       </Text>
-      <Text style={[theme.typography.parentBody, styles.purpose]}>reward作成・編集</Text>
 
       {/* [2026-08-30追加] 登録者・最終編集者（要件定義書07-15章、主要画面ワイヤーフレーム.md
           24.2節決定4）。app/parent/chore-edit.tsxと全く同じ構成・分岐。 */}
@@ -316,10 +315,6 @@ export default function RewardEditScreen() {
           </Pressable>
         ))}
       </View>
-      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
-      </Text>
-
       {/* [2026-09-06追加] 主要画面ワイヤーフレーム.md 31.0節決定6。プレフィル直後のみ、
           「ポイントは目安である」ことを軽い注記として重ねて伝える。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>
@@ -559,7 +554,6 @@ const styles = StyleSheet.create({
   // [2026-09-11追加・要件定義書07-26章決定16／主要画面ワイヤーフレーム.md 39.3.1節
   // 決定12] app/parent/chore-edit.tsxと同型。
   chipDeemphasized: { opacity: 0.5 },
-  purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   // [2026-08-30追加] app/parent/chore-edit.tsxと同じスタイル。
   metaCard: { marginTop: theme.spacing.s4 },
   metaLine: { marginTop: theme.spacing.s1 },

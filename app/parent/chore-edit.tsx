@@ -385,13 +385,9 @@ export default function ChoreEditScreen() {
 
   return (
     <Screen tone="parent">
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>P11</Text>
-      </View>
       <Text style={theme.typography.parentTitle}>
         {chore ? `${chore.emoji ?? "📝"} クエストを編集` : "クエストを新規登録"}
       </Text>
-      <Text style={[theme.typography.parentBody, styles.purpose]}>chore作成・編集</Text>
 
       {/* [2026-08-30追加] 登録者・最終編集者（要件定義書07-15章、主要画面ワイヤーフレーム.md
           24.2節決定4）。既存のnfcCardと同種のCardで軽く囲み、フォームより手前・目的文の
@@ -479,10 +475,6 @@ export default function ChoreEditScreen() {
           </Pressable>
         ))}
       </View>
-      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        Windowsは「Windowsキー + .（ピリオド）」、スマホは絵文字キーボードから入力できます
-      </Text>
-
       {/* ポイント */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>ポイント（1以上の整数）</Text>
       <TextInput
@@ -679,7 +671,7 @@ export default function ChoreEditScreen() {
         <Card style={styles.nfcCard} tone="parent">
           <Text style={theme.typography.parentBodyMedium}>NFCタグ</Text>
           <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-            このクエストに対応するタグに家族の誰かがスマホをかざすと、完了報告（C13→C14）が起動します。
+            このクエストに対応するタグに家族の誰かがスマホをかざすと、完了報告が起動します。
           </Text>
           <AppButton
             label={
@@ -972,16 +964,6 @@ export default function ChoreEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    alignSelf: "flex-start",
-    backgroundColor: theme.colors.brandPrimarySoft,
-    paddingHorizontal: theme.spacing.s3,
-    paddingVertical: theme.spacing.s1,
-    borderRadius: theme.radius.parentMd,
-    marginBottom: theme.spacing.s3,
-  },
-  badgeText: { color: theme.colors.brandPrimaryStrong, fontWeight: "700", fontSize: 12 },
-  purpose: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.2節決定4。nfcCardと同種の
   // Card枠（色は既定のneutralBorderのまま、強調色は使わない）。
   metaCard: { marginTop: theme.spacing.s4 },

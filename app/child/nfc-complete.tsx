@@ -102,6 +102,16 @@ export default function NfcCompleteScreen() {
                 <Text style={[headlineStyle, styles.centerText, { marginTop: theme.spacing.s4 }]}>
                   {isProxy ? "とどいたよ！" : `「${params.choreTitle}」とどいたよ！`}
                 </Text>
+                {/* [2026-09-13追加・実装メモ.md 215章／主要画面ワイヤーフレーム.md 7.6.5節C]
+                    統括要望「待っていると感じさせない何かが欲しい」への本体の打ち手は
+                    C13（nfc-scan）側のアニメーション速度（215章）だが、UIUXデザイン部の
+                    提案どおり結果が確定するC14側にも一言添える。子ども・自分の記録のときは
+                    「よくがんばったね」、代理報告のときは持ち主名を主語にする（持ち主が
+                    見ている画面ではないため）。保護者・みまもりメンバー向けには追加しない
+                    （7.6.5節C「大人向けの画面に子ども向けの労いを足すのは不自然」）。 */}
+                <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s2 }]}>
+                  {isProxy ? `${params.ownerDisplayName}ちゃん、よくがんばったね` : "よくがんばったね"}
+                </Text>
               </>
             ) : (
               <Text style={[headlineStyle, styles.centerText]}>「{params.choreTitle}」をきろくしました</Text>

@@ -57,11 +57,18 @@ export default function NfcScanScreen() {
   const myMemberId = status === "child" ? state.activeChildMemberId : state.activeParentMemberId;
   const tone = status === "child" ? "child" : status === "supporter" ? "supporter" : "parent";
 
+  // [2026-09-13変更・実装メモ.md 215章／主要画面ワイヤーフレーム.md 7.6.5節B-2案]
+  // 従来は1周期1秒（500ms×2）だったが、この画面の表示時間は215章で700msの
+  // 人工的な待ちを撤去した結果1秒未満（実測の通信時間のみ）になり、1周期も
+  // 回りきらないまま遷移することが多くなった。B-2案の「1周期300ms程度」を
+  // そのまま採用し、150ms×2＝1周期300msにした（提案どおりの素直な値。これ以上
+  // 速めると呼吸というより点滅に見え、7.2節の「やわらかいパルス」という
+  // トーンを損なうおそれがあるため、提案値から動かしていない）。
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 500, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 150, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -75,11 +82,14 @@ export default function NfcScanScreen() {
     // src/data/store.tsxのローディングゲートにより、この画面が
     // `status === "loading"`のままマウントされることは無い設計だが、
     // 依頼（やること.md 2-4）により念のための防御として追加した。
+    //
+    // [2026-09-13削除・実装メモ.md 215章] ここに以前あった`setTimeout(..., 700)`は
+    // 待ち時間に仕様上の根拠が無い（主要画面ワイヤーフレーム.md 7.2節はこの画面を
+    // 「処理は一瞬で終わる想定」「橋渡し表示」とのみ定めており、待ち時間の指定は
+    // 無い）ため撤去した。二重発火防止（`processedRef`）は`process()`内部にあるため
+    // ここで即時に呼び出しても安全。
     if (status === "loading") return;
-    const t = setTimeout(() => {
-      void process();
-    }, 700);
-    return () => clearTimeout(t);
+    void process();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tagValue, status]);
 
