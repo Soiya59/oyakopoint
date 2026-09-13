@@ -26,7 +26,10 @@ export default function WelcomeScreen() {
   // 通常の直接起動と同様にマウントされてしまう。ここでもう一度、レース無しで
   // 確認した起動時URLを見て、NFC報告のURLであれば通常のロール別ホーム転送より
   // 優先して`/child/nfc-scan`へ渡す。
-  const { tagValue: pendingNfcTagValue, consume: consumePendingNfcLink } = usePendingNfcLink();
+  // [2026-09-13改訂・実装メモ.md 217章] `consume()`（値を外から`null`に書き換える方式）を
+  // `take()`（呼んだその場で1回だけ値を受け取る方式）に置き換えた。詳細は
+  // src/lib/pendingNfcLink.tsxのコメント参照。
+  const { resolved: pendingNfcResolved, take: takePendingNfcLink } = usePendingNfcLink();
 
   useEffect(() => {
     // 起動時URLの確認がまだ終わっていない間は、どちらの転送も保留する
@@ -34,10 +37,10 @@ export default function WelcomeScreen() {
     // 上書きされてしまうため）。通常は`Linking.getInitialURL()`の解決の方が
     // セッション復元（SecureStore読み取り＋Supabase問い合わせ）より速いため、
     // 実質的な待ち時間はほぼ発生しない想定。
-    if (pendingNfcTagValue === undefined) return;
+    if (!pendingNfcResolved) return;
 
+    const pendingNfcTagValue = takePendingNfcLink();
     if (pendingNfcTagValue) {
-      consumePendingNfcLink();
       router.replace({ pathname: NFC_SCAN_PATH, params: { [NFC_TAG_VALUE_PARAM]: pendingNfcTagValue } });
       return;
     }
@@ -53,7 +56,7 @@ export default function WelcomeScreen() {
     } else if (status === "child") {
       router.replace("/child/home");
     }
-  }, [status, pendingNfcTagValue, consumePendingNfcLink]);
+  }, [status, pendingNfcResolved, takePendingNfcLink]);
 
   return (
     <Screen tone="parent">

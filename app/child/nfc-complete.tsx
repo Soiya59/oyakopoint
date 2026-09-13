@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
@@ -53,7 +53,21 @@ export default function NfcCompleteScreen() {
   );
 
   const homePath = isChild ? "/child/home" : isSupporter ? "/supporter/family" : "/parent";
-  const goHome = () => router.replace(homePath);
+  // [2026-09-13追加・実装メモ.md 217章] 実機で発生した無限ループ（Maximum update
+  // depth exceeded）の再発防止策の1つ。この画面は`result==="approved"`のとき
+  // 全画面を覆う`Pressable`（下記）と3秒の自動タイマー（下のuseEffect）の**2つの
+  // 経路**から`goHome`が呼ばれ得る。タイマー発火の瞬間にタップが重なると
+  // `router.replace(homePath)`がほぼ同時に2回呼ばれる可能性があり、
+  // ナビゲーションの二重発火そのものを断つため、1回目の呼び出し以降は
+  // 何もしないようにする（`homePath`は同一レンダー内で不変のため、複数回
+  // 呼んでも本来は無害なはずだが、原因を1点に確定できていない以上、
+  // 呼び出し自体を1回に絞るのが最も確実な歯止めと判断した）。
+  const wentHomeRef = useRef(false);
+  const goHome = () => {
+    if (wentHomeRef.current) return;
+    wentHomeRef.current = true;
+    router.replace(homePath);
+  };
 
   // 主要画面ワイヤーフレーム.md 7.6.4節「演出タイムラインと自動遷移」: 即時加点状態
   // （自分・代理いずれも）のみ3秒後に自動でホームへ戻る。画面タップでも即座に遷移する

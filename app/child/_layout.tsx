@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Slot, router, usePathname } from "expo-router";
 import { View } from "react-native";
 import { useAppData } from "@/data/store";
@@ -77,8 +77,21 @@ export default function ChildLayout() {
 
   const consent = useTermsConsentGate(status === "child" && !isNfcPath && !shouldRedirect, client);
 
+  // [2026-09-13追加・実装メモ.md 217章] 実機で「NFC完了画面から3秒後の自動ホーム
+  // 遷移で無限ループ（Maximum update depth exceeded）」が発生した際の再発防止策。
+  // 原因を1点に確定できなかった（217章に詳細）ため、「このeffectが`router.replace("/")`
+  // を打つのは、このChildLayoutインスタンスが生きている間で最大1回まで」という
+  // 構造的な歯止めを加える。`shouldRedirect`は`state`（メンバー一覧）・`status`・
+  // `pathname`の組み合わせから毎レンダー再計算される値であり、何らかの理由で
+  // true/falseを行き来しても、実際にナビゲーションを起こす副作用（`router.replace`）
+  // は`redirectFiredRef`が一度trueになった後は二度と実行されない。
+  // `<Slot/>`を使うこのレイアウトは`/child/*`間の遷移では再マウントされないため、
+  // このrefは「/childの外へ出るまで」有効な歯止めとして機能する。
+  const redirectFiredRef = useRef(false);
+
   useEffect(() => {
-    if (!shouldRedirect) return;
+    if (!shouldRedirect || redirectFiredRef.current) return;
+    redirectFiredRef.current = true;
     if (staleSession) {
       void logoutChild().then(() => router.replace("/"));
     } else {

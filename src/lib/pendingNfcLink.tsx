@@ -44,25 +44,50 @@ import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM } from "./nfc.shared";
  * `PENDING_URL_TIMEOUT_MS`（2000ms）でこちらも打ち切る。この数値は
  * 「一般的なコールドスタートのオーバーヘッドを十分に吸収できる長さ」という
  * 経験的な判断であり、実機計測に基づく厳密な値ではない。
+ *
+ * [2026-09-13改訂・実装メモ.md 217章／実機クラッシュの再発防止]
+ * 213.9章では「保留中の値を`consume()`し忘れる経路がある」という穴を、
+ * `app/child/nfc-scan.tsx`のマウント時に`consume()`を呼ぶことで塞いだ。
+ * しかし`consume()`は「`tagValue`というReact stateを外から`null`に書き換える」
+ * 設計だったため、**値を消費したかどうかの判断が、呼び出し側が毎回正しく
+ * `consume()`を呼ぶことに依存していた**（＝経路が増えるたびに呼び忘れの
+ * リスクが残る。実際、本部長差し戻しの反省点そのもの）。加えて、`tagValue`が
+ * Reactの再レンダーを経由するstateである以上、これを読む側（`app/index.tsx`）の
+ * `useEffect`の依存配列に含めざるを得ず、依存が絡み合う余地そのものが
+ * バグの温床だった。
+ *
+ * そこで**「値の受け渡し」と「一度きりの消費」を、Reactの再レンダーを経由しない
+ * `ref`ベースの`take()`関数1本に集約**した。`take()`は何回・どこから・どんな順で
+ * 呼ばれても、**最初の1回だけ**実際の値（あれば）を返し、それ以降は必ず`null`を返す
+ * （呼び出し側が`consume()`を呼び忘れる、または二重に呼んでしまう余地そのものを
+ * なくす）。Contextが公開する`resolved`（起動時URLの確認が完了したかどうか）は
+ * 一度きり`false→true`に変わるだけの単純なbooleanで、`take()`の呼び出しでは
+ * 変化しない（＝`take()`を呼んでも再レンダーは起きない）ため、
+ * `usePendingNfcLink()`を使う側の`useEffect`が`take()`を挟んでループする経路は
+ * 構造的に無くなる。
  */
 const PENDING_URL_TIMEOUT_MS = 2000;
 
 interface PendingNfcLinkValue {
   /**
-   * `undefined`: 起動時URLの確認がまだ終わっていない（呼び出し側は転送を保留すること）。
-   * `null`: 確認済みだが、NFC報告のURLではなかった（通常の転送でよい）。
-   * `string`: NFC報告のURLで、値は`tagValue`。まだ`consume()`されていなければ未消費。
+   * 起動時URLの確認が完了したかどうか。`false`の間、呼び出し側は転送を保留すること。
+   * 一度`true`になった後は変化しない。
    */
-  tagValue: string | null | undefined;
-  /** 消費済みにする（`router.replace`した直後に呼び、二重遷移・再訪時の再発火を防ぐ）。 */
-  consume: () => void;
+  resolved: boolean;
+  /**
+   * 保留中の値を取り出す。**呼び出せるのは実質1回分だけ**（`ref`で管理しており、
+   * 2回目以降は常に`null`を返す）。`resolved`が`false`の間に呼んでも`null`が返る
+   * （まだ確認が終わっていないだけであり、`resolved`をチェックしてから呼ぶこと）。
+   * NFC報告のURLでなかった場合も`null`。
+   */
+  take: () => string | null;
 }
 
-const noop = () => {};
+const noop = () => null;
 
 const PendingNfcLinkContext = createContext<PendingNfcLinkValue>({
-  tagValue: undefined,
-  consume: noop,
+  resolved: false,
+  take: noop,
 });
 
 /**
@@ -99,8 +124,14 @@ export function extractPendingNfcTagValue(url: string | null | undefined): strin
  * `Linking.getInitialURL()`を呼び切るため）。
  */
 export function PendingNfcLinkProvider({ children }: { children: React.ReactNode }) {
-  const [tagValue, setTagValue] = useState<string | null | undefined>(undefined);
-  const consumedRef = useRef(false);
+  // [2026-09-13改訂・217章] 実際の値は`valueRef`（ref）に持ち、Reactのstateには
+  // 「確認が完了したか」という1回きりのbooleanだけを持たせる。値そのものを
+  // stateにすると、それを読む側のuseEffectの依存配列に値が乗り、再レンダーの
+  // たびに「もう一度見る」余地が生まれる。ref化することで、値は`take()`という
+  // 単一の入口からしか観測できず、その入口自体が「1回だけ」を保証する。
+  const [resolved, setResolved] = useState(false);
+  const valueRef = useRef<string | null>(null);
+  const takenRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,33 +141,41 @@ export function PendingNfcLinkProvider({ children }: { children: React.ReactNode
 
     Promise.race([Linking.getInitialURL(), timeout])
       .then((url) => {
-        if (cancelled || consumedRef.current) return;
-        setTagValue(extractPendingNfcTagValue(url));
+        if (cancelled) return;
+        valueRef.current = extractPendingNfcTagValue(url);
+        setResolved(true);
       })
       .catch(() => {
-        if (!cancelled && !consumedRef.current) setTagValue(null);
+        if (!cancelled) {
+          valueRef.current = null;
+          setResolved(true);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-    // 起動時に1回だけ確認する（依存配列は意図的に空。setTagValue等はReactが
+    // 起動時に1回だけ確認する（依存配列は意図的に空。setResolved等はReactが
     // 安定した参照を保証するため、exhaustive-depsの警告対象にもならない）。
   }, []);
 
-  // [2026-09-13追加・実装メモ.md 213.9章／本部長差し戻し対応] useCallbackで
-  // 参照を安定させる。安定させないと、`app/index.tsx`のようにこの関数を
-  // useEffectの依存配列に含めている呼び出し元で、毎レンダーeffectが走ってしまう。
-  const consume = useCallback(() => {
-    consumedRef.current = true;
-    setTagValue(null);
+  // [2026-09-13改訂・217章] `consume()`（外から`null`に書き換える方式）を廃止し、
+  // 「呼んだ側がその場で値を受け取り、以後は誰が呼んでも`null`」という`take()`に
+  // 一本化した。`consumedRef`と`valueRef`の2つを毎回同じ手順
+  // （`if (takenRef.current) return null; takenRef.current = true; return
+  // valueRef.current;`）でしか触らないため、呼び出し順・呼び出し回数に関わらず
+  // 結果は一意に決まる（＝「呼び忘れたら再発火する」「二重に呼んでも安全か
+  // 逐一確認する」という設計上の負担が呼び出し側から無くなる）。
+  const take = useCallback((): string | null => {
+    if (takenRef.current) return null;
+    takenRef.current = true;
+    return valueRef.current;
   }, []);
 
-  // [2026-09-13追加・同上] ContextのvalueをuseMemoで包み、tagValue・consumeの
-  // 参照が変わらない限りvalueオブジェクト自体を作り直さないようにする
-  // （consumeは上のuseCallbackで既に安定しているため、実質tagValueが変わった
-  // ときだけ作り直される）。
-  const value = useMemo<PendingNfcLinkValue>(() => ({ tagValue, consume }), [tagValue, consume]);
+  // Contextの`value`をuseMemoで包み、`resolved`が変わらない限り（＝`take()`を
+  // 呼んだだけでは）作り直さないようにする。`take`自体は`useCallback([])`で
+  // 参照が永久に安定しているため、実質`resolved`が変わったときだけ作り直される。
+  const value = useMemo<PendingNfcLinkValue>(() => ({ resolved, take }), [resolved, take]);
 
   return <PendingNfcLinkContext.Provider value={value}>{children}</PendingNfcLinkContext.Provider>;
 }

@@ -32,22 +32,24 @@ export default function NfcScanScreen() {
   const { status, client } = useSession();
   const pulse = useRef(new Animated.Value(0.4)).current;
   const processedRef = useRef(false);
-  const { consume: consumePendingNfcLink } = usePendingNfcLink();
+  const { take: takePendingNfcLink } = usePendingNfcLink();
 
-  // [2026-09-13追加・実装メモ.md 213.9章／本部長差し戻し対応] 「起動時URL由来の
-  // 保留」は、経路（expo-routerが起動時URLの解決に成功して直接この画面に来た場合・
-  // app/index.tsxが213.4章のロジックで転送してきた場合のどちらでも）を問わず、
-  // この画面に到達した時点で必ず消費する。消費しないと、expo-routerが起動時URL
-  // 解決に成功して直接この画面へ来たケース（150msのレースに勝てた場合）で
-  // `PendingNfcLinkProvider`の`tagValue`が文字列のまま残り続け、その後
-  // `app/child/_layout.tsx`のstale-sessionガードや`logoutChild()`等でようこそ画面
-  // （`/`）に戻った瞬間、`app/index.tsx`のeffectが残っていた`tagValue`を拾って
-  // 再度この画面へ遷移し、**同じタグで報告RPCをもう一度投げてしまう**
-  // （`processedRef`は画面ごとのrefのため、再遷移＝再マウントでは二重発火防止の
-  // 役に立たない）。マウント時に必ず`consume()`することで、この画面に来た理由が
-  // どちらであっても「保留」は役目を終えたことにする。
+  // [2026-09-13追加・実装メモ.md 213.9章／本部長差し戻し対応、2026-09-13改訂・217章]
+  // 「起動時URL由来の保留」は、経路（expo-routerが起動時URLの解決に成功して直接
+  // この画面に来た場合・app/index.tsxが213.4章のロジックで転送してきた場合の
+  // どちらでも）を問わず、この画面に到達した時点で必ず消費する。消費しないと、
+  // expo-routerが起動時URL解決に成功して直接この画面へ来たケース（150msの
+  // レースに勝てた場合）で保留中の値が残り続け、その後`app/child/_layout.tsx`の
+  // stale-sessionガードや`logoutChild()`等でようこそ画面（`/`）に戻った瞬間、
+  // `app/index.tsx`のeffectが残っていた値を拾って再度この画面へ遷移し、
+  // **同じタグで報告RPCをもう一度投げてしまう**（`processedRef`は画面ごとの
+  // refのため、再遷移＝再マウントでは二重発火防止の役に立たない）。
+  // [217章] `take()`は「1回目の呼び出しだけ値を返し、以後は誰が呼んでも`null`」を
+  // 保証する設計にしたため（src/lib/pendingNfcLink.tsx参照）、ここで戻り値を
+  // 使わずに呼び捨てるだけでよい。`app/index.tsx`側が既に`take()`していた場合も
+  // （＝この画面へ`index.tsx`経由で来た場合）ここでは`null`が返るだけで安全。
   useEffect(() => {
-    consumePendingNfcLink();
+    takePendingNfcLink();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
