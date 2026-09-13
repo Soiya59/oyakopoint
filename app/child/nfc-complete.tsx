@@ -86,10 +86,10 @@ export default function NfcCompleteScreen() {
       gachaLoadState === "ready"
         ? canDrawNow
           ? isChild
-            ? `🎰 ${params.ownerDisplayName}ちゃん、ガチャが ひけるよ！`
+            ? `🎰 ${params.ownerDisplayName}、ガチャが ひけるよ！`
             : `🎰 ${params.ownerDisplayName}さん、ガチャが引けます`
           : isChild
-          ? `🎰 ${params.ownerDisplayName}ちゃん、あと${remaining}かいでガチャ！`
+          ? `🎰 ${params.ownerDisplayName}、あと${remaining}かいでガチャ！`
           : `🎰 ${params.ownerDisplayName}さん、あと${remaining}回でガチャ`
         : null;
 
@@ -101,7 +101,7 @@ export default function NfcCompleteScreen() {
             {isProxy && (
               <Text style={[headlineStyle, styles.centerText, { marginBottom: theme.spacing.s2 }]}>
                 {isChild
-                  ? `👤 ${params.ownerDisplayName}ちゃんの「${params.choreTitle}」`
+                  ? `👤 ${params.ownerDisplayName}の「${params.choreTitle}」`
                   : `${params.ownerDisplayName}さんの記録として届きました`}
               </Text>
             )}
@@ -119,7 +119,7 @@ export default function NfcCompleteScreen() {
                     見ている画面ではないため）。保護者・みまもりメンバー向けには追加しない
                     （7.6.5節C「大人向けの画面に子ども向けの労いを足すのは不自然」）。 */}
                 <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s2 }]}>
-                  {isProxy ? `${params.ownerDisplayName}ちゃん、よくがんばったね` : "よくがんばったね"}
+                  {isProxy ? `${params.ownerDisplayName}、よくがんばったね` : "よくがんばったね"}
                 </Text>
               </>
             ) : (
