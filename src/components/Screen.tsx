@@ -41,14 +41,45 @@ export function Screen({ children, scroll = true, tone = "parent", style, conten
   // (1) は useSafeAreaInsets() で明示的に足す。ただしWeb版（GitHub Pages を
   // Chrome で開く現在の運用）では env(safe-area-inset-bottom) が 0 を返すため
   // これだけでは解決せず、(2) の固定値も 32 → 64 に広げる。
+  //
+  // [2026-09-13修正・実装メモ.md 219章] 上端にも同じ「SafeAreaView任せにしない」
+  // 方式を揃えた。統括が実機（Pixel 9a）で、画面遷移直後の一瞬だけ「← ホームへ戻る」
+  // がステータスバーに重なって描かれ、直後に正しい位置へずれる現象を発見
+  // （それを誤タップしてしまうとの報告）。原因はSafeAreaViewのedges任せの余白と
+  // useSafeAreaInsets()を直接styleに足す余白とで、Android実機上での確定タイミングが
+  // 異なること。前者はnative側のSafeAreaViewShadowNodeが自身の初回レイアウト後に
+  // 親（SafeAreaProvider）からlocalDataを受け取って初めてpadding値を確定する
+  // ため、新しい画面（＝新しいSafeAreaViewの実体）に遷移するたびに「0で1フレーム
+  // 描画→インセット確定後にpaddingが入り直す」再レイアウトが起きる
+  // （react-native-safe-area-context 5.7.0、
+  // android/.../SafeAreaViewShadowNode.kt の setLocalData/onBeforeLayout 参照）。
+  // 後者（useSafeAreaInsets()）はapp/_layout.tsxのSafeAreaProviderが起動時に
+  // 一度だけ生成するReact Context（SafeAreaInsetsContext）の値を読むだけで、
+  // このContextはアプリ起動中ずっとマウントされたまま値を保持しているため、
+  // 新しい画面がマウントされた最初のレンダーから正しい値が返る（再レイアウトが
+  // 発生しない）。下端をこの方式にしたときは元々値が足りていなかっただけで
+  // このズレ自体は起きていなかった（下端は元からnative SafeAreaViewを使っていない
+  // ため）。上端も同じ方式に揃えることでズレを無くす。
+  // edgesから"top"を外しても、SafeAreaView自体は画面全体を覆ったまま
+  // （edgesはpaddingの有無だけを決め、Viewの位置・大きさは変えない）なので、
+  // 背景色が画面上端まで伸びる見え方は変わらない。
   const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["top", "left", "right"]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["left", "right"]}>
       <Container
         style={scroll ? styles.scroll : [styles.flex, styles.outer]}
         contentContainerStyle={scroll ? styles.scrollOuter : undefined}
       >
-        <View style={[styles.content, !scroll && styles.flex, { paddingBottom: BASE_BOTTOM_PADDING + insets.bottom }, contentStyle]}>{children}</View>
+        <View
+          style={[
+            styles.content,
+            !scroll && styles.flex,
+            { paddingTop: theme.spacing.s4 + insets.top, paddingBottom: BASE_BOTTOM_PADDING + insets.bottom },
+            contentStyle,
+          ]}
+        >
+          {children}
+        </View>
       </Container>
     </SafeAreaView>
   );
@@ -67,7 +98,8 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 480,
     padding: theme.spacing.s4,
-    // paddingBottom は描画時に BASE_BOTTOM_PADDING + 下端インセットで上書きする
+    // paddingTop・paddingBottom は描画時に「s4 + 上端インセット」
+    // 「BASE_BOTTOM_PADDING + 下端インセット」でそれぞれ上書きする
   },
 });
 
