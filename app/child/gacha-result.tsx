@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
@@ -6,6 +6,7 @@ import GachaResultView from "@/components/GachaResultView";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useGachaPrizeDetail } from "@/hooks/useGacha";
+import { playSound } from "@/lib/sound";
 import type { GachaPrizeKind } from "@/types/domain";
 
 /**
@@ -16,6 +17,11 @@ import type { GachaPrizeKind } from "@/types/domain";
  * 「ひみつが あいたよ！」の2段階開示演出になる（決定3、子ども向けのみ）。
  * [2026-08-26改訂・第4段階] 「木に飾る」導線を実装した。C21（app/child/gacha.tsx）
  * から受け取った`drawId`をそのままC23（app/child/tree-decorate.tsx）へ引き継ぐ。
+ *
+ * [2026-09-14追加・やること.md 2-3「効果音」] ガチャの結果が出たとき（景品データの
+ * 取得が完了しdetailが表示できる状態になったとき）に1回だけ鳴らす（統括決定）。
+ * 家族の絵の2段階開示演出（上記）が始まる前の、結果が確定した瞬間に鳴らす
+ * （開示演出自体には手を加えない）。
  */
 export default function ChildGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -29,6 +35,14 @@ export default function ChildGachaResultScreen() {
     presetOrnamentId || null,
     prizeDrawingId || null
   );
+
+  const hasPlayedSoundRef = useRef(false);
+  useEffect(() => {
+    if (loadState !== "ready" || !detail) return;
+    if (hasPlayedSoundRef.current) return;
+    hasPlayedSoundRef.current = true;
+    playSound("gacha");
+  }, [loadState, detail]);
 
   return (
     <Screen tone="child">

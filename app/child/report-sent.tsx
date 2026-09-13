@@ -9,6 +9,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
 import { cancelCompletionErrorText, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { playSound, type SoundHandle } from "@/lib/sound";
 
 /**
  * C7 報告完了（送信済み）
@@ -46,6 +47,18 @@ export default function ReportSentScreen() {
   // keyを変えて再マウントすることで再取得させる）。
   const [gachaHintKey, setGachaHintKey] = useState(0);
 
+  // [2026-09-14追加・やること.md 2-3「効果音」] 完了報告が通った瞬間（この画面が
+  // 表示された瞬間）に1回だけ鳴らす。StrictModeの二重マウント等で2回鳴らないよう
+  // useRefで1回だけに制御する（開発部/成果物/実装メモ.md参照）。取消（handleCancel）
+  // で再生中の音を止められるよう、ハンドルを保持しておく。
+  const soundHandleRef = useRef<SoundHandle | null>(null);
+  const hasPlayedSoundRef = useRef(false);
+  useEffect(() => {
+    if (hasPlayedSoundRef.current) return;
+    hasPlayedSoundRef.current = true;
+    soundHandleRef.current = playSound("report");
+  }, []);
+
   // [2026-08-30追加・本部長] 3秒後に自動でやることリストへ戻る。
   // 大人のお祝いポップアップが3秒で自分から消えるのと同じ扱いにするため
   // （見せ方は役割ごとに変えるが、「押さなくても進む」というルールは共通にする）。
@@ -65,6 +78,9 @@ export default function ReportSentScreen() {
       clearTimeout(autoTimerRef.current);
       autoTimerRef.current = null;
     }
+    // [2026-09-14追加] 取消を選んだ時点で、鳴っているかもしれない完了音を止める
+    // （やること.md 2-3「取消したときに音が鳴り続けないよう注意」対応）。
+    soundHandleRef.current?.stop();
     setCancelState("processing");
     setCancelErrorText(null);
     const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
