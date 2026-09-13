@@ -38,9 +38,15 @@ type ShortcutItem = { emoji: string; label: string; path: string };
  * 並ぶ感じ」、36.0節本部長訂正・36.2節）。遷移先URL（`/child/sticker-shop`）・
  * 画面自体は変更していない。
  *
- * 感謝ポイント（C16/C17）はタイルとして並べない。C8内の「💌ありがとうをおくる」
- * ボタン経由のまま変更しない（36.5.3節「気が向いたときだけ使う任意機能はタブ相当の
- * 目立つ場所に置かない」という既存原則の維持）。
+ * [2026-09-13追記・実装メモ216章、やること4-21] 上の「感謝ポイント（C16/C17）は
+ * タイルとして並べない」という記述は事実誤認だった。36.5.3節当時の理由づけ
+ * （「気が向いたときだけ使う任意機能はタブ相当の目立つ場所に置かない」という原則の
+ * 維持）は、統括の確認により意図的な除外ではなく単なる漏れだったと判明している
+ * （36.5.5節経緯）。この原則は子どものじぶんタブのタイル追加には適用しない。
+ * 統括の採用案（36.5.5節A案1）により、「ありがとう」（C16/C17、`/child/gratitude`）
+ * と「つうちょう」（C8、`/child/points`）をタイル一覧の末尾に追加した。
+ * かぞくタブ（`app/child/(tabs)/family.tsx`）側の「💌 ありがとうをおくる」ボタンは
+ * 削除せず、じぶん・かぞく両方に入口を残す（統括の意図した重複、36.5.5節D3）。
  */
 export default function ChildSelfTabScreen() {
   const { state, memberPoints, fullLedger, memberAvatars } = useAppData();
@@ -55,7 +61,9 @@ export default function ChildSelfTabScreen() {
     { emoji: "🪙", label: "メダル", path: "/child/sticker-shop" },
     { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
     { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
+    { emoji: "💌", label: "ありがとう", path: "/child/gratitude" },
     { emoji: "📅", label: "きろく", path: "/child/history" },
+    { emoji: "📔", label: "つうちょう", path: "/child/points" },
   ];
 
   return (
