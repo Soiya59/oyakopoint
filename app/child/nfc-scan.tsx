@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import Screen from "@/components/Screen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
@@ -33,6 +33,46 @@ export default function NfcScanScreen() {
   const pulse = useRef(new Animated.Value(0.4)).current;
   const processedRef = useRef(false);
   const { take: takePendingNfcLink } = usePendingNfcLink();
+  const navigation = useNavigation();
+
+  // [2026-09-13追加・実装メモ.md 217.18章] **ウォームスタート限定の無限ループの
+  // 直接原因への対処。** `app/child/_layout.tsx`の`<Slot/>`は内部で
+  // `StackRouter`ベースの「隠れたStack navigator」を持つ
+  // （node_modules/expo-router/build/views/Navigator.js `SlotNavigator`、
+  // `useNavigationBuilder(StackRouter, ...)`）。ウォーム状態でNFCタグの
+  // URLを受け取ると、react-navigation本体のディープリンク処理
+  // （node_modules/expo-router/build/react-navigation/core/
+  // getActionFromState.js 44〜90行目）が、この隠れたnavigatorを「ネストした
+  // navigatorへの初期フォーカス指示」として扱い、**ROOTスタック上の
+  // "child"（この`<Slot/>`自体）のroute.paramsに
+  // `{screen:"nfc-scan", params:{tagValue,...}, initial:true,
+  // path:"oyakopoint/child/nfc-scan?tagValue=...", pop:true}`という
+  // react-navigation予約済みのキー一式を書き込む**（実機ログで確認・
+  // 実装メモ217.15〜217.17章）。この値は、私たちが後で呼ぶ`router.replace(...)`
+  // （expo-router独自のrouting queue、`global-state/getNavigationAction.js`
+  // 経由）では**上書き・消費されない**（そちらは"child"の内側＝隠れた
+  // navigatorの中身を差し替えるだけで、"child"自身のroute.paramsには
+  // 触れないため）。残ったこの指示が、何らかの再評価のたびに
+  // 「nfc-scanへフォーカスし直せ」という意味に再解釈され、
+  // `/child/home`との無限往復（Maximum update depth exceeded）を
+  // 引き起こしていた。
+  //
+  // 対処: この画面（`/child/nfc-scan`）に到達した時点で、**親navigator
+  // （ROOTスタック上の"child"エントリ）に残ったこの予約済みキーを
+  // 明示的に消す**。`useNavigation()`はこの画面が属する「隠れたnavigator」
+  // （"child"の内側）を指すため、`.getParent()`でROOTスタックへ上り、
+  // その"child"route自身の`params`から該当キーだけを取り除く
+  // （`tagValue`等、私たちが実際に使っている他のparamsには触れない）。
+  useEffect(() => {
+    navigation.getParent()?.setParams({
+      screen: undefined,
+      params: undefined,
+      initial: undefined,
+      path: undefined,
+      pop: undefined,
+    } as never);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // [2026-09-13追加・実装メモ.md 213.9章／本部長差し戻し対応、2026-09-13改訂・217章]
   // 「起動時URL由来の保留」は、経路（expo-routerが起動時URLの解決に成功して直接

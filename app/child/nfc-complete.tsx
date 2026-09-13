@@ -53,15 +53,10 @@ export default function NfcCompleteScreen() {
   );
 
   const homePath = isChild ? "/child/home" : isSupporter ? "/supporter/family" : "/parent";
-  // [2026-09-13追加・実装メモ.md 217章] 実機で発生した無限ループ（Maximum update
-  // depth exceeded）の再発防止策の1つ。この画面は`result==="approved"`のとき
-  // 全画面を覆う`Pressable`（下記）と3秒の自動タイマー（下のuseEffect）の**2つの
-  // 経路**から`goHome`が呼ばれ得る。タイマー発火の瞬間にタップが重なると
-  // `router.replace(homePath)`がほぼ同時に2回呼ばれる可能性があり、
-  // ナビゲーションの二重発火そのものを断つため、1回目の呼び出し以降は
-  // 何もしないようにする（`homePath`は同一レンダー内で不変のため、複数回
-  // 呼んでも本来は無害なはずだが、原因を1点に確定できていない以上、
-  // 呼び出し自体を1回に絞るのが最も確実な歯止めと判断した）。
+  // [2026-09-13追加・実装メモ.md 217章] 二重発火の歯止め。3秒タイマーと画面全体の
+  // `Pressable`の両方から呼ばれ得るため、実際に`router.replace`を発行するのは
+  // 最初の1回だけにする（無害な安全策として残す。無限ループの原因ではないと
+  // 217.9〜217.10章の実機再検証で確認済みだが、これはこれとして有用なため維持する）。
   const wentHomeRef = useRef(false);
   const goHome = () => {
     if (wentHomeRef.current) return;
