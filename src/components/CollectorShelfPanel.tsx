@@ -27,7 +27,7 @@
  *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
 import BadgeList from "./BadgeList";
 import Card from "./Card";
@@ -154,6 +154,70 @@ const bodyMediumStyleFor = (tone: Tone) =>
 const captionStyleFor = (tone: Tone) =>
   tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
 
+/**
+ * [2026-09-14追加・実装メモ225章] 拡大表示モーダルの「閉じる」ボタンの一辺の長さ。
+ * `theme.tapTarget`はロールごとに最小タップ領域の基準値が異なるため
+ * （子ども56dp・保護者44dp・みまもりメンバー48dp、デザイントークン.md 1.7節）、
+ * `MemberAvatar.tsx`の閉じるボタン（全ロール一律32dp固定）をそのまま複製せず、
+ * `tone`ごとに基準値をそのまま使う（子ども向けの基準を必ず満たすことが依頼の要件）。
+ */
+const closeTapSizeFor = (tone: Tone) =>
+  tone === "child" ? theme.tapTarget.child : tone === "supporter" ? theme.tapTarget.supporterPrimary : theme.tapTarget.parent;
+
+/**
+ * [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] 拡大表示カードの上端の
+ * 余白（≒閉じるボタンの真下まで絵を出さないための空間）。閉じるボタンは
+ * `top: theme.spacing.s2`から`closeTapSizeFor(tone)`の高さで置かれるため、
+ * ボタンの下端は`theme.spacing.s2 + closeTapSizeFor(tone)`。この値に、ボタンと
+ * 絵の間の余白として`theme.spacing.s2`をもう1つ足すことで、
+ * `paddingTop = closeTapSizeFor(tone) + theme.spacing.s2 * 2`となり、
+ * **絵の描画開始位置（paddingTopの直後）が常にボタンの下端より`theme.spacing.s2`
+ * 分だけ下**になることを式で保証する。ロールごとにボタンの大きさが違う
+ * （子ども56／保護者44／みまもり48）ため固定値にはしない（差し戻し文の指摘どおり）。
+ *
+ * 差し戻し前は固定`theme.spacing.s6`（24）だったため、子ども向け（ボタン56）では
+ * ボタン下端（8+56=64）が絵の開始位置（24）より40pt下まで食い込んでいた
+ * （225.7章の計算）。この関数はその重なりを、絵が円形か文字（絵文字）かに関わらず
+ * 「ボタンの占める行範囲そのものを絵の描画領域から除外する」ことで解消する
+ * （円の幾何学的な余白に頼った修正ではないため、既製の飾り〈四角い絵文字〉にも
+ * 同じ根拠で効く）。
+ */
+const expandedCardPaddingTopFor = (tone: Tone) => closeTapSizeFor(tone) + theme.spacing.s2 * 2;
+
+/**
+ * [2026-09-14追加・実装メモ225章] 拡大表示（`ShelfItemsGrid`の詳細モーダル）で
+ * 絵・既製の飾りの絵文字を表示する一辺の長さを、画面サイズから計算する。
+ *
+ * `MemberAvatar.tsx`（43.11節・実装メモ218章）は220ptの固定値だが、あちらは
+ * 常に1個しか出さないアバターの拡大表示。今回は「220ptより大きく」という
+ * 明示の要望があるうえ、コレクター棚は縦長スマホだけでなく横長タブレット等でも
+ * 使われうるため、固定値ではなく画面幅・画面高さの両方から動的に計算する。
+ *
+ * - 横幅の余白: モーダル外側の余白（`styles.overlay`のpadding、両側）と
+ *   カード内側の余白（`styles.expandedCard`のpaddingHorizontal、両側）を引く。
+ * - 縦幅の制約: 画像の下に「描いた人／題名／日付／見つけた人」の複数行テキストと
+ *   閉じるボタンが乗るため、画面の高さの50%を上限にする（横長・低い画面〈例:
+ *   横倒しにしたタブレット〉で画像がテキストを画面外に押し出さないための保険）。
+ * - 上限320pt・下限160pt: 大画面タブレットで際限なく巨大化しないための上限、
+ *   極端に小さい画面でも視認できる最低限の下限（いずれも実機実測ではなく安全側の
+ *   目安値。統括の実機確認で調整の要望があれば225章に追記して見直す）。
+ *
+ * [2026-09-14追記・本部長差し戻し（実装メモ225.7章）] この50%の上限だけでは、
+ * 画面の高さそのものが小さい端末（横長の低い画面など）でカード全体
+ * （閉じるボタンの余白＋絵＋複数行の文字＋パディング）が画面をはみ出す
+ * 組み合わせが実測で見つかった。この関数自体は変更せず（絵の大きさの計算はそのまま）、
+ * カード全体を`ScrollView`で包み画面の高さを超えたら内側でスクロールできるように
+ * することで対応した（`ShelfItemsGrid`内`modalMaxHeight`参照）。
+ */
+function computeExpandedImageSize(windowWidth: number, windowHeight: number): number {
+  const overlayPadding = theme.spacing.s4;
+  const cardHorizontalPadding = theme.spacing.s4;
+  const maxByWidth = windowWidth - overlayPadding * 2 - cardHorizontalPadding * 2;
+  const maxByHeight = windowHeight * 0.5;
+  const available = Math.min(maxByWidth, maxByHeight);
+  return Math.max(160, Math.min(320, available));
+}
+
 /** season_start/season_end（"YYYY-MM-DD"、JST基準の暦月初日）をJST 0時としてDate化する。 */
 function jstDate(dateOnly: string): Date {
   return new Date(`${dateOnly}T00:00:00+09:00`);
@@ -204,20 +268,51 @@ function buildShelfEntries(items: CollectedGachaDraw[]): { key: string; item: Co
 }
 
 /**
- * 景品一覧グリッド＋タップで開く詳細カード（「集めたもの」全員ビュー・個別メンバーの
- * 「つくった・あつめたもの」の両方で使う共通表示）。`items`が空配列のときは何も
- * 描画しない（空状態の文言は呼び出し側が個別に出す。全員ビューと個別ビューで
- * 空状態の文言・導線が異なるため、02.2a節決定23と同じくここでは共通化しない）。
+ * 景品一覧グリッド＋タップで画面いっぱいに開く拡大表示モーダル（「集めたもの」
+ * 全員ビュー・個別メンバーの「つくった・あつめたもの」の両方で使う共通表示）。
+ * `items`が空配列のときは何も描画しない（空状態の文言は呼び出し側が個別に出す。
+ * 全員ビューと個別ビューで空状態の文言・導線が異なるため、02.2a節決定23と
+ * 同じくここでは共通化しない）。
+ *
+ * [2026-09-14改訂・統括の実機報告（実装メモ225章）「絵が下の方に出る。コレクション
+ * が溜まるとスクロールがめんどい」への対応で、詳細表示をグリッド直下のインライン
+ * カードから、`MemberAvatar.tsx`（43.11節・実装メモ218章）と同じ「タップで画面
+ * いっぱいに拡大表示するモーダル」方式に変更した（統括が示された3案から選んだ
+ * 案B）。以前ここにあった「新しい画面・新しいモーダルは増やさず、既存の詳細
+ * カードの表示サイズだけを変える」というコメント（2026-09-09時点の判断）は撤回する。
+ * **当時の判断が誤りだったわけではなく、前提が変わった**: 2026-09-09時点は
+ * 「絵が小さくて見えない」という指摘への最小の手当てであり、枚数が増えたときに
+ * 詳細カードがグリッドの下へ押し下げられスクロールが必要になる問題はまだ
+ * 顕在化していなかった（当時はコレクション枚数がまだ少なかったと見られる）。
+ * 今回は「枚数が増えるほど毎回スクロールが必要」という実機報告があり、かつ
+ * 2026-09-13にアバターの拡大表示モーダル（`MemberAvatar`の`expandOnTap`）が
+ * 同じ「タップで画面いっぱいに拡大表示する」仕組みとして実装・統括の実機確認
+ * 「いい感じでした」まで済んでいる。この既存の仕組みと同じ操作感に揃えることが
+ * 目的の一部であるため、今回に限り「モーダルを増やさない」方針よりも
+ * 「既存の操作感に揃える」ことを優先し、方針を上書きする。
  */
 function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw[] }) {
   const isChild = tone === "child";
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const { width, height } = useWindowDimensions();
 
   const shelfEntries = useMemo(() => buildShelfEntries(items), [items]);
   const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
   const selectedItem = selectedEntry?.item ?? null;
+  const expandedImageSize = computeExpandedImageSize(width, height);
+  const closeLabel = isChild ? "とじる" : "閉じる";
+  const closeDetail = () => setSelectedItemId(null);
+  const closeSize = closeTapSizeFor(tone);
+  const expandedCardPaddingTop = expandedCardPaddingTopFor(tone);
+  // [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] オーバーレイの上下余白
+  // （`styles.overlay`のpadding、両側）を引いた残りを、拡大表示カード全体
+  // （閉じるボタンの余白＋絵＋文字＋内側の余白すべて込み）の縦幅の上限にする。
+  // これを超える組み合わせ（例: 横長で高さの低い端末＋子ども向けの大きい
+  // ボタン・文字）は、下の`ScrollView`でカードの中身だけをスクロールさせる
+  // （225.7節で数値を確認済み）。
+  const modalMaxHeight = height - theme.spacing.s4 * 2;
 
   if (shelfEntries.length === 0) return null;
 
@@ -226,11 +321,19 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
       <View style={styles.grid}>
         {shelfEntries.map((entry) => {
           const item = entry.item;
+          // [2026-09-14・実装メモ225章 判断] 選択中の枠（黄色いハイライト）は
+          // モーダルを開いた後も残す。モーダルの背景はrgba(0,0,0,0.4)の半透明の
+          // ため、閉じるまでの間グリッド自体がうっすら透けて見え続ける。どのマスを
+          // 拡大表示しているかをその状態でも辿れる利点があり、`selectedItemId`は
+          // どのみち「拡大表示中のitemを特定する」ために保持し続ける必要がある値
+          // なので、ハイライトを残すこと自体に追加コストは無い。モーダルを閉じたら
+          // `closeDetail`で`selectedItemId`をnullに戻し、ハイライトも消す（下に
+          // 何も表示されない状態でハイライトだけ残る「消し忘れ」を避ける）。
           const selected = entry.key === selectedItemId;
           return (
             <Pressable
               key={entry.key}
-              onPress={() => setSelectedItemId(selected ? null : entry.key)}
+              onPress={() => setSelectedItemId(entry.key)}
               style={[styles.gridItem, selected && styles.gridItemSelected]}
               accessibilityRole="button"
               accessibilityState={{ selected }}
@@ -249,57 +352,88 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
       </View>
 
       {selectedItem && (
-        <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-          {selectedItem.prizeKind === "preset_ornament" ? (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailEmoji}>{selectedItem.presetOrnament?.emoji ?? "🎁"}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={bodyMediumStyle}>{selectedItem.presetOrnament?.display_name ?? "かざり"}</Text>
-                <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>
-                  {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
-                  {isChild ? "が みつけたよ" : "が獲得"}
-                </Text>
-              </View>
-            </View>
-          ) : selectedItem.drawing ? (
-            // [2026-09-09拡大・統括の実機確認からの指摘「絵をタップしたときに大きく
-            // 表示してほしい。今は大きく表示されない」] グリッド（48pt）とほぼ同じ
-            // 大きさ（72pt）のサムネイルでは絵の中身が見えなかったため、詳細カード内で
-            // 大きく（220pt）表示する。新しい画面・新しいモーダルは増やさず、既存の
-            // 詳細カードの表示サイズだけを変える。横並び（絵＋テキスト）だと大きな絵の
-            // 隣にテキストが収まらないため、この分岐だけ縦積み（絵を中央上、テキストを
-            // その下に中央寄せ）のレイアウトに変える。`DrawingThumbnail`
-            // （`src/components/DrawingCanvas.tsx`）は`size`を渡せる実装のため、
-            // サイズの変更のみで対応できた。
-            <View style={styles.detailDrawingWrap}>
-              <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={220} />
-              <View style={styles.detailDrawingTextWrap}>
-                <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
-                  {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
-                </Text>
-                {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
-                    主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
-                    直後に、独立した1行のラベル付き表示として追加する。無い絵は
-                    この行自体が無い（プレースホルダは出さない）。 */}
-                {selectedItem.drawing.title && (
-                  <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-                    {isChild ? "だいめい：" : "題名："}
-                    {selectedItem.drawing.title}
+        <Modal visible transparent animationType="fade" onRequestClose={closeDetail}>
+          <Pressable style={styles.overlay} onPress={closeDetail} accessibilityRole="button" accessibilityLabel={closeLabel}>
+            {/* [2026-09-14] カード自体は無反応のPressableで包み、背景タップの
+                クローズ（上のPressable）にタップイベントが伝播しないようにする
+                （`MemberAvatar.tsx`と同じ手当て）。`ScrollView`自体はタップの
+                伝播を確実に止める保証が無いため、この無反応Pressableは
+                `ScrollView`の外側に残す（225.7章、本部長差し戻し対応）。 */}
+            <Pressable onPress={() => {}} style={{ maxHeight: modalMaxHeight }}>
+              {/* [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] `maxHeight`を
+                  超える内容（小さい・横長の端末で絵＋複数行の文字がすべて乗った
+                  とき）は、カードの外にはみ出させず内側でスクロールさせる。
+                  カードの見た目（背景・枠線・角丸・内側の余白）は
+                  `contentContainerStyle`側（`styles.expandedCard`）に置く。 */}
+              <ScrollView
+                style={{ maxHeight: modalMaxHeight }}
+                contentContainerStyle={[styles.expandedCard, { paddingTop: expandedCardPaddingTop }]}
+                showsVerticalScrollIndicator={false}
+              >
+                <Pressable
+                  onPress={closeDetail}
+                  hitSlop={8}
+                  style={[styles.expandedCloseButton, { width: closeSize, height: closeSize, borderRadius: closeSize / 2 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={closeLabel}
+                >
+                  <Text style={styles.expandedCloseButtonText}>×</Text>
+                </Pressable>
+
+                {selectedItem.prizeKind === "preset_ornament" ? (
+                <View style={styles.detailDrawingWrap}>
+                  <Text style={[styles.detailEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
+                    {selectedItem.presetOrnament?.emoji ?? "🎁"}
                   </Text>
-                )}
-                {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
-                    絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
-                    （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
-                    だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
-                    日付と一緒に見つけた人も出す。 */}
-                <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-                  {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
-                  {isChild ? "が みつけたよ" : "が獲得"}
-                </Text>
-              </View>
-            </View>
-          ) : null}
-        </Card>
+                  <View style={styles.detailDrawingTextWrap}>
+                    <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
+                      {selectedItem.presetOrnament?.display_name ?? "かざり"}
+                    </Text>
+                    <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+                      {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                      {isChild ? "が みつけたよ" : "が獲得"}
+                    </Text>
+                  </View>
+                </View>
+              ) : selectedItem.drawing ? (
+                // [2026-09-14改訂・実装メモ225章] 従来はグリッド直下のインライン
+                // カード内で220pt固定表示していたが、モーダル化に伴い画面サイズから
+                // 計算した`expandedImageSize`（`computeExpandedImageSize`参照、
+                // 160〜320ptの範囲で可変）で表示するよう変更した。縦積み
+                // （絵を中央上、テキストをその下に中央寄せ）のレイアウト自体は
+                // 2026-09-09時点のものをそのまま踏襲する。
+                <View style={styles.detailDrawingWrap}>
+                  <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                  <View style={styles.detailDrawingTextWrap}>
+                    <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
+                      {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
+                    </Text>
+                    {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
+                        主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
+                        直後に、独立した1行のラベル付き表示として追加する。無い絵は
+                        この行自体が無い（プレースホルダは出さない）。 */}
+                    {selectedItem.drawing.title && (
+                      <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+                        {isChild ? "だいめい：" : "題名："}
+                        {selectedItem.drawing.title}
+                      </Text>
+                    )}
+                    {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
+                        絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
+                        （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
+                        だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
+                        日付と一緒に見つけた人も出す。 */}
+                    <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+                      {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                      {isChild ? "が みつけたよ" : "が獲得"}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
     </>
   );
@@ -1106,12 +1240,51 @@ const styles = StyleSheet.create({
   gridItemSelected: { borderColor: theme.gachaColors.accent, borderWidth: 2, backgroundColor: theme.gachaColors.accentSoft },
   gridEmoji: { fontSize: 32 },
   gridCaption: { textAlign: "center" },
-  detailRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 },
   detailEmoji: { fontSize: 40 },
   // [2026-09-09新設] 家族の絵の詳細表示専用（拡大サムネイル＋縦積みレイアウト）。
   detailDrawingWrap: { alignItems: "center" },
   detailDrawingTextWrap: { marginTop: theme.spacing.s3, alignItems: "center" },
   detailDrawingCenterText: { textAlign: "center" },
+  // [2026-09-14新設・実装メモ225章] 「集めたもの」詳細の拡大表示モーダル。
+  // `MemberAvatar.tsx`のoverlay/expandedCard/closeButton相当を、見た目を揃える
+  // 目的でこちらにも複製した（トークン〈色・角丸・余白〉は共通のtheme参照のため
+  // 値そのものは一致する。共通コンポーネント化は今回のスコープ外）。
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing.s4,
+  },
+  // [2026-09-14改訂・本部長差し戻し（実装メモ225.7章）] `paddingTop`はロールごとに
+  // 閉じるボタンの大きさが異なるため固定値を廃止し、呼び出し側で
+  // `expandedCardPaddingTopFor(tone)`を都度計算してインラインで上書きする
+  // （`ShelfItemsGrid`参照）。ここでは`paddingTop`以外の見た目のみを定義する。
+  expandedCard: {
+    alignItems: "center",
+    backgroundColor: theme.colors.neutralSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentLg,
+    paddingHorizontal: theme.spacing.s4,
+    paddingBottom: theme.spacing.s4,
+  },
+  expandedCloseButton: {
+    position: "absolute",
+    top: theme.spacing.s2,
+    right: theme.spacing.s2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.neutralBg,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+  },
+  expandedCloseButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.neutralTextPrimary,
+    lineHeight: 20,
+  },
   emptyWrap: { alignItems: "center", paddingVertical: theme.spacing.s6 },
   legendWrap: { marginTop: theme.spacing.s3 },
   legendHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
