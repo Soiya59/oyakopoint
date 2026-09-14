@@ -15,6 +15,47 @@ import { useDecorateTreeWithStickerAction, useMoveTreeStickerAction } from "@/ho
 const SUCCESS_DISPLAY_MS = 600;
 
 /**
+ * [2026-09-14追加・実装メモ224章] 飾り終わったあと`/child/family-tree`へ移る際、
+ * `router.replace`だけだと「飾る前に通ってきたガチャ結果（`gacha-result.tsx`、
+ * 「きに かざる →」の画面）」がスタックに残ったままになり、木の画面で
+ * ハードウェア戻る・スワイプ戻るを行うと、飾り終わっているのに
+ * 「きに かざる →」へ戻ってしまう不具合があった（統括の実機報告）。
+ *
+ * 木の画面を最初に見せる導線自体は変えない（結果が見えるのは良い体験）。
+ * 変えるのは「木の画面から戻ったときの行き先」だけ。`router.dismissTo(homePath)`は
+ * 「現在のスタックに`homePath`が既にあれば、そこまで戻る（間の画面は全て破棄）。
+ * 無ければ現在の画面をそのまま`homePath`に置き換える」という公式に文書化された
+ * 挙動（node_modules/expo-router/build/global-state/router.d.ts）を持つ。
+ * ガチャ・コレクター棚のいずれの起点でも、必ず`/child/home`を経由してから
+ * この画面に辿り着いている（app/child/(tabs)/home.tsx → gacha/collector-shelf →
+ * tree-decorate）ため、スタックには`/child/home`が必ず存在し、そこまで一気に
+ * 戻ったうえで`family-tree`を新しく積み直す。結果、木の画面の「戻る」（ハード
+ * ウェア戻る・スワイプ戻るのいずれも）は必ずホームに着地する。
+ *
+ * [検討して不採用にした方法]
+ * - `router.dismissAll()`（POP_TO_TOP）: 現在のスタック全体の「一番最初の画面」
+ *   まで戻る。このアプリはルートに`headerShown:false`の単一Stackを敷いている
+ *   （app/_layout.tsx）ため、「一番最初の画面」はホームではなくログイン直後の
+ *   画面（あるいはそれより前）になる可能性が高く、意図せずログイン画面等まで
+ *   戻ってしまう恐れがあるため採用しなかった（実機・エミュレータで確認できず
+ *   検証できなかったため、より挙動が読める`dismissTo`を選んだ）。
+ * - `router.replace`を2回重ねる（例: 一度homeにreplace→続けてfamily-treeに
+ *   replace）: これだと「replaceする直前の1画面」しか置き換わらないため、
+ *   ガチャ結果より前の画面は変わらず、結局ガチャ結果が1段階手前の「戻り先」
+ *   として残ってしまい、今回の不具合を解決しない。
+ * - `navigation.reset()`（React Navigation標準API）: スタックを完全に組み直せる
+ *   が、expo-routerのファイルベースルーティングが内部的にどの文字列を
+ *   ルート名として登録しているかを確実に知る必要があり、指定を誤ると
+ *   型エラー・実行時エラーの双方のリスクがある。`dismissTo`は同じ目的を
+ *   `Href`文字列（既存コードで使っているものと同じ文字列）だけで実現できる
+ *   公式APIのため、こちらを優先した。
+ */
+function goToTreeWithCleanHistory() {
+  router.dismissTo("/child/home");
+  router.push("/child/family-tree");
+}
+
+/**
  * C23 木に飾る（子ども、交換相手選択・自由配置）。P26/C20/S14「かざりつけモード」
  * 参照: 画面一覧・遷移図.md C23、主要画面ワイヤーフレーム.md 21.4節・32.3節、
  * 設計部/成果物/スキーマ設計.sql 49章、開発部/成果物/実装メモ.md 142章
@@ -76,7 +117,7 @@ export default function ChildTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => router.replace("/child/family-tree"), SUCCESS_DISPLAY_MS);
+    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
   };
 
   const handleConfirmSticker = async (nx: number, ny: number) => {
@@ -87,7 +128,7 @@ export default function ChildTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => router.replace("/child/family-tree"), SUCCESS_DISPLAY_MS);
+    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
   };
 
   if (success) {

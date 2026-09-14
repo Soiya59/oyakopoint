@@ -15,6 +15,21 @@ import { useDecorateTreeWithStickerAction, useMoveTreeStickerAction } from "@/ho
 const SUCCESS_DISPLAY_MS = 600;
 
 /**
+ * [2026-09-14追加・実装メモ224章] 飾り終わったあと`/parent/family-tree`へ移る際、
+ * `router.replace`だけだと直前のガチャ結果（`gacha-result.tsx`「木に飾る →」の
+ * 画面）がスタックに残り、木の画面から戻ると飾り終わっているのにその画面へ
+ * 戻ってしまう不具合があった（統括の実機報告）。詳しい理由・検討して不採用に
+ * した方法（`dismissAll`・replaceの二重掛け・`navigation.reset()`）は
+ * `app/child/tree-decorate.tsx`の同名関数のコメントを参照（3ロール共通の理由）。
+ * `/parent`（ホーム、P29への起点は必ずここを経由する）まで戻ったうえで
+ * `family-tree`を積み直すことで、木の画面からの「戻る」を必ずホームへ着地させる。
+ */
+function goToTreeWithCleanHistory() {
+  router.dismissTo("/parent");
+  router.push("/parent/family-tree");
+}
+
+/**
  * P29 木に飾る（保護者、交換相手選択・自由配置）。P26/C20/S14「かざりつけモード」
  * 参照: 画面一覧・遷移図.md P29、主要画面ワイヤーフレーム.md 21.4節・32.3節、
  * 設計部/成果物/スキーマ設計.sql 49章、開発部/成果物/実装メモ.md 142章
@@ -73,7 +88,7 @@ export default function ParentTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => router.replace("/parent/family-tree"), SUCCESS_DISPLAY_MS);
+    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
   };
 
   const handleConfirmSticker = async (nx: number, ny: number) => {
@@ -84,7 +99,7 @@ export default function ParentTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => router.replace("/parent/family-tree"), SUCCESS_DISPLAY_MS);
+    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
   };
 
   if (success) {

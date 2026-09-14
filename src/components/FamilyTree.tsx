@@ -153,7 +153,35 @@ function isPrioritizedDot(d: FamilyTreeCompletionDot): boolean {
   return d.prize !== null;
 }
 
-export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): FamilyTreeCompletionDot[] {
+/**
+ * [2026-09-14追加・実装メモ223章の調査を受けて224章で実装・案A（統括選択）]
+ * 「選んでいる最中の完了報告は、40個の枠から外れないよう必ず表示する」対応。
+ *
+ * 223章で判明した不具合: かざりつけモードで一覧から選んだ完了報告（まだ
+ * `prize`が付いていない＝`normalDots`側）が、今シーズンの合計が40件を超える
+ * 家庭ではreservoir samplingで表示対象から漏れることがあり、「選んだ瞬間は
+ * 木の上に何も出ないのに、確定すると別の場所に景品が現れる」という体験に
+ * なっていた（真の原因は223.1節）。
+ *
+ * 直し方（案A）: 景品（`isPrioritizedDot`）が40スロットの中で優先確保されて
+ * いるのと**全く同じ考え方**を、まだ確定していない「選択中」の完了報告にも
+ * 適用する。`forceIncludeId`（選択中の完了報告ID）を指定すると、既存の
+ * reservoir sampling計算（`keptPrizes`・`keptNormal`）は一切変更せず、
+ * その計算結果に選択中の対象が含まれていなければ**追加で1件だけ付け足す**。
+ *
+ * 既存の計算をそのまま使う（間引かない）ため、`forceIncludeId`を渡さない
+ * 呼び出し（飾り付けモードでない各ロールのfamily-tree.tsx等）は従来と
+ * 完全に同じ結果になる（本関数の冒頭〜returnまでの計算経路は無変更。
+ * 224.2節でNode実行により実測確認済み）。
+ *
+ * 犠牲になる点（統括が了承済み・避けようとしなくてよい）: 選んでいる間だけ、
+ * 表示される色丸の合計が一時的に40個を超える（例: 40個＋選択中の1個）。
+ * 木から離れれば（選択中でなくなれば）通常どおり40個以下に戻る。
+ */
+export function pickDisplaySlots(
+  dots: FamilyTreeCompletionDot[],
+  forceIncludeId?: string | null
+): FamilyTreeCompletionDot[] {
   const prizeDots = dots.filter(isPrioritizedDot);
   const normalDots = dots.filter((d) => !isPrioritizedDot(d));
 
@@ -161,7 +189,12 @@ export function pickDisplaySlots(dots: FamilyTreeCompletionDot[]): FamilyTreeCom
   const remainingSlots = MAX_SLOTS - keptPrizes.length;
   const keptNormal = reservoirSample(normalDots, remainingSlots);
 
-  return [...keptPrizes, ...keptNormal];
+  const result = [...keptPrizes, ...keptNormal];
+  if (forceIncludeId != null && !result.some((d) => d.id === forceIncludeId)) {
+    const forced = dots.find((d) => d.id === forceIncludeId);
+    if (forced) result.push(forced);
+  }
+  return result;
 }
 
 /**
@@ -750,7 +783,19 @@ export function TreeStageVisual({
    */
   hiddenStickerDecorationId?: string | null;
 }) {
-  const slots = useMemo(() => pickDisplaySlots(dots), [dots]);
+  /**
+   * [2026-09-14追加・224章・案A] `highlightCompletionId`（一覧UIで選択中の完了報告ID、
+   * `TreeDecoratePanel`→本コンポーネントの経路で渡ってくる）を`pickDisplaySlots`の
+   * `forceIncludeId`にそのまま渡す。選択中の対象を40枠から漏れないよう優先確保する
+   * （`pickDisplaySlots`直上のコメント参照）。
+   * 通常表示（家族の木画面・過去の木・コレクター棚等）は`highlightCompletionId`を
+   * 渡さない＝`undefined`のままなので、`pickDisplaySlots`は`forceIncludeId`無しの
+   * 経路を通り、従来と完全に同じ結果になる（既存呼び出し元は無変更で動く）。
+   */
+  const slots = useMemo(
+    () => pickDisplaySlots(dots, highlightCompletionId),
+    [dots, highlightCompletionId]
+  );
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
   // 幅は固定値ではなく実測する。固定値だと画面幅とずれ、はみ出した分が
   // React Nativeの既定の切り取りで消える（空の色丸が出ない不具合の原因になった）。
