@@ -294,6 +294,30 @@ function buildLedgers(state: State) {
   return { reactionsForCompletion, earnLedger, spendLedger, fullLedger };
 }
 
+/**
+ * [2026-09-16追加・実装メモ.md 228章、やること.md 4-28] `hasReactedWithStamp`が
+ * 呼ばれるたびに`state.reactions`全体を`.some()`で走査していたのを、reactionsが
+ * 変わったときだけ1回Setを作る方式に変える（`app/parent/approvals.tsx`が完了報告を
+ * 全件表示し、スタンプボタンごとにこの判定を呼ぶため、件数が増えるほど初回描画が
+ * 重くなっていた。実装メモ219.7章）。
+ *
+ * [判定結果が変わらないことの根拠] キーは`${completion_id}__${reacted_by}__${stamp_key}`。
+ * completion_id・reacted_byはいずれもUUID（16進数とハイフンのみ、アンダースコアを
+ * 含まない）のため、区切り文字"__"の位置がstamp_key側の内容にかかわらず一意に定まり、
+ * 異なる3つ組が同じ文字列に衝突することはない。したがって
+ * `set.has(`${completionId}__${reactedBy}__${stampKey}`)`は元の
+ * `.some((r) => r.completion_id === completionId && r.reacted_by === reactedBy &&
+ * r.kind === "stamp" && r.stamp_key === stampKey)`と常に同じ真偽値を返す。
+ */
+function buildStampReactionIndex(reactions: ChoreReaction[]): Set<string> {
+  const set = new Set<string>();
+  for (const r of reactions) {
+    if (r.kind !== "stamp") continue;
+    set.add(`${r.completion_id}__${r.reacted_by}__${r.stamp_key}`);
+  }
+  return set;
+}
+
 function LoadingScreen() {
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.neutralBg }}>
@@ -604,8 +628,99 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   const sessionIdentityKey = `${session.status}:${activeChildMemberId}:${activeParentMemberId}`;
   useEffect(() => {
     setLoadedOnce(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionIdentityKey]);
+
+  /**
+   * [2026-09-16追加・実装メモ.md 228章、やること.md 4-28] スタンプ送信・コメント送信
+   * （ADD_REACTION・TOGGLE_REACTION_STAMP）の成功後、`load()`（8クエリ丸ごと再取得）を
+   * 呼ぶのをやめ、実際に変わる`chore_reactions`だけを取り直す。
+   *
+   * [根拠] `toggle_chore_reaction_stamp`（マイグレーション
+   * `20260910020000_toggle_chore_reaction_stamp.sql`）・スタンプ以外の
+   * `chore_reactions`直接INSERT（コメント、`chore_reactions_insert_scoped`）は
+   * いずれも`chore_reactions`テーブルへのINSERT/DELETEのみで完結する。
+   * `trg_chore_reactions_before_insert`（`20260815093520_initial_schema.sql`）は
+   * 対象completionからfamily_idを補完するだけで他テーブルへは書き込まない。
+   * `chore_reactions`にはAFTERトリガーが無く、他テーブルへ波及する経路は無い
+   * （完了報告・残高・カレンダー・ガチャ進捗・ごほうび・感謝ポイント・掲示板・
+   * 「まいにち」設定のいずれにも影響しない）。
+   *
+   * 取得に失敗した場合のみ、従来どおり`load()`にフォールバックする（取りこぼして
+   * 表示が古いまま残るより、遅くても正しい状態に揃えることを優先する）。
+   */
+  const refreshReactionsOnly = useCallback(async () => {
+    if (!familyId) {
+      await load();
+      return;
+    }
+    const res = await api.fetchReactions(session.client, familyId);
+    if (!res.ok) {
+      await load();
+      return;
+    }
+    setState((prev) => ({ ...prev, reactions: res.data }));
+  }, [familyId, session.client, load]);
+
+  /**
+   * [2026-09-16追加・実装メモ.md 228章、やること.md 4-28] 完了報告の取消
+   * （CANCEL_COMPLETION）成功後、`load()`を呼ぶのをやめ、実際に変わる4本
+   * （completions・reactions・memberPoints・dailySummary）だけを取り直す。
+   *
+   * [根拠] `cancel_chore_completion`（マイグレーション
+   * `20260903010000_cancel_chore_completion.sql`）が書き込むのは
+   * `chore_completions`（対象1行のDELETE）・`family_tree_seasons`・
+   * `gacha_member_progress`の3テーブルのみ。後2つはload()の取得対象に含まれない
+   * （`fetchFamilyTreeSeasonHistory`・`fetchGachaProgressSummary`等、各画面が個別に
+   * 再取得する別系統。`src/data/api.ts` 1510行目以降・1954行目参照）ため、load()側で
+   * 追いかける必要が無い。`chore_completions`のDELETEは`chore_reactions.completion_id`
+   * のON DELETE CASCADEで連動して消える（`family_tree_decorations.completion_id`は
+   * ON DELETE RESTRICTだが、RPC内で事前ガード済みのため到達しない）。
+   * `member_points`（View、`current_points = earned(chore_completions) -
+   * spent(reward_redemptions) + gratitude_received(gratitude_points) -
+   * sticker_spent(ornament_sticker_purchases)`）と`chore_completion_daily_summary`
+   * （View、`chore_completions`のみを集計）はいずれも`chore_completions`が変われば
+   * 再取得が必要。`reward_redemptions`・`gratitude_points`・
+   * `family_board_reactions`・`chore_daily_flags`は本RPCが一切書き込まないため対象外。
+   *
+   * dailySummaryの取得条件（過去400日〜当日の窓）はload()と同じ計算式をそのまま使う
+   * （窓の縮小は今回のスコープ外。228章の申し送り参照）。
+   *
+   * いずれかの取得に失敗した場合は、従来どおり`load()`にフォールバックする。
+   */
+  const refreshAfterCancel = useCallback(async () => {
+    if (!familyId) {
+      await load();
+      return;
+    }
+    const client = session.client;
+    const today = toJstDateString(new Date());
+    const windowStart = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 400);
+      return toJstDateString(d);
+    })();
+
+    const [completionsRes, reactionsRes, memberPointsRes, dailySummaryRes] = await Promise.all([
+      api.fetchCompletions(client, familyId),
+      api.fetchReactions(client, familyId),
+      api.fetchMemberPoints(client, familyId),
+      client
+        .from("chore_completion_daily_summary")
+        .select("*")
+        .eq("family_id", familyId)
+        .gte("activity_date", windowStart)
+        .lte("activity_date", today),
+    ]);
+
+    if (!completionsRes.ok || !reactionsRes.ok || !memberPointsRes.ok || dailySummaryRes.error) {
+      await load();
+      return;
+    }
+
+    setState((prev) => ({ ...prev, completions: completionsRes.data, reactions: reactionsRes.data }));
+    setMemberPoints(memberPointsRes.data);
+    setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
+  }, [familyId, session.client, load]);
 
   const dispatch = useCallback(
     async (action: Action): Promise<DispatchResult> => {
@@ -633,8 +748,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           if (!res.ok) return { ok: false, error: res.error };
           // RPCは取消後の家族の木・ガチャ進捗の最新値を返さない設計のため
           // （API仕様.md 4d節）、呼び出し元の画面が個別にガチャ進捗等を再取得する
-          // （家族の木・完了報告一覧はload()の再取得で自動的に反映される）。
-          await load();
+          // （家族の木・完了報告一覧はrefreshAfterCancel()の再取得で自動的に反映される）。
+          // [2026-09-16変更・実装メモ.md 228章] load()の全件再取得から、実際に変わる
+          // 4本（completions・reactions・memberPoints・dailySummary）だけの取り直しに
+          // 変更した（根拠はrefreshAfterCancel定義部のコメント参照）。
+          await refreshAfterCancel();
           return { ok: true };
         }
 
@@ -653,7 +771,9 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
             if (res.error.code === api.PG_ERRCODE.uniqueViolation) return { ok: true };
             return { ok: false, error: res.error };
           }
-          await load();
+          // [2026-09-16変更・実装メモ.md 228章] load()の全件再取得から、reactionsのみの
+          // 取り直しに変更した（根拠はrefreshReactionsOnly定義部のコメント参照）。
+          await refreshReactionsOnly();
           return { ok: true };
         }
 
@@ -666,7 +786,9 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
             stamp_key: action.stampKey,
           });
           if (!res.ok) return { ok: false, error: res.error };
-          await load();
+          // [2026-09-16変更・実装メモ.md 228章] load()の全件再取得から、reactionsのみの
+          // 取り直しに変更した（根拠はrefreshReactionsOnly定義部のコメント参照）。
+          await refreshReactionsOnly();
           return { ok: true };
         }
 
@@ -696,7 +818,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
       }
     },
-    [session.client, load]
+    [session.client, load, refreshReactionsOnly, refreshAfterCancel, familyId]
   );
 
   const findChoreByTag = useCallback(
@@ -709,6 +831,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   );
 
   const ledgers = useMemo(() => buildLedgers(state), [state]);
+
+  // [2026-09-16追加・実装メモ.md 228章] hasReactedWithStampのO(n)全走査対策。
+  // state.reactionsが変わったときだけ1回Setを作る（buildStampReactionIndex参照）。
+  const stampReactionIndex = useMemo(() => buildStampReactionIndex(state.reactions), [state.reactions]);
 
   const value = useMemo<DataContextValue>(
     () => ({
@@ -723,9 +849,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>
-        state.reactions.some(
-          (r) => r.completion_id === completionId && r.reacted_by === reactedBy && r.kind === "stamp" && r.stamp_key === stampKey
-        ),
+        stampReactionIndex.has(`${completionId}__${reactedBy}__${stampKey}`),
       dailySummary: (fromDate, toDate) =>
         dailySummaryRows.filter((r) => r.activity_date >= fromDate && r.activity_date <= toDate),
       memberAvatars,
@@ -744,6 +868,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       memberPoints,
       ledgers,
       findChoreByTag,
+      stampReactionIndex,
       dailySummaryRows,
       memberAvatars,
       memberAvatarsLoaded,
@@ -999,6 +1124,11 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
 
   const ledgers = useMemo(() => buildLedgers(state), [state]);
 
+  // [2026-09-16追加・実装メモ.md 228章] RealDataProviderImplと同じ最適化
+  // （buildStampReactionIndex参照）。モック実装にも同じ判定ロジックがあり、
+  // 2つの実装を食い違わせないため揃える。
+  const stampReactionIndex = useMemo(() => buildStampReactionIndex(state.reactions), [state.reactions]);
+
   const value = useMemo<DataContextValue>(
     () => ({
       state,
@@ -1012,9 +1142,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>
-        state.reactions.some(
-          (r) => r.completion_id === completionId && r.reacted_by === reactedBy && r.kind === "stamp" && r.stamp_key === stampKey
-        ),
+        stampReactionIndex.has(`${completionId}__${reactedBy}__${stampKey}`),
       dailySummary: (fromDate, toDate) => computeDailySummary(state, fromDate, toDate),
       memberAvatars,
       memberAvatarsLoaded: true,
@@ -1023,7 +1151,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       setMemberAvatarLocal,
       clearMemberAvatarLocal,
     }),
-    [state, dispatch, ledgers, findChoreByTag, memberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal]
+    [state, dispatch, ledgers, findChoreByTag, stampReactionIndex, memberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
