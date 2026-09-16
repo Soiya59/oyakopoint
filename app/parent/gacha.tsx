@@ -54,6 +54,18 @@ export default function ParentGachaScreen() {
       <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
         🎰 ガチャ
       </Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.3節、実装メモ.md 227章]
+          常時表示の一文。GachaHomeWidget（3ロール共通部品）には足さず、保護者専用の
+          この画面ファイル側にのみ追加する（こども側への波及を避けるため、45.7.3節
+          却下案参照）。 */}
+      <Text
+        style={[
+          theme.typography.parentCaption,
+          { marginTop: theme.spacing.s2, textAlign: "center", color: theme.colors.neutralTextSecondary },
+        ]}
+      >
+        クエストをがんばると引けるようになる、景品ガチャです。当たった景品は木に飾れます。
+      </Text>
 
       <GachaDrawPanel
         tone="parent"

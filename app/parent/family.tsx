@@ -560,6 +560,12 @@ export default function FamilyScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={() => router.push("/parent/invite-supporter")}
       />
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.5節、実装メモ.md 227章]
+          招待ボタンの直下（本部長承認済み、45.11節2.）。既存の「👦 こどもモードにする」
+          ボタン直下のキャプション（613〜617行目）と同じ配置パターン。 */}
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+        はなれて暮らす祖父母など、見て・讃える立場です。家族共有のクエスト・ごほうび・家族の管理には関わりません。
+      </Text>
       <AppButton
         label="子どもプロフィールを追加"
         style={{ marginTop: theme.spacing.s6 }}

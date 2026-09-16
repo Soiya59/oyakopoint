@@ -51,6 +51,11 @@ export default function SupporterCollectorShelfScreen() {
         <Text style={theme.typography.supporterBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>コレクション</Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
+          保護者側（app/parent/collector-shelf.tsx）と同一文言を流用する。 */}
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        ガチャの景品・お絵かき・メダル・バッジなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
+      </Text>
 
       <CollectorShelfPanel
         tone="supporter"

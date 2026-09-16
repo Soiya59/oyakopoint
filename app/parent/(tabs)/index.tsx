@@ -91,6 +91,21 @@ export default function ParentFamilyTabScreen() {
     .slice(0, 5);
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
 
+  // [2026-09-16追加・UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 45.1〜45.6節、
+  // 実装メモ.md 227章] 保護者ホームの「はじめの3つ」。「もう見た」を覚える保存領域は
+  // 新設せず、state.members/state.chores/state.rewards（既存useAppData()）の実件数
+  // のみで毎回判定し直す（45.2節。AsyncStorage・DB列いずれの新設も無い）。1件以上
+  // できた項目から消え、3項目とも消えたら欄自体を描画しない（45.1節）。並び順は
+  // こども→クエスト→ごほうび（45.4節の提案を45.11節1.で本部長が採用）。
+  const hasActiveChild = state.members.some((m) => m.is_active && m.role === "child");
+  const hasFamilyChore = state.chores.some((c) => c.scope === "family");
+  const hasFamilyReward = state.rewards.some((r) => r.scope === "family");
+  const starterItems: { key: string; emoji: string; label: string; path: string }[] = [
+    ...(hasActiveChild ? [] : [{ key: "child", emoji: "👦", label: "こどもを1人登録する", path: "/parent/child-profile" }]),
+    ...(hasFamilyChore ? [] : [{ key: "chore", emoji: "📝", label: "クエストを1つ作る", path: "/parent/chore-edit" }]),
+    ...(hasFamilyReward ? [] : [{ key: "reward", emoji: "🎁", label: "ごほうびを1つ作る", path: "/parent/reward-edit" }]),
+  ];
+
   // [旧app/parent/home.tsxからそのまま移設・実装メモ92.2章/108章/167章] 左上の
   // 「いま誰として使っているか」。タップで子ども選択画面へ（子どもが0人なら非タップ）。
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
@@ -112,6 +127,28 @@ export default function ParentFamilyTabScreen() {
           統括の実機確認「じぶんとかんりの左上のアイコンから、子供モードに飛べない」を受け、
           ここにだけあった子どもモードへの導線を共通部品へ移した。 */}
       <ParentTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.1節決定1] ParentTabHeaderの
+          直後、「家族の掲示板」Cardの直前に配置する。3項目とも完了済みならstarterItemsは
+          空配列になり、このCardごと描画されない（高さ0の空Viewも残さない）ため、
+          3つ終わった家族ではこの下のレイアウトが変更前と完全に同じになる。 */}
+      {starterItems.length > 0 && (
+        <Card style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={theme.typography.parentBodyMedium}>🌱 はじめに、この3つをやってみましょう</Text>
+          <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
+            {starterItems.map((item) => (
+              <Pressable key={item.key} onPress={() => router.push(item.path as never)}>
+                <Card style={styles.starterRow}>
+                  <Text style={theme.typography.parentBody}>
+                    {item.emoji} {item.label}
+                  </Text>
+                  <Text style={theme.typography.parentBody}>›</Text>
+                </Card>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+      )}
 
       <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
         <Card style={{ marginTop: theme.spacing.s4 }}>
@@ -184,6 +221,9 @@ const styles = StyleSheet.create({
     color: theme.colors.brandPrimaryStrong,
   },
   cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  // [2026-09-16追加・主要画面ワイヤーフレーム.md 45.6節] 「はじめの3つ」内の1行。
+  // app/parent/(tabs)/manage.tsxのrowスタイルと同型（新しい部品は作らない）。
+  starterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   digestSkeleton: {
     marginTop: theme.spacing.s2,
     height: 18,

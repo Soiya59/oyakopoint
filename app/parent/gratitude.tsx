@@ -103,6 +103,11 @@ export default function ParentGratitudeHubScreen() {
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>感謝ポイント</Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.4節、実装メモ.md 227章]
+          常時表示の一文。 */}
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        気づいたときに贈る、ポイント付きの「ありがとう」です。贈られた分は、相手の通帳残高に加わります。
+      </Text>
 
       {toast && (
         <View style={styles.toast}>

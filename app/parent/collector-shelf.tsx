@@ -57,6 +57,11 @@ export default function ParentCollectorShelfScreen() {
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>コレクション</Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6節、実装メモ.md 227章]
+          常時表示の一文。 */}
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        ガチャの景品・お絵かき・メダル・バッジなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
+      </Text>
 
       <CollectorShelfPanel
         tone="parent"

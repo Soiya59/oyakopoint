@@ -40,6 +40,11 @@ export default function SupporterFamilyTreeScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/family")} />
       <Text style={theme.typography.supporterTitle}>家族の木</Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
+          保護者側（app/parent/family-tree.tsx）と同一文言を流用する。 */}
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        クエストの完了報告が積み重なるたびに、少しずつ育っていく、家族みんなの木です。
+      </Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>

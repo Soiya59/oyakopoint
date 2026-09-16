@@ -100,6 +100,11 @@ export default function SupporterGratitudeHubScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>感謝ポイント</Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
+          保護者側（app/parent/gratitude.tsx）と同一文言を流用する。 */}
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        気づいたときに贈る、ポイント付きの「ありがとう」です。贈られた分は、相手の通帳残高に加わります。
+      </Text>
 
       {toast && (
         <View style={styles.toast}>

@@ -52,6 +52,13 @@ export default function ParentFamilyTreeScreen() {
         </Text>
       </View>
 
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.2節、実装メモ.md 227章]
+          常時表示の一文。theme.typography.parentCaption＋neutralTextSecondary
+          （45.7節共通方針、chore-edit.tsx 673〜675行目の前例と同じスタイル）。 */}
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+        クエストの完了報告が積み重なるたびに、少しずつ育っていく、家族みんなの木です。
+      </Text>
+
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
           <SkeletonList count={2} />

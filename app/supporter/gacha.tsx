@@ -52,6 +52,16 @@ export default function SupporterGachaScreen() {
       <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
         🎰 ガチャ
       </Text>
+      {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
+          保護者側（app/parent/gacha.tsx）と同一文言を流用する。 */}
+      <Text
+        style={[
+          theme.typography.supporterCaption,
+          { marginTop: theme.spacing.s2, textAlign: "center", color: theme.colors.neutralTextSecondary },
+        ]}
+      >
+        クエストをがんばると引けるようになる、景品ガチャです。当たった景品は木に飾れます。
+      </Text>
 
       <GachaDrawPanel
         tone="supporter"
