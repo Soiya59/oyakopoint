@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>おやこポイント NFCタグ台紙（印刷用）</title>
+<style>
+  /*
+    設計書: UIUXデザイン部/成果物/NFCタグの台紙の設計（2026-09-14）.md
+    A4縦 210mm×297mm、すべての寸法をmm単位で指定する（pxは使わない）。
+    横: 11 + 60 + 4 + 60 + 4 + 60 + 11 = 210mm
+    縦: 90(ヘッダー) + 60 + 4 + 60 + 4 + 60 (=188) + 19(下余白) = 297mm
+    詳しい計算根拠は 開発部/成果物/実装メモ.md 229章を参照。
+  */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+    background: #ffffff;
+    color: #000000;
+    font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", "MS PGothic", sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+  }
+
+  /* ===== 説明ヘッダー（約90mm、A4シート1回だけ） ===== */
+  .header {
+    box-sizing: border-box;
+    height: 90mm;
+    margin: 0 11mm;
+    padding: 3mm 3mm 2mm 3mm;
+    overflow: hidden;
+  }
+  .header h1 {
+    margin: 0 0 2mm 0;
+    font-size: 6mm;
+    line-height: 7.5mm;
+    font-weight: 700;
+  }
+  .header .steps {
+    margin: 0 0 2mm 0;
+  }
+  .header .steps span {
+    display: block;
+    font-size: 3.6mm;
+    line-height: 4.6mm;
+  }
+  .header .warnings {
+    margin: 0 0 2mm 0;
+  }
+  .header .warnings p {
+    margin: 0;
+    font-size: 3.3mm;
+    line-height: 4.3mm;
+  }
+  .header .print100 {
+    margin: 0 0 2mm 0;
+    font-size: 3.6mm;
+    line-height: 4.6mm;
+    font-weight: 700;
+  }
+  .header .examples {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6mm;
+    font-size: 3.2mm;
+    line-height: 4.2mm;
+    white-space: nowrap;
+  }
+
+  /* ===== 台紙グリッド（3列×3行、間隔4mm） ===== */
+  .grid {
+    margin: 0 11mm;
+    width: 188mm;
+    height: 188mm;
+    display: grid;
+    grid-template-columns: repeat(3, 60mm);
+    grid-template-rows: repeat(3, 60mm);
+    gap: 4mm;
+  }
+
+  /* 台紙1枚（60mm×60mm）。外周の点線＝切り取り線 */
+  .card {
+    width: 60mm;
+    height: 60mm;
+    box-sizing: border-box;
+    border: 0.35mm dashed #000000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ①「だれの」帯（14mm） */
+  .band-who {
+    height: 14mm;
+    box-sizing: border-box;
+    padding: 2mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.2mm dotted #999999;
+  }
+  .band-who .label {
+    font-size: 3mm;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .band-who .blank {
+    flex: 1;
+    height: 1mm;
+    margin: 0 1.5mm;
+    border-bottom: 0.25mm solid #000000;
+  }
+  .band-who .colorcircle {
+    width: 10mm;
+    height: 10mm;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 0.3mm solid #000000;
+  }
+
+  /* ②「かざす場所」帯（36mm）＝32mmφ点線の丸＋ここでタッチ */
+  .band-target {
+    height: 36mm;
+    box-sizing: border-box;
+    padding-top: 1mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .band-target .circle {
+    width: 32mm;
+    height: 32mm;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 0.35mm dashed #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 2.6mm;
+    line-height: 3.4mm;
+  }
+  .band-target .taplabel {
+    margin-top: 0.5mm;
+    font-size: 2.4mm;
+    line-height: 3mm;
+    white-space: nowrap;
+  }
+
+  /* ③「クエスト」帯（10mm）＋金属NGの小マーク（6mm角） */
+  .band-quest {
+    height: 10mm;
+    box-sizing: border-box;
+    padding: 1.5mm 2mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 0.2mm dotted #999999;
+  }
+  .band-quest .label {
+    font-size: 3mm;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .band-quest .blank {
+    flex: 1;
+    height: 1mm;
+    margin: 0 1.5mm;
+    border-bottom: 0.25mm solid #000000;
+  }
+  .band-quest .nometal {
+    width: 6mm;
+    height: 6mm;
+    flex-shrink: 0;
+    border: 0.3mm solid #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3.2mm;
+    line-height: 1;
+  }
+
+  @media print {
+    html, body {
+      width: 210mm;
+      height: 297mm;
+    }
+    .page {
+      page-break-after: avoid;
+      page-break-inside: avoid;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <h1>おやこポイント NFCタグ台紙</h1>
+    <div class="steps">
+      <span>① 好きな枠を切りとる → ② 名前とクエスト名を書く</span>
+      <span>→ ③ まん中の丸に、子どもが絵をかく</span>
+      <span>→ ④ 紙のうらにNFCタグを貼る</span>
+      <span>→ ⑤ 両面テープで壁に貼る</span>
+    </div>
+    <div class="warnings">
+      <p>⚠ 金属の壁・スチールのドア・冷蔵庫の側面には貼れません（NFCが読み取れなくなります）</p>
+      <p>⚠ 台紙の上に厚いものを重ねると、読み取りにくくなることがあります</p>
+    </div>
+    <p class="print100">実際のサイズ（100%）で印刷してください（「用紙に合わせる」にしない）</p>
+    <div class="examples">
+      <span>はみがき → 洗面台の鏡の横の壁</span>
+      <span>お風呂そうじ → 脱衣所の壁</span>
+      <span>せんたくもの → 洗濯機のすぐ横の壁</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="band-who">
+        <span class="label">だれの：</span>
+        <span class="blank"></span>
+        <span class="colorcircle"></span>
+      </div>
+      <div class="band-target">
+        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="taplabel">📱 ここでタッチ</div>
+      </div>
+      <div class="band-quest">
+        <span class="label">クエスト：</span>
+        <span class="blank"></span>
+        <span class="nometal">🧲✕</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
