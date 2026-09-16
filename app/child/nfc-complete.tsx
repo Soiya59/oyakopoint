@@ -75,19 +75,22 @@ export default function NfcCompleteScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
-  // [2026-09-14追加・やること.md 2-3「効果音」] この画面は3ロール共通だが、音を
-  // 鳴らすのは子どものときだけ（統括決定。保護者・みまもりメンバーには入れない）。
-  // また鳴らすのは即時加点が成功したとき（result==="approved"）のみで、上限到達・
-  // タグ未読み取り・通信エラーのときは鳴らさない。既存の自動遷移useEffect
-  // （上記）とは独立させ、依存配列・順序には触れていない。二重発火防止は
-  // useRefで行う（StrictModeの二重マウント等で2回鳴らないようにするため）。
+  // [2026-09-14追加・2026-09-16改訂・やること.md 2-3「効果音」] この画面は3ロール
+  // 共通。当初は子どものときだけ鳴らしていたが、2026-09-16の統括決定で
+  // 保護者・みまもりメンバーにも拡張したため`isChild`の条件を外した（代理報告の
+  // ときも鳴る。持ち主のロールではなく、タグを読み取った本人＝画面を見ている人の
+  // 結果として鳴らす）。鳴らすのは即時加点が成功したとき（result==="approved"）
+  // のみで、上限到達・タグ未読み取り・通信エラーのときは鳴らさない。既存の
+  // 自動遷移useEffect（上記）とは独立させ、依存配列・順序には触れていない。
+  // 二重発火防止はuseRefで行う（StrictModeの二重マウント等で2回鳴らないように
+  // するため）。
   const hasPlayedSoundRef = useRef(false);
   useEffect(() => {
-    if (result !== "approved" || !isChild) return;
+    if (result !== "approved") return;
     if (hasPlayedSoundRef.current) return;
     hasPlayedSoundRef.current = true;
     playSound("report");
-  }, [result, isChild]);
+  }, [result]);
 
   const bodyStyle = isChild ? theme.typography.childBody : isSupporter ? theme.typography.supporterBody : theme.typography.parentBody;
   const headlineStyle = isChild

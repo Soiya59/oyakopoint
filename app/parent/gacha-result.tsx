@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
@@ -6,6 +6,7 @@ import GachaResultView from "@/components/GachaResultView";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useGachaPrizeDetail } from "@/hooks/useGacha";
+import { playSound } from "@/lib/sound";
 import type { GachaPrizeKind } from "@/types/domain";
 
 /**
@@ -17,6 +18,11 @@ import type { GachaPrizeKind } from "@/types/domain";
  *
  * [2026-08-26改訂・第4段階] 「木に飾る」導線を実装した。P27から受け取った`drawId`を
  * そのままP29（app/parent/tree-decorate.tsx）へ引き継ぐ。
+ *
+ * [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
+ * app/child/gacha-result.tsx（C22）と全く同じタイミング（`loadState`が
+ * `"ready"`になり`detail`が揃った瞬間）に1回だけ鳴らす。二重発火防止も
+ * 同じくuseRefで行う。
  */
 export default function ParentGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -30,6 +36,14 @@ export default function ParentGachaResultScreen() {
     presetOrnamentId || null,
     prizeDrawingId || null
   );
+
+  const hasPlayedSoundRef = useRef(false);
+  useEffect(() => {
+    if (loadState !== "ready" || !detail) return;
+    if (hasPlayedSoundRef.current) return;
+    hasPlayedSoundRef.current = true;
+    playSound("gacha");
+  }, [loadState, detail]);
 
   return (
     <Screen tone="parent">

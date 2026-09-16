@@ -7,6 +7,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE } from "@/data/api";
+import { playSound } from "@/lib/sound";
 
 /**
  * S7 クエストの完了報告（みまもりメンバー）
@@ -71,6 +72,11 @@ export default function SupporterChoreReportScreen() {
       }
       return;
     }
+
+    // [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
+    // app/parent/my-chore-report.tsxと同じ理由（この`send()`は成功時にしか
+    // 到達しないため、ここで鳴らせば「成功時に1回だけ」を満たせる）。
+    playSound("report");
 
     router.replace({
       pathname: "/supporter/my-chores",

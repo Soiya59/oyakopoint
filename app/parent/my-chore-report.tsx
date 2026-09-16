@@ -7,6 +7,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE } from "@/data/api";
+import { playSound } from "@/lib/sound";
 
 /**
  * P20 じぶんの完了報告（保護者、要件定義書07-4章「親の完了報告」）
@@ -66,6 +67,16 @@ export default function ParentMyChoreReportScreen() {
       }
       return;
     }
+
+    // [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
+    // ここは`send()`という、ボタン押下でのみ呼ばれ、かつ`result.ok`が真の
+    // （＝成功した）ときにしか到達しない経路のため、useEffect＋useRefの
+    // 二重発火防止を使わずとも「成功時に1回だけ」を満たせる（失敗時は上の
+    // if文でreturn済み）。P19（app/parent/my-chores.tsx）へ戻った直後に
+    // お祝いポップアップ（ReportCelebration）が表示されるが、そちらは
+    // 遷移パラメータを受け取って表示するだけの別画面のため、「成功したこの
+    // 瞬間」を確実に1回だけ捉えられるここで鳴らす。
+    playSound("report");
 
     // 主要画面ワイヤーフレーム.md 9.0決定2: 新しい画面へは遷移せず、P19へ戻り
     // 控えめな確認表示のみ行う。P19側はjustChoreId/justTitle/justPointsパラメータを

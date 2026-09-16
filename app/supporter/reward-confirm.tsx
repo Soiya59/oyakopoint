@@ -6,6 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { playSound } from "@/lib/sound";
 
 /**
  * S11 交換確認（みまもりメンバー）
@@ -59,6 +60,11 @@ export default function SupporterRewardConfirmScreen() {
       }
       return;
     }
+    // [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
+    // app/parent/my-reward-confirm.tsxと同じ理由（成功時にしか到達しない
+    // `confirm()`内で鳴らす）。
+    playSound("reward");
+
     router.replace({
       pathname: "/supporter/rewards",
       params: { justRewardId: reward.id, justName: reward.name, justCost: String(reward.cost) },

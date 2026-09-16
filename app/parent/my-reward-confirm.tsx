@@ -6,6 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { playSound } from "@/lib/sound";
 
 /**
  * じぶんのごほうび：交換確認（保護者版）
@@ -47,6 +48,12 @@ export default function ParentMyRewardConfirmScreen() {
       }
       return;
     }
+    // [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
+    // `confirm()`は`result.ok`が真（＝交換成功）のときにしか到達しない
+    // （失敗時は上のif文でreturn済み）ため、ここで鳴らせば「成功時に1回だけ」
+    // を満たせる。子どものC11（app/child/reward-complete.tsx）と同じ音。
+    playSound("reward");
+
     router.replace({
       pathname: "/parent/my-rewards",
       params: { justRewardId: reward.id, justName: reward.name, justCost: String(reward.cost) },
