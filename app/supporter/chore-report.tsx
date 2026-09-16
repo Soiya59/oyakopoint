@@ -6,7 +6,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { PG_ERRCODE } from "@/data/api";
+import { PG_ERRCODE, describeChoreReportFailure } from "@/data/api";
 import { playSound } from "@/lib/sound";
 
 /**
@@ -38,6 +38,9 @@ export default function SupporterChoreReportScreen() {
   const [screenState, setScreenState] = useState<ScreenState>(
     chore && me && isChoreLimitReached(chore, me.id) ? "limitReached" : "form"
   );
+  // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
+  // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
+  const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
 
   if (!chore || !me) {
     return (
@@ -68,6 +71,7 @@ export default function SupporterChoreReportScreen() {
       if (result.error.code === PG_ERRCODE.checkViolation) {
         setScreenState("limitReached");
       } else {
+        setSendErrorMessage(describeChoreReportFailure(result.error));
         setScreenState("networkError");
       }
       return;
@@ -115,9 +119,17 @@ export default function SupporterChoreReportScreen() {
           </Text>
         </View>
         <View style={styles.centerBlock}>
-          <Text style={theme.typography.supporterBody}>通信エラーが発生しました</Text>
+          <Text style={theme.typography.supporterBody}>{sendErrorMessage ?? "通信エラーが発生しました"}</Text>
         </View>
-        <AppButton tone="supporter" label="もう一度送信する" fullWidth onPress={() => setScreenState("form")} />
+        <AppButton
+          tone="supporter"
+          label="もう一度送信する"
+          fullWidth
+          onPress={() => {
+            setSendErrorMessage(null);
+            setScreenState("form");
+          }}
+        />
       </Screen>
     );
   }

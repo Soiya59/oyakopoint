@@ -89,10 +89,17 @@ export const PG_ERRCODE = {
   noDataFound: "P0002", // 招待コード無効（join_family_with_invite_code）
 } as const;
 
-/** PostgrestError（.code/.message持ち）をApiErrorへ正規化する（API仕様.md 9章のERRCODE対応）。 */
-function fromPostgrestError(error: { code?: string | null; message?: string } | null): ApiError {
-  if (!error) return GENERIC_ERROR;
-  return { code: error.code ?? "unknown_error", message: error.message ?? GENERIC_ERROR.message };
+/**
+ * PostgrestError（.code/.message持ち）をApiErrorへ正規化する（API仕様.md 9章のERRCODE対応）。
+ *
+ * [2026-09-17追加・やること.md 4-36 症状3] 第2引数`status`は任意。呼び出し元が
+ * PostgrestResponseのHTTPステータスも持っている場合だけ渡す（`reportCompletion`
+ * 参照）。既存の呼び出し元（statusを渡さない大多数）への影響は無い
+ * （ApiError.statusはもともと省略可能）。
+ */
+function fromPostgrestError(error: { code?: string | null; message?: string } | null, status?: number): ApiError {
+  if (!error) return { ...GENERIC_ERROR, status };
+  return { code: error.code ?? "unknown_error", message: error.message ?? GENERIC_ERROR.message, status };
 }
 
 /**
@@ -177,6 +184,15 @@ export const AUTH_ERRCODE = {
  * GoTrueのerror_code文字列（AUTH_ERRCODE参照）を入れる。実装メモ117章の教訓
  * （可読名の文字列比較をしない）を踏まえ、呼び出し側もAUTH_ERRCODEの定数と
  * 比較すること。
+ *
+ * [2026-09-17追加・やること.md 4-36 症状1] ここが「利用者がメールと6桁コードを
+ * 自分で入力してログインする」唯一の呼び出し元（他にverifyOtpを呼ぶ箇所は無い。
+ * `grep -rn "verifyOtp("`で確認済み）。呼び出し元の`src/components/
+ * EmailCodeVerifyForm.tsx`は、この関数が成功を返した直後に`useSession().
+ * refreshParentMember()`を明示的に呼び、こどもモードから保護者への切り替えを
+ * 確定させる（`onAuthStateChange`の`SIGNED_IN`イベントを待って推測する方式は
+ * 本部長レビューで指摘された競合・時間切れの懸念があり不採用にした。
+ * `src/lib/session.tsx`のコメント参照）。
  */
 export async function verifyEmailOtp(email: string, code: string): Promise<ApiResult<null>> {
   const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
@@ -742,7 +758,12 @@ export async function reportCompletion(
   client: SupabaseClient,
   input: { chore_id: string; reported_by: string; note: string | null }
 ): Promise<ApiResult<ChoreCompletion>> {
-  const { data, error } = await client
+  // [2026-09-17変更・やること.md 4-36 症状3] `status`（PostgRESTが返す実際のHTTP
+  // ステータス）も受け取り、fromPostgrestErrorへ渡す。以前はdata/errorのみを
+  // 見ており、通信断・RLS拒否・ログイン切れがすべて呼び出し元で見分けられず、
+  // 「通信エラーが発生しました」の1文にまとめられていた（describeChoreReportFailure
+  // 参照）。
+  const { data, error, status } = await client
     .from("chore_completions")
     .insert({
       chore_id: input.chore_id,
@@ -751,8 +772,44 @@ export async function reportCompletion(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as ChoreCompletion };
+}
+
+/**
+ * [2026-09-17新設・やること.md 4-36 症状3] `reportCompletion`が失敗したとき、
+ * `PG_ERRCODE.checkViolation`（1日の上限。呼び出し元が先に個別処理する）以外の
+ * 失敗を一律「通信エラーが発生しました」としていたのを改める。以前これが、
+ * 保護者の画面がこどものJWTで送信していた不具合（症状2）の切り分けを実際に
+ * 妨げた（403/42501が返っていたのに「通信エラー」としか表示されなかった）。
+ *
+ * 判定根拠（いずれも`node_modules/@supabase/postgrest-js/src/PostgrestBuilder.ts`
+ * で確認済み）:
+ * - `status === 0`: fetch自体が失敗した（オフライン等）場合、postgrest-jsは
+ *   `code: ""`・`status: 0`の結果を返す（391行目以降のcatch節）。
+ * - `code === PG_ERRCODE.insufficientPrivilege`（"42501"）: RLSポリシーによる拒否
+ *   （PostgreSQLのSQLSTATE。PostgRESTはこれをHTTP 403として転送する。やること.md
+ *   4-36で本部長が実測した403はこのケース）。
+ * - `status === 401`: JWT自体が無効・期限切れで、PostgreSQLへ到達する前に
+ *   PostgREST自身が拒否した場合（この場合はPostgresのSQLSTATEが付かない）。
+ * - 上記のいずれにも当てはまらない場合は、原因を特定できないサーバー側の
+ *   エラーとして扱う。
+ *
+ * いずれの文言も、統括の指摘どおりエラーコードをそのまま画面に出さず、
+ * 利用者には「何をすればよいか」を示し、開発側は表示された文言の違いから
+ * 原因を切り分けられるようにしている。
+ */
+export function describeChoreReportFailure(error: ApiError): string {
+  if (error.status === 0) {
+    return "通信状態を確認できませんでした。電波の良い場所で、もう一度お試しください。";
+  }
+  if (error.code === PG_ERRCODE.insufficientPrivilege) {
+    return "この操作を行う権限を確認できませんでした。お手数ですが、アプリを一度終了して開き直し、もう一度お試しください。";
+  }
+  if (error.status === 401) {
+    return "ログインの状態を確認できませんでした。お手数ですが、アプリを一度終了して開き直してから、もう一度お試しください。";
+  }
+  return "サーバーでエラーが発生しました。しばらくしてから、もう一度お試しください。";
 }
 
 /**

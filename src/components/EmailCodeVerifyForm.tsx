@@ -3,6 +3,7 @@ import { Text, TextInput, View } from "react-native";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { verifyEmailOtp, AUTH_ERRCODE, type ApiResult } from "@/data/api";
+import { useSession } from "@/lib/session";
 
 /**
  * P3「メール送信完了」・S0「招待プレビュー・参加確認」未ログイン時状態の
@@ -14,6 +15,16 @@ import { verifyEmailOtp, AUTH_ERRCODE, type ApiResult } from "@/data/api";
  * 区別しないことをローカルSupabaseで確認済み（正しいコード→成功、存在しない
  * コード→otp_expired、期限切れコード→otp_expiredの3パターンをcurlで実測）。
  * 29.6章の代替方針どおり、両者を1つの文言（MSG_CODE_INVALID）に一本化する。
+ *
+ * [2026-09-17変更・やること.md 4-36 症状1・実装メモ.md 230章] 成功後に
+ * `useSession().refreshParentMember()`を明示的に呼ぶ（下記submit参照）。
+ * 以前は`onAuthStateChange`の`SIGNED_IN`イベントを待って自動的にstatusが
+ * 切り替わるのに任せていたが、こどもセッションが有効な間はこのイベントを
+ * 無条件で無視する設計（31章のレース対策）のため、こどもモードから保護者に
+ * 戻ろうとするとstatusが変わらず「たしかめています…」のまま止まっていた。
+ * イベントを待たず、検証成功をこの場で知っているこの関数から直接
+ * `refreshParentMember()`を呼ぶことで、イベントの取り合い・時間切れの懸念を
+ * 構造的に無くした（詳細はsrc/lib/session.tsxのコメント）。
  */
 
 const RESEND_COOLDOWN_MS = 30000;
@@ -37,6 +48,7 @@ export interface EmailCodeVerifyFormProps {
 }
 
 export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCodeVerifyFormProps) {
+  const { refreshParentMember } = useSession();
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -68,8 +80,11 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
       );
       return;
     }
-    // 成功時: useSession()のstatus監視（呼び出し元画面）が自動的に検知して次へ進む
+    // 成功時: こどもモードから保護者に戻る場合を含め、ここで明示的に
+    // refreshParentMember()を呼んでstatusを確定させる（上のコメント参照）。
+    // これが終わればuseSession()のstatus監視（呼び出し元画面）が次へ進む
     // （設計部10.3章）。この画面はそのまま切り替わるため、verifyingは明示的にfalseへ戻さない。
+    await refreshParentMember();
   };
 
   const onChangeCode = (raw: string) => {
