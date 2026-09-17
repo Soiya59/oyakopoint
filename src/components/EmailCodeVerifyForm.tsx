@@ -4,6 +4,7 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { verifyEmailOtp, AUTH_ERRCODE, type ApiResult } from "@/data/api";
 import { useSession } from "@/lib/session";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 
 /**
  * P3「メール送信完了」・S0「招待プレビュー・参加確認」未ログイン時状態の
@@ -34,7 +35,9 @@ const RESEND_NOTICE_MS = 2500;
 const MSG_CODE_INVALID =
   "うまく確認できませんでした。もう一度、メールの数字をご確認のうえ入力してください。";
 const MSG_RATE_LIMIT = "何度か試していただいたようです。少し時間をおいてから、もう一度お試しください。";
-const MSG_NETWORK = "通信エラーが発生しました。もう一度お試しください。";
+// [2026-09-17変更・やること.md 4-40] 文言はsrc/lib/errorMessages.tsに集約した
+// （元々ここと同一の文言だった）。
+const MSG_NETWORK = GENERIC_ERROR_MESSAGE;
 const MSG_RESEND_RATE_LIMIT =
   "メールの送信回数が上限に達しました。しばらく時間をおいてからもう一度お試しください。";
 

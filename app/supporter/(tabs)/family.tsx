@@ -12,6 +12,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
@@ -120,7 +121,7 @@ export default function SupporterFamilyScreen() {
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
     setReactionError(null);
     const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
-    if (!result.ok) setReactionError("スタンプを送信できませんでした。もう一度お試しください");
+    if (!result.ok) setReactionError(STAMP_SEND_ERROR_MESSAGE);
   };
 
   const openDetail = (c: ChoreCompletion) => {
@@ -157,7 +158,7 @@ export default function SupporterFamilyScreen() {
     });
     setSendingComment(false);
     if (!result.ok) {
-      setReactionError("コメントを送信できませんでした。もう一度お試しください");
+      setReactionError(COMMENT_SEND_ERROR_MESSAGE);
       return;
     }
     setCommentDraft("");

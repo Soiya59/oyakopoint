@@ -7,6 +7,7 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { signInWithEmail, signInWithPassword } from "@/data/api";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 
 /**
  * [2026-09-11新設] Google Play・App Store審査員向けログイン手段。
@@ -17,8 +18,12 @@ import { buildAuthRedirectUrl } from "@/lib/authRedirect";
  */
 const REVIEW_LOGIN_ERROR_MESSAGE =
   "メールアドレスとパスワードの組み合わせを確認できませんでした。ふだんのログインでは、パスワードは使いません。メールでログインする場合は、上の「送信する」からお進みください。";
-/** 29.2節・29.4節の既存の通信エラー文言をそのまま流用する（42.3節決定9）。 */
-const REVIEW_LOGIN_NETWORK_ERROR_MESSAGE = "通信エラーが発生しました。もう一度お試しください。";
+/**
+ * 29.2節・29.4節の既存の通信エラー文言をそのまま流用する（42.3節決定9）。
+ * [2026-09-17変更・やること.md 4-40] 文言はsrc/lib/errorMessages.tsに集約した
+ * （元々ここと同一の文言だった）。
+ */
+const REVIEW_LOGIN_NETWORK_ERROR_MESSAGE = GENERIC_ERROR_MESSAGE;
 
 /**
  * P2 メールアドレス入力

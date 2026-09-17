@@ -11,6 +11,7 @@ import { createReward, deleteReward, updateReward } from "@/data/api";
 import { toJstDateString } from "@/lib/calendarDates";
 import { findRewardSuggestionById } from "@/data/rewardSuggestions";
 import { saveSequentially } from "@/lib/sequentialSave";
+import { FAMILY_DATA_NOT_READY_MESSAGE } from "@/lib/errorMessages";
 
 // [2026-09-04追加・統括判断] ごほうびの絵文字の候補チップ。
 // 上のコメントのとおり2026-08-20に「自分で決めたい、選択ではなく」との要望で自由入力へ
@@ -138,7 +139,7 @@ export default function RewardEditScreen() {
     }
     // app/parent/chore-edit.tsxと同じ理由の安全策（実装メモ.md参照）。
     if (!state.family.id) {
-      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      setErrorMessage(FAMILY_DATA_NOT_READY_MESSAGE);
       return;
     }
     setErrorMessage(null);

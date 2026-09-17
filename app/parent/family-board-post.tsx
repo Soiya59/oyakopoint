@@ -7,6 +7,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createFamilyBoardPost, PG_ERRCODE } from "@/data/api";
+import { BOARD_POST_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 
 /**
  * P33 投稿する（保護者）
@@ -47,7 +48,7 @@ export default function ParentFamilyBoardPostScreen() {
       if (res.error.code === PG_ERRCODE.checkViolation) {
         setErrorMessage("本日の投稿数の上限（5件）に達しています");
       } else {
-        setErrorMessage("送信できませんでした。もう一度お試しください");
+        setErrorMessage(BOARD_POST_SEND_ERROR_MESSAGE);
       }
       return;
     }

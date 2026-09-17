@@ -8,6 +8,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE, describeChoreReportFailure } from "@/data/api";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { playSound } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
@@ -137,7 +138,7 @@ export default function SupporterChoreReportScreen() {
           </Text>
         </View>
         <View style={styles.centerBlock}>
-          <Text style={theme.typography.supporterBody}>{sendErrorMessage ?? "通信エラーが発生しました"}</Text>
+          <Text style={theme.typography.supporterBody}>{sendErrorMessage ?? GENERIC_ERROR_MESSAGE}</Text>
         </View>
         <AppButton
           tone="supporter"

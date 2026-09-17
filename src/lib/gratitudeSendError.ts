@@ -15,6 +15,7 @@
  * 文字列比較はしない（実装メモ.md 111.5章の教訓）。
  */
 import { PG_ERRCODE, type ApiError } from "@/data/api";
+import { GENERIC_ERROR_MESSAGE, GENERIC_ERROR_MESSAGE_CHILD } from "@/lib/errorMessages";
 
 export type GratitudeTone = "parent" | "child" | "supporter";
 
@@ -50,5 +51,5 @@ export function gratitudeSendErrorText(tone: GratitudeTone, error: ApiError): st
     // 将来別の理由でRLSが働いた場合の保険として汎用の日本語文言に倒す。
     return tone === "child" ? "おくれなかったよ" : "この操作はできません";
   }
-  return tone === "child" ? "とどきませんでした…" : "通信エラーが発生しました";
+  return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
 }

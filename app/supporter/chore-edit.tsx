@@ -22,6 +22,12 @@ import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findSkillChoreTemplateById } from "@/data/skillChoreTemplates";
 import { useHabitFigureCatalog, groupHabitFigureCatalogByKind } from "@/hooks/useHabitCards";
+import {
+  FAMILY_DATA_NOT_READY_MESSAGE,
+  NFC_UNLINK_ERROR_MESSAGE,
+  NFC_WRITE_ERROR_MESSAGE,
+  NFC_WRITE_RETRY_LABEL,
+} from "@/lib/errorMessages";
 
 // [2026-09-01追加・実装メモ.md 108章] 要件定義書07-2章判断事項7「みまもりメンバー
 // 自身の自分専用クエストへのタグ発行」。主要画面ワイヤーフレーム.md 7.6.2節のとおり、
@@ -229,7 +235,7 @@ export default function SupporterChoreEditScreen() {
       return;
     }
     if (!state.family.id) {
-      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      setErrorMessage(FAMILY_DATA_NOT_READY_MESSAGE);
       return;
     }
     setErrorMessage(null);
@@ -517,7 +523,7 @@ export default function SupporterChoreEditScreen() {
                           </Text>
                           {revokeErrorTagId === t.id && (
                             <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                              解除できませんでした。もう一度お試しください
+                              {NFC_UNLINK_ERROR_MESSAGE}
                             </Text>
                           )}
                           <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
@@ -604,9 +610,9 @@ export default function SupporterChoreEditScreen() {
               <>
                 <Text style={theme.typography.supporterTitle}>NFCタグを発行</Text>
                 <Text style={{ marginTop: theme.spacing.s3 }}>
-                  {nfcErrorMessage ?? "うまく書き込めませんでした。もう一度近づけてください"}
+                  {nfcErrorMessage ?? NFC_WRITE_ERROR_MESSAGE}
                 </Text>
-                <AppButton tone="supporter" label="もう一度試す" style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
+                <AppButton tone="supporter" label={NFC_WRITE_RETRY_LABEL} style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
                 <AppButton
                   tone="supporter"
                   label="キャンセル"

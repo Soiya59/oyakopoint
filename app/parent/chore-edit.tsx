@@ -22,6 +22,12 @@ import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findChoreSuggestionById } from "@/data/choreSuggestions";
 import { findSkillChoreTemplateById } from "@/data/skillChoreTemplates";
 import { saveSequentially } from "@/lib/sequentialSave";
+import {
+  FAMILY_DATA_NOT_READY_MESSAGE,
+  NFC_UNLINK_ERROR_MESSAGE,
+  NFC_WRITE_ERROR_MESSAGE,
+  NFC_WRITE_RETRY_LABEL,
+} from "@/lib/errorMessages";
 import { useHabitFigureCatalog, groupHabitFigureCatalogByKind } from "@/hooks/useHabitCards";
 
 // [2026-09-17追加・要件定義書07-28章決定23a] 台紙型クエストは3枚上限に達している
@@ -352,7 +358,7 @@ export default function ChoreEditScreen() {
     // ローディングゲートで防がれるはずだが、念のための二重の安全策として）、
     // ここでも明示的にチェックし、分かりやすい案内を表示する。
     if (!state.family.id) {
-      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      setErrorMessage(FAMILY_DATA_NOT_READY_MESSAGE);
       return;
     }
     setErrorMessage(null);
@@ -991,7 +997,7 @@ export default function ChoreEditScreen() {
                                   </Text>
                                   {revokeErrorTagId === t.id && (
                                     <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                                      解除できませんでした。もう一度お試しください
+                                      {NFC_UNLINK_ERROR_MESSAGE}
                                     </Text>
                                   )}
                                   <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
@@ -1106,9 +1112,9 @@ export default function ChoreEditScreen() {
               <>
                 <Text style={theme.typography.parentTitle}>NFCタグを発行</Text>
                 <Text style={{ marginTop: theme.spacing.s3 }}>
-                  {nfcErrorMessage ?? "うまく書き込めませんでした。もう一度近づけてください"}
+                  {nfcErrorMessage ?? NFC_WRITE_ERROR_MESSAGE}
                 </Text>
-                <AppButton label="もう一度試す" style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
+                <AppButton label={NFC_WRITE_RETRY_LABEL} style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
                 <AppButton
                   label="キャンセル"
                   variant="secondary"

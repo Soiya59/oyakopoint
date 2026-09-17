@@ -7,6 +7,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createSupporterSharedReward, deleteReward, updatePersonalReward } from "@/data/api";
+import { FAMILY_DATA_NOT_READY_MESSAGE } from "@/lib/errorMessages";
 
 /**
  * S9 ごほうび登録・編集（みまもりメンバー）
@@ -54,7 +55,7 @@ export default function SupporterRewardEditScreen() {
       return;
     }
     if (!state.family.id) {
-      setErrorMessage("家族データの読み込みが完了していません。もう一度お試しください");
+      setErrorMessage(FAMILY_DATA_NOT_READY_MESSAGE);
       return;
     }
     setErrorMessage(null);

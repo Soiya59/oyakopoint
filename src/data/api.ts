@@ -18,6 +18,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type {
   Category,
   Chore,
@@ -73,7 +74,7 @@ export interface ApiError {
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
-const GENERIC_ERROR: ApiError = { code: "unknown_error", message: "通信エラーが発生しました" };
+const GENERIC_ERROR: ApiError = { code: "unknown_error", message: GENERIC_ERROR_MESSAGE };
 
 /**
  * PostgRESTが返す `code` は、`RAISE EXCEPTION ... USING ERRCODE = 'check_violation'`

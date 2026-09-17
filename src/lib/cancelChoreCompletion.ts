@@ -10,6 +10,7 @@
  * 修正した経緯を踏襲する。設計部/成果物/API仕様.md 9章参照）。
  */
 import { PG_ERRCODE, type ApiError } from "@/data/api";
+import { GENERIC_ERROR_MESSAGE, GENERIC_ERROR_MESSAGE_CHILD } from "@/lib/errorMessages";
 
 export type CancelTone = "parent" | "child" | "supporter";
 
@@ -71,5 +72,5 @@ export function cancelCompletionErrorText(tone: CancelTone, error: ApiError): st
     // （API仕様.md 11章）。
     return tone === "child" ? "できなかったよ" : "この操作はできません";
   }
-  return tone === "child" ? "とどきませんでした…" : "通信エラーが発生しました";
+  return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
 }
