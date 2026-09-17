@@ -22,6 +22,7 @@ import {
 import type { FamilyInvite } from "@/types/domain";
 import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
+import AppVersionInfo from "@/components/AppVersionInfo";
 import { HELP_CHILD_URL, HELP_PARENT_URL, HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
 
 /** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
@@ -712,6 +713,12 @@ export default function FamilyScreen() {
       </Text>
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/parent")} />
+
+      {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ241章] いま動いているバージョンの
+          表示。OTA（expo-updates）を使い始めたことで、配布した中身がストアの表示に
+          一切出なくなったため、この端末に届いているかを確かめる手段として置く。
+          画面の一番下・既存キャプションと同じ見た目（新しい部品は作らない）。 */}
+      <AppVersionInfo tone="parent" />
     </Screen>
   );
 }

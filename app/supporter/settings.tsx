@@ -9,6 +9,7 @@ import { Text } from "react-native";
 import { useSession } from "@/lib/session";
 import { removeMember } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
+import AppVersionInfo from "@/components/AppVersionInfo";
 import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
 
 /** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
@@ -122,6 +123,10 @@ export default function SupporterSettingsScreen() {
       )}
 
       <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/self")} />
+
+      {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ241章] いま動いているバージョンの
+          表示。app/parent/family.tsxと同じ理由・同じ部品。画面の一番下に置く。 */}
+      <AppVersionInfo tone="supporter" />
     </Screen>
   );
 }
