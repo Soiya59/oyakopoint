@@ -11,6 +11,9 @@
     横: 11 + 60 + 4 + 60 + 4 + 60 + 11 = 210mm
     縦: 90(ヘッダー) + 60 + 4 + 60 + 4 + 60 (=188) + 19(下余白) = 297mm
     詳しい計算根拠は 開発部/成果物/実装メモ.md 229章を参照。
+    台紙①〜⑥の中央の丸のインラインSVG（星・ハート・ちょうちょ・くも・つき・お花）は
+    設計書14章（2026-09-17全面改訂）の座標・色をそのまま使用。
+    座標の検算・moon（つき）のsweep-flag修正の経緯は実装メモ229.11章を参照。
   */
   @page {
     size: A4;
@@ -158,6 +161,9 @@
     font-size: 2.6mm;
     line-height: 3.4mm;
   }
+  .band-target .circle svg {
+    display: block;
+  }
   .band-target .taplabel {
     margin-top: 0.5mm;
     font-size: 2.4mm;
@@ -218,6 +224,7 @@
     <div class="steps">
       <span>① 好きな枠を切りとる → ② 名前とクエスト名を書く</span>
       <span>→ ③ まん中の丸に、子どもが絵をかく</span>
+      <span>※ マークの線には色がついています。中と白い丸は、好きな色や絵、文字で自由にどうぞ。</span>
       <span>→ ④ 紙のうらにNFCタグを貼る</span>
       <span>→ ⑤ 両面テープで壁に貼る</span>
     </div>
@@ -234,6 +241,7 @@
   </div>
 
   <div class="grid">
+    <!-- 台紙① 星（ほし） #FF8F00 -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -241,7 +249,11 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="ほし">
+            <path d="M 0,-9.5 L 2.23,-3.07 L 9.04,-2.94 L 3.61,1.17 L 5.58,7.69 L 0,3.8 L -5.58,7.69 L -3.61,1.17 L -9.04,-2.94 L -2.23,-3.07 Z" fill="none" stroke="#FF8F00" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -250,6 +262,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙② ハート #E53935 -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -257,7 +271,11 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="ハート">
+            <path d="M 0,8 C -4.8,4 -8,0.8 -8,-2.4 C -8,-5.6 -4.8,-8 0,-4.8 C 4.8,-8 8,-5.6 8,-2.4 C 8,0.8 4.8,4 0,8 Z" fill="none" stroke="#E53935" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -266,6 +284,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙③ ちょうちょ #039BE5 -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -273,7 +293,19 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="ちょうちょ">
+            <g fill="none" stroke="#039BE5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="0" cy="0" rx="0.8" ry="5.0"/>
+              <ellipse cx="5" cy="-2" rx="4.2" ry="2.8"/>
+              <ellipse cx="-5" cy="-2" rx="4.2" ry="2.8"/>
+              <ellipse cx="3.5" cy="3.5" rx="3.5" ry="2.2"/>
+              <ellipse cx="-3.5" cy="3.5" rx="3.5" ry="2.2"/>
+              <line x1="0" y1="-5" x2="2" y2="-8.5"/>
+              <line x1="0" y1="-5" x2="-2" y2="-8.5"/>
+            </g>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -282,6 +314,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙④ くも #78909C -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -289,7 +323,11 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="くも">
+            <path d="M -8,3.5 Q -7,-5 -3.5,2.5 Q 0,-7 3.5,2.5 Q 7,-5 8,3.5 L -8,3.5 Z" fill="none" stroke="#78909C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -298,6 +336,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙⑤ つき（三日月） #7E57C2 -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -305,7 +345,11 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="つき">
+            <path d="M 4.72,6.46 A8,8 0 1 1 4.72,-6.46 A6.5,6.5 0 1 0 4.72,6.46 Z" fill="none" stroke="#7E57C2" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -314,6 +358,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙⑥ お花（はな） #EC407A -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -321,7 +367,20 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle">
+          <svg class="icon" viewBox="-11 -11 22 22" width="22mm" height="22mm" xmlns="http://www.w3.org/2000/svg" aria-label="はな">
+            <g fill="none" stroke="#EC407A" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="0" cy="-1" r="2.0"/>
+              <ellipse cx="0" cy="-6" rx="3.0" ry="2.0" transform="rotate(-90,0,-6)"/>
+              <ellipse cx="4.8" cy="-2.5" rx="3.0" ry="2.0" transform="rotate(-18,4.8,-2.5)"/>
+              <ellipse cx="2.9" cy="3.0" rx="3.0" ry="2.0" transform="rotate(54,2.9,3.0)"/>
+              <ellipse cx="-2.9" cy="3.0" rx="3.0" ry="2.0" transform="rotate(126,-2.9,3.0)"/>
+              <ellipse cx="-4.8" cy="-2.5" rx="3.0" ry="2.0" transform="rotate(198,-4.8,-2.5)"/>
+              <line x1="0" y1="1" x2="0" y2="9"/>
+              <ellipse cx="1.5" cy="5" rx="2.0" ry="1.0" transform="rotate(-30,1.5,5)"/>
+            </g>
+          </svg>
+        </div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -330,6 +389,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙⑦ 白紙（丸の中には何も印刷しない。設計書14.5節） -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -337,7 +398,7 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle"></div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -346,6 +407,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙⑧ 白紙（丸の中には何も印刷しない。設計書14.5節） -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -353,7 +416,7 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle"></div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
@@ -362,6 +425,8 @@
         <span class="nometal">🧲✕</span>
       </div>
     </div>
+
+    <!-- 台紙⑨ 白紙（丸の中には何も印刷しない。設計書14.5節） -->
     <div class="card">
       <div class="band-who">
         <span class="label">だれの：</span>
@@ -369,7 +434,7 @@
         <span class="colorcircle"></span>
       </div>
       <div class="band-target">
-        <div class="circle">（ここに<br>えを<br>かいてね）</div>
+        <div class="circle"></div>
         <div class="taplabel">📱 ここでタッチ</div>
       </div>
       <div class="band-quest">
