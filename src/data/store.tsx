@@ -734,6 +734,119 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
   }, [familyId, session.client, load]);
 
+  /**
+   * [2026-09-17追加・実装メモ.md 240章、やること.md 4-43] 完了報告
+   * （REPORT_COMPLETION）成功後、`load()`を呼ぶのをやめ、実際に変わる3本
+   * （completions・memberPoints・dailySummary）だけを取り直す。228.2章で
+   * 理論値として分析済みだった対応表をそのまま適用する（統括の報告時点では
+   * 「報告自体は対象外」と判断していたが、今回の統括報告〔2026-09-17〕は
+   * 「できた」を押す操作そのものが対象のため、この宿題に着手する）。
+   *
+   * [根拠] `chore_completions`への直接INSERT（`api.reportCompletion`）が引き起こす
+   * 波及は、`trg_chore_completions_before_insert`（BEFORE、上限チェック等・他
+   * テーブルへの書き込み無し）と、3本のAFTER INSERTトリガー
+   * （`trg_family_tree_seasons_bump`・`trg_gacha_member_progress_bump`・
+   * `trg_member_badges_check_chore_completion`、いずれも`initial_schema.sql`）
+   * のみ。前2つの書き込み先（`family_tree_seasons`・`gacha_member_progress`）は
+   * 228.3章で確認したとおりload()の取得対象に元々含まれておらず、各画面の専用
+   * フック（`useFamilyTreeSummary`・`useGachaProgress`）が個別に再取得する別系統。
+   * `trg_member_badges_check_chore_completion`が書き込む`member_badges`も
+   * load()の8クエリには含まれていない（バッジ画面は別途専用フックを持つ）。
+   *
+   * [台紙型（reward_mode='habit_card'）・237章との整合] `trg_habit_card_progress_bump`
+   * （`20260925010000_habit_cards_and_figures.sql`、AFTER INSERT）も同じ
+   * `chore_completions`に付いているが、書き込み先は`habit_cards`・
+   * `habit_figure_grants`のみで、トリガーのコメント自身に明記されているとおり
+   * 「member_pointsには一切触れない」。この2表はload()の8クエリに元々含まれて
+   * おらず（`useHabitCardsForMember`・`useCheckNewHabitFigureGrant`という、
+   * `dispatch`の戻り値の`reportedAt`を受け取って呼び出し元の画面が個別に叩く
+   * 別系統のフック、`src/hooks/useHabitCards.ts`参照）、`app/parent/
+   * my-chore-report.tsx`・`app/supporter/chore-report.tsx`・
+   * `app/child/report.tsx`はいずれも`load()`の完了を待たずに`checkNewGrant`を
+   * 呼んでいる（`store.tsx`の`load()`とは無関係に動く設計）。したがって今回
+   * `load()`を呼ばなくしても、台紙・フィギュア付与の表示更新経路には一切
+   * 触れておらず、取りこぼしは無い。
+   *
+   * `chore_completions`のINSERTにより`completions`（新しい行が増える）・
+   * `memberPoints`（Viewが`chore_completions`を集計）・`dailySummary`（Viewが
+   * `chore_completions`のみを集計）の3本が変わる。`reactions`・`redemptions`・
+   * `gratitude`・`familyBoardReactions`・`dailyFlags`は本操作が一切書き込まない
+   * テーブルのため無関係（228.2章の対応表のとおり）。
+   *
+   * dailySummaryの取得条件（過去400日〜当日の窓）はload()・refreshAfterCancelと
+   * 同じ計算式をそのまま使う（窓の縮小は今回もスコープ外）。
+   *
+   * いずれかの取得に失敗した場合は、従来どおり`load()`にフォールバックする。
+   */
+  const refreshAfterReport = useCallback(async () => {
+    if (!familyId) {
+      await load();
+      return;
+    }
+    const client = session.client;
+    const today = toJstDateString(new Date());
+    const windowStart = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 400);
+      return toJstDateString(d);
+    })();
+
+    const [completionsRes, memberPointsRes, dailySummaryRes] = await Promise.all([
+      api.fetchCompletions(client, familyId),
+      api.fetchMemberPoints(client, familyId),
+      client
+        .from("chore_completion_daily_summary")
+        .select("*")
+        .eq("family_id", familyId)
+        .gte("activity_date", windowStart)
+        .lte("activity_date", today),
+    ]);
+
+    if (!completionsRes.ok || !memberPointsRes.ok || dailySummaryRes.error) {
+      await load();
+      return;
+    }
+
+    setState((prev) => ({ ...prev, completions: completionsRes.data }));
+    setMemberPoints(memberPointsRes.data);
+    setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
+  }, [familyId, session.client, load]);
+
+  /**
+   * [2026-09-17追加・実装メモ.md 240章、やること.md 4-43] ごほうび交換
+   * （REDEEM_REWARD）成功後、`load()`を呼ぶのをやめ、実際に変わる2本
+   * （redemptions・memberPoints）だけを取り直す。
+   *
+   * [根拠] `reward_redemptions`への直接INSERT（`api.redeemReward`）には
+   * `trg_reward_redemptions_before_insert`（BEFORE、family_id補完等）のみが
+   * 付いており、AFTERトリガーは無い（228.2章の対応表のとおり、他テーブルへの
+   * 書き込みは発生しない）。`redemptions`（新しい行が増える）・`memberPoints`
+   * （Viewが`reward_redemptions`を集計）の2本のみが変わる。`completions`・
+   * `reactions`・`gratitude`・`familyBoardReactions`・`dailySummary`・
+   * `dailyFlags`はいずれも本操作が一切書き込まないテーブルのため無関係。
+   *
+   * 取得に失敗した場合は、従来どおり`load()`にフォールバックする。
+   */
+  const refreshAfterRedeem = useCallback(async () => {
+    if (!familyId) {
+      await load();
+      return;
+    }
+    const client = session.client;
+    const [redemptionsRes, memberPointsRes] = await Promise.all([
+      api.fetchRedemptions(client, familyId),
+      api.fetchMemberPoints(client, familyId),
+    ]);
+
+    if (!redemptionsRes.ok || !memberPointsRes.ok) {
+      await load();
+      return;
+    }
+
+    setState((prev) => ({ ...prev, redemptions: redemptionsRes.data }));
+    setMemberPoints(memberPointsRes.data);
+  }, [familyId, session.client, load]);
+
   const dispatch = useCallback(
     async (action: Action): Promise<DispatchResult> => {
       const client = session.client;
@@ -750,7 +863,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
             note: action.note,
           });
           if (!res.ok) return { ok: false, error: res.error };
-          await load();
+          // [2026-09-17変更・実装メモ.md 240章] load()の全件再取得から、実際に変わる
+          // 3本（completions・memberPoints・dailySummary）だけの取り直しに変更した
+          // （根拠はrefreshAfterReport定義部のコメント参照）。
+          await refreshAfterReport();
           return { ok: true, completionId: res.data.id, reportedAt: res.data.reported_at };
         }
 
@@ -807,7 +923,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
         case "REDEEM_REWARD": {
           const res = await api.redeemReward(client, { reward_id: action.rewardId, member_id: action.memberId });
           if (!res.ok) return { ok: false, error: res.error };
-          await load();
+          // [2026-09-17変更・実装メモ.md 240章] load()の全件再取得から、実際に変わる
+          // 2本（redemptions・memberPoints）だけの取り直しに変更した
+          // （根拠はrefreshAfterRedeem定義部のコメント参照）。
+          await refreshAfterRedeem();
           return { ok: true };
         }
 
@@ -830,7 +949,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
       }
     },
-    [session.client, load, refreshReactionsOnly, refreshAfterCancel, familyId]
+    [session.client, load, refreshReactionsOnly, refreshAfterCancel, refreshAfterReport, refreshAfterRedeem, familyId]
   );
 
   const findChoreByTag = useCallback(
