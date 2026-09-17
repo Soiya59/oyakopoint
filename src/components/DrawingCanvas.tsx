@@ -195,6 +195,19 @@ export function DrawingCanvas({
       },
       onPanResponderRelease: finishStroke,
       onPanResponderTerminate: finishStroke,
+      // [2026-09-17追加・やること.md 4-41・実装メモ234章] iOS実機で「長い線が描けない」
+      // （線が短く途切れる）不具合への対処。キャンバスは`Screen`（scroll=true）の
+      // ScrollViewの中にあり、指を動かし始めるとScrollViewが「自分がスクロールする」と
+      // 責任者の交代を要求してくる。既定ではこの要求に応じてしまい、その瞬間に
+      // `onPanResponderTerminate`→`finishStroke`で線が打ち切られていた。iOSの
+      // UIScrollViewは指が数pt動いただけで要求を出すため、線がどれも同じくらい短く
+      // 切れる。Androidは要求が緩く、切れる前に描き終わるので気づかなかった。
+      // 線を描いている間は交代要求を断る（falseを返す）。描き終えて指を離せば
+      // 責任者は解放されるので、通常のスクロールには影響しない。
+      onPanResponderTerminationRequest: () => false,
+      // Android側の保険: ネイティブ側の部品（ScrollView等）がタッチを横取りするのを
+      // 明示的に止める（既定値もtrueだが、上の対処と対で意図を明示しておく）。
+      onShouldBlockNativeResponder: () => true,
     })
   ).current;
 
