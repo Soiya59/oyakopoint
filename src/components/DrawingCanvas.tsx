@@ -14,7 +14,7 @@
  */
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
-import Svg, { Circle, Polyline } from "react-native-svg";
+import Svg, { Circle, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
@@ -103,6 +103,22 @@ interface DrawingCanvasProps {
    * 白背景のまま動作する）。
    */
   backgroundColor?: string;
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 47.6節決定14] 円形の外枠線・
+   * 円形クリップを持たせない。既定`false`（今までどおり自前で円の枠線・クリップを
+   * 持つ）。`ZoomableDrawingCanvas.tsx`が「窓（基準直径）」側にのみ外周の枠線・
+   * クリップを持たせ、内側の拡大キャンバスにはこの部品を`chromeless`で使うために
+   * 新設した。既存の呼び出し元（`DrawingBoard.tsx`旧実装・`AvatarDrawingPanel.tsx`）は
+   * このpropを渡さないため、今までどおりの見た目のまま変わらない。
+   */
+  chromeless?: boolean;
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 47.3節決定9〜10] 2本指ドラッグを
+   * 検出したときに呼ばれる（1本指のみのときは呼ばれない）。引数は前回の2本指の
+   * 中心位置からの移動量（px、`size`基準の座標系）。このpropを渡さない既存の呼び出し元
+   * （`AvatarDrawingPanel.tsx`等）には一切影響しない（下記`onPanResponderMove`参照）。
+   */
+  onPan?: (dx: number, dy: number) => void;
 }
 
 export function DrawingCanvas({
@@ -113,6 +129,8 @@ export function DrawingCanvas({
   onStrokeEnd,
   disabled = false,
   backgroundColor = theme.colors.neutralSurface,
+  chromeless = false,
+  onPan,
 }: DrawingCanvasProps) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
@@ -127,6 +145,14 @@ export function DrawingCanvas({
   const linesCountRef = useRef(lines.length);
   linesCountRef.current = lines.length;
   const currentPointsRef = useRef<number[]>([]);
+  // [2026-09-17追加・47.3節決定9〜10] 最新のonPanをrefで参照する（colorRefと同じ理由）。
+  const onPanRef = useRef(onPan);
+  onPanRef.current = onPan;
+  // 2本指ドラッグ中かどうか（決定10「全ての指が離れるまで移動モードを維持し、
+  // 残った1本の指では描画を再開しない」の実現に使う）。
+  const isPanningRef = useRef(false);
+  // 直前フレームの2本指の中心位置（pageX/pageY基準）。次のmoveとの差分がパン量になる。
+  const panCenterRef = useRef<{ x: number; y: number } | null>(null);
 
   const toNormalized = (px: number, py: number): [number, number] => {
     const nx = Math.max(0, Math.min(1000, Math.round((px / size) * 1000)));
@@ -165,6 +191,10 @@ export function DrawingCanvas({
         // ブラウザ実装依存。効かせられなくても実害は無く（`touch-action: none`が
         // 別途スクロールを止める）、これ以上は深追いしない方針とした。
         evt.preventDefault?.();
+        // [2026-09-17追加・47.3節決定9〜10] 新しいジェスチャーの開始時は必ず
+        // 「移動モード」をクリアしておく（前回のジェスチャーの状態を持ち越さない）。
+        isPanningRef.current = false;
+        panCenterRef.current = null;
         if (disabledRef.current || linesCountRef.current >= theme.drawingLimits.maxLines) return;
         const { locationX, locationY } = evt.nativeEvent;
         const [nx, ny] = toNormalized(locationX, locationY);
@@ -174,6 +204,34 @@ export function DrawingCanvas({
       onPanResponderMove: (evt) => {
         evt.preventDefault?.();
         if (disabledRef.current) return;
+        // [2026-09-17追加・主要画面ワイヤーフレーム.md 47.3節決定9〜10]
+        // 2本目の指が触れたら「描く」から「移動」へ切り替える。
+        // - 描きかけの線は保存せず破棄する（決定10、B案「確定して残す」は不採用）。
+        //   `currentPointsRef`・`livePoints`を空に戻すだけで、`onStrokeEnd`は呼ばない。
+        // - `isPanningRef`をtrueにしたら、この指が1本に減っても（相方が先に離れても）
+        //   trueのまま維持し、以後の分岐（このmoveハンドラの下側）で新しい描画を
+        //   再開させない。全ての指が離れて次のonPanResponderGrantが呼ばれて
+        //   初めてfalseに戻る（上のonPanResponderGrant参照）。
+        const touches = evt.nativeEvent.touches;
+        if (touches && touches.length >= 2) {
+          if (currentPointsRef.current.length > 0) {
+            currentPointsRef.current = [];
+            setLivePoints([]);
+          }
+          isPanningRef.current = true;
+          const cx = (touches[0].pageX + touches[1].pageX) / 2;
+          const cy = (touches[0].pageY + touches[1].pageY) / 2;
+          if (panCenterRef.current) {
+            onPanRef.current?.(cx - panCenterRef.current.x, cy - panCenterRef.current.y);
+          }
+          panCenterRef.current = { x: cx, y: cy };
+          return;
+        }
+        if (isPanningRef.current) {
+          // 2本→1本に減った（相方が先に離れた）。決定10のとおり、残った1本では
+          // 描画を再開しない（このジェスチャーが終わるまで何もしない）。
+          return;
+        }
         const pts = currentPointsRef.current;
         if (pts.length === 0) return;
         // 1本あたりの座標点数上限（DB側は300点=p配列600要素、33b章）に達したら、
@@ -214,8 +272,12 @@ export function DrawingCanvas({
   return (
     <View
       style={[
-        styles.circle,
-        { width: size, height: size, borderRadius: size / 2 },
+        // [2026-09-17変更・47.6節決定14] `chromeless`のときは円形の外枠線・クリップを
+        // 持たせない（`ZoomableDrawingCanvas.tsx`の「窓」側にだけ持たせるため）。
+        // 既定`false`の呼び出し元（今までどおりの全部）は`styles.circle`のみが
+        // 適用され、見た目は一切変わらない。
+        chromeless ? styles.chromeless : styles.circle,
+        { width: size, height: size, borderRadius: chromeless ? 0 : size / 2 },
         // キャンバスの矩形の上でだけスクロールを止める。この`View`の外
         // （題名入力欄・パレット・保存ボタン・過去の絵の一覧）にはこのスタイルを
         // 付けないため、画面全体のスクロール（Screenのscroll=true）は従来どおり働く。
@@ -224,6 +286,13 @@ export function DrawingCanvas({
       {...panResponder.panHandlers}
     >
       <Svg width={size} height={size}>
+        {/* [2026-09-17追加・47.6節決定14「コーナー部分の白抜け対策」] `chromeless`で
+            円形クリップが外れると、正方形の四隅（元々は透明で、外側Viewの円形
+            クリップに隠れていた部分）から背景色が透けて見えてしまう。円を描く前に
+            size×size全面を同じ背景色で塗っておく。`chromeless=false`（既存の
+            全呼び出し元）では外側Viewの円形クリップがそのまま効くため、この矩形が
+            増えても見た目には一切影響しない。 */}
+        {chromeless && <Rect x={0} y={0} width={size} height={size} fill={backgroundColor} />}
         <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={backgroundColor} />
         {lines.map((line, idx) => {
           const displayStrokeWidth = line.w ?? theme.defaultDrawingStrokeWidth;
@@ -342,6 +411,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
     backgroundColor: theme.colors.neutralSurface,
     overflow: "hidden",
+    alignSelf: "center",
+  },
+  // [2026-09-17追加・47.6節決定14] `chromeless=true`のときに使う。枠線・円形クリップを
+  // 持たない、ただの土台View（拡大中の内側キャンバス用）。
+  chromeless: {
     alignSelf: "center",
   },
   thumbnail: {

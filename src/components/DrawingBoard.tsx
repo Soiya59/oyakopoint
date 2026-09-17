@@ -24,7 +24,8 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
-import DrawingCanvas, { DrawingThumbnail } from "./DrawingCanvas";
+import { DrawingThumbnail } from "./DrawingCanvas";
+import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import { PRIZE_DOT_SIZE, prizeInnerSize } from "./FamilyTree";
@@ -186,9 +187,12 @@ export function DrawingBoard({
   // 統合。統括の実体験（塗り絵で上限到達）を踏まえ、既存の「あと少し」文言の
   // 直後に、なぜ思ったより早く「あと少し」になったのかという理由を1文足す
   // （下線部相当が追加分。新しい表示枠・新しいしきい値は追加しない）。
+  // [2026-09-17変更・主要画面ワイヤーフレーム.md 47.5節決定13] 拡大して細かく描くことも
+  // 上限接近の一因である旨を1文追記する（下線部相当が追加分。新しい表示欄・
+  // 新しいしきい値は増やさない）。
   const nearCapacityText = isChildTone
-    ? "もうすこしで いっぱいに なりそうだよ。おなじところに かさねて ぬると、はやく いっぱいに なるよ"
-    : "もうすぐ描き足せなくなります。同じ場所に重ねて塗ると上限に早く近づくため、区切りのよいところで保存すると安心です";
+    ? "もうすこしで いっぱいに なりそうだよ。おなじところに かさねて ぬったり、おおきく して こまかく かいたりすると、はやく いっぱいに なるよ"
+    : "もうすぐ描き足せなくなります。同じ場所に重ねて塗ったり、拡大して細かく描き込んだりすると上限に早く近づくため、区切りのよいところで保存すると安心です";
 
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
     setLines((prev) => {
@@ -370,7 +374,13 @@ export function DrawingBoard({
 
       {showCanvas && (
         <>
-          <DrawingCanvas
+          {/* [2026-09-17変更・主要画面ワイヤーフレーム.md 47章] 画面いっぱいのキャンバス＋
+              2倍・3倍の拡大表示（B＋C案）。`ZoomableDrawingCanvas`が内部で
+              `DrawingCanvas`を「基準直径×倍率」で描き、基準直径ぶんの円形の窓に
+              `translate`で配置する（47.3節決定8）。座標正規化・間引きロジックは
+              `DrawingCanvas.tsx`側で一切変更していない（47.4節決定12）。 */}
+          <ZoomableDrawingCanvas
+            tone={tone}
             color={color}
             strokeWidth={strokeWidth}
             lines={lines}
@@ -385,6 +395,12 @@ export function DrawingBoard({
             // このガードに掛からず起きていた。1本あたり20点＝6000/300のため、
             // 通常の使い方では線数より先に点数の上限に当たる）。
             disabled={saving || atCapacity}
+            // [主要画面ワイヤーフレーム.md 47.2節「3つのボタンの実装」] 倍率ボタンは
+            // `disabled={saving}`のみで無効化し、`atCapacity`では無効化しない
+            // （上限到達後も、拡大して見返す・「ひとつ もどす」の後に続きを描くために
+            // 拡大したままにする、といった操作を妨げないため）。
+            zoomPickerDisabled={saving}
+            editingId={editingId}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
