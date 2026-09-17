@@ -27,11 +27,21 @@ import AppButton from "./AppButton";
 import DrawingCanvas, { DrawingThumbnail } from "./DrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
+import { PRIZE_DOT_SIZE, prizeInnerSize } from "./FamilyTree";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
+
+/**
+ * [2026-09-17追加・主要画面ワイヤーフレーム.md 46.14節 決定13・開発部への実装メモ2]
+ * 「木に飾るとこう見える」縮小見本の実寸。`30`のようにハードコードせず、木側の
+ * 景品の内側サイズと同じ式（`FamilyTree.tsx`の`prizeInnerSize(PRIZE_DOT_SIZE)`、
+ * `PrizeDotView`の`innerSize`と同一）を呼ぶ。木側の直径が将来変わっても、この値は
+ * 自動的に追随する。
+ */
+const TREE_MINIATURE_SIZE = prizeInnerSize(PRIZE_DOT_SIZE);
 
 interface DrawingBoardProps {
   tone: Tone;
@@ -377,6 +387,21 @@ export function DrawingBoard({
             disabled={saving || atCapacity}
           />
 
+          {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
+              「木に飾るとこう見える」縮小見本。キャンバス直後・パレット直前に常時表示する
+              （確認画面は新設しない、決定12）。線が1本も無いときは見本欄ごと出さない
+              （決定16）。サイズは実寸のまま拡大しない（決定13、TREE_MINIATURE_SIZE参照）。
+              `lineData`は保存時に組み立てるものと同じ形をそのまま渡し、新しいステート・
+              変換ロジックは増やさない（決定14・実装メモ3）。通信は増えない（決定16・実装メモ5）。 */}
+          {lines.length > 0 && (
+            <View style={styles.treeMiniatureWrap}>
+              <DrawingThumbnail lineData={{ v: 1, lines }} size={TREE_MINIATURE_SIZE} />
+              <Text style={[captionStyle, styles.treeMiniatureText]}>
+                {isChildTone ? "きに かざると こう みえるよ" : "木に飾るとこのくらいの大きさになります"}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.paletteWrap}>
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
           </View>
@@ -472,6 +497,11 @@ export function DrawingBoard({
 }
 
 const styles = StyleSheet.create({
+  // [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10節] 「木に飾るとこう見える」
+  // 縮小見本。キャンバス（280pt）とパレットの間に置き、実物との対比自体が
+  // 「これだけ小さくなる」という情報を伝える（決定13）。
+  treeMiniatureWrap: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
+  treeMiniatureText: { textAlign: "center" },
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   // [2026-09-05追加] 線の太さ選択（21.5b節）。パレットの下・題名入力欄の上。
   strokeWidthWrap: { marginTop: theme.spacing.s4, alignItems: "center" },

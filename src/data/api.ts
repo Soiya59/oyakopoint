@@ -1643,13 +1643,24 @@ export async function fetchFamilyTreeWeeklyCompletionCounts(
  * [2026-08-26新設・第4段階] 完了報告が景品と交換済みの場合の詳細。
  * `family_tree_decorations`経由で`gacha_draws`（さらにその先の
  * `gacha_preset_ornaments`／`family_drawings`）を辿った内容（API仕様.md 12.5章）。
+ *
+ * [2026-09-17追加・主要画面ワイヤーフレーム.md 46.3節末尾「開発部への申し送り」]
+ * 木の飾りのタップ拡大表示（46.1〜46.9節）が「いつ木に飾ったか」
+ * （`decoratedAt`＝`family_tree_decorations.decorated_at`、既存カラム）と、
+ * 家族の絵の場合の「描いた人の名前・ID・題名」（`drawing.artistName`・
+ * `artistId`・`title`＝`family_drawings.artist_member_id`/`title`、既存カラム）を
+ * 必要とするため追加した。いずれも既存カラムのSELECT句への追加のみで、
+ * DBスキーマ変更は伴わない（`fetchFamilyCollectedGachaDraws`の
+ * `CollectedGachaDraw.drawing`と同じ埋め込みパターン）。
  */
 export interface FamilyTreeDotPrize {
   decorationId: string;
   drawId: string;
   prizeKind: GachaPrizeKind;
+  /** family_tree_decorations.decorated_at（いつ木に飾ったか）。 */
+  decoratedAt: string;
   presetOrnament: { display_name: string; emoji: string | null } | null;
-  drawing: { line_data: FamilyDrawingLineData } | null;
+  drawing: { line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
 }
 
 /**
@@ -1664,6 +1675,11 @@ export interface FamilyTreeDotPrize {
  * でのみ結合するため）、`family_tree_decorations`単独を起点にした本型・
  * 専用の取得関数（`fetchFamilyTreeStickerPlacements`）に置き換えた。
  * 旧`FamilyTreeDotSticker`（`FamilyTreeCompletionDot.sticker`）は廃止した。
+ *
+ * [2026-09-17追加・主要画面ワイヤーフレーム.md 46.3節末尾] 木の飾りのタップ拡大
+ * 表示（46.1〜46.9節）が「いつ置いたか」を必要とするため`decoratedAt`
+ * （`family_tree_decorations.decorated_at`、既存カラム）を追加した。SELECT句への
+ * 追加のみで、DBスキーマ変更は伴わない。
  */
 export interface FamilyTreeStickerPlacement {
   decorationId: string;
@@ -1677,6 +1693,8 @@ export interface FamilyTreeStickerPlacement {
   rarity: "bronze" | "silver" | "gold" | "crystal";
   stickerKey: string;
   displayName: string;
+  /** family_tree_decorations.decorated_at（いつ木に置いたか）。 */
+  decoratedAt: string;
 }
 
 /**
@@ -1735,9 +1753,10 @@ export async function fetchFamilyTreeCompletionDots(
     .from("chore_completions")
     .select(
       "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
-        "family_tree_decorations(id, draw_id, decoration_source, gacha_draws(prize_kind, " +
+        "family_tree_decorations(id, draw_id, decoration_source, decorated_at, gacha_draws(prize_kind, " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data)))"
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title,artist_member_id," +
+        "artist:family_members!artist_member_id(display_name))))"
     )
     .eq("family_id", familyId)
     .gte("reported_at", seasonStartIso)
@@ -1756,10 +1775,16 @@ export async function fetchFamilyTreeCompletionDots(
           id: string;
           draw_id: string | null;
           decoration_source: "gacha" | "sticker";
+          decorated_at: string;
           gacha_draws: {
             prize_kind: GachaPrizeKind;
             preset_ornament: { display_name: string; emoji: string | null } | null;
-            prize_drawing: { line_data: FamilyDrawingLineData } | null;
+            prize_drawing: {
+              line_data: FamilyDrawingLineData;
+              title: string | null;
+              artist_member_id: string;
+              artist: { display_name: string } | null;
+            } | null;
           } | null;
         }
       | null;
@@ -1778,8 +1803,16 @@ export async function fetchFamilyTreeCompletionDots(
               decorationId: decoration.id,
               drawId: decoration.draw_id,
               prizeKind: decoration.gacha_draws.prize_kind,
+              decoratedAt: decoration.decorated_at,
               presetOrnament: decoration.gacha_draws.preset_ornament,
-              drawing: decoration.gacha_draws.prize_drawing,
+              drawing: decoration.gacha_draws.prize_drawing
+                ? {
+                    line_data: decoration.gacha_draws.prize_drawing.line_data,
+                    artistName: decoration.gacha_draws.prize_drawing.artist?.display_name ?? "だれか",
+                    artistId: decoration.gacha_draws.prize_drawing.artist_member_id,
+                    title: decoration.gacha_draws.prize_drawing.title,
+                  }
+                : null,
             }
           : null;
       return {
@@ -1809,7 +1842,7 @@ export async function fetchFamilyTreeStickerPlacements(
   const { data, error } = await client
     .from("family_tree_decorations")
     .select(
-      "id, pos_x, pos_y, " +
+      "id, pos_x, pos_y, decorated_at, " +
         "sticker_purchase:ornament_sticker_purchases(id, member_id, " +
         "family_members!member_id(avatar_color), " +
         "sticker_catalog(shape, rarity, sticker_key, display_name))"
@@ -1822,6 +1855,7 @@ export async function fetchFamilyTreeStickerPlacements(
     id: string;
     pos_x: number | null;
     pos_y: number | null;
+    decorated_at: string;
     sticker_purchase: {
       id: string;
       member_id: string;
@@ -1852,6 +1886,7 @@ export async function fetchFamilyTreeStickerPlacements(
       rarity: r.sticker_purchase.sticker_catalog.rarity,
       stickerKey: r.sticker_purchase.sticker_catalog.sticker_key,
       displayName: r.sticker_purchase.sticker_catalog.display_name,
+      decoratedAt: r.decorated_at,
     });
   }
   return { ok: true, data: out };

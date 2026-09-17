@@ -1,14 +1,26 @@
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, TextStyle, View } from "react-native";
+import {
+  GestureResponderEvent,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextStyle,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import theme from "@/theme/theme";
+import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
-import type { FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
+import type { FamilyMember, FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { StickerIcon } from "./StickerIcon";
 import { useAppData } from "@/data/store";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
+import { pickNearestTreeTapTarget } from "@/lib/treeTapTargets";
 
 /**
  * 家族の木の共通ビジュアル（P26/C20/S14の3画面から共有）。
@@ -72,9 +84,20 @@ export const STICKER_DOT_SIZE = 30;
 const FLOWER_CENTER_COLOR = theme.treeColors.flowerCenter;
 
 /** 景品の識別リング（交換した本人のavatar_color、2pt実線）の太さ。 */
-const PRIZE_RING_WIDTH = 2;
+export const PRIZE_RING_WIDTH = 2;
 /** かざりつけモードで自分の色丸に添える「淡い強調」のはみ出し幅（決定8）。 */
 const MINE_HALO_PADDING = 4;
+
+/**
+ * [2026-09-17追加・主要画面ワイヤーフレーム.md 46.14節 決定13・開発部への実装メモ2]
+ * 景品の識別リング（`PRIZE_RING_WIDTH`、2pt実線）の内側に絵柄が収まる直径を計算する。
+ * `PrizeDotView`・`FreeStickerView`の`innerSize`計算と完全に同じ式をここに1箇所だけ
+ * 定義し、お絵かきの縮小見本（DrawingBoard.tsx）もこの関数を呼ぶことで、木側の直径
+ * （`PRIZE_DOT_SIZE`）が将来変わっても見本側だけ古い値のまま残る事故を防ぐ。
+ */
+export function prizeInnerSize(size: number): number {
+  return Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
+}
 
 /**
  * 文字列から決定論的な非負整数ハッシュを作る（FNV-1a＋最終ミックス）。
@@ -646,7 +669,7 @@ function PrizeDotView({
   const prize = dot.prize;
   if (!prize) return null;
   const ringColor = dotColor(dot);
-  const innerSize = Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
+  const innerSize = prizeInnerSize(size);
   return (
     <View
       style={[
@@ -700,7 +723,7 @@ function FreeStickerView({
   size: number;
 }) {
   const ringColor = placement.avatarColor ?? theme.colors.neutralBorder;
-  const innerSize = Math.max(size - PRIZE_RING_WIDTH * 2 - 2, 0);
+  const innerSize = prizeInnerSize(size);
   return (
     <View
       style={[
@@ -720,6 +743,218 @@ function FreeStickerView({
   );
 }
 
+/**
+ * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.2節] 双葉（stage1）の葉は
+ * CSSの`rotate`で左右に開いているため（`SPROUT_LEAF_ANGLE_DEG`）、葉の中の
+ * 色丸のタップ判定用の座標も、葉の中心を軸に同じ角度だけ回転させる必要がある
+ * （レイアウト計算だけでは回転前の位置のままになってしまうため）。
+ */
+function rotatePointAroundCenter(
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+  degrees: number
+): { x: number; y: number } {
+  const rad = (degrees * Math.PI) / 180;
+  const dx = x - cx;
+  const dy = y - cy;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+}
+
+/**
+ * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.1〜46.9節] タップ拡大表示の対象
+ * （景品またはステッカー1件）＋キャンバス絶対座標＋キャッチ半径。
+ * `targetId`は`src/lib/treeTapTargets.ts`の`pickNearestTreeTapTarget`に渡す
+ * 一意キー（`prize:<completion_id>` / `sticker:<decoration_id>`）。
+ */
+type TapExpandCandidate =
+  | { kind: "prize"; targetId: string; dot: FamilyTreeCompletionDot; x: number; y: number; catchRadius: number }
+  | { kind: "sticker"; targetId: string; placement: FamilyTreeStickerPlacement; x: number; y: number; catchRadius: number };
+
+type TreeTone = "parent" | "child" | "supporter";
+
+/** [2026-09-17新設・225章と同じ考え方] 拡大表示モーダルの「閉じる」ボタンの一辺の長さ。 */
+const treeCloseTapSizeFor = (tone: TreeTone) =>
+  tone === "child" ? theme.tapTarget.child : tone === "supporter" ? theme.tapTarget.supporterPrimary : theme.tapTarget.parent;
+
+/** [2026-09-17新設・225.7章と同じ式] 拡大表示カードの上端の余白（閉じるボタンの下端＋余白）。 */
+const treeExpandedCardPaddingTopFor = (tone: TreeTone) => treeCloseTapSizeFor(tone) + theme.spacing.s2 * 2;
+
+/** [2026-09-17新設・225章と同じ式] 拡大表示で絵を表示する一辺の長さを画面サイズから計算する。 */
+function computeTreeExpandedImageSize(windowWidth: number, windowHeight: number): number {
+  const overlayPadding = theme.spacing.s4;
+  const cardHorizontalPadding = theme.spacing.s4;
+  const maxByWidth = windowWidth - overlayPadding * 2 - cardHorizontalPadding * 2;
+  const maxByHeight = windowHeight * 0.5;
+  const available = Math.min(maxByWidth, maxByHeight);
+  return Math.max(160, Math.min(320, available));
+}
+
+function treeFormatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+}
+
+/**
+ * [2026-09-17新設・CollectorShelfPanel.tsxのstickerShapeLabel/stickerRarityLabelと
+ * 同じ内容を複製] `CollectorShelfPanel.tsx`は本ファイル（FamilyTree.tsx）の
+ * `TreeStageVisual`をimportしているため、逆方向のimport（本ファイルから
+ * `CollectorShelfPanel.tsx`）は循環importになり避ける必要がある
+ * （225章の`ShelfItemsGrid`拡大モーダルをこちらへ複製したのと同じ理由）。
+ */
+const treeStickerShapeLabel: Record<StickerShape, { child: string; parent: string }> = {
+  beetle: { child: "カブトムシ", parent: "カブトムシ" },
+  butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
+  flower: { child: "おはな", parent: "おはな" },
+  dragon: { child: "ドラゴン", parent: "ドラゴン" },
+};
+
+const treeStickerRarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
+  bronze: { child: "どう", parent: "銅" },
+  silver: { child: "ぎん", parent: "銀" },
+  gold: { child: "きん", parent: "金" },
+  crystal: { child: "クリスタル", parent: "クリスタル" },
+};
+
+function treeStickerEntryLabel(tone: TreeTone, shape: StickerShape, rarity: StickerRarity): string {
+  const isChild = tone === "child";
+  return `${isChild ? treeStickerShapeLabel[shape].child : treeStickerShapeLabel[shape].parent} ${
+    isChild ? treeStickerRarityLabel[rarity].child : treeStickerRarityLabel[rarity].parent
+  }`;
+}
+
+/**
+ * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.3節 決定6] 「誰が・いつ」の1行。
+ * 46.3節の文言例（子ども向け「そらが 8/20に かざったよ／きに かざったよ」、
+ * 保護者・みまもり向け「パパが8/20に木に飾りました」）をそのまま踏襲する。
+ */
+function treeDecoratedAtLine(tone: TreeTone, memberName: string, dateStr: string, isDrawing: boolean): string {
+  if (tone === "child") {
+    return isDrawing ? `${memberName}が ${dateStr}に きに かざったよ` : `${memberName}が ${dateStr}に かざったよ`;
+  }
+  return `${memberName}が${dateStr}に木に飾りました`;
+}
+
+/**
+ * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.3節 決定5〜7] 木の飾り
+ * （景品・ステッカー）のタップ拡大表示。`CollectorShelfPanel.tsx`の
+ * `ShelfItemsGrid`拡大モーダル（Modal・overlay・expandedCard・ScrollView・
+ * closeButton、実装メモ225章・225.7章）と同じ部品構成・同じ見た目を複製した
+ * （決定5「新しいモーダルの型は作らない」。225.7章の差し戻し理由〈`paddingTop`の
+ * 式・`ScrollView`での内側スクロール〉をそのまま踏襲している）。
+ */
+function TreeDecorationExpandModal({
+  target,
+  tone,
+  memberName,
+  onClose,
+}: {
+  target: TapExpandCandidate;
+  tone: TreeTone;
+  memberName: string;
+  onClose: () => void;
+}) {
+  const isChild = tone === "child";
+  const { width, height } = useWindowDimensions();
+  const expandedImageSize = computeTreeExpandedImageSize(width, height);
+  const closeSize = treeCloseTapSizeFor(tone);
+  const expandedCardPaddingTop = treeExpandedCardPaddingTopFor(tone);
+  const modalMaxHeight = height - theme.spacing.s4 * 2;
+  const closeLabel = isChild ? "とじる" : "閉じる";
+  const bodyMediumStyle = isChild
+    ? theme.typography.childBody
+    : tone === "supporter"
+    ? theme.typography.supporterBodyMedium
+    : theme.typography.parentBodyMedium;
+  const captionStyle = isChild
+    ? theme.typography.childBody
+    : tone === "supporter"
+    ? theme.typography.supporterCaption
+    : theme.typography.parentCaption;
+
+  const decoratedAt = target.kind === "prize" ? target.dot.prize?.decoratedAt : target.placement.decoratedAt;
+  const dateStr = decoratedAt ? treeFormatShortDate(decoratedAt) : "";
+
+  const prizeDrawing = target.kind === "prize" ? target.dot.prize?.drawing ?? null : null;
+  const isPresetOrnament = target.kind === "prize" && target.dot.prize?.prizeKind === "preset_ornament";
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.expandOverlay} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel}>
+        {/* [225.7章と同じ理由] カード自体は無反応のPressableで包み、背景タップの
+            クローズにタップイベントが伝播しないようにする。 */}
+        <Pressable onPress={() => {}} style={{ maxHeight: modalMaxHeight }}>
+          <ScrollView
+            style={{ maxHeight: modalMaxHeight }}
+            contentContainerStyle={[styles.expandCard, { paddingTop: expandedCardPaddingTop }]}
+            showsVerticalScrollIndicator={false}
+          >
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              style={[styles.expandCloseButton, { width: closeSize, height: closeSize, borderRadius: closeSize / 2 }]}
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel}
+            >
+              <Text style={styles.expandCloseButtonText}>×</Text>
+            </Pressable>
+
+            {target.kind === "prize" && isPresetOrnament && (
+              <View style={styles.expandContentWrap}>
+                <Text style={[styles.expandEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
+                  {target.dot.prize?.presetOrnament?.emoji ?? "🎁"}
+                </Text>
+                <View style={styles.expandTextWrap}>
+                  <Text style={[bodyMediumStyle, styles.expandCenterText]}>
+                    「{target.dot.prize?.presetOrnament?.display_name ?? "かざり"}」
+                  </Text>
+                  <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
+                    {treeDecoratedAtLine(tone, memberName, dateStr, false)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {target.kind === "prize" && !isPresetOrnament && prizeDrawing && (
+              <View style={styles.expandContentWrap}>
+                <DrawingThumbnail lineData={prizeDrawing.line_data} size={expandedImageSize} />
+                <View style={styles.expandTextWrap}>
+                  <Text style={[bodyMediumStyle, styles.expandCenterText]}>「{prizeDrawing.artistName}」の絵</Text>
+                  {prizeDrawing.title && (
+                    <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
+                      {isChild ? "だいめい：" : "題名："}
+                      {prizeDrawing.title}
+                    </Text>
+                  )}
+                  <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
+                    {treeDecoratedAtLine(tone, memberName, dateStr, true)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {target.kind === "sticker" && (
+              <View style={styles.expandContentWrap}>
+                <StickerIcon shape={target.placement.shape} rarity={target.placement.rarity} size={expandedImageSize} highRes />
+                <View style={styles.expandTextWrap}>
+                  <Text style={[bodyMediumStyle, styles.expandCenterText]}>
+                    {treeStickerEntryLabel(tone, target.placement.shape, target.placement.rarity)}
+                  </Text>
+                  <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
+                    {treeDecoratedAtLine(tone, memberName, dateStr, false)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export function TreeStageVisual({
   stage,
   dots,
@@ -728,6 +963,8 @@ export function TreeStageVisual({
   previewDecorationSize = null,
   stickerPlacements = null,
   hiddenStickerDecorationId = null,
+  enableTapExpand = false,
+  tone = "parent",
 }: {
   stage: number;
   dots: FamilyTreeCompletionDot[];
@@ -782,6 +1019,20 @@ export function TreeStageVisual({
    * ために使う。
    */
   hiddenStickerDecorationId?: string | null;
+  /**
+   * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.5節 決定9] 景品・ステッカーの
+   * タップ拡大表示（46.1〜46.9節）を有効にするかどうか。**既定はfalse（無効）**で、
+   * 既存の呼び出し元（`TreeDecoratePanel.tsx`・`TreeStickerDragCanvas.tsx`・
+   * `CollectorShelfPanel.tsx`の過去の木）は本プロパティを渡さない限り1行も
+   * 変更せずに現状のまま動く（オプトイン方式、決定9・決定10）。
+   */
+  enableTapExpand?: boolean;
+  /**
+   * [2026-09-17新設] `enableTapExpand`が真のときのみ使う、拡大表示モーダルの
+   * 文体・タップ領域の書き分け（46.4節決定8）。既定は"parent"だが、
+   * `enableTapExpand`を渡さない既存呼び出し元では一切参照されない。
+   */
+  tone?: "parent" | "child" | "supporter";
 }) {
   /**
    * [2026-09-14追加・224章・案A] `highlightCompletionId`（一覧UIで選択中の完了報告ID、
@@ -895,11 +1146,218 @@ export function TreeStageVisual({
     items: { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[]
   ) => renderPlaced(placeGroup(items, effectiveDotSize));
 
-  return (
-    <View
-      style={styles.canvas}
-      onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
-    >
+  // [2026-09-17追加・主要画面ワイヤーフレーム.md 46.5節 決定9] enableTapExpandが
+  // falseの既存呼び出し元では、以下の状態・計算は一切使われない
+  // （tapTargetsは空配列のまま、expandedTargetは常にnull、handleCanvasPressは
+  // 呼ばれない）ため、既存呼び出し元の見た目・挙動には影響しない。
+  const [expandedTarget, setExpandedTarget] = useState<TapExpandCandidate | null>(null);
+  const { state: appState } = useAppData();
+
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 46.2節・46.9節、開発部/成果物/
+   * 実装メモ.md 233章] 景品・ステッカーのタップ拡大表示のための、キャンバス全体を
+   * 基準にした絶対座標の一覧。
+   *
+   * [なぜ描画用のx/yをそのまま使えないか] 景品は樹冠の箱・幹・双葉・地面にまいた
+   * 種など、木の部位ごとに用意された「その部位を原点とするローカルな入れ物
+   * （View）」の中に配置される（下のJSX参照）。この入れ物自体がキャンバス内の
+   * どこに置かれるかはRNのflexレイアウト（`styles.canvas`の
+   * `justifyContent:"flex-end"`・`alignItems:"center"`）が決めるため、部位ごとの
+   * 入れ物の絶対位置（キャンバスの左上を原点とするオフセット）を、下のJSXが
+   * 実際に使っているのと同じ定数・同じ式で再現し、ローカル座標へ加算する。
+   * 双葉（stage1の葉）はCSSの`rotate`で開いているため、葉の中心を軸に同じ角度
+   * だけ回転させてから加算する（`rotatePointAroundCenter`）。
+   *
+   * [JSXを直接は変更しない理由] 木の見た目は統括の実機フィードバックを何度も
+   * 経て調整されたものであり（本ファイル冒頭のコメント群参照）、当たり判定の
+   * ためにJSXの構造を組み替えると見た目を壊すリスクが大きい。本ブロックは
+   * 既存のJSX（下のreturn内）を一切変更せず、`byRegion`・`placeGroup`という
+   * 既存の計算結果を再利用して並行に計算するだけの独立したロジックにしてある
+   * （46.2節「開発部への実装メモ」の『既存の計算結果をタップ判定にも使い回す』を、
+   * JSXへの侵襲を避けつつ実現する方法）。木のレイアウト定数（SOIL_HEIGHT・幹の
+   * marginTop:-2 等）や座標式を変更した場合は、本ブロックも必ず追随させること。
+   */
+  const tapTargets = useMemo((): TapExpandCandidate[] => {
+    if (!enableTapExpand) return [];
+    const targets: TapExpandCandidate[] = [];
+    const catchDiameter =
+      tone === "child" ? theme.tapTarget.child : tone === "supporter" ? theme.tapTarget.supporterPrimary : theme.tapTarget.parent;
+    const catchRadius = catchDiameter / 2;
+    // [重要] styles.canvasは`paddingBottom: theme.spacing.s4`を持つ（下記styles参照）。
+    // 土（soil）を含む流し込みレイアウトの子要素は、この内側の余白の分だけ
+    // キャンバスの外枠より上に詰められる（`justifyContent:"flex-end"`はpadding
+    // box基準）。sky/stickerOverlayのような`position:"absolute"`の層は
+    // padding boxの外枠（＝キャンバス自身の外枠）を基準にするため影響を受けない
+    // （sky/stickerOverlayのoffsetを0のままにしているのはこのため）。
+    const soilTop = CANVAS_HEIGHT - theme.spacing.s4 - SOIL_HEIGHT;
+
+    const pushPrizeDots = (
+      items: { dot: FamilyTreeCompletionDot; bounds: PlacementBounds }[],
+      offsetX: number,
+      offsetY: number,
+      rotate?: { deg: number; cx: number; cy: number }
+    ) => {
+      if (items.length === 0) return;
+      const placed = placeGroup(items, effectiveDotSize);
+      for (const { dot, x, y } of placed) {
+        if (!dot.prize) continue; // 決定1: 色丸（絵の無いもの）はタップ対象外
+        const point = rotate ? rotatePointAroundCenter(x, y, rotate.cx, rotate.cy, rotate.deg) : { x, y };
+        targets.push({
+          kind: "prize",
+          targetId: `prize:${dot.id}`,
+          dot,
+          x: offsetX + point.x,
+          y: offsetY + point.y,
+          catchRadius,
+        });
+      }
+    };
+
+    // 空（sky）。skyLayerはtop:0/left:0でキャンバスと同寸のためオフセット無し。
+    pushPrizeDots(
+      byRegion.sky.map((dot) => ({
+        dot,
+        bounds: bounds(canvasWidth / 2, CANVAS_HEIGHT * 0.36, canvasWidth / 2 - DOT_SIZE, CANVAS_HEIGHT * 0.32),
+      })),
+      0,
+      0
+    );
+
+    // 土（soil）。左端0・幅いっぱいのため縦方向のオフセットのみ加える。
+    pushPrizeDots(
+      byRegion.soil.map((dot) => ({
+        dot,
+        bounds: bounds(canvasWidth / 2, SOIL_HEIGHT / 2 + 6, canvasWidth / 2 - DOT_SIZE, SOIL_HEIGHT / 2 - DOT_SIZE),
+      })),
+      0,
+      soilTop
+    );
+
+    if (shape.kind === "tree") {
+      const { leafRadius, trunkWidth, trunkHeight } = shape;
+      const boxWidth = leafRadius * 2.7;
+      const boxHeight = leafRadius * 2.05;
+      const sideSize = leafRadius * 1.3;
+      const dotRadius = Math.max(leafRadius - DOT_SIZE, 0);
+      // 幹の下端はsoilの上端に接し（幹のmarginTop:-2は樹冠との間だけに影響）、
+      // 樹冠の下端は幹の上端より2pt下（幹のmarginTop:-2、下のJSX参照）。
+      const trunkTop = soilTop - trunkHeight;
+      const canopyBottom = trunkTop + 2;
+      const canopyTop = canopyBottom - boxHeight;
+      const canopyLeft = (canvasWidth - boxWidth) / 2;
+      const trunkLeft = (canvasWidth - trunkWidth) / 2;
+
+      pushPrizeDots(
+        [
+          ...byRegion.canopy.map((dot) => ({ dot, bounds: bounds(boxWidth / 2, leafRadius, dotRadius, dotRadius) })),
+          ...byRegion.lobeLeft.map((dot) => ({
+            dot,
+            bounds: bounds(sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE),
+          })),
+          ...byRegion.lobeRight.map((dot) => ({
+            dot,
+            bounds: bounds(boxWidth - sideSize / 2, boxHeight - sideSize / 2, sideSize / 2 - DOT_SIZE, sideSize / 2 - DOT_SIZE),
+          })),
+        ],
+        canopyLeft,
+        canopyTop
+      );
+
+      pushPrizeDots(
+        byRegion.trunk.map((dot) => ({
+          dot,
+          bounds: bounds(trunkWidth / 2, trunkHeight / 2, trunkWidth / 2 - DOT_SIZE / 2, trunkHeight / 2 - DOT_SIZE),
+        })),
+        trunkLeft,
+        trunkTop
+      );
+    } else if (shape.kind === "sprout") {
+      const { stemHeight, leafWidth, leafHeight } = shape;
+      const rx = leafWidth / 2 - DOT_SIZE / 2 - 2;
+      const ry = leafHeight / 2 - DOT_SIZE / 2 - 2;
+      const wrapperHeight = leafHeight + stemHeight;
+      const wrapperTop = soilTop - wrapperHeight;
+      const wrapperLeft = (canvasWidth - leafWidth * 2) / 2;
+      const leafCenter = { cx: leafWidth / 2, cy: leafHeight / 2 };
+
+      // 左の葉（left:0、SPROUT_LEAF_ANGLE_DEGだけ時計回りに回転、下のJSX参照）。
+      pushPrizeDots(
+        byRegion.lobeLeft.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) })),
+        wrapperLeft,
+        wrapperTop,
+        { deg: SPROUT_LEAF_ANGLE_DEG, ...leafCenter }
+      );
+      // 右の葉（right:0＝wrapperLeft+leafWidthから開始、-SPROUT_LEAF_ANGLE_DEGだけ回転）。
+      pushPrizeDots(
+        byRegion.lobeRight.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) })),
+        wrapperLeft + leafWidth,
+        wrapperTop,
+        { deg: -SPROUT_LEAF_ANGLE_DEG, ...leafCenter }
+      );
+    } else {
+      // seed: byRegionは使わずslotsそのものが1つのgroundScatterへまとまる（下のJSX参照）。
+      const groundScatterHeight = SEED_SCATTER_RADIUS * 0.42 * 2;
+      const groundScatterWidth = SEED_SCATTER_RADIUS * 2;
+      // groundScatterのmarginBottom(-R*0.42)によりsoilTopとR*0.42分重なる。
+      const groundScatterBottom = soilTop + SEED_SCATTER_RADIUS * 0.42;
+      const groundScatterTop = groundScatterBottom - groundScatterHeight;
+      const groundScatterLeft = (canvasWidth - groundScatterWidth) / 2;
+      pushPrizeDots(
+        slots.map((dot) => ({
+          dot,
+          bounds: bounds(
+            SEED_SCATTER_RADIUS,
+            SEED_SCATTER_RADIUS * 0.42,
+            SEED_SCATTER_RADIUS - DOT_SIZE / 2,
+            SEED_SCATTER_RADIUS * 0.42 - DOT_SIZE / 2
+          ),
+        })),
+        groundScatterLeft,
+        groundScatterTop
+      );
+    }
+
+    // ステッカーは元々キャンバス絶対座標（stickerOverlayがtop:0/left:0で
+    // キャンバスと同寸）で描かれているため、変換不要でそのまま使う。
+    if (stickerPlacements) {
+      for (const p of stickerPlacements) {
+        if (p.decorationId === hiddenStickerDecorationId) continue;
+        targets.push({
+          kind: "sticker",
+          targetId: `sticker:${p.decorationId}`,
+          placement: p,
+          x: (p.posX / 1000) * canvasWidth,
+          y: (p.posY / 1000) * CANVAS_HEIGHT,
+          catchRadius,
+        });
+      }
+    }
+
+    return targets;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableTapExpand, tone, byRegion, shape, canvasWidth, slots, stickerPlacements, hiddenStickerDecorationId]);
+
+  const expandedMemberName = useMemo(() => {
+    if (!expandedTarget) return "";
+    const memberId = expandedTarget.kind === "prize" ? expandedTarget.dot.reported_by : expandedTarget.placement.memberId;
+    return appState.members.find((m) => m.id === memberId)?.display_name ?? (tone === "child" ? "だれか" : "だれか");
+  }, [expandedTarget, appState.members, tone]);
+
+  /** [46.2節決定3・決定4] タップ位置に最も近い対象を選ぶ（無ければ何も起きない）。 */
+  const handleCanvasPress = (e: GestureResponderEvent) => {
+    const { locationX, locationY } = e.nativeEvent;
+    const nearestId = pickNearestTreeTapTarget(
+      locationX,
+      locationY,
+      tapTargets.map((t) => ({ id: t.targetId, x: t.x, y: t.y, catchRadius: t.catchRadius }))
+    );
+    if (nearestId == null) return;
+    const found = tapTargets.find((t) => t.targetId === nearestId) ?? null;
+    setExpandedTarget(found);
+  };
+
+  const canvasContent = (
+    <>
       {/* 背景（晴れた空）。太陽と雲は固定色で、個人色には染めない。
           いちばん背面に置き、木や色丸より目立たないよう彩度を抑える。 */}
       <View style={styles.skyBackground} pointerEvents="none">
@@ -1092,7 +1550,38 @@ export function TreeStageVisual({
             ))}
         </View>
       )}
-    </View>
+    </>
+  );
+
+  // [2026-09-17追加・主要画面ワイヤーフレーム.md 46.2節 開発部への実装メモ] 木の
+  // キャンバス全体に1つのタップ検出を置く（景品・ステッカーごとに個別の
+  // `Pressable`を重ねない）。`enableTapExpand`がfalseのとき（既存呼び出し元）は
+  // 従来どおり`View`のみを描画し、`Pressable`化・当たり判定は一切行わない
+  // （決定9「既存呼び出し元は1行も変えなくても動く」）。
+  return (
+    <>
+      {enableTapExpand ? (
+        <Pressable
+          style={styles.canvas}
+          onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
+          onPress={handleCanvasPress}
+        >
+          {canvasContent}
+        </Pressable>
+      ) : (
+        <View style={styles.canvas} onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}>
+          {canvasContent}
+        </View>
+      )}
+      {enableTapExpand && expandedTarget && (
+        <TreeDecorationExpandModal
+          target={expandedTarget}
+          tone={tone}
+          memberName={expandedMemberName}
+          onClose={() => setExpandedTarget(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -1355,6 +1844,45 @@ const styles = StyleSheet.create({
   // [2026-09-02追加] 週ごとの記録（20.1a節）。矢印・棒グラフ・色分けを使わない
   // 縦並びの数字リストのみ（決定9）。
   weeklyRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: theme.spacing.s1 },
+  // [2026-09-17新設・主要画面ワイヤーフレーム.md 46.3節] 木の飾りのタップ拡大表示。
+  // `CollectorShelfPanel.tsx`の`overlay`/`expandedCard`/`expandedCloseButton`と
+  // 見た目を揃えるため複製した（トークン参照のため値そのものは一致する。225章）。
+  expandOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing.s4,
+  },
+  expandCard: {
+    alignItems: "center",
+    backgroundColor: theme.colors.neutralSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentLg,
+    paddingHorizontal: theme.spacing.s4,
+    paddingBottom: theme.spacing.s4,
+  },
+  expandCloseButton: {
+    position: "absolute",
+    top: theme.spacing.s2,
+    right: theme.spacing.s2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.neutralBg,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+  },
+  expandCloseButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.neutralTextPrimary,
+    lineHeight: 20,
+  },
+  expandContentWrap: { alignItems: "center" },
+  expandTextWrap: { marginTop: theme.spacing.s3, alignItems: "center" },
+  expandCenterText: { textAlign: "center" },
+  expandEmoji: { fontSize: 40 },
 });
 
 export default TreeStageVisual;
