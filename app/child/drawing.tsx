@@ -27,6 +27,9 @@ export default function ChildDrawingScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // [2026-09-08追加・やること.md 4-4] 削除競合（先にガチャで公開された）の通知。
   const [deletePublishedNotice, setDeletePublishedNotice] = useState<string | null>(null);
+  // [2026-09-17追加・実装メモ243章] キャンバスに指が触れている間trueにし、
+  // 下のScreenのscrollEnabledを一時的にfalseへ切り替える（234.5節の申し送り対応）。
+  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
   const handleSave = async (lineData: FamilyDrawingLineData, title: string | null): Promise<boolean> => {
     setSaving(true);
@@ -86,7 +89,13 @@ export default function ChildDrawingScreen() {
   };
 
   return (
-    <Screen tone="child">
+    <Screen
+      tone="child"
+      // [2026-09-17追加・実装メモ243章] 描いている間だけスクロールを止める
+      // （決定的な手）。canCancelContentTouches=falseはiOSの保険（二重の守り）。
+      scrollEnabled={!canvasGestureActive}
+      canCancelContentTouches={false}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
           <Text style={theme.typography.childBody}>← もどる</Text>
@@ -123,6 +132,7 @@ export default function ChildDrawingScreen() {
             onEditSave={handleEditSave}
             onDeleteRequest={handleDeleteRequest}
             deletingId={deletingId}
+            onCanvasGestureActiveChange={setCanvasGestureActive}
           />
         </View>
       )}

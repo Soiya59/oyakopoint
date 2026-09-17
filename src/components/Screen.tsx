@@ -9,6 +9,22 @@ interface ScreenProps {
   tone?: "parent" | "child" | "supporter";
   style?: ViewStyle;
   contentStyle?: ViewStyle;
+  /**
+   * [2026-09-17追加・実装メモ243章・234.5節の申し送り] 描いている間だけ画面の
+   * スクロールを止めるための入り口。既定`true`（今までどおりスクロールできる）。
+   * `scroll=false`（ScrollViewを使わない画面）では無視される（元々スクロールしない
+   * ため実害は無いが、`Container`がViewのときはScrollView用propを渡さない）。
+   */
+  scrollEnabled?: boolean;
+  /**
+   * [2026-09-17追加・実装メモ243章] iOS専用のScrollViewの保険。`true`だと
+   * ScrollViewが「このタッチは自分のものだ」とコンテンツ側から途中で奪い取れる
+   * （既定値）。お絵かき画面のように「掴んだら離さない」子（キャンバス）を持つ
+   * 画面だけ`false`を渡し、横取りされないようにする。既定は未指定（RNの既定値
+   * `true`のまま）で、既存の呼び出し元は今までどおり動く。Android・Webではこの
+   * propは効果を持たない（iOS固有のScrollView実装のみが参照する）。
+   */
+  canCancelContentTouches?: boolean;
 }
 
 /**
@@ -24,7 +40,15 @@ interface ScreenProps {
  * （左上に寄ったまま幅だけ制限される形になり）効かないため、two-layer構成にした。
  * スマホ実機での見え方はwidth:100%のため変化しない。
  */
-export function Screen({ children, scroll = true, tone = "parent", style, contentStyle }: ScreenProps) {
+export function Screen({
+  children,
+  scroll = true,
+  tone = "parent",
+  style,
+  contentStyle,
+  scrollEnabled = true,
+  canCancelContentTouches,
+}: ScreenProps) {
   // tone="supporter"（デザイントークン.md 1.7節「neutralを基調にcolor-supporter-accentを
   // 差し色として使う」）は背景を保護者向けと同じneutralBgのままにし、差し色はボタン・見出し等
   // 個別コンポーネント側でsupporterAccentを使う設計とした（tone="child"のような全画面着色はしない）。
@@ -69,6 +93,11 @@ export function Screen({ children, scroll = true, tone = "parent", style, conten
       <Container
         style={scroll ? styles.scroll : [styles.flex, styles.outer]}
         contentContainerStyle={scroll ? styles.scrollOuter : undefined}
+        // [2026-09-17追加・実装メモ243章] scroll=falseのとき（Containerが
+        // ScrollViewではなくView）はScrollView専用propを渡さない
+        // （contentContainerStyleと同じ、上のternaryの書き方に揃える）。
+        scrollEnabled={scroll ? scrollEnabled : undefined}
+        canCancelContentTouches={scroll ? canCancelContentTouches : undefined}
       >
         <View
           style={[

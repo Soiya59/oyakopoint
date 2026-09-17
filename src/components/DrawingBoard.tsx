@@ -101,6 +101,13 @@ interface DrawingBoardProps {
   onDeleteRequest: (drawingId: string) => void;
   /** 削除処理中のdrawing id（ボタンの二重押下防止・ローディング表示用）。 */
   deletingId: string | null;
+  /**
+   * [2026-09-17追加・実装メモ243章、やること.md 4-41続き] キャンバスに指が
+   * 触れている間（ストローク中・2本指パン中）trueで呼ばれる。呼び出し元
+   * （各ロールの`drawing.tsx`）はこの値を保持し、`Screen`の`scrollEnabled`へ
+   * `!値`を渡して、描いている間だけ画面のスクロールを止める。
+   */
+  onCanvasGestureActiveChange?: (active: boolean) => void;
 }
 
 export function DrawingBoard({
@@ -118,6 +125,7 @@ export function DrawingBoard({
   onEditSave,
   onDeleteRequest,
   deletingId,
+  onCanvasGestureActiveChange,
 }: DrawingBoardProps) {
   const [lines, setLines] = useState<FamilyDrawingLine[]>([]);
   const [color, setColor] = useState<string>(theme.drawingPalette[0].value);
@@ -490,6 +498,7 @@ export function DrawingBoard({
             zoomPickerDisabled={saving}
             editingId={editingId}
             fitToCircleSignal={fitToCircleSignal}
+            onGestureActiveChange={onCanvasGestureActiveChange}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]

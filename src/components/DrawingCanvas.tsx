@@ -12,10 +12,11 @@
  *   おり（node_modules/react-native-web/src/vendor/react-native/PanResponder確認済み）、
  *   Expo Web export（GitHub Pages配信）でもマウスドラッグでの描画が動作する。
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
 import Svg, { Circle, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
+import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -119,6 +120,18 @@ interface DrawingCanvasProps {
    * （`AvatarDrawingPanel.tsx`等）には一切影響しない（下記`onPanResponderMove`参照）。
    */
   onPan?: (dx: number, dy: number) => void;
+  /**
+   * [2026-09-17追加・実装メモ243章、やること.md 4-41続き] 指がキャンバスに
+   * 触れている間（ストローク中・2本指パン中の両方を含む）trueで呼ばれ、
+   * 全ての指が離れる（または`PanResponder`がterminateされる）とfalseで呼ばれる。
+   * 234章の`onPanResponderTerminationRequest: () => false`だけではiOSの
+   * ScrollView自体のスクロールは止まらなかった（JS側の責任者交代を断っても、
+   * ネイティブ側のUIScrollViewは別にスクロールしうるため）ための追加の手当て。
+   * 呼び出し元（`ZoomableDrawingCanvas.tsx`経由）はこの値で`Screen`の
+   * `scrollEnabled`を切り替える。このpropを渡さない既存の呼び出し元
+   * （`AvatarDrawingPanel.tsx`）には一切影響しない。
+   */
+  onGestureActiveChange?: (active: boolean) => void;
 }
 
 export function DrawingCanvas({
@@ -131,6 +144,7 @@ export function DrawingCanvas({
   backgroundColor = theme.colors.neutralSurface,
   chromeless = false,
   onPan,
+  onGestureActiveChange,
 }: DrawingCanvasProps) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
@@ -153,6 +167,30 @@ export function DrawingCanvas({
   const isPanningRef = useRef(false);
   // 直前フレームの2本指の中心位置（pageX/pageY基準）。次のmoveとの差分がパン量になる。
   const panCenterRef = useRef<{ x: number; y: number } | null>(null);
+  // [2026-09-17追加・実装メモ243章] 最新のonGestureActiveChangeをrefで参照する
+  // （colorRef・onPanRefと同じ理由）。
+  const onGestureActiveChangeRef = useRef(onGestureActiveChange);
+  onGestureActiveChangeRef.current = onGestureActiveChange;
+  // 直近に通知した「指が触れている」状態。二重通知を避け、アンマウント時に
+  // trueのまま終わっていないかを判定するためにも使う（下のuseEffect参照）。
+  // 通知すべきかどうかの判定自体は`gestureActiveNotifier.ts`の純粋関数に切り出し、
+  // node単体実行で検証している（`gestureActiveNotifier.verify.ts`）。
+  const gestureActiveRef = useRef(false);
+  const setGestureActive = (active: boolean) => {
+    const result = nextGestureActiveState(gestureActiveRef.current, active);
+    if (!result.shouldNotify) return;
+    gestureActiveRef.current = result.active;
+    onGestureActiveChangeRef.current?.(result.active);
+  };
+  // [2026-09-17追加・実装メモ243章] 234.5節の申し送り「ジェスチャーが途中で
+  // 終わっても・アンマウント時も必ずtrueに戻る」の保険。この部品自体が
+  // （`showCanvas`の条件変化等で）指を触れたまま消えることがあっても、
+  // 消える瞬間にfalseを1回だけ通知する。
+  useEffect(() => {
+    return () => {
+      setGestureActive(false);
+    };
+  }, []);
 
   const toNormalized = (px: number, py: number): [number, number] => {
     const nx = Math.max(0, Math.min(1000, Math.round((px / size) * 1000)));
@@ -181,6 +219,11 @@ export function DrawingCanvas({
         !disabledRef.current && linesCountRef.current < theme.drawingLimits.maxLines,
       onMoveShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderGrant: (evt) => {
+        // [2026-09-17追加・実装メモ243章] Grantはこのキャンバスが responder に
+        // なった瞬間（＝指がキャンバス上にある間）にのみ呼ばれる
+        // （onStartShouldSetPanResponderがtrueを返したとき。disabled・上限到達
+        // 時はそもそもここへ来ない）。無条件でtrueを通知してよい。
+        setGestureActive(true);
         // Web版でのスクロール抑止の保険（主たる防御はwebTouchActionNoneStyle）。
         // react-native-webの responder システムは document に touchstart/touchmove
         // リスナーを{passive: true}指定無しで登録している
@@ -251,8 +294,18 @@ export function DrawingCanvas({
         currentPointsRef.current = next;
         setLivePoints(next);
       },
-      onPanResponderRelease: finishStroke,
-      onPanResponderTerminate: finishStroke,
+      // [2026-09-17追加・実装メモ243章] 全ての指が離れた（Release）・強制的に
+      // 責任者を失った（Terminate）のどちらでも「指が触れていない」に戻す。
+      // finishStrokeより先にfalseを通知しておく（呼び出し元がすぐscrollEnabled
+      // をtrueへ戻せるように。finishStroke自体はscrollの状態に関与しない）。
+      onPanResponderRelease: () => {
+        setGestureActive(false);
+        finishStroke();
+      },
+      onPanResponderTerminate: () => {
+        setGestureActive(false);
+        finishStroke();
+      },
       // [2026-09-17追加・やること.md 4-41・実装メモ234章] iOS実機で「長い線が描けない」
       // （線が短く途切れる）不具合への対処。キャンバスは`Screen`（scroll=true）の
       // ScrollViewの中にあり、指を動かし始めるとScrollViewが「自分がスクロールする」と

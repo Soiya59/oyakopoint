@@ -64,6 +64,13 @@ interface ZoomableDrawingCanvasProps {
    * 「48章のボタンを押した瞬間」を1行追記する形で1倍・中央へリセットする。
    */
   fitToCircleSignal: number;
+  /**
+   * [2026-09-17追加・実装メモ243章] `DrawingCanvas`の`onGestureActiveChange`を
+   * そのまま上（`DrawingBoard.tsx`）へ橋渡しする。ここでは何も加工しない
+   * （2本指パン自体は`handlePan`で別途処理しており、この値は「画面のスクロールを
+   * 止めるべきか」だけを伝えるためのもの）。
+   */
+  onGestureActiveChange?: (active: boolean) => void;
 }
 
 export function ZoomableDrawingCanvas({
@@ -76,6 +83,7 @@ export function ZoomableDrawingCanvas({
   zoomPickerDisabled = false,
   editingId,
   fitToCircleSignal,
+  onGestureActiveChange,
 }: ZoomableDrawingCanvasProps) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
@@ -173,6 +181,7 @@ export function ZoomableDrawingCanvas({
             disabled={disabled}
             chromeless
             onPan={handlePan}
+            onGestureActiveChange={onGestureActiveChange}
           />
         </View>
       </View>
