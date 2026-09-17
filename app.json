@@ -15,7 +15,8 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "associatedDomains": [
-        "applinks:soiya59.github.io"
+        "applinks:soiya59.github.io",
+        "applinks:soiyalab.com"
       ]
     },
     "android": {
@@ -42,6 +43,21 @@
             {
               "scheme": "https",
               "host": "soiya59.github.io",
+              "pathPrefix": "/oyakopoint/child/nfc-scan"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "soiyalab.com",
               "pathPrefix": "/oyakopoint/child/nfc-scan"
             }
           ],

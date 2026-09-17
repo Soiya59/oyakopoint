@@ -23,32 +23,48 @@ const { withAndroidManifest, AndroidConfig } = require("expo/config-plugins");
  * 候補にし、「NFC で見つかったリンクを開きますか？」の通知経由でブラウザが
  * 開いてしまう（2026-09-12実機確認、Android 16・versionCode 4）。
  *
- * [値の一元化] host・pathPrefixは`app.json`の
- * `expo.android.intentFilters[0].data[0]`（VIEW用に既に書いてあるもの）から
- * 読む。ここにハードコードすると、将来ドメインを変えるときに片方だけ直す
- * 事故につながるため。
+ * [値の一元化] host・pathPrefixは`app.json`の`expo.android.intentFilters`
+ * （VIEW用に既に書いてあるもの）から読む。ここにハードコードすると、将来ドメインを
+ * 変えるときに片方だけ直す事故につながるため。
+ *
+ * [2026-09-17改訂・やること.md 4-35・実装メモ232章]
+ * `app.json`のVIEW用`intentFilters`が新旧2ホスト（`soiya59.github.io`・
+ * `soiyalab.com`）に増えたため、**該当するVIEWフィルタすべて**を読んで
+ * NDEF_DISCOVEREDのintent-filterもホストの数ぶん追加するよう改めた（旧実装は
+ * `.find()`で最初の1件しか見ておらず、そのままだと新ドメインのタグをタップ
+ * したときだけNDEF_DISCOVEREDが効かず、ファイル冒頭の「なぜNDEF_DISCOVEREDが
+ * 要るか」で説明した「ブラウザ確認ダイアログを飛ばして直接アプリを起動する」
+ * 効果が新ドメインのタグに対してだけ働かなくなるところだった）。
  */
 
 const NDEF_ACTION = "android.nfc.action.NDEF_DISCOVERED";
 
-function getViewIntentFilterData(config) {
+/**
+ * `app.json`の`android.intentFilters`のうち、`action: "VIEW"`かつ`data`を
+ * 持つものすべてから、それぞれの1件目のdataを取り出す（新旧ドメインぶん
+ * 複数件になりうる）。
+ */
+function getViewIntentFilterDataList(config) {
   const intentFilters = config.android?.intentFilters ?? [];
-  const viewFilter = intentFilters.find((f) => f.action === "VIEW" && f.data);
-  const data = Array.isArray(viewFilter?.data) ? viewFilter.data[0] : viewFilter?.data;
-  if (!data?.scheme || !data?.host) {
+  const viewFilters = intentFilters.filter((f) => f.action === "VIEW" && f.data);
+  const dataList = viewFilters.map((f) => (Array.isArray(f.data) ? f.data[0] : f.data));
+  const invalid = dataList.find((data) => !data?.scheme || !data?.host);
+  if (dataList.length === 0 || invalid) {
     throw new Error(
-      "withNfcNdefIntentFilter: app.json の android.intentFilters[0].data[0] に " +
-        "scheme・host が見つかりません。NDEF_DISCOVERED用のintent-filterに使う値を" +
-        "読み込めないため中断します。"
+      "withNfcNdefIntentFilter: app.json の android.intentFilters（action: VIEW）の " +
+        "data に scheme・host が見つかりません。NDEF_DISCOVERED用のintent-filterに" +
+        "使う値を読み込めないため中断します。"
     );
   }
-  return data;
+  return dataList;
 }
 
-function hasNdefIntentFilter(mainActivity) {
+function hasNdefIntentFilterForHost(mainActivity, host) {
   const filters = mainActivity["intent-filter"] ?? [];
-  return filters.some((filter) =>
-    (filter.action ?? []).some((a) => a.$?.["android:name"] === NDEF_ACTION)
+  return filters.some(
+    (filter) =>
+      (filter.action ?? []).some((a) => a.$?.["android:name"] === NDEF_ACTION) &&
+      (filter.data ?? []).some((d) => d.$?.["android:host"] === host)
   );
 }
 
@@ -68,18 +84,21 @@ function withNfcNdefIntentFilter(config, props = {}) {
   return withAndroidManifest(config, (modConfig) => {
     const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(modConfig.modResults);
 
-    // 冪等性: prebuildを複数回走らせても、既にNDEF_DISCOVEREDのintent-filterが
-    // あれば追加しない（重複させない）。
-    if (hasNdefIntentFilter(mainActivity)) {
-      return modConfig;
-    }
-
-    const data = props.scheme && props.host ? props : getViewIntentFilterData(modConfig);
+    const dataList = props.scheme && props.host ? [props] : getViewIntentFilterDataList(modConfig);
 
     if (!Array.isArray(mainActivity["intent-filter"])) {
       mainActivity["intent-filter"] = [];
     }
-    mainActivity["intent-filter"].push(buildNdefIntentFilter(data));
+
+    for (const data of dataList) {
+      // 冪等性: prebuildを複数回走らせても、同じホストのNDEF_DISCOVERED
+      // intent-filterが既にあれば追加しない（重複させない）。ホストごとに
+      // 判定するため、新しいホストを追加したときはそのホストの分だけ足される。
+      if (hasNdefIntentFilterForHost(mainActivity, data.host)) {
+        continue;
+      }
+      mainActivity["intent-filter"].push(buildNdefIntentFilter(data));
+    }
 
     return modConfig;
   });

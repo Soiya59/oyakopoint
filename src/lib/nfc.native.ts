@@ -49,8 +49,10 @@ import type { NfcReadResult, NfcWriteResult } from "./nfc.shared";
  *
  * [Web版との整合性]
  * 書き込むNDEFレコードの1番目は、Web版とまったく同じ「chore報告画面へのURL
- * （URIレコード、`https://soiya59.github.io/oyakopoint/child/nfc-scan?
- * tagValue=...`）」にした。理由:
+ * （URIレコード、`https://soiyalab.com/oyakopoint/child/nfc-scan?
+ * tagValue=...`。2026-09-17改訂・やること.md 4-35・実装メモ232章で
+ * `soiya59.github.io`から独自ドメインへ差し替え。実際のURLは
+ * `src/lib/legalLinks.ts`の`WEB_APP_BASE_URL`から組み立てる）」にした。理由:
  * 1. 家族の端末がWeb版・ネイティブ版に一斉移行するとは限らない移行期間中も、
  *    どちらのアプリが書いたタグでも、ネイティブアプリを入れていない端末で
  *    タップすればブラウザが開いて読める（後方互換）。

@@ -36,7 +36,9 @@ export async function openExternalUrl(url: string): Promise<boolean> {
       // 窓オブジェクトを受け取る必要があるため、`noopener`は付けずに開き、
       // 直後に`opener`を切る。安全性は`noopener`と同等で、判定だけが可能になる。
       // 開く先は使い方ガイド・規約・PPのいずれも本アプリと同一オリジン
-      // （`https://soiya59.github.io`。`src/lib/legalLinks.ts`参照）なので
+      // （`https://soiyalab.com`。2026-09-17時点。`src/lib/legalLinks.ts`参照。
+      // 旧オリジン`soiya59.github.io`は独自ドメイン取得に伴いsoiyalab.comへ
+      // 301リダイレクトされる、やること.md 4-35・実装メモ232章）なので
       // `win.opener`への代入は通るが、将来ドメインが分かれた場合に
       // SecurityErrorになりうるため念のためtry/catchで囲う。
       const win = window.open(url, "_blank");

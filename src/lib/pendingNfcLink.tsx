@@ -100,10 +100,12 @@ const PendingNfcLinkContext = createContext<PendingNfcLinkValue>({
  * ネイティブにも同じ値が入っているはずだが、この関数自体はその値の有無に依存しない
  * 設計にした）が実際に入っているかを前提にせず、URL文字列内に`NFC_SCAN_PATH`が
  * どこかに含まれていれば良い、という部分一致で判定する。これにより
- * `https://soiya59.github.io/oyakopoint/child/nfc-scan?...`（プレフィックスあり）・
- * `https://soiya59.github.io/child/nfc-scan?...`（プレフィックスなし）・
+ * `https://soiyalab.com/oyakopoint/child/nfc-scan?...`（プレフィックスあり）・
+ * `https://soiyalab.com/child/nfc-scan?...`（プレフィックスなし）・
  * 将来`oyakopoint://child/nfc-scan?...`のようなカスタムスキームが来ても、
- * いずれも同じロジックで拾える。依頼では「自前で剥がす」という前提だったが、
+ * いずれも同じロジックで拾える（ホスト名を見ていないため、旧ドメイン
+ * `soiya59.github.io`が書かれた古いタグ・古いブックマークが来ても同様に拾える。
+ * 2026-09-17・やること.md 4-35・実装メモ232章）。依頼では「自前で剥がす」という前提だったが、
  * 剥がさなくても部分一致で両対応できるため、あえて剥がす処理は追加していない
  * （`NFC_SCAN_PATH`は`/child/nfc-scan`のみで他の画面パスの接頭辞になっていないため、
  * 部分一致による誤検出のリスクは実質無い。念のため直後に`?`か文字列終端が続く

@@ -12,8 +12,12 @@
  * `src/lib/nfc.native.ts`でも同じ本番オリジンを参照する（ネイティブで書き込む
  * NFCタグのURLを、Web版が書き込むURLと同じ形にするため。window.location.origin
  * が使えないネイティブ側では、この定数がその代わりになる）。
+ *
+ * [2026-09-17改訂・やること.md 4-35・実装メモ232章] 統括が独自ドメイン
+ * `soiyalab.com` を取得しGitHub Pagesに接続したため、`BASE_URL`をそちらへ
+ * 差し替えた（旧`soiya59.github.io`は現在soiyalab.comへ301リダイレクトされる）。
  */
-const BASE_URL = "https://soiya59.github.io/oyakopoint";
+const BASE_URL = "https://soiyalab.com/oyakopoint";
 export const WEB_APP_BASE_URL = BASE_URL;
 
 export const HELP_PARENT_URL = `${BASE_URL}/help/parent.html`;
