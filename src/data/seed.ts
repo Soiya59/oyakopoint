@@ -19,7 +19,7 @@ import type {
 
 export const seedFamily: Family = {
   id: "family-1",
-  name: "森下家",
+  name: "やまだ家",
   invite_code: "AB3CD9EF",
   created_at: "2026-07-01T00:00:00+09:00",
   updated_at: "2026-07-01T00:00:00+09:00",
@@ -29,7 +29,7 @@ export const seedMembers: FamilyMember[] = [
   {
     id: "member-parent-1",
     family_id: "family-1",
-    display_name: "もりした ゆう",
+    display_name: "やまだ ゆう",
     role: "parent",
     avatar_color: "#A8D5BA",
     is_owner: true,
@@ -40,7 +40,7 @@ export const seedMembers: FamilyMember[] = [
   {
     id: "member-parent-2",
     family_id: "family-1",
-    display_name: "もりした けい",
+    display_name: "やまだ けい",
     role: "parent",
     avatar_color: "#FFE5B4",
     is_owner: false,

@@ -49,7 +49,7 @@ export default function CreateFamilyScreen() {
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="例: 森下家"
+          placeholder="例: やまだ家"
           style={{
             borderWidth: 1,
             borderColor: theme.colors.neutralBorder,
