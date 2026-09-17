@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
+import type { ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
@@ -9,6 +10,23 @@ import { PendingNfcLinkProvider } from "@/lib/pendingNfcLink";
 import { completeEmailSignIn } from "@/data/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import theme from "@/theme/theme";
+import AppErrorFallback from "@/components/AppErrorFallback";
+
+/**
+ * アプリ全体のエラー境界（やること.md 4-37、開発部/成果物/実装メモ.md 242章）。
+ * expo-routerは、ルートファイルが`ErrorBoundary`という名前でexportしたコンポーネント
+ * を見つけると、そのファイルの既定export（＝このRootLayout。SafeAreaProviderから
+ * Stackまでアプリ全体のツリーそのもの）を丸ごとReactのエラー境界（内部的には
+ * `getDerivedStateFromError`を持つクラスコンポーネント）で包む。この1ファイルにだけ
+ * 置くことで、新しく増える画面（app/配下にファイルを1つ追加するだけの画面）を含めて
+ * 漏れなくカバーする（各画面に個別にexportして回る方式は書き忘れに弱いため採らず、
+ * 手書きのクラスコンポーネントで<Stack>を包む方式もexpo-router内部と同じ仕組みの
+ * 車輪の再発明になるだけのため採らなかった。選定理由の詳細は
+ * src/components/AppErrorFallback.tsxの先頭コメント参照）。
+ */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <AppErrorFallback {...props} />;
+}
 
 /**
  * マジックリンクのリダイレクトを受け取り、Supabase Authセッションへ交換する。
