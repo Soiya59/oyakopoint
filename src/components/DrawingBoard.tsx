@@ -20,7 +20,7 @@
  * （決定12〜14）。送信直前に前後の空白をトリムし、トリム後0文字なら`null`として
  * 送る（決定15、DrawingBoard内で行う）。
  */
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
@@ -31,6 +31,7 @@ import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import { PRIZE_DOT_SIZE, prizeInnerSize } from "./FamilyTree";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
+import { fitDrawingLinesToCircle } from "@/lib/fitDrawingToCircle";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -135,6 +136,35 @@ export function DrawingBoard({
   // トリム・null化は送信直前（handleSave）でのみ行う（決定15）。
   const [title, setTitle] = useState<string>("");
 
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 48.3節決定11〜13、実装メモ.md 236章]
+   * 「まんなかに おおきく」ボタンで座標変換する直前の`lines`を1つだけ保持する。
+   * 変換直後の「ひとつ もどす」1回だけ、まとめてこの内容へ戻す（決定11）。
+   * `null`のときは「戻す権利が無い（消費済み、または変換していない）」を表す。
+   * 決定12-4のとおり、新しい線を描く・ぜんぶけす・保存成功・編集開始のいずれかが
+   * 起きたら即座に破棄する（このコンポーネント内の該当箇所で`null`を代入する）。
+   */
+  const preFitLinesRef = useRef<FamilyDrawingLine[] | null>(null);
+  /**
+   * [2026-09-17追加・48.5節決定17]「まんなかに おおきく」で変換が成功するたびに
+   * 1ずつ増える値。`ZoomableDrawingCanvas`へそのまま渡し、47章の倍率・パン位置を
+   * 1倍・中央へリセットするきっかけにする（47.6節決定15の一覧に本ボタン押下を
+   * 追記する形）。
+   */
+  const [fitToCircleSignal, setFitToCircleSignal] = useState(0);
+  /**
+   * [2026-09-17追加・48.1節決定6]「まんなかに おおきく」を押したが、変換後の
+   * 見積もりバイト数がmaxBytesを超えるため変換できなかったときの案内文言。
+   * 次に`lines`が変化した瞬間に消す（下のuseEffect）。
+   */
+  const [fitBlockedMessage, setFitBlockedMessage] = useState<string | null>(null);
+  useEffect(() => {
+    setFitBlockedMessage(null);
+    // linesの参照が変わるたび（描く・ひとつもどす・ぜんぶけす・保存成功・編集開始の
+    // いずれでも）に案内を消す。「まんなかに おおきく」が失敗した場合はlinesを
+    // 変更しないため、この効果はそのタイミングでは発火しない。
+  }, [lines]);
+
   const isChildTone = tone === "child";
   const bodyStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
   const captionStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
@@ -194,7 +224,19 @@ export function DrawingBoard({
     ? "もうすこしで いっぱいに なりそうだよ。おなじところに かさねて ぬったり、おおきく して こまかく かいたりすると、はやく いっぱいに なるよ"
     : "もうすぐ描き足せなくなります。同じ場所に重ねて塗ったり、拡大して細かく描き込んだりすると上限に早く近づくため、区切りのよいところで保存すると安心です";
 
+  // [2026-09-17追加・主要画面ワイヤーフレーム.md 48.2節決定7]「まんなかに おおきく」
+  // ボタンの文言。子ども向け（C24・C25）は平仮名、保護者・みまもりメンバー向け
+  // （P30・S18）は漢字表記のみ差がある（内容は同じ）。
+  const fitToCircleLabel = isChildTone ? "まんなかに おおきく" : "中央に大きく";
+  // [2026-09-17追加・48.1節決定6] 変換すると保存できなくなる見込みのときの案内文言。
+  const fitToCircleBlockedText = isChildTone
+    ? "このえは いっぱいで、まんなかに おおきく できないよ。ひとつ もどす か すこし けすと できるようになるよ"
+    : "この絵はいっぱいで、これ以上大きくできません。「ひとつ戻す」か一部を消してから試してください";
+
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
+    // [2026-09-17追加・48.3節決定12-4] 新しい線を1本描き終えたら、「まんなかに
+    // おおきく」の一括復元の権利は即座に失効する。
+    preFitLinesRef.current = null;
     setLines((prev) => {
       if (prev.length >= theme.drawingLimits.maxLines) return prev;
       const totalPoints = prev.reduce((sum, l) => sum + l.p.length / 2, 0) + line.p.length / 2;
@@ -211,13 +253,29 @@ export function DrawingBoard({
     });
   };
 
-  const clearAll = () => setLines([]);
+  const clearAll = () => {
+    // [2026-09-17追加・48.3節決定12-4]「ぜんぶけす」でも一括復元の権利は失効する。
+    preFitLinesRef.current = null;
+    setLines([]);
+  };
 
   /** 直前の1本だけ取り消す。保存前のキャンバス上の操作なので、DBには一切触れない。
    *  編集モード中（既存の絵をなおしている最中）でも同じ関数でよい。読み込んだ線・
    *  自分で描き足した線を区別せず、キャンバス上の配列を1本分戻すだけだから
-   *  （DBには一切触れないため、`edit_unpublished_drawing()`は保存を押すまで呼ばれない）。 */
-  const undoLastStroke = () => setLines((prev) => prev.slice(0, -1));
+   *  （DBには一切触れないため、`edit_unpublished_drawing()`は保存を押すまで呼ばれない）。
+   *
+   *  [2026-09-17追加・48.3節決定11〜12]「まんなかに おおきく」を押した直後に限り、
+   *  この「ひとつ もどす」は変換前の`lines`へ一括で戻る（`preFitLinesRef`が有効な
+   *  間だけ）。消費したら即座に破棄し、次からは通常どおり最後の1本を取り除く。 */
+  const undoLastStroke = () => {
+    if (preFitLinesRef.current !== null) {
+      const restored = preFitLinesRef.current;
+      preFitLinesRef.current = null;
+      setLines(restored);
+      return;
+    }
+    setLines((prev) => prev.slice(0, -1));
+  };
 
   /**
    * 未公開の絵の編集を始める（API仕様.md 12.2a章）。対象の絵の線データを
@@ -227,6 +285,8 @@ export function DrawingBoard({
    * （21.5a節・決定19）。
    */
   const startEdit = (drawing: FamilyDrawing) => {
+    // [2026-09-17追加・48.3節決定12-4] 編集開始でも一括復元の権利は失効する。
+    preFitLinesRef.current = null;
     setConfirmingDeleteId(null);
     setEditingId(drawing.id);
     setLines(drawing.line_data.lines);
@@ -255,6 +315,8 @@ export function DrawingBoard({
     if (isEditing && editingId) {
       const ok = await onEditSave(editingId, { v: 1, lines }, titleToSend);
       if (ok) {
+        // [2026-09-17追加・48.3節決定12-4] 保存成功でも一括復元の権利は失効する。
+        preFitLinesRef.current = null;
         setLines([]);
         setEditingId(null);
         setTitle("");
@@ -263,9 +325,35 @@ export function DrawingBoard({
     }
     const ok = await onSave({ v: 1, lines }, titleToSend);
     if (ok) {
+      preFitLinesRef.current = null;
       setLines([]);
       setTitle("");
     }
+  };
+
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 48章、実装メモ.md 236章]
+   * 「まんなかに おおきく」／「中央に大きく」ボタンの押下処理。
+   * 48.1節決定1〜6の変換を`fitDrawingLinesToCircle`（純粋関数）で行い、
+   * 変換後のバイト数が上限を超える場合は変換自体を行わず案内文言を出す（決定6）。
+   * 変換が成功したら、48.3節決定11の一括復元の権利を確保しつつ、47章の倍率・
+   * パン位置を1倍・中央へリセットする（決定17、`fitToCircleSignal`をインクリメント）。
+   */
+  const handleFitToCircle = () => {
+    const result = fitDrawingLinesToCircle(lines);
+    if (!result.changed) {
+      // 決定16: 既に十分大きい（または線が無い）場合は何もしない。案内も出さない。
+      return;
+    }
+    const estimatedBytes = estimateLineDataBytes(result.lines);
+    if (estimatedBytes > theme.drawingLimits.maxBytes) {
+      // 決定6: 変換すると保存できなくなる見込みのときは、変換自体を行わない。
+      setFitBlockedMessage(fitToCircleBlockedText);
+      return;
+    }
+    preFitLinesRef.current = lines;
+    setLines(result.lines);
+    setFitToCircleSignal((n) => n + 1);
   };
 
   /**
@@ -401,6 +489,7 @@ export function DrawingBoard({
             // 拡大したままにする、といった操作を妨げないため）。
             zoomPickerDisabled={saving}
             editingId={editingId}
+            fitToCircleSignal={fitToCircleSignal}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
@@ -415,6 +504,19 @@ export function DrawingBoard({
               <Text style={[captionStyle, styles.treeMiniatureText]}>
                 {isChildTone ? "きに かざると こう みえるよ" : "木に飾るとこのくらいの大きさになります"}
               </Text>
+              {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 48章、実装メモ.md 236章]
+                  「まんなかに おおきく」ボタン。46-Bの見本の直後・パレットの直前に、
+                  見本と1組のまとまりとして配置する（48.2節決定8）。線が0本のときは
+                  見本ごと出さない（48.5節決定15、このブロックの条件と共有）。
+                  見た目はAppButtonのsecondary variant、47章の選択枠表現は使わない
+                  （48.2節決定9）。 */}
+              <AppButton
+                label={fitToCircleLabel}
+                tone={tone}
+                variant="secondary"
+                onPress={handleFitToCircle}
+                disabled={saving}
+              />
             </View>
           )}
 
@@ -460,11 +562,15 @@ export function DrawingBoard({
       )}
 
       {/* [2026-09-05変更] 既存の通信エラー表示の余白を「共有ステータス欄」として拡張
-          （21.5c節 決定26）。通信エラー＞もう描けない＞あと少しの優先順位で1つだけ
-          出す。もう描けない・あと少しはキャンバスを描いている最中にのみ意味を持つ
-          ため、showCanvas（新規作成中・編集中）のときに限る。 */}
+          （21.5c節 決定26）。通信エラー＞まんなかに おおきく できない＞もう描けない＞
+          あと少しの優先順位で1つだけ出す（48.1節決定6の優先順位「errorMessageの次・
+          atCapacityの前」）。もう描けない・あと少し・まんなかに おおきく できないは
+          キャンバスを描いている最中にのみ意味を持つため、showCanvas
+          （新規作成中・編集中）のときに限る。 */}
       {errorMessage ? (
         <Text style={styles.error}>{errorMessage}</Text>
+      ) : showCanvas && fitBlockedMessage ? (
+        <Text style={[bodyStyle, styles.atCapacity]}>{fitBlockedMessage}</Text>
       ) : showCanvas && atCapacity ? (
         <Text style={[bodyStyle, styles.atCapacity]}>{atCapacityText}</Text>
       ) : showCanvas && nearCapacity ? (

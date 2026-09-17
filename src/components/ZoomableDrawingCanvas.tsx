@@ -56,6 +56,14 @@ interface ZoomableDrawingCanvasProps {
    * 1倍・中央へリセットする。`DrawingBoard.tsx`の`editingId`をそのまま渡す。
    */
   editingId: string | null;
+  /**
+   * [2026-09-17追加・主要画面ワイヤーフレーム.md 48.5節決定17、実装メモ.md 236章]
+   * 48章「まんなかに おおきく」ボタンで座標変換が成功するたびに1ずつ増える値。
+   * `DrawingBoard.tsx`側でボタン押下・変換成功のたびにインクリメントして渡す。
+   * 47.6節決定15の一覧（キャンバスが空になった瞬間・編集開始の瞬間）に、
+   * 「48章のボタンを押した瞬間」を1行追記する形で1倍・中央へリセットする。
+   */
+  fitToCircleSignal: number;
 }
 
 export function ZoomableDrawingCanvas({
@@ -67,6 +75,7 @@ export function ZoomableDrawingCanvas({
   disabled = false,
   zoomPickerDisabled = false,
   editingId,
+  fitToCircleSignal,
 }: ZoomableDrawingCanvasProps) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
@@ -101,6 +110,17 @@ export function ZoomableDrawingCanvas({
     }
     // editingIdの変化だけを見る（他の依存はresetZoom自体が参照する最新stateで十分）。
   }, [editingId]);
+
+  // 48.5節決定17: 48章の「まんなかに おおきく」ボタンで座標変換が成功するたびに
+  // （2倍・3倍で拡大中であっても）1倍・中央へリセットする。初回マウント時は
+  // 値が変化していない（前回値と同じ）ため発火しない（lines.length監視と同じ方式）。
+  const prevFitToCircleSignalRef = useRef(fitToCircleSignal);
+  useEffect(() => {
+    if (prevFitToCircleSignalRef.current !== fitToCircleSignal) {
+      resetZoom();
+    }
+    prevFitToCircleSignalRef.current = fitToCircleSignal;
+  }, [fitToCircleSignal]);
 
   const handleLayout = (e: LayoutChangeEvent) => {
     setMeasuredWidth(e.nativeEvent.layout.width);
