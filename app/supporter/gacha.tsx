@@ -60,7 +60,10 @@ export default function SupporterGachaScreen() {
           { marginTop: theme.spacing.s2, textAlign: "center", color: theme.colors.neutralTextSecondary },
         ]}
       >
-        クエストをがんばると引けるようになる、景品ガチャです。当たった景品は木に飾れます。
+        クエストをがんばると引けるようになる、景品ガチャです。{"\n"}
+        当たった景品はコレクションに入ります。{"\n"}
+        コレクションでは、景品を大きく表示できます。{"\n"}
+        木に飾れるのは家族の絵だけです（絵文字は飾れません）。
       </Text>
 
       <GachaDrawPanel
