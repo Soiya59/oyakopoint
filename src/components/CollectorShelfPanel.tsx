@@ -385,13 +385,21 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
 
       {selectedItem && (
         <Modal visible transparent animationType="fade" onRequestClose={closeDetail}>
-          <Pressable style={styles.overlay} onPress={closeDetail} accessibilityRole="button" accessibilityLabel={closeLabel}>
-            {/* [2026-09-14] カード自体は無反応のPressableで包み、背景タップの
-                クローズ（上のPressable）にタップイベントが伝播しないようにする
-                （`MemberAvatar.tsx`と同じ手当て）。`ScrollView`自体はタップの
-                伝播を確実に止める保証が無いため、この無反応Pressableは
-                `ScrollView`の外側に残す（225.7章、本部長差し戻し対応）。 */}
-            <Pressable onPress={() => {}} style={{ maxHeight: modalMaxHeight }}>
+          <View style={styles.overlay}>
+            {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
+                押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
+                中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
+                外側の Pressable が押下を受け取れない端末があった。**背景の受け皿を absoluteFill の
+                Pressable として下に敷き、カードを兄弟として上に置く**（入れ子に依存しない）。
+                あわせて統括の要望「絵と×以外はどこを押しても閉じる」を入れる：本文ブロックを
+                閉じる Pressable にし、絵（絵文字・お絵かき・ステッカー）だけ無反応の Pressable で包む。 */}
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={closeDetail}
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel}
+            />
+            <View style={{ maxHeight: modalMaxHeight }}>
               {/* [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] `maxHeight`を
                   超える内容（小さい・横長の端末で絵＋複数行の文字がすべて乗った
                   とき）は、カードの外にはみ出させず内側でスクロールさせる。
@@ -413,10 +421,12 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                 </Pressable>
 
                 {selectedItem.prizeKind === "preset_ornament" ? (
-                <View style={styles.detailDrawingWrap}>
-                  <Text style={[styles.detailEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
-                    {selectedItem.presetOrnament?.emoji ?? "🎁"}
-                  </Text>
+                <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
+                  <Pressable onPress={() => {}}>
+                    <Text style={[styles.detailEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
+                      {selectedItem.presetOrnament?.emoji ?? "🎁"}
+                    </Text>
+                  </Pressable>
                   <View style={styles.detailDrawingTextWrap}>
                     <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
                       {selectedItem.presetOrnament?.display_name ?? "かざり"}
@@ -426,7 +436,7 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                       {isChild ? "が みつけたよ" : "が獲得"}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               ) : selectedItem.drawing ? (
                 // [2026-09-14改訂・実装メモ225章] 従来はグリッド直下のインライン
                 // カード内で220pt固定表示していたが、モーダル化に伴い画面サイズから
@@ -434,8 +444,10 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                 // 160〜320ptの範囲で可変）で表示するよう変更した。縦積み
                 // （絵を中央上、テキストをその下に中央寄せ）のレイアウト自体は
                 // 2026-09-09時点のものをそのまま踏襲する。
-                <View style={styles.detailDrawingWrap}>
-                  <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
+                  <Pressable onPress={() => {}}>
+                    <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                  </Pressable>
                   <View style={styles.detailDrawingTextWrap}>
                     <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
                       {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
@@ -460,11 +472,11 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                       {isChild ? "が みつけたよ" : "が獲得"}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               ) : null}
               </ScrollView>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
       )}
     </>

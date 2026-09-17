@@ -912,10 +912,21 @@ function TreeDecorationExpandModal({
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.expandOverlay} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel}>
-        {/* [225.7章と同じ理由] カード自体は無反応のPressableで包み、背景タップの
-            クローズにタップイベントが伝播しないようにする。 */}
-        <Pressable onPress={() => {}} style={{ maxHeight: modalMaxHeight }}>
+      <View style={styles.expandOverlay}>
+        {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
+                押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
+                中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
+                外側の Pressable が押下を受け取れない端末があった。**背景の受け皿を absoluteFill の
+                Pressable として下に敷き、カードを兄弟として上に置く**（入れ子に依存しない）。
+                あわせて統括の要望「絵と×以外はどこを押しても閉じる」を入れる：本文ブロックを
+                閉じる Pressable にし、絵（絵文字・お絵かき・ステッカー）だけ無反応の Pressable で包む。 */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={closeLabel}
+        />
+        <View style={{ maxHeight: modalMaxHeight }}>
           <ScrollView
             style={{ maxHeight: modalMaxHeight }}
             contentContainerStyle={[styles.expandCard, { paddingTop: expandedCardPaddingTop }]}
@@ -932,10 +943,12 @@ function TreeDecorationExpandModal({
             </Pressable>
 
             {target.kind === "prize" && isPresetOrnament && (
-              <View style={styles.expandContentWrap}>
-                <Text style={[styles.expandEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
-                  {target.dot.prize?.presetOrnament?.emoji ?? "🎁"}
-                </Text>
+              <Pressable style={styles.expandContentWrap} onPress={onClose}>
+                <Pressable onPress={() => {}}>
+                  <Text style={[styles.expandEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
+                    {target.dot.prize?.presetOrnament?.emoji ?? "🎁"}
+                  </Text>
+                </Pressable>
                 <View style={styles.expandTextWrap}>
                   <Text style={[bodyMediumStyle, styles.expandCenterText]}>
                     「{target.dot.prize?.presetOrnament?.display_name ?? "かざり"}」
@@ -944,12 +957,14 @@ function TreeDecorationExpandModal({
                     {treeDecoratedAtLine(tone, memberName, dateStr, false)}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             )}
 
             {target.kind === "prize" && !isPresetOrnament && prizeDrawing && (
-              <View style={styles.expandContentWrap}>
-                <DrawingThumbnail lineData={prizeDrawing.line_data} size={expandedImageSize} />
+              <Pressable style={styles.expandContentWrap} onPress={onClose}>
+                <Pressable onPress={() => {}}>
+                  <DrawingThumbnail lineData={prizeDrawing.line_data} size={expandedImageSize} />
+                </Pressable>
                 <View style={styles.expandTextWrap}>
                   <Text style={[bodyMediumStyle, styles.expandCenterText]}>「{prizeDrawing.artistName}」の絵</Text>
                   {prizeDrawing.title && (
@@ -962,12 +977,14 @@ function TreeDecorationExpandModal({
                     {treeDecoratedAtLine(tone, memberName, dateStr, true)}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             )}
 
             {target.kind === "sticker" && (
-              <View style={styles.expandContentWrap}>
-                <StickerIcon shape={target.placement.shape} rarity={target.placement.rarity} size={expandedImageSize} highRes />
+              <Pressable style={styles.expandContentWrap} onPress={onClose}>
+                <Pressable onPress={() => {}}>
+                  <StickerIcon shape={target.placement.shape} rarity={target.placement.rarity} size={expandedImageSize} highRes />
+                </Pressable>
                 <View style={styles.expandTextWrap}>
                   <Text style={[bodyMediumStyle, styles.expandCenterText]}>
                     {treeStickerEntryLabel(tone, target.placement.shape, target.placement.rarity)}
@@ -976,11 +993,11 @@ function TreeDecorationExpandModal({
                     {treeDecoratedAtLine(tone, memberName, dateStr, false)}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
