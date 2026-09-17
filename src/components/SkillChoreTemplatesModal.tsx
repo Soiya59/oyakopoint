@@ -38,6 +38,13 @@ export function SkillChoreTemplatesModal({ visible, tone = "parent", onClose, on
             </Pressable>
           </View>
 
+          {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ239章] モーダル冒頭1行の
+              一言案内。既存の「〜の練習になっています」注記は本モーダルにまだ無いため、
+              その注記が置かれるはずの位置（冒頭1行）にこの案内を置く。 */}
+          <Text style={[captionStyle, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 }]}>
+            おてつだい は ポイント。まいにちの おやくそく は シール。
+          </Text>
+
           <Text style={[bodyStyle, styles.intro]}>
             えらぶと、ないようが入った状態でひらきます。あとから自由に変えられます。
           </Text>

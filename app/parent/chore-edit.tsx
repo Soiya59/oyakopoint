@@ -647,6 +647,15 @@ export default function ChoreEditScreen() {
           </Text>
         )}
       </Text>
+      {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ239章] たまり方の一言案内。
+          rewardModeの値（ポイント／台紙）どちらでも見える位置（「たまり方」欄の直下・
+          分岐の外）に置く。子ども向け画面には出さない（P11は保護者専用画面）。 */}
+      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        おてつだい は ポイント。まいにちの おやくそく は シール。
+      </Text>
+      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        1回ずつ手間がかかることはポイントに。毎日の小さな約束は台紙に。ポイントは「ごほうび」に、シールは「フィギュア」になります
+      </Text>
 
       {/* [新設・2026-09-17・決定5・6] 台紙の種類（habit_kind_key）。たまり方＝台紙の
           ときのみ必須項目として表示する。32.1節メダル購入画面と同じ「1行1種類」の

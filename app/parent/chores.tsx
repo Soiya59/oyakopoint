@@ -172,7 +172,7 @@ export default function ChoresListScreen() {
           常時表示のテキストリンク。 */}
       <Pressable onPress={() => setSkillTemplatesVisible(true)} style={{ marginTop: theme.spacing.s2 }}>
         <Text style={[theme.typography.parentBody, { color: theme.colors.brandPrimaryStrong }]}>
-          🌱 せいかつ・きもちの型から選ぶ
+          🌱 おやくそくの型から選ぶ
         </Text>
       </Pressable>
 

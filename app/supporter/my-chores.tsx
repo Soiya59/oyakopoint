@@ -141,7 +141,7 @@ export default function SupporterMyChoresScreen() {
 
       <Pressable onPress={() => setSkillTemplatesVisible(true)} style={{ marginTop: theme.spacing.s2 }}>
         <Text style={[theme.typography.supporterBody, { color: theme.colors.supporterAccent }]}>
-          🌱 せいかつ・きもちの型から選ぶ
+          🌱 おやくそくの型から選ぶ
         </Text>
       </Pressable>
 

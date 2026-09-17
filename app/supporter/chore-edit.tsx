@@ -373,6 +373,15 @@ export default function SupporterChoreEditScreen() {
           </Text>
         )}
       </Text>
+      {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ239章] たまり方の一言案内。
+          rewardModeの値（ポイント／台紙）どちらでも見える位置（「たまり方」欄の直下・
+          分岐の外）に置く。子ども向け画面には出さない（S6はみまもりメンバー専用画面）。 */}
+      <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        おてつだい は ポイント。まいにちの おやくそく は シール。
+      </Text>
+      <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+        1回ずつ手間がかかることはポイントに。毎日の小さな約束は台紙に。ポイントは「ごほうび」に、シールは「フィギュア」になります
+      </Text>
 
       {rewardMode === "habit_card" && (
         <>
