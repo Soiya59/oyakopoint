@@ -195,7 +195,9 @@ export default function ParentFamilyTabScreen() {
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>
+                  {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLの
+                      ため何も添えない。 */}
+                  {c.points != null && <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>}
                   <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
                     {formatDateTimeShort(c.reported_at)}
                   </Text>

@@ -1,12 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ChildTabHeader from "@/components/ChildTabHeader";
 import MemberAvatar from "@/components/MemberAvatar";
+import HabitCardStrip from "@/components/HabitCardStrip";
+import ChildHabitCardModal from "@/components/ChildHabitCardModal";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
+import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -56,6 +59,13 @@ export default function ChildSelfTabScreen() {
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const latestEntry = fullLedger(me.id)[0] ?? null;
 
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9・12]
+  // 台紙カード。対象クエストを1件も持たないメンバーにはHabitCardStrip自体が
+  // 何も描画しない（決定9、カード内部で0件判定済み）。
+  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
+  const { activeCards } = useHabitCardsForMember(me.id);
+  const [habitCardModalVisible, setHabitCardModalVisible] = useState(false);
+
   const shortcuts: ShortcutItem[] = [
     { emoji: "🎁", label: "ごほうび", path: "/child/rewards" },
     { emoji: "🪙", label: "メダル", path: "/child/sticker-shop" },
@@ -97,6 +107,23 @@ export default function ChildSelfTabScreen() {
           )}
         </Card>
       </Pressable>
+
+      <HabitCardStrip
+        tone="child"
+        cards={activeCards}
+        chores={state.chores}
+        catalog={habitFigureCatalog}
+        onPressCard={() => setHabitCardModalVisible(true)}
+      />
+
+      <ChildHabitCardModal
+        visible={habitCardModalVisible}
+        onClose={() => setHabitCardModalVisible(false)}
+        members={state.members}
+        myMemberId={me.id}
+        chores={state.chores}
+        catalog={habitFigureCatalog}
+      />
 
       <Text style={[theme.typography.childBody, styles.sectionHeading]}>じぶんのこと</Text>
       <View style={styles.grid}>

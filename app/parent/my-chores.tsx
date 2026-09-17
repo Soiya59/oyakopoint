@@ -16,6 +16,8 @@ import {
   CANCEL_SUCCESS_TEXT,
   cancelCompletionErrorText,
 } from "@/lib/cancelChoreCompletion";
+import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 
 /**
  * P19 じぶんのお手伝い一覧（保護者、要件定義書07-4章「親の完了報告」）
@@ -58,6 +60,9 @@ export default function ParentMyChoresScreen() {
   }, [params.justChoreId, params.justTitle, params.justPoints]);
 
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.5章決定14]
+  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
+  const { activeCards: habitActiveCards } = useHabitCardsForMember(state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // ここは「これからやる」ための一覧なので、役目を終えた単発が残っていても押せないだけで邪魔になる。
   // 管理用の一覧（P10 app/parent/chores.tsx）では折りたたみセクションとして引き続き確認できる。
@@ -137,7 +142,7 @@ export default function ParentMyChoresScreen() {
                 <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.chore_title}
                 </Text>
-                <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                {c.points != null && <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>}
                 <Pressable
                   onPress={() => handleCancelRecentCompletion(c.id)}
                   disabled={cancelingCompletionId === c.id}
@@ -219,7 +224,9 @@ export default function ParentMyChoresScreen() {
                   <Text style={styles.doneLabel}>きろくずみ</Text>
                 ) : (
                   <>
-                    <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
+                    <Text style={theme.typography.parentBodyMedium}>
+                      {formatChoreRowRewardLabel(c, habitActiveCards, habitFigureCatalog)}
+                    </Text>
                     <Text style={styles.chevron}>›</Text>
                   </>
                 )}

@@ -16,6 +16,9 @@ import {
   CANCEL_SUCCESS_TEXT,
   cancelCompletionErrorText,
 } from "@/lib/cancelChoreCompletion";
+import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
+import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
 
 /**
  * S5 クエスト一覧（みまもりメンバー）
@@ -44,6 +47,9 @@ import {
 export default function SupporterMyChoresScreen() {
   const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.5章決定14]
+  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
+  const { activeCards: habitActiveCards } = useHabitCardsForMember(state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
   // [2026-09-06改訂・07-18章] 'personal'（既存分）に加え'supporter_shared'（新規分）も
@@ -83,6 +89,8 @@ export default function SupporterMyChoresScreen() {
   // 完了報告への入口の発見しやすさを損なわないため）。折りたたみは区分の開閉だけで、
   // 中の完了報告の入口には触らない（07-20章決定3）。
   const [othersOpen, setOthersOpen] = useState(true);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.7章決定19]
+  const [skillTemplatesVisible, setSkillTemplatesVisible] = useState(false);
 
   const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
@@ -131,6 +139,22 @@ export default function SupporterMyChoresScreen() {
         ダイエット・運動・勉強など、じぶんの目標を登録できます。完了報告には通常どおりポイントが付きます。ここに登録したクエストは家族みんなに見えます。
       </Text>
 
+      <Pressable onPress={() => setSkillTemplatesVisible(true)} style={{ marginTop: theme.spacing.s2 }}>
+        <Text style={[theme.typography.supporterBody, { color: theme.colors.supporterAccent }]}>
+          🌱 せいかつ・きもちの型から選ぶ
+        </Text>
+      </Pressable>
+
+      <SkillChoreTemplatesModal
+        visible={skillTemplatesVisible}
+        tone="supporter"
+        onClose={() => setSkillTemplatesVisible(false)}
+        onSelect={(t) => {
+          setSkillTemplatesVisible(false);
+          router.push({ pathname: "/supporter/chore-edit", params: { recId: t.id } });
+        }}
+      />
+
       {/* [2026-09-06追加] 28.11.2節「さっきの記録」。決定9のとおりP19と完全に同一の
           設計。該当が無ければブロックごと出さない。既存の2段構成より上に置く（決定12）。 */}
       {recentSelfCompletions.length > 0 && (
@@ -143,7 +167,7 @@ export default function SupporterMyChoresScreen() {
                 <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.chore_title}
                 </Text>
-                <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
+                {c.points != null && <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>}
                 <Pressable
                   onPress={() => handleCancelRecentCompletion(c.id)}
                   disabled={cancelingCompletionId === c.id}
@@ -190,7 +214,9 @@ export default function SupporterMyChoresScreen() {
                   {done ? (
                     <Text style={styles.doneLabel}>きろくずみ</Text>
                   ) : (
-                    <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
+                    <Text style={theme.typography.supporterBodyMedium}>
+                      {formatChoreRowRewardLabel(c, habitActiveCards, habitFigureCatalog)}
+                    </Text>
                   )}
                 </Pressable>
                 <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
@@ -259,7 +285,11 @@ export default function SupporterMyChoresScreen() {
                         <View key={c.id} style={styles.refItem}>
                           <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
                           <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
-                          <Text style={theme.typography.supporterCaption}>+{c.points}pt</Text>
+                          {/* [2026-09-17改訂・要件定義書07-28章] 台紙型（他のみまもりメンバーの
+                              自分専用クエスト）はポイントを持たないため、ここでは何も添えない。
+                              累計表示は本人以外のデータを都度取得するコストが見合わないため
+                              対象外とする（決定14は本人の一覧行が対象）。 */}
+                          {c.points != null && <Text style={theme.typography.supporterCaption}>+{c.points}pt</Text>}
                         </View>
                       );
                     })}

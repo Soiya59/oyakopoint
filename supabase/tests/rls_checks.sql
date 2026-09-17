@@ -365,6 +365,30 @@
 -- （A23〜A25と同じ形）。本マイグレーションは181章時点でローカルDocker環境に
 -- 適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-17更新・開発部／実装メモ237章] 習慣カード（台紙）とフィギュア
+-- （要件定義書07-28章、設計部/成果物/スキーマ設計.sql 55章、
+-- supabase/migrations/20260925010000_habit_cards_and_figures.sql）対応で
+-- S1（31→34、habit_figure_catalog・habit_cards・habit_figure_grantsを追加）・
+-- S3（60→63本、上記3テーブルのSELECTポリシー3本を追加）・
+-- S4（65→71件、chores_after_insert_create_habit_card・habit_cards_before_write・
+-- habit_card_progress_bump・end_habit_card・decorate_tree_with_habit_figure・
+-- move_tree_habit_figureの6件を追加）を更新した。A層にA29（habit_cards）・
+-- A30（habit_figure_grants）を追加した（A23〜A28と同じ形）。ハッシュ・件数は
+-- いずれもローカルDockerで実測して確認した（96.5章の遵守）。ローカルで全52件
+-- PASSを確認済み（開発部/成果物/実装メモ.md 237章）。本番へは未適用（本部長の
+-- 操作を待つ）。
+--
+-- [同時修正・pre-existing gapの発見] 上記の実測時、本ファイルを更新する前の
+-- 時点で既にS1=31・S4=65（30・63ではない）とズレていることを発見した。原因は
+-- `20260924010000_member_avatars.sql`（07-28章とは無関係の別タスク「アバターを
+-- お絵かきにする」の成果物）がmember_avatarsテーブル・2ポリシー・2関数
+-- （is_valid_avatar_line_data・member_avatars_before_write）を追加していたに
+-- もかかわらず、当時このファイルへ一度も反映されていなかったこと
+-- （同マイグレーション30行目に「S1: +1」との自己申告コメントがあったが、
+-- 本ファイル側の更新が漏れていた）。「既存の検査が全部通ること」を満たすため、
+-- 07-28章の担当外だがこのタスクの中であわせて反映した（S1に+1、S3に+2、
+-- S4に+2、A31を新設）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -416,8 +440,21 @@ GRANT INSERT ON _r TO authenticated;
 -- 実装メモ.md 201章）に伴い、family_sticker_pricesを追加。29→30。設計部53.12章の
 -- 見込み（29→30）と一致した（ローカルDockerで実測。96.5章の遵守。
 -- sticker_catalog_effective_pricesはViewのためS1には数えない）。
+-- [2026-09-17再更新・開発部/成果物/実装メモ.md 237章] 07-28章「習慣カード（台紙）と
+-- フィギュア」対応（supabase/migrations/20260925010000_habit_cards_and_figures.sql）で
+-- habit_figure_catalog・habit_cards・habit_figure_grantsの3テーブルを追加。30→33。
+--
+-- [同時発見・pre-existing gap] ローカルDockerで実測したところ、本ファイルを更新する
+-- 前の時点で既に実際の値が31（30ではない）だった。原因を調査した結果、
+-- `20260924010000_member_avatars.sql`（アバターをお絵かきにする機能、本タスクとは
+-- 無関係の別タスクの成果物）がmember_avatarsテーブルを新規にRLS有効化していたが
+-- （同マイグレーション30行目に「S1: +1」との自己申告コメントがあるにもかかわらず）、
+-- 本ファイルの当時の更新でこの分がS1・S3・S4のいずれにも反映されていなかった
+-- （本ファイルにmember_avatarsの記載が1件も無いことで確認）。07-28章の担当外だが、
+-- 「既存の検査が全部通ること」を満たすため、このタスクの中であわせて反映した
+-- （開発部/成果物/実装メモ.md 237章に経緯を記録）。31+3=34。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '30', count(*)::text, count(*) = 30
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '34', count(*)::text, count(*) = 34
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -582,6 +619,18 @@ WITH expected(t, p, c, h) AS (VALUES
   ('gratitude_points','gratitude_points_insert_self','INSERT','3a333e6d1714c61877e086de96092891'),
   ('gratitude_points','gratitude_points_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gratitude_points','gratitude_points_update_revoke_by_sender','UPDATE','5cc6c5f5c30e0d1ecae492e233a49ac1'),
+  -- [2026-09-17追加] 習慣カード（台紙）とフィギュア（要件定義書07-28章、設計部/
+  -- 成果物/スキーマ設計.sql 55章、開発部/成果物/実装メモ.md 237章）。
+  -- habit_cards・habit_figure_grantsのSELECT条件式`family_id = current_family_id()`は
+  -- 既存の多数のSELECTポリシーと文字通り同一のためハッシュを引き写せる（104章の
+  -- 教訓）。habit_figure_catalogのSELECT条件式`true`（TO authenticated）は
+  -- sticker_catalog_select_authenticated等と文字通り同一のため同じハッシュに
+  -- なる。いずれもローカルDockerで実測して確認した。INSERT/UPDATE/DELETE
+  -- ポリシーは3テーブルとも一切定義しない（書き込みはトリガー・
+  -- end_habit_card()等のSECURITY DEFINER関数のみに閉じる、55.10章）。
+  ('habit_cards','habit_cards_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  ('habit_figure_catalog','habit_figure_catalog_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
+  ('habit_figure_grants','habit_figure_grants_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   -- [2026-09-02追加] join_consents（招待受諾フローにおける可視範囲の説明と同意
   -- 取得、設計部/成果物/スキーマ設計.sql 40.4章、開発部/成果物/実装メモ.md
   -- 111章）。INSERT/UPDATE/DELETEポリシーは1本も定義しない設計（40.4章、書込みは
@@ -600,6 +649,18 @@ WITH expected(t, p, c, h) AS (VALUES
   -- sticker_catalogのSELECT条件式`true`（TO authenticated）はgacha_preset_ornaments_
   -- select_authenticatedと文字通り同一のため同じハッシュになる。いずれもローカル
   -- Dockerで実測して確認した。
+  -- [2026-09-17追加・pre-existing gap修正、開発部/成果物/実装メモ.md 237章]
+  -- member_avatars（要件定義書07-27章、`20260924010000_member_avatars.sql`、
+  -- 07-28章とは無関係の別タスクの成果物）が本ファイルに一度も反映されて
+  -- いなかったことをローカルDockerでの実測時に発見し、あわせて追加した。
+  -- SELECT条件式`family_id = current_family_id()`は既存の多数のSELECT
+  -- ポリシーと文字通り同一のためハッシュを引き写せる（104章の教訓）。
+  -- write_self_or_parent（FOR ALL）の条件式`family_id = current_family_id()
+  -- AND (is_current_user_parent() OR member_id = current_family_member_id())`は
+  -- 承認済み一覧に文字通り同一のものが無い新しい形であり、ローカルDockerで
+  -- 実測した。
+  ('member_avatars','member_avatars_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  ('member_avatars','member_avatars_write_self_or_parent','ALL','17f6d38cb67dc4f94ec44da5105695c5'),
   ('member_badges','member_badges_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('ornament_sticker_purchases','ornament_sticker_purchases_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('push_tokens','push_tokens_delete_self','DELETE','d2d83fd3535d0c4e22eba82950957a4e'),
@@ -650,7 +711,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー58本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー63本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -677,6 +738,14 @@ WITH expected(f) AS (VALUES
   -- 新規関数作成時にauthenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動）。
   ('chore_nfc_tags_before_write'),
   ('chore_reactions_before_insert'),
+  -- [2026-09-17追加] chores_after_insert_create_habit_card（習慣カードの台紙自動
+  -- 作成、要件定義書07-28章、設計部/成果物/スキーマ設計.sql 55.6章、開発部/成果物/
+  -- 実装メモ.md 237章）。SECURITY DEFINERだが明示的なREVOKEを行っていない
+  -- （chores_after_insert_create_habit_card自体は書き込み対象をhabit_cardsに
+  -- 限定する専用トリガーのため、他の非SECURITY DEFINERトリガー関数と同じ扱いで
+  -- 問題ない）ため、新規関数作成時にauthenticatedへEXECUTE権限が自動付与される
+  -- （34.5章の既知の挙動）。
+  ('chores_after_insert_create_habit_card'),
   ('chores_before_write'),('create_family_with_owner'),('current_family_id'),
   ('current_family_member_id'),('current_family_role'),
   -- [2026-09-02追加] current_join_consent_version（招待受諾フローにおける可視範囲の
@@ -692,12 +761,24 @@ WITH expected(f) AS (VALUES
   -- 自動付与される（34.5章の既知の挙動）。明示的なREVOKEは行っていない。
   ('current_terms_consent_version'),
   ('decorate_tree_with_gacha_prize'),
+  -- [2026-09-17追加] decorate_tree_with_habit_figure（習慣カードのフィギュアを
+  -- 木に自由配置する、要件定義書07-28章決定21、設計部/成果物/スキーマ設計.sql
+  -- 55.9章、開発部/成果物/実装メモ.md 237章）。decorate_tree_with_sticker()等と
+  -- 同じくSECURITY DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえで
+  -- authenticatedへ明示的にGRANTしている。
+  ('decorate_tree_with_habit_figure'),
   -- [2026-09-07追加] decorate_tree_with_sticker（木を飾るステッカー購入とバッジ、
   -- 設計部/成果物/スキーマ設計.sql 47.3章、開発部/成果物/実装メモ.md 138章）。
   -- decorate_tree_with_gacha_prize()等と同じくSECURITY DEFINERであり、
   -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   ('decorate_tree_with_sticker'),
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
+  -- [2026-09-17追加] end_habit_card（習慣カードを「おわりにする」、要件定義書
+  -- 07-28章決定18・19、設計部/成果物/スキーマ設計.sql 55.8章、開発部/成果物/
+  -- 実装メモ.md 237章）。cancel_chore_completion()等と同じくSECURITY DEFINERで
+  -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的に
+  -- GRANTしている。
+  ('end_habit_card'),
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
   ('family_board_posts_daily_used'),
@@ -719,7 +800,22 @@ WITH expected(f) AS (VALUES
   -- EXECUTE権限がある設計どおりの状態のままのため、authenticatedが実行
   -- できる関数のこの一覧からはproname自体が消える。
   ('gratitude_daily_allowance'),('gratitude_points_before_insert'),
-  ('gratitude_points_before_update'),('gratitude_points_daily_used'),('is_current_user_parent'),
+  ('gratitude_points_before_update'),('gratitude_points_daily_used'),
+  -- [2026-09-17追加] habit_card_progress_bump・habit_cards_before_write
+  -- （習慣カードの累計カウント・自動付与、家族整合性検証・3枚上限の強制。
+  -- 要件定義書07-28章、設計部/成果物/スキーマ設計.sql 55.5章・55.3a章、
+  -- 開発部/成果物/実装メモ.md 237章）。他の非SECURITY DEFINER／明示REVOKEなしの
+  -- トリガー関数と同じく、新規関数作成時にauthenticatedへEXECUTE権限が
+  -- 自動付与される（34.5章の既知の挙動）。
+  ('habit_card_progress_bump'),('habit_cards_before_write'),
+  ('is_current_user_parent'),
+  -- [2026-09-17追加・pre-existing gap修正] is_valid_avatar_line_data
+  -- （member_avatars、20260924010000_member_avatars.sql）。is_valid_drawing_
+  -- line_data等と同じくLANGUAGE SQL・SECURITY DEFINERではないため、新規関数
+  -- 作成時にauthenticatedへEXECUTE権限が自動付与される。本ファイルへの反映
+  -- 漏れをローカルDockerでの実測時に発見し、あわせて追加した（開発部/成果物/
+  -- 実装メモ.md 237章）。
+  ('is_valid_avatar_line_data'),
   ('is_valid_drawing_line_data'),('join_family_with_invite_code'),('jst_week_start_date'),
   -- [2026-09-01追加] max_nfc_tags_per_chore_member（NFCタグの人ごと化、設計部/成果物/
   -- スキーマ設計.sql 39.3章、開発部/成果物/実装メモ.md 108章）。SECURITY DEFINERでは
@@ -736,10 +832,22 @@ WITH expected(f) AS (VALUES
   -- before_insert・family_board_reactions_before_insert等）と全く同じ理由
   -- （SECURITY DEFINERではないため新規関数作成時にauthenticatedへEXECUTE権限が
   -- 自動付与される、34.5章の既知の挙動）でS4に含まれる。明示的なREVOKEは行っていない。
+  -- [2026-09-17追加・pre-existing gap修正] member_avatars_before_write
+  -- （member_avatars、20260924010000_member_avatars.sql）。他の非SECURITY
+  -- DEFINERトリガー関数と同じ理由でS4に含まれる。本ファイルへの反映漏れを
+  -- ローカルDockerでの実測時に発見し、あわせて追加した（開発部/成果物/
+  -- 実装メモ.md 237章）。
+  ('member_avatars_before_write'),
   ('member_badges_check_chore_completion'),
   ('member_badges_check_family_drawing'),
   ('member_badges_check_gacha_draw'),
   ('member_badges_check_sticker_purchase'),
+  -- [2026-09-17追加] move_tree_habit_figure（習慣カードのフィギュアの配置を
+  -- その月のうちに動かす、要件定義書07-28章決定21、設計部/成果物/スキーマ設計.sql
+  -- 55.9章、開発部/成果物/実装メモ.md 237章）。move_tree_sticker()等と同じく
+  -- SECURITY DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえで
+  -- authenticatedへ明示的にGRANTしている。
+  ('move_tree_habit_figure'),
   -- [2026-09-08追加] move_tree_sticker（ステッカーの自由配置化、設計部/成果物/
   -- スキーマ設計.sql 49.13章、開発部/成果物/実装メモ.md 142章）。
   -- decorate_tree_with_gacha_prize()等と同じくSECURITY DEFINERであり、
@@ -799,7 +907,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数63件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数71件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1178,6 +1286,32 @@ INSERT INTO _r SELECT 'A層', 'A28 保護者: family_sticker_pricesに他家族�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM family_sticker_prices WHERE family_id <> current_family_id();
+
+-- [2026-09-17追加] A29・A30 習慣カード（台紙）とフィギュア（要件定義書07-28章、
+-- 設計部/成果物/スキーマ設計.sql 55章、開発部/成果物/実装メモ.md 237章）。
+-- habit_cards・habit_figure_grantsはいずれもfamily_idを持つ家族間分離対象の
+-- 新規テーブルのため、既存のA01〜A28と同じ形で追加する。habit_figure_catalogは
+-- sticker_catalog・gacha_preset_ornamentsと同じ全家族共通グローバルカタログ
+-- （family_id列を持たない）のため対象外とする。
+INSERT INTO _r SELECT 'A層', 'A29 保護者: habit_cardsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM habit_cards WHERE family_id <> current_family_id();
+
+INSERT INTO _r SELECT 'A層', 'A30 保護者: habit_figure_grantsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM habit_figure_grants WHERE family_id <> current_family_id();
+
+-- [2026-09-17追加・pre-existing gap修正] A31 member_avatars
+-- （20260924010000_member_avatars.sql、07-28章とは無関係の別タスクの成果物）。
+-- family_idを持つ家族間分離対象の新規テーブルだが、A層への反映が漏れていたことを
+-- ローカルDockerでの実測時に発見し、あわせて追加した（開発部/成果物/実装メモ.md
+-- 237章）。
+INSERT INTO _r SELECT 'A層', 'A31 保護者: member_avatarsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM member_avatars WHERE family_id <> current_family_id();
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する

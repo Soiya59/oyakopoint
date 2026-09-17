@@ -35,13 +35,21 @@ import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
 import { MemberAvatar } from "./MemberAvatar";
 import { StickerIcon } from "./StickerIcon";
+import FigureIcon from "./FigureIcon";
+import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { BadgeRow } from "@/hooks/useBadges";
-import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
-import type { FamilyMember, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount, StickerPurchaseWithCatalog } from "@/types/domain";
+import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
+import type {
+  FamilyMember,
+  FamilyTreeSeason,
+  FamilyTreeWeeklyCompletionCount,
+  HabitFigureGrantWithPlacement,
+  StickerPurchaseWithCatalog,
+} from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -93,6 +101,13 @@ export interface CollectorShelfPanelProps {
    */
   stickerPlacementsBySeasonId: Record<string, FamilyTreeStickerPlacement[]>;
   /**
+   * [2026-09-17追加・要件定義書07-28章決定21、開発部/成果物/実装メモ.md 237章]
+   * 過去シーズンの自由配置フィギュア（decoration_source='habit_figure'）。
+   * stickerPlacementsBySeasonIdと同じ「見る」展開のタイミングで取得され、
+   * TreeStageVisualのhabitFigurePlacementsプロパティにそのまま渡す。
+   */
+  habitFigurePlacementsBySeasonId: Record<string, FamilyTreeHabitFigurePlacement[]>;
+  /**
    * [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節「過去の木への反映」、
    * 主要画面ワイヤーフレーム.md 21.0節決定11）。dotsBySeasonIdと同じ「見る」展開の
    * タイミングで取得され、同一ビュー内に表示する。
@@ -141,6 +156,23 @@ export interface CollectorShelfPanelProps {
   onPlaceSticker: (purchaseId: string, shape: StickerShape, rarity: StickerRarity) => void;
   /** 自分選択時のみ: 「うごかす」導線（→ドラッグ移動画面、49.12章統括判断）。 */
   onMoveSticker: (decorationId: string, shape: StickerShape, rarity: StickerRarity, posX: number, posY: number) => void;
+
+  // [2026-09-17新設・要件定義書07-28章決定27、主要画面ワイヤーフレーム.md 49.2章
+  // 決定3-③、開発部/成果物/実装メモ.md 237章] 「フィギュア」区分（決定27。メダルとは
+  // 独立した別の区分見出しの下に表示し、同じ一覧・グリッドには混在させない）。
+  // シール区分（StickerShelfSection/FamilyMedalSection）と全く同じ構造。
+  /** 個別メンバー選択時の「フィギュア」区分。 */
+  habitFiguresLoadState: LoadState;
+  habitFigureGrants: HabitFigureGrantWithPlacement[];
+  onRetryHabitFigures: () => void;
+  /** 「全員」選択時の「フィギュア」区分。 */
+  familyHabitFiguresLoadState: LoadState;
+  familyHabitFigureGrants: HabitFigureGrantWithPlacement[];
+  onRetryFamilyHabitFigures: () => void;
+  /** 自分選択時のみ: 「木に かざる」導線。 */
+  onPlaceHabitFigure: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
+  /** 自分選択時のみ: 「うごかす」導線。 */
+  onMoveHabitFigure: (decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) => void;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -568,6 +600,7 @@ export function CollectorShelfPanel({
   onRetryPastSeasons,
   dotsBySeasonId,
   stickerPlacementsBySeasonId,
+  habitFigurePlacementsBySeasonId,
   weeklyBySeasonId,
   loadingSeasonIds,
   errorSeasonIds,
@@ -588,6 +621,14 @@ export function CollectorShelfPanel({
   onGoToStickerShop,
   onPlaceSticker,
   onMoveSticker,
+  habitFiguresLoadState,
+  habitFigureGrants,
+  onRetryHabitFigures,
+  familyHabitFiguresLoadState,
+  familyHabitFigureGrants,
+  onRetryFamilyHabitFigures,
+  onPlaceHabitFigure,
+  onMoveHabitFigure,
 }: CollectorShelfPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
@@ -698,6 +739,19 @@ export function CollectorShelfPanel({
                   onRetry={onRetryFamilyStickers}
                 />
               </View>
+
+              {/* --- フィギュア区分（「全員」選択時。要件定義書07-28章決定27、
+                  メダルとは別の区分見出し・区画に分ける、開発部/成果物/実装メモ.md 237章） --- */}
+              <View style={{ marginTop: theme.spacing.s6 }}>
+                <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+                <FamilyHabitFigureSection
+                  tone={tone}
+                  members={members}
+                  loadState={familyHabitFiguresLoadState}
+                  grants={familyHabitFigureGrants}
+                  onRetry={onRetryFamilyHabitFigures}
+                />
+              </View>
             </View>
           ) : (
             // 個別メンバー選択時: バッジ・つくった/あつめたもの・シールの3区分（決定21・22）。
@@ -740,6 +794,18 @@ export function CollectorShelfPanel({
                 onGoToShop={onGoToStickerShop}
                 onPlace={onPlaceSticker}
                 onMove={onMoveSticker}
+              />
+
+              {/* --- フィギュア区分（決定23と同じ扱い。所有数0の種類×段階は表示しない） --- */}
+              <HabitFigureShelfSection
+                tone={tone}
+                isViewingSelf={isViewingSelf}
+                selectedMemberName={selectedMember?.display_name ?? "?"}
+                loadState={habitFiguresLoadState}
+                grants={habitFigureGrants}
+                onRetry={onRetryHabitFigures}
+                onPlace={onPlaceHabitFigure}
+                onMove={onMoveHabitFigure}
               />
             </View>
           )}
@@ -800,6 +866,7 @@ export function CollectorShelfPanel({
                             stage={season.current_stage}
                             dots={dotsBySeasonId[season.id]}
                             stickerPlacements={stickerPlacementsBySeasonId[season.id]}
+                            habitFigurePlacements={habitFigurePlacementsBySeasonId[season.id]}
                           />
                           <PastTreeColorLegend
                             dots={dotsBySeasonId[season.id]}
@@ -1192,6 +1259,308 @@ function FamilyStickerDetailCard({
         <StickerIcon shape={shape} rarity={rarity} size={220} highRes />
         <View style={styles.detailDrawingTextWrap}>
           <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
+          <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
+            {ownerCounts.map(({ member, count }) => (
+              <View key={member.id} style={styles.legendRow}>
+                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
+                <Text style={captionStyle}>
+                  {member.display_name}
+                  {count > 1 ? ` ×${count}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * 「フィギュア」区分（要件定義書07-28章決定27、主要画面ワイヤーフレーム.md
+ * 49.2章決定3-③、開発部/成果物/実装メモ.md 237章）。`StickerShelfSection`と
+ * 全く同じ構造（所有している種類×段階だけを列挙し、所有数0の組み合わせは
+ * 表示しない）だが、メダルとは独立した別のコンポーネントとして実装する
+ * （ワイヤーフレーム49.14章開発部への申し送り(3)「既存のメダル関連
+ * コンポーネントを複製せず新しいコンポーネントとして実装すること」）。
+ * `figure_catalog_id`でグルーピングする（種類×段階の組み合わせを一意に表す、
+ * shape×rarityと同じ役割）。
+ */
+function buildHabitFigureShelfEntries(
+  grants: HabitFigureGrantWithPlacement[]
+): { key: string; figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] }[] {
+  const map = new Map<string, HabitFigureGrantWithPlacement[]>();
+  for (const g of grants) {
+    const key = g.figure_catalog_id;
+    const list = map.get(key);
+    if (list) list.push(g);
+    else map.set(key, [g]);
+  }
+  return Array.from(map.entries()).map(([key, owned]) => {
+    const catalog = owned[0].habit_figure_catalog;
+    return {
+      key,
+      figureKey: catalog?.figure_key ?? "",
+      kindEmoji: catalog?.kind_emoji ?? null,
+      label: catalog?.display_name ?? "フィギュア",
+      owned,
+    };
+  });
+}
+
+function HabitFigureShelfSection({
+  tone,
+  isViewingSelf,
+  selectedMemberName,
+  loadState,
+  grants,
+  onRetry,
+  onPlace,
+  onMove,
+}: {
+  tone: Tone;
+  isViewingSelf: boolean;
+  selectedMemberName: string;
+  loadState: LoadState;
+  grants: HabitFigureGrantWithPlacement[];
+  onRetry: () => void;
+  onPlace: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
+  onMove: (decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) => void;
+}) {
+  const isChild = tone === "child";
+  const bodyStyle = bodyStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const totalOwned = grants.length;
+  const entries = useMemo(() => buildHabitFigureShelfEntries(grants), [grants]);
+  const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
+
+  return (
+    <View>
+      <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+
+      {loadState === "loading" && <SkeletonList count={2} />}
+      {loadState === "error" && (
+        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
+      )}
+
+      {loadState === "ready" && totalOwned === 0 && (
+        <Text style={bodyStyle}>
+          {isViewingSelf
+            ? isChild
+              ? "まだ フィギュアを もっていないよ。台紙をためて もらおう"
+              : "まだフィギュアを獲得していません。台紙をためると獲得できます"
+            : isChild
+            ? `${selectedMemberName}さんは まだ もっていないよ`
+            : `${selectedMemberName}さんはまだ持っていません`}
+        </Text>
+      )}
+
+      {loadState === "ready" && totalOwned > 0 && (
+        <>
+          {/* [決定3-②] メダルの円形枠と混同しないよう、五角形の枠（FigureFrame）で表示する。 */}
+          <View style={styles.grid}>
+            {entries.map((entry) => {
+              const selected = entry.key === selectedKey;
+              return (
+                <Pressable
+                  key={entry.key}
+                  onPress={() => setSelectedKey(selected ? null : entry.key)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <FigureFrame size={48} ringColor={null}>
+                    <FigureIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+                  </FigureFrame>
+                  <Text style={[captionStyle, styles.gridCaption]}>
+                    {entry.label}
+                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {selectedEntry && (
+            <HabitFigureDetailCard tone={tone} isViewingSelf={isViewingSelf} entry={selectedEntry} onPlace={onPlace} onMove={onMove} />
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+function HabitFigureDetailCard({
+  tone,
+  isViewingSelf,
+  entry,
+  onPlace,
+  onMove,
+}: {
+  tone: Tone;
+  isViewingSelf: boolean;
+  entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
+  onPlace: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
+  onMove: (decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) => void;
+}) {
+  const isChild = tone === "child";
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+
+  const { figureKey, kindEmoji, label, owned } = entry;
+  const unplaced = owned.filter((g) => !g.placement);
+  const currentSeasonPlaced = owned.find((g) => g.placement?.isCurrentSeason);
+
+  return (
+    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
+      <View style={styles.detailDrawingWrap}>
+        <FigureFrame size={160} ringColor={null}>
+          <FigureIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+        </FigureFrame>
+        <View style={styles.detailDrawingTextWrap}>
+          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+            {currentSeasonPlaced
+              ? isChild
+                ? "いまの きに かざってあるよ"
+                : "いまの木にかざってあります"
+              : isChild
+              ? "いまの きには かざっていないよ"
+              : "いまの木にはかざっていません"}
+          </Text>
+          {isViewingSelf && (
+            <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
+              {currentSeasonPlaced && currentSeasonPlaced.placement && (
+                <Pressable
+                  onPress={() =>
+                    onMove(
+                      currentSeasonPlaced.placement!.decorationId,
+                      figureKey,
+                      kindEmoji,
+                      currentSeasonPlaced.placement!.posX,
+                      currentSeasonPlaced.placement!.posY
+                    )
+                  }
+                  hitSlop={8}
+                >
+                  <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
+                </Pressable>
+              )}
+              {unplaced.length > 0 && (
+                <AppButton
+                  label={isChild ? "木に かざる" : "木に飾る"}
+                  tone={tone}
+                  variant="secondary"
+                  onPress={() => onPlace(unplaced[0].id, figureKey, kindEmoji)}
+                />
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * 「フィギュア」区分（「全員」選択時）。`FamilyMedalSection`と同型で、木への
+ * 配置状況・操作導線は持たず「誰が何個獲得しているか」の内訳のみを示す。
+ */
+function FamilyHabitFigureSection({
+  tone,
+  members,
+  loadState,
+  grants,
+  onRetry,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  loadState: LoadState;
+  grants: HabitFigureGrantWithPlacement[];
+  onRetry: () => void;
+}) {
+  const isChild = tone === "child";
+  const bodyStyle = bodyStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  const entries = useMemo(() => buildHabitFigureShelfEntries(grants), [grants]);
+  const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
+
+  if (loadState === "loading") return <SkeletonList count={2} />;
+  if (loadState === "error") {
+    return (
+      <ErrorState
+        tone={isChild ? "child" : "parent"}
+        title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        onRetry={onRetry}
+      />
+    );
+  }
+  if (entries.length === 0) {
+    return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
+  }
+
+  return (
+    <>
+      <View style={styles.grid}>
+        {entries.map((entry) => {
+          const selected = entry.key === selectedKey;
+          return (
+            <Pressable
+              key={entry.key}
+              onPress={() => setSelectedKey(selected ? null : entry.key)}
+              style={[styles.gridItem, selected && styles.gridItemSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <FigureFrame size={48} ringColor={null}>
+                <FigureIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+              </FigureFrame>
+              <Text style={[captionStyle, styles.gridCaption]}>
+                {entry.label}
+                {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {selectedEntry && <FamilyHabitFigureDetailCard tone={tone} members={members} entry={selectedEntry} />}
+    </>
+  );
+}
+
+function FamilyHabitFigureDetailCard({
+  tone,
+  members,
+  entry,
+}: {
+  tone: Tone;
+  members: FamilyMember[];
+  entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
+}) {
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const { figureKey, kindEmoji, label, owned } = entry;
+  const { memberAvatars } = useAppData();
+
+  const ownerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    owned.forEach((g) => counts.set(g.member_id, (counts.get(g.member_id) ?? 0) + 1));
+    return members.filter((m) => counts.has(m.id)).map((m) => ({ member: m, count: counts.get(m.id)! }));
+  }, [owned, members]);
+
+  return (
+    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
+      <View style={styles.detailDrawingWrap}>
+        <FigureFrame size={160} ringColor={null}>
+          <FigureIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+        </FigureFrame>
+        <View style={styles.detailDrawingTextWrap}>
+          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
           <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
             {ownerCounts.map(({ member, count }) => (
               <View key={member.id} style={styles.legendRow}>

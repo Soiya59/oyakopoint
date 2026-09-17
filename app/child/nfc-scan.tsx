@@ -177,7 +177,10 @@ export default function NfcScanScreen() {
         result: "approved",
         choreTitle: res.data.chore_title,
         choreEmoji: res.data.chore_emoji,
-        points: String(res.data.points),
+        // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLになりうる。
+        // "null"という文字列を送らないよう、その場合は空文字にする
+        // （app/child/nfc-complete.tsxが空文字を「pt表示なし」として扱う）。
+        points: res.data.points != null ? String(res.data.points) : "",
         ownerMemberId: res.data.member_id,
         ownerDisplayName: res.data.member_display_name,
         isProxy: isProxy ? "1" : "0",

@@ -81,7 +81,10 @@ export function ReportCelebration({
         <Text style={styles.emoji}>🎉</Text>
         <Text style={[titleStyle, styles.center]}>きろくしました</Text>
         <Text style={[bodyStyle, styles.center, styles.title]}>{title}</Text>
-        <Text style={styles.points}>+{points}pt</Text>
+        {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型クエストの記録では
+            呼び出し元（P19/S5）が`points`に空文字を渡す（ポイントに一切触れない）。
+            その場合は「+◯pt」自体を出さない。 */}
+        {points && <Text style={styles.points}>+{points}pt</Text>}
 
         <GachaCelebrationHint tone={tone} memberId={memberId} />
       </Animated.View>

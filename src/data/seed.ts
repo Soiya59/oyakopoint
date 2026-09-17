@@ -97,7 +97,11 @@ const MOCK_NFC_TOKENS = {
 // [2026-08-30追加] 要件定義書07-15章・スキーマ設計.sql 37章でChore型に
 // updated_by/updated_atが追加されたため、created_by/scopeと同じ理由で
 // モックシードにもデフォルト値（updated_by=null・updated_at=作成時刻と同一）を補完する。
-type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "updated_by" | "updated_at">;
+// [2026-09-17追加] 要件定義書07-28章・スキーマ設計.sql 55.1章でChore型に
+// reward_mode/habit_kind_keyが追加されたため、created_by/scope等と同じ理由で
+// モックシードにもデフォルト値（reward_mode='points'・habit_kind_key=null、
+// 既存行はすべてポイント型のまま）を補完する。
+type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "updated_by" | "updated_at" | "reward_mode" | "habit_kind_key">;
 
 export const seedChores: Chore[] = (
   [
@@ -179,6 +183,8 @@ export const seedChores: Chore[] = (
   scope: "family" as const,
   updated_by: null,
   updated_at: "2026-07-01T00:00:00+09:00",
+  reward_mode: "points" as const,
+  habit_kind_key: null,
 }));
 
 // [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止(スキーマ設計.sql 5章「[廃止]」)に伴い、

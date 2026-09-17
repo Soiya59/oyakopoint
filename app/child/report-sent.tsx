@@ -5,11 +5,14 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import Confetti from "@/components/Confetti";
 import GachaCelebrationHint from "@/components/GachaCelebrationHint";
+import HabitFigureGrantBanner from "@/components/HabitFigureGrantBanner";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
 import { cancelCompletionErrorText, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { playSound, type SoundHandle } from "@/lib/sound";
+import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
+import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 
 /**
  * C7 報告完了（送信済み）
@@ -32,12 +35,40 @@ import { playSound, type SoundHandle } from "@/lib/sound";
 type CancelState = "idle" | "processing" | "success" | "error" | "networkError";
 
 export default function ReportSentScreen() {
-  const { choreTitle, points, completionId } = useLocalSearchParams<{
+  const { choreTitle, points, completionId, choreId, reportedAt } = useLocalSearchParams<{
     choreTitle?: string;
     points?: string;
     completionId?: string;
+    choreId?: string;
+    reportedAt?: string;
   }>();
   const { state, dispatch } = useAppData();
+
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
+  // 台紙型クエストの段階到達演出。対象choreがhabit_card型のときだけ、直近で新しく
+  // 付与されたフィギュアが無いか確認する（サーバー側トリガーが自動で付与するため、
+  // クライアントは「付与されたはず」を後から確認するだけでよい）。
+  const chore = choreId ? state.chores.find((c) => c.id === choreId) : undefined;
+  const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
+  const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
+  const [figureCheckDone, setFigureCheckDone] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (chore?.reward_mode === "habit_card" && reportedAt) {
+      void checkNewGrant(state.activeChildMemberId, reportedAt).then((grant) => {
+        if (!cancelled) {
+          setFigureGrant(grant);
+          setFigureCheckDone(true);
+        }
+      });
+    } else {
+      setFigureCheckDone(true);
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [cancelState, setCancelState] = useState<CancelState>("idle");
   const [cancelErrorText, setCancelErrorText] = useState<string | null>(null);
@@ -66,11 +97,15 @@ export default function ReportSentScreen() {
   // [2026-09-03改訂] 取消処理中はこのタイマーを解除する（下記handleCancel参照）。
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // [2026-09-17改訂・要件定義書07-28章] フィギュア付与の確認が終わっていない間、
+    // または新しい付与が見つかった間は自動遷移しない（「木に飾る→」を選ぶ時間を
+    // 確保するため）。確認の結果「付与なし」と分かった時点で通常どおり3秒後に戻る。
+    if (!figureCheckDone || figureGrant) return;
     autoTimerRef.current = setTimeout(() => router.replace("/child/home"), 3000);
     return () => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
-  }, []);
+  }, [figureCheckDone, figureGrant]);
 
   const handleCancel = async () => {
     if (!completionId) return;
@@ -115,7 +150,13 @@ export default function ReportSentScreen() {
           とどいたよ！
         </Text>
         <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-          {points ? `「${choreTitle}」+${points}ptとどいたよ！` : `「${choreTitle}」のポイントがとどいたよ`}
+          {/* [2026-09-17改訂・要件定義書07-28章] 台紙型（points=""）は「ポイントが
+              とどいた」と言わない（決定9、ポイントには一切触れない）。 */}
+          {points
+            ? `「${choreTitle}」+${points}ptとどいたよ！`
+            : chore?.reward_mode === "habit_card"
+            ? `「${choreTitle}」がとどいたよ！`
+            : `「${choreTitle}」のポイントがとどいたよ`}
         </Text>
         <Text
           style={[
@@ -133,6 +174,27 @@ export default function ReportSentScreen() {
       <View style={{ marginTop: theme.spacing.s6, alignItems: "center" }}>
         <GachaCelebrationHint key={gachaHintKey} tone="child" memberId={state.activeChildMemberId} />
       </View>
+
+      {/* [2026-09-17追加・要件定義書07-28章決定9・10、主要画面ワイヤーフレーム.md
+          49.8章決定24〜26] 段階到達時の自動付与演出。新しい全画面演出・選択モーダルは
+          作らず、既存の完了報告成功演出に続けて表示する。 */}
+      {figureGrant && (
+        <HabitFigureGrantBanner
+          tone="child"
+          grant={figureGrant}
+          onPlaceOnTree={() =>
+            router.replace({
+              pathname: "/child/tree-decorate",
+              params: {
+                habitFigureGrantId: figureGrant.id,
+                habitFigureKey: figureGrant.habit_figure_catalog?.figure_key ?? "",
+                habitFigureKindEmoji: figureGrant.habit_figure_catalog?.kind_emoji ?? "",
+              },
+            })
+          }
+          onLater={() => router.replace("/child/home")}
+        />
+      )}
 
       <AppButton
         label="もどる"

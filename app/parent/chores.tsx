@@ -7,6 +7,7 @@ import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import { EmptyState } from "@/components/StatusViews";
 import ChoreSuggestionsModal from "@/components/ChoreSuggestionsModal";
+import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
@@ -42,6 +43,11 @@ export default function ChoresListScreen() {
   // 27.1・27.2節）。P10の空状態限定で開くモーダル。選択するとP11へプレフィル遷移する
   // だけで、モーダル側にDB書き込みは一切発生しない。
   const [suggestionsVisible, setSuggestionsVisible] = useState(false);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.7章決定19]
+  // スキルの型付きクエストひな形。常時表示のテキストリンクとして追加する
+  // （27章「クエストのおすすめ集」の空状態限定パターンはここでは使わない。
+  // 既存ユーザーのほぼ全員が入口を見られなくなるため）。
+  const [skillTemplatesVisible, setSkillTemplatesVisible] = useState(false);
 
   // [2026-08-29修正・本部長／軽微変更ルート] 家族共有（scope='family'）のみを対象にする。
   //
@@ -103,7 +109,11 @@ export default function ChoresListScreen() {
             {resolveRegistrantSuffix(c)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary }}>
-            {c.points}pt {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
+            {/* [2026-09-17改訂・要件定義書07-28章] 台紙型はポイントを持たないため
+                「台紙」と表示する（決定14の対象はC5・P19・S5のみだが、この管理一覧でも
+                「+nullpt」のような表示崩れを避けるため最小限の分岐を入れる）。 */}
+            {c.reward_mode === "habit_card" ? "台紙" : `${c.points}pt`}{" "}
+            {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
             {assigneeLabel ? `・${assigneeLabel}` : ""}
           </Text>
         </Card>
@@ -140,7 +150,7 @@ export default function ChoresListScreen() {
                 {isOpen ? "▾" : "▸"} {head.emoji} {head.title}
               </Text>
               <Text style={{ color: theme.colors.neutralTextSecondary }}>
-                {head.points}pt（{g.items.length}）
+                {head.reward_mode === "habit_card" ? "台紙" : `${head.points}pt`}（{g.items.length}）
               </Text>
             </Card>
           </Pressable>
@@ -157,6 +167,24 @@ export default function ChoresListScreen() {
         <Text style={theme.typography.parentTitle}>クエスト管理</Text>
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
+
+      {/* [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.7章決定19]
+          常時表示のテキストリンク。 */}
+      <Pressable onPress={() => setSkillTemplatesVisible(true)} style={{ marginTop: theme.spacing.s2 }}>
+        <Text style={[theme.typography.parentBody, { color: theme.colors.brandPrimaryStrong }]}>
+          🌱 せいかつ・きもちの型から選ぶ
+        </Text>
+      </Pressable>
+
+      <SkillChoreTemplatesModal
+        visible={skillTemplatesVisible}
+        tone="parent"
+        onClose={() => setSkillTemplatesVisible(false)}
+        onSelect={(t) => {
+          setSkillTemplatesVisible(false);
+          router.push({ pathname: "/parent/chore-edit", params: { recId: t.id } });
+        }}
+      />
 
       {/* [2026-09-07移動・統括指示／実装メモ147章] 146章で「＋新規追加」ボタンの下に常設化
           したが、一覧の一番下に置いたため、クエストやごほうびの件数が増えるほど埋もれる

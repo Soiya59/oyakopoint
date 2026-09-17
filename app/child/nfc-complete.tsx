@@ -143,9 +143,14 @@ export default function NfcCompleteScreen() {
             ) : (
               <Text style={[headlineStyle, styles.centerText]}>「{params.choreTitle}」をきろくしました</Text>
             )}
-            <Text style={[headlineStyle, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
-              +{params.points}pt
-            </Text>
+            {/* [2026-09-17改訂・要件定義書07-28章決定9・49.5章決定15] 台紙型は
+                pointsを持たないため、nfc-scan.tsxが空文字を渡してきた場合は
+                「+◯pt」自体を表示しない（台紙の進捗は台紙画面で見る）。 */}
+            {!!params.points && (
+              <Text style={[headlineStyle, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
+                +{params.points}pt
+              </Text>
+            )}
           </View>
 
           {gachaLine && (

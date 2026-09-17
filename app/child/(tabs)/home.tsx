@@ -13,6 +13,8 @@ import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 
 /**
  * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
@@ -63,6 +65,9 @@ export default function ChildHomeScreen() {
 
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const myPoints = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.5章決定14]
+  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
+  const { activeCards: habitActiveCards } = useHabitCardsForMember(me.id);
 
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.5a節「さっき とどけた ほうこく」。統括決定B対応
@@ -168,7 +173,7 @@ export default function ChildHomeScreen() {
             <View key={c.id} style={styles.recentRow}>
               <View style={styles.recentRowMain}>
                 <Text style={theme.typography.childBody}>
-                  {c.chore_emoji} {c.chore_title} +{c.points}pt
+                  {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
                 </Text>
                 <Pressable
                   onPress={() => handleCancelRecentCompletion(c.id)}
@@ -300,7 +305,7 @@ export default function ChildHomeScreen() {
                     </Text>
                   ) : (
                     <Text style={styles.pointLabel} numberOfLines={1}>
-                      +{chore.points}pt
+                      {formatChoreRowRewardLabel(chore, habitActiveCards, habitFigureCatalog)}
                     </Text>
                   )}
                 </Pressable>

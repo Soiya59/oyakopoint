@@ -5,12 +5,14 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import TreeDecoratePanel from "@/components/TreeDecoratePanel";
 import TreeStickerDragCanvas from "@/components/TreeStickerDragCanvas";
+import TreeHabitFigureDragCanvas from "@/components/TreeHabitFigureDragCanvas";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useDecorateTreeAction, useDecoratableCompletions } from "@/hooks/useTreeDecoration";
 import { useDecorateTreeWithStickerAction, useMoveTreeStickerAction } from "@/hooks/useStickers";
+import { useDecorateTreeWithHabitFigureAction, useMoveTreeHabitFigureAction } from "@/hooks/useHabitCards";
 
 const SUCCESS_DISPLAY_MS = 600;
 
@@ -46,7 +48,19 @@ function goToTreeWithCleanHistory() {
  *      `TreeStickerDragCanvas`（mode="move"）
  */
 export default function ParentTreeDecorateScreen() {
-  const { drawId, purchaseId, moveDecorationId, shape, rarity, posX, posY } = useLocalSearchParams<{
+  const {
+    drawId,
+    purchaseId,
+    moveDecorationId,
+    shape,
+    rarity,
+    posX,
+    posY,
+    habitFigureGrantId,
+    habitFigureKey,
+    habitFigureKindEmoji,
+    moveHabitFigureDecorationId,
+  } = useLocalSearchParams<{
     drawId?: string;
     purchaseId?: string;
     moveDecorationId?: string;
@@ -54,10 +68,14 @@ export default function ParentTreeDecorateScreen() {
     rarity?: StickerRarity;
     posX?: string;
     posY?: string;
+    habitFigureGrantId?: string;
+    habitFigureKey?: string;
+    habitFigureKindEmoji?: string;
+    moveHabitFigureDecorationId?: string;
   }>();
   const { state } = useAppData();
   const myId = state.activeParentMemberId;
-  const { loadState: treeLoadState, season, dots, stickerPlacements, reload: reloadTree } = useFamilyTreeDetail();
+  const { loadState: treeLoadState, season, dots, stickerPlacements, habitFigurePlacements, reload: reloadTree } = useFamilyTreeDetail();
   const { loadState: candidatesLoadState, candidates, reload: reloadCandidates } = useDecoratableCompletions(
     myId,
     season?.season_start ?? null,
@@ -66,12 +84,15 @@ export default function ParentTreeDecorateScreen() {
   const { decorating: decoratingGacha, decorate: decorateGacha } = useDecorateTreeAction();
   const { decorating: placingSticker, decorate: placeSticker } = useDecorateTreeWithStickerAction();
   const { moving: movingSticker, move: moveSticker } = useMoveTreeStickerAction();
+  const { decorating: placingHabitFigure, decorate: placeHabitFigure } = useDecorateTreeWithHabitFigureAction();
+  const { moving: movingHabitFigure, move: moveHabitFigure } = useMoveTreeHabitFigureAction();
   const [decorateError, setDecorateError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const isStickerMode = !!purchaseId || !!moveDecorationId;
+  const isHabitFigureMode = !!habitFigureGrantId || !!moveHabitFigureDecorationId;
 
-  if (!drawId && !purchaseId && !moveDecorationId) {
+  if (!drawId && !purchaseId && !moveDecorationId && !habitFigureGrantId && !moveHabitFigureDecorationId) {
     return (
       <Screen tone="parent">
         <Text style={theme.typography.parentBody}>対象が見つかりませんでした</Text>
@@ -102,13 +123,27 @@ export default function ParentTreeDecorateScreen() {
     setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
   };
 
+  // [2026-09-17追加・要件定義書07-28章決定21] フィギュアの配置・移動。
+  const handleConfirmHabitFigure = async (nx: number, ny: number) => {
+    setDecorateError(null);
+    const res = habitFigureGrantId
+      ? await placeHabitFigure(habitFigureGrantId, nx, ny)
+      : await moveHabitFigure(moveHabitFigureDecorationId!, nx, ny);
+    if (!res.ok) {
+      setDecorateError(res.error.message);
+      return;
+    }
+    setSuccess(true);
+    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
+  };
+
   if (success) {
     return (
       <Screen tone="parent">
         <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
           <Text style={{ fontSize: 40 }}>🎉</Text>
           <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3 }]}>
-            {moveDecorationId ? "動かしました" : "木に飾りました"}
+            {moveDecorationId || moveHabitFigureDecorationId ? "動かしました" : "木に飾りました"}
           </Text>
         </View>
       </Screen>
@@ -121,10 +156,35 @@ export default function ParentTreeDecorateScreen() {
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-        {moveDecorationId ? "メダルを動かす" : purchaseId ? "メダルを飾る" : "木に飾る"}
+        {isHabitFigureMode
+          ? moveHabitFigureDecorationId
+            ? "フィギュアを動かす"
+            : "フィギュアを飾る"
+          : moveDecorationId
+          ? "メダルを動かす"
+          : purchaseId
+          ? "メダルを飾る"
+          : "木に飾る"}
       </Text>
 
-      {isStickerMode ? (
+      {isHabitFigureMode ? (
+        <TreeHabitFigureDragCanvas
+          tone="parent"
+          treeLoadState={treeLoadState}
+          stage={season?.current_stage ?? 0}
+          dots={dots}
+          habitFigurePlacements={habitFigurePlacements}
+          figureKey={habitFigureKey ?? ""}
+          kindEmoji={habitFigureKindEmoji ?? null}
+          mode={habitFigureGrantId ? "place" : "move"}
+          movingDecorationId={moveHabitFigureDecorationId ?? null}
+          initialPos={posX && posY ? { x: Number(posX), y: Number(posY) } : null}
+          confirming={placingHabitFigure || movingHabitFigure}
+          confirmErrorMessage={decorateError}
+          onRetryLoad={reloadTree}
+          onConfirm={handleConfirmHabitFigure}
+        />
+      ) : isStickerMode ? (
         <TreeStickerDragCanvas
           tone="parent"
           treeLoadState={treeLoadState}

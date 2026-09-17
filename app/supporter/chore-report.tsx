@@ -3,11 +3,14 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import HabitFigureGrantBanner from "@/components/HabitFigureGrantBanner";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE, describeChoreReportFailure } from "@/data/api";
 import { playSound } from "@/lib/sound";
+import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
+import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 
 /**
  * S7 クエストの完了報告（みまもりメンバー）
@@ -41,6 +44,9 @@ export default function SupporterChoreReportScreen() {
   // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
   // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
   const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
+  const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
+  const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
 
   if (!chore || !me) {
     return (
@@ -82,9 +88,21 @@ export default function SupporterChoreReportScreen() {
     // 到達しないため、ここで鳴らせば「成功時に1回だけ」を満たせる）。
     playSound("report");
 
+    if (chore.reward_mode === "habit_card" && result.reportedAt) {
+      const grant = await checkNewGrant(me.id, result.reportedAt);
+      if (grant) {
+        setFigureGrant(grant);
+        return;
+      }
+    }
+
+    goToMyChores();
+  };
+
+  const goToMyChores = () => {
     router.replace({
       pathname: "/supporter/my-chores",
-      params: { justChoreId: chore.id, justTitle: chore.title, justPoints: String(chore.points) },
+      params: { justChoreId: chore.id, justTitle: chore.title, justPoints: chore.points != null ? String(chore.points) : "" },
     });
   };
 
@@ -134,6 +152,36 @@ export default function SupporterChoreReportScreen() {
     );
   }
 
+  // [2026-09-17追加・要件定義書07-28章決定9・10] 段階到達演出。新しい画面へは
+  // 遷移せず、この画面に留まって表示する。
+  if (figureGrant) {
+    return (
+      <Screen tone="supporter">
+        <View style={styles.backRow}>
+          <Text style={theme.typography.supporterBody}>
+            {chore.title} {chore.emoji}
+          </Text>
+        </View>
+        <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>きろくしました</Text>
+        <HabitFigureGrantBanner
+          tone="supporter"
+          grant={figureGrant}
+          onPlaceOnTree={() =>
+            router.replace({
+              pathname: "/supporter/tree-decorate",
+              params: {
+                habitFigureGrantId: figureGrant.id,
+                habitFigureKey: figureGrant.habit_figure_catalog?.figure_key ?? "",
+                habitFigureKindEmoji: figureGrant.habit_figure_catalog?.kind_emoji ?? "",
+              },
+            })
+          }
+          onLater={goToMyChores}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen tone="supporter">
       <View style={styles.backRow}>
@@ -145,8 +193,10 @@ export default function SupporterChoreReportScreen() {
         </Text>
       </View>
 
+      {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はポイントを持たないため
+          文言を出し分ける。 */}
       <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        きろくすると +{chore.points}pt
+        {chore.reward_mode === "habit_card" ? "きろくすると台紙にたまります" : `きろくすると +${chore.points}pt`}
       </Text>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         👀 この完了報告は家族に公開され、リアクションをもらえます。

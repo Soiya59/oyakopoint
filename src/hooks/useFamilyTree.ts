@@ -13,11 +13,13 @@ import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   fetchFamilyTreeCompletionDots,
   fetchFamilyTreeCurrentSeason,
+  fetchFamilyTreeHabitFigurePlacements,
   fetchFamilyTreeMemberBreakdown,
   fetchFamilyTreeSeasonHistory,
   fetchFamilyTreeStickerPlacements,
   fetchFamilyTreeWeeklyCompletionCounts,
   type FamilyTreeCompletionDot,
+  type FamilyTreeHabitFigurePlacement,
   type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeMemberBreakdown, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
@@ -83,6 +85,9 @@ export function useFamilyTreeDetail() {
   // API仕様.md 14.5節）。木の描画時にdotsの上へ最前面固定で重ねる想定
   // （FamilyTree.tsx TreeStageVisualのstickerPlacementsプロパティに渡す）。
   const [stickerPlacements, setStickerPlacements] = useState<FamilyTreeStickerPlacement[]>([]);
+  // [2026-09-17追加・要件定義書07-28章決定21] 自由配置フィギュア（decoration_source=
+  // 'habit_figure'）。stickerPlacementsと同じ独立した表示レイヤー。
+  const [habitFigurePlacements, setHabitFigurePlacements] = useState<FamilyTreeHabitFigurePlacement[]>([]);
   const [lastSeason, setLastSeason] = useState<FamilyTreeSeason | null>(null);
   // [2026-09-02追加] 週ごとの記録（要件定義書07-9章新設節、API仕様.md 9.6章）。
   // 週start昇順のまま保持し、並べ替えは表示側（FamilyTreeWeeklyList）に委ねる
@@ -108,20 +113,23 @@ export function useFamilyTreeDetail() {
     let dotsResData: FamilyTreeCompletionDot[] = [];
     let weeklyResData: FamilyTreeWeeklyCompletionCount[] = [];
     let stickerPlacementsResData: FamilyTreeStickerPlacement[] = [];
+    let habitFigurePlacementsResData: FamilyTreeHabitFigurePlacement[] = [];
     if (seasonRes.data) {
       const seasonStartIso = new Date(`${seasonRes.data.season_start}T00:00:00+09:00`).toISOString();
-      const [dotsRes, weeklyRes, stickerPlacementsRes] = await Promise.all([
+      const [dotsRes, weeklyRes, stickerPlacementsRes, habitFigurePlacementsRes] = await Promise.all([
         fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso),
         fetchFamilyTreeWeeklyCompletionCounts(client, seasonRes.data.id),
         fetchFamilyTreeStickerPlacements(client, familyId, seasonRes.data.id),
+        fetchFamilyTreeHabitFigurePlacements(client, familyId, seasonRes.data.id),
       ]);
-      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok) {
+      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok || !habitFigurePlacementsRes.ok) {
         setLoadState("error");
         return;
       }
       dotsResData = dotsRes.data;
       weeklyResData = weeklyRes.data;
       stickerPlacementsResData = stickerPlacementsRes.data;
+      habitFigurePlacementsResData = habitFigurePlacementsRes.data;
     }
 
     // 20.0節決定6: 直近1シーズン分の最終形態のみ「先月の木」として一言添える
@@ -134,6 +142,7 @@ export function useFamilyTreeDetail() {
     setDots(dotsResData);
     setWeeklyCounts(weeklyResData);
     setStickerPlacements(stickerPlacementsResData);
+    setHabitFigurePlacements(habitFigurePlacementsResData);
     setLastSeason(mostRecentClosed);
     setLoadState("ready");
   }, [client, familyId]);
@@ -142,5 +151,5 @@ export function useFamilyTreeDetail() {
     void load();
   }, [load]);
 
-  return { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload: load };
+  return { loadState, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload: load };
 }

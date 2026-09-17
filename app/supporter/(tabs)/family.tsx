@@ -262,7 +262,9 @@ export default function SupporterFamilyScreen() {
                   <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
                   <Text style={{ flex: 1 }} />
                   <Text style={theme.typography.supporterBodyMedium}>
-                    {c.chore_emoji} {c.chore_title} +{c.points}pt
+                    {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
+                        のため何も添えない。 */}
+                    {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
                   </Text>
                 </View>
                 <View style={[styles.cardMeta, styles.cardMetaRow]}>
@@ -333,7 +335,8 @@ export default function SupporterFamilyScreen() {
                       {detailTarget.chore_emoji} {detailTarget.chore_title}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
-                      {member?.display_name} さんから ・ +{detailTarget.points}pt
+                      {member?.display_name} さんから
+                      {detailTarget.points != null ? ` ・ +${detailTarget.points}pt` : ""}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
                       {formatDateTimeFullJp(detailTarget.reported_at)}

@@ -208,7 +208,9 @@ export default function SupporterHistoryScreen() {
                     <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
                       {c.chore_emoji} {c.chore_title}
                     </Text>
-                    <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>
+                    {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLの
+                        ため何も添えない。 */}
+                    {c.points != null && <Text style={theme.typography.supporterBodyMedium}>+{c.points}pt</Text>}
                   </View>
                 );
               })}

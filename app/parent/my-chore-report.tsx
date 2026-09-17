@@ -3,11 +3,14 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import HabitFigureGrantBanner from "@/components/HabitFigureGrantBanner";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE, describeChoreReportFailure } from "@/data/api";
 import { playSound } from "@/lib/sound";
+import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
+import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 
 /**
  * P20 じぶんの完了報告（保護者、要件定義書07-4章「親の完了報告」）
@@ -36,6 +39,10 @@ export default function ParentMyChoreReportScreen() {
   // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
   // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
   const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
+  // 台紙型クエストの段階到達演出。新規画面へは遷移せず、この画面上に一時的に表示する。
+  const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
+  const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
 
   if (!chore || !me) {
     return (
@@ -82,12 +89,27 @@ export default function ParentMyChoreReportScreen() {
     // 瞬間」を確実に1回だけ捉えられるここで鳴らす。
     playSound("report");
 
-    // 主要画面ワイヤーフレーム.md 9.0決定2: 新しい画面へは遷移せず、P19へ戻り
-    // 控えめな確認表示のみ行う。P19側はjustChoreId/justTitle/justPointsパラメータを
-    // 「一度きりの合図」として受け取り、該当行のハイライト＋スナックバーを出す。
+    // [2026-09-17追加・要件定義書07-28章、API仕様.md 15.4節] 台紙型クエストなら、
+    // P19へ戻る前に段階到達の確認を挟む（新しい付与が見つかった場合のみ、この
+    // 画面上にバナーを表示して遷移を保留する）。
+    if (chore.reward_mode === "habit_card" && result.reportedAt) {
+      const grant = await checkNewGrant(me.id, result.reportedAt);
+      if (grant) {
+        setFigureGrant(grant);
+        return;
+      }
+    }
+
+    goToMyChores();
+  };
+
+  // 主要画面ワイヤーフレーム.md 9.0決定2: 新しい画面へは遷移せず、P19へ戻り
+  // 控えめな確認表示のみ行う。P19側はjustChoreId/justTitle/justPointsパラメータを
+  // 「一度きりの合図」として受け取り、該当行のハイライト＋スナックバーを出す。
+  const goToMyChores = () => {
     router.replace({
       pathname: "/parent/my-chores",
-      params: { justChoreId: chore.id, justTitle: chore.title, justPoints: String(chore.points) },
+      params: { justChoreId: chore.id, justTitle: chore.title, justPoints: chore.points != null ? String(chore.points) : "" },
     });
   };
 
@@ -136,6 +158,37 @@ export default function ParentMyChoreReportScreen() {
     );
   }
 
+  // [2026-09-17追加・要件定義書07-28章決定9・10、主要画面ワイヤーフレーム.md
+  // 49.8章決定24〜26] 段階到達演出。新しい画面へは遷移せず、この画面に留まって
+  // 表示する（決定25「新しい全画面演出は作らない」）。
+  if (figureGrant) {
+    return (
+      <Screen tone="parent">
+        <View style={styles.backRow}>
+          <Text style={theme.typography.parentBody}>
+            {chore.title} {chore.emoji}
+          </Text>
+        </View>
+        <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>記録しました</Text>
+        <HabitFigureGrantBanner
+          tone="parent"
+          grant={figureGrant}
+          onPlaceOnTree={() =>
+            router.replace({
+              pathname: "/parent/tree-decorate",
+              params: {
+                habitFigureGrantId: figureGrant.id,
+                habitFigureKey: figureGrant.habit_figure_catalog?.figure_key ?? "",
+                habitFigureKindEmoji: figureGrant.habit_figure_catalog?.kind_emoji ?? "",
+              },
+            })
+          }
+          onLater={goToMyChores}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen tone="parent">
       <View style={styles.backRow}>
@@ -147,8 +200,10 @@ export default function ParentMyChoreReportScreen() {
         </Text>
       </View>
 
+      {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はポイントを持たないため
+          文言を出し分ける。 */}
       <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        記録すると +{chore.points}pt
+        {chore.reward_mode === "habit_card" ? "記録すると台紙にたまります" : `記録すると +${chore.points}pt`}
       </Text>
 
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>

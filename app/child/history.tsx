@@ -167,9 +167,13 @@ export default function ChildHistoryScreen() {
                           {isRoutine ? "（つづけてる）" : ""}
                         </Text>
                         <Text style={{ flex: 1 }} />
-                        <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
-                          +{c.points}pt
-                        </Text>
+                        {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型の完了報告は
+                            points=NULLのため何も添えない（ポイントに一切触れない）。 */}
+                        {c.points != null && (
+                          <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
+                            +{c.points}pt
+                          </Text>
+                        )}
                       </View>
                       {reactions.length > 0 && (
                         <View style={{ marginTop: theme.spacing.s1, gap: 2 }}>

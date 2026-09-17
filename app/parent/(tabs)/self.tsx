@@ -7,8 +7,10 @@ import GachaHomeWidget from "@/components/GachaHomeWidget";
 import ParentTabHeader from "@/components/ParentTabHeader";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
+import HabitCardStrip from "@/components/HabitCardStrip";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
+import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -44,6 +46,10 @@ export default function ParentSelfTabScreen() {
   const inboxCount = countRecentInbox(state, state.activeParentMemberId, inboxSince);
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
+
+  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9]
+  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
+  const { activeCards: habitActiveCards } = useHabitCardsForMember(state.activeParentMemberId);
 
   // [2026-09-11並び替え・統括指示] 並びは統括の指定どおり
   // クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく→通帳。
@@ -96,6 +102,14 @@ export default function ParentSelfTabScreen() {
       )}
 
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
+
+      <HabitCardStrip
+        tone="parent"
+        cards={habitActiveCards}
+        chores={state.chores}
+        catalog={habitFigureCatalog}
+        onPressCard={() => router.push("/parent/habit-cards")}
+      />
 
       <GachaHomeWidget
         tone="parent"

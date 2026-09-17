@@ -12,12 +12,14 @@ import {
 } from "react-native";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
-import type { FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
+import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 import type { FamilyMember, FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { StickerIcon } from "./StickerIcon";
+import FigureIcon from "./FigureIcon";
+import FigureFrame from "./FigureFrame";
 import { useAppData } from "@/data/store";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 import { pickNearestTreeTapTarget } from "@/lib/treeTapTargets";
@@ -744,6 +746,34 @@ function FreeStickerView({
 }
 
 /**
+ * [2026-09-17新設・要件定義書07-28章決定21、設計部/成果物/スキーマ設計.sql
+ * 55.9章決定55-18] 習慣カード（台紙）の段階報酬フィギュアの木への自由配置表示。
+ * `FreeStickerView`と全く同じ「自由配置レイヤー」に乗るが、メダルと混同されない
+ * よう五角形の枠（`FigureFrame`）を使う（主要画面ワイヤーフレーム.md 49.2章決定3。
+ * 既存のメダル関連コンポーネント〈StickerIcon・FreeStickerView〉は一切変更せず、
+ * 新しい独立したコンポーネントとして実装する、49.14章開発部への申し送り(3)）。
+ */
+function FreeHabitFigureView({
+  placement,
+  x,
+  y,
+  size,
+}: {
+  placement: FamilyTreeHabitFigurePlacement;
+  x: number;
+  y: number;
+  size: number;
+}) {
+  return (
+    <View style={{ position: "absolute", left: x - size / 2, top: y - size / 2, width: size, height: size }}>
+      <FigureFrame size={size} ringColor={placement.avatarColor}>
+        <FigureIcon figureKey={placement.figureKey} kindEmoji={placement.kindEmoji} size={size * 0.5} />
+      </FigureFrame>
+    </View>
+  );
+}
+
+/**
  * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.2節] 双葉（stage1）の葉は
  * CSSの`rotate`で左右に開いているため（`SPROUT_LEAF_ANGLE_DEG`）、葉の中の
  * 色丸のタップ判定用の座標も、葉の中心を軸に同じ角度だけ回転させる必要がある
@@ -963,6 +993,8 @@ export function TreeStageVisual({
   previewDecorationSize = null,
   stickerPlacements = null,
   hiddenStickerDecorationId = null,
+  habitFigurePlacements = null,
+  hiddenHabitFigureDecorationId = null,
   enableTapExpand = false,
   tone = "parent",
 }: {
@@ -1019,6 +1051,16 @@ export function TreeStageVisual({
    * ために使う。
    */
   hiddenStickerDecorationId?: string | null;
+  /**
+   * [2026-09-17新設・要件定義書07-28章決定21、スキーマ設計.sql 55.9章決定55-18]
+   * 木の上の自由配置フィギュア（`fetchFamilyTreeHabitFigurePlacements`の結果）。
+   * `stickerPlacements`と全く同じ「最前面固定・重なり回避なし」の独立レイヤーとして
+   * 描画する。nullまたは省略時（既存呼び出し元）は何も描画しない
+   * （後方互換のため既定値null、既存のメダル描画には一切影響しない）。
+   */
+  habitFigurePlacements?: FamilyTreeHabitFigurePlacement[] | null;
+  /** `habitFigurePlacements`のうち、この`decorationId`と一致する1件を描画から除外する（`TreeHabitFigureDragCanvas`の移動中プレビュー用、`hiddenStickerDecorationId`と同じ役割）。 */
+  hiddenHabitFigureDecorationId?: string | null;
   /**
    * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.5節 決定9] 景品・ステッカーの
    * タップ拡大表示（46.1〜46.9節）を有効にするかどうか。**既定はfalse（無効）**で、
@@ -1541,6 +1583,24 @@ export function TreeStageVisual({
             .filter((p) => p.decorationId !== hiddenStickerDecorationId)
             .map((p) => (
               <FreeStickerView
+                key={p.decorationId}
+                placement={p}
+                x={(p.posX / 1000) * canvasWidth}
+                y={(p.posY / 1000) * CANVAS_HEIGHT}
+                size={STICKER_DOT_SIZE}
+              />
+            ))}
+        </View>
+      )}
+
+      {/* [2026-09-17新設・要件定義書07-28章決定21] 自由配置フィギュア。ステッカーと
+          同じ最前面固定レイヤー（メダルの表示コンポーネント自体は変更していない）。 */}
+      {habitFigurePlacements && habitFigurePlacements.length > 0 && (
+        <View style={styles.stickerOverlay} pointerEvents="none">
+          {habitFigurePlacements
+            .filter((p) => p.decorationId !== hiddenHabitFigureDecorationId)
+            .map((p) => (
+              <FreeHabitFigureView
                 key={p.decorationId}
                 placement={p}
                 x={(p.posX / 1000) * canvasWidth}

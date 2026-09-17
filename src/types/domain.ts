@@ -55,7 +55,10 @@ export interface Chore {
   category_id: string | null;
   title: string;
   emoji: string | null;
-  points: number;
+  // [2026-09-17改訂・要件定義書07-28章、スキーマ設計.sql 55.1章] 台紙型
+  // （reward_mode='habit_card'）の行は常にNULL（ポイントに一切触れない、決定9）。
+  // ポイント型（既定）は従来どおり1以上の整数。
+  points: number | null;
   is_repeatable: boolean;
   daily_limit: number | null;
   assigned_to: string | null; // family_members.id、nullなら誰でも実行可
@@ -95,6 +98,13 @@ export interface Chore {
   // 場合はundefinedになりうる）。
   creator?: FamilyMemberBrief | null;
   editor?: FamilyMemberBrief | null;
+  // [新設・2026-09-17] 習慣カード（台紙）とフィギュア（要件定義書07-28章、
+  // スキーマ設計.sql 55.1章）。'points'（既定、既存行はすべてこちら）または
+  // 'habit_card'。台紙型は作成後に変更できない（決定55-9）。
+  reward_mode: "points" | "habit_card";
+  // 台紙の種類（habit_figure_catalog.kind_key）。reward_mode='habit_card'の
+  // ときのみ非NULL。作成後に変更できない（決定55-9）。
+  habit_kind_key: string | null;
 }
 
 // [新設・2026-09-01] chore_nfc_tags（要件定義書07-2章「作り直し：タグの人ごと化」、
@@ -125,7 +135,10 @@ export interface ReportChoreCompletionByNfcTagResult {
   chore_id: string;
   chore_title: string;
   chore_emoji: string | null;
-  points: number;
+  // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型（reward_mode='habit_card'）の
+  // クエストはNFCクイック完了でもpoints=NULLになる（49.5章決定15、chores.pointsを
+  // そのまま返すRPCのSELECT元がNULLになるため）。
+  points: number | null;
   member_id: string;
   member_display_name: string;
 }
@@ -143,7 +156,12 @@ export interface ChoreCompletion {
   // [削除] status/review_note/reviewed_by/reviewed_at（スキーマ設計.sql 5章「[廃止]」参照）。
   // 承認/差し戻しという状態遷移自体が無くなり、chore_completionsはINSERTのみの
   // 追記専用ログになった（UPDATE経路自体が存在しない）。
-  points: number;
+  // [2026-09-17改訂・要件定義書07-28章、スキーマ設計.sql 55.1章] 台紙型
+  // （reward_mode='habit_card'）クエストの完了報告は常にNULL（chores.pointsを
+  // そのままコピーするchore_completions_before_insertの既存ロジックにより、
+  // chores.pointsがNULLならここも自動的にNULLになる。member_pointsのSUM集計は
+  // NULLを自動的に無視するため、ポイントには一切触れない）。
+  points: number | null;
   // [2026-09-09削除] 証拠写真機能の残骸撤去（やること.md 5-4、開発部/成果物/
   // 実装メモ.md 180章）。photo_url列はDBから削除済み（マイグレーション
   // 20260917020000_drop_chore_photos.sql）。
@@ -638,4 +656,72 @@ export interface FamilyHomeCard {
   digest_id: string | null;
   digest_week_start: string | null;
   digest_generated_at: string | null;
+}
+
+// [新設・2026-09-17] 習慣カード（台紙）とフィギュア（要件定義書07-28章、
+// 設計部/成果物/スキーマ設計.sql 55章、API仕様.md 15章、開発部/成果物/
+// 実装メモ.md 237章）。
+
+/** habit_figure_catalog テーブルの1行（全家族共通グローバルカタログ、静的）。 */
+export interface HabitFigureCatalogItem {
+  id: string;
+  kind_key: string;
+  kind_display_name: string;
+  kind_emoji: string | null;
+  tier: "bronze" | "silver" | "gold" | "crystal";
+  figure_key: string;
+  display_name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** habit_cards テーブルの1行（習慣×メンバー単位の台紙インスタンス）。 */
+export interface HabitCard {
+  id: string;
+  family_id: string;
+  chore_id: string;
+  member_id: string;
+  chore_title: string;
+  chore_emoji: string | null;
+  status: "active" | "archived";
+  started_at: string;
+  archived_at: string | null;
+  archive_reason: "manual" | "crystal_completed" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** habit_figure_grants テーブルの1行（段階到達ごとの自動付与記録。選択の余地は無い）。 */
+export interface HabitFigureGrant {
+  id: string;
+  family_id: string;
+  habit_card_id: string;
+  member_id: string;
+  tier: "bronze" | "silver" | "gold" | "crystal";
+  figure_catalog_id: string;
+  triggering_completion_id: string | null;
+  granted_at: string;
+}
+
+/** habit_figure_grants に habit_figure_catalog を埋め込んだ表示用の形（台紙詳細・演出用）。 */
+export interface HabitFigureGrantWithCatalog extends HabitFigureGrant {
+  habit_figure_catalog: Pick<
+    HabitFigureCatalogItem,
+    "kind_display_name" | "kind_emoji" | "figure_key" | "display_name"
+  > | null;
+}
+
+/**
+ * コレクター棚「フィギュア」区分表示用（主要画面ワイヤーフレーム.md 49.2章決定3-③・
+ * 決定27）。`StickerPurchaseWithCatalog`と同じ「木への配置状況を付与する」パターン。
+ */
+export interface HabitFigureGrantWithPlacement extends HabitFigureGrantWithCatalog {
+  placement: {
+    decorationId: string;
+    seasonId: string;
+    posX: number;
+    posY: number;
+    isCurrentSeason: boolean;
+  } | null;
 }

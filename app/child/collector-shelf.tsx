@@ -10,6 +10,7 @@ import { useCollectedPrizes, usePastTreeSeasonDots, usePastTreeSeasons } from "@
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useFamilyStickerPurchases, useMyStickerPurchases } from "@/hooks/useStickers";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useHabitCards";
 
 /**
  * C26 コレクションだな（子ども）
@@ -26,8 +27,15 @@ export default function ChildCollectorShelfScreen() {
   const myId = state.activeChildMemberId;
   const { loadState: collectedLoadState, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
   const { loadState: pastSeasonsLoadState, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
-  const { dotsBySeasonId, stickerPlacementsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason } =
-    usePastTreeSeasonDots(familyId);
+  const {
+    dotsBySeasonId,
+    stickerPlacementsBySeasonId,
+    habitFigurePlacementsBySeasonId,
+    weeklyBySeasonId,
+    loadingSeasonIds,
+    errorSeasonIds,
+    loadSeason,
+  } = usePastTreeSeasonDots(familyId);
 
   const [selectedMemberId, setSelectedMemberId] = useState(ALL_MEMBERS_ID);
   const isViewingIndividual = selectedMemberId !== ALL_MEMBERS_ID;
@@ -45,6 +53,17 @@ export default function ChildCollectorShelfScreen() {
     purchases: familyStickerPurchases,
     reload: reloadFamilyStickers,
   } = useFamilyStickerPurchases(familyId, season?.id ?? null);
+  // [2026-09-17追加・要件定義書07-28章決定27、開発部/成果物/実装メモ.md 237章]
+  // 「フィギュア」区分。シール区分と全く同じ構造。
+  const { loadState: habitFiguresLoadState, grants: habitFigureGrants, reload: reloadHabitFigures } = useMyHabitFigureGrants(
+    effectiveMemberId,
+    season?.id ?? null
+  );
+  const {
+    loadState: familyHabitFiguresLoadState,
+    grants: familyHabitFigureGrants,
+    reload: reloadFamilyHabitFigures,
+  } = useFamilyHabitFigureGrants(familyId, season?.id ?? null);
 
   return (
     <Screen tone="child">
@@ -66,6 +85,7 @@ export default function ChildCollectorShelfScreen() {
         onRetryPastSeasons={reloadPastSeasons}
         dotsBySeasonId={dotsBySeasonId}
         stickerPlacementsBySeasonId={stickerPlacementsBySeasonId}
+        habitFigurePlacementsBySeasonId={habitFigurePlacementsBySeasonId}
         weeklyBySeasonId={weeklyBySeasonId}
         loadingSeasonIds={loadingSeasonIds}
         errorSeasonIds={errorSeasonIds}
@@ -91,6 +111,30 @@ export default function ChildCollectorShelfScreen() {
           router.push({
             pathname: "/child/tree-decorate",
             params: { moveDecorationId: decorationId, shape, rarity, posX: String(posX), posY: String(posY) },
+          })
+        }
+        habitFiguresLoadState={habitFiguresLoadState}
+        habitFigureGrants={habitFigureGrants}
+        onRetryHabitFigures={reloadHabitFigures}
+        familyHabitFiguresLoadState={familyHabitFiguresLoadState}
+        familyHabitFigureGrants={familyHabitFigureGrants}
+        onRetryFamilyHabitFigures={reloadFamilyHabitFigures}
+        onPlaceHabitFigure={(grantId: string, figureKey: string, kindEmoji: string | null) =>
+          router.push({
+            pathname: "/child/tree-decorate",
+            params: { habitFigureGrantId: grantId, habitFigureKey: figureKey, habitFigureKindEmoji: kindEmoji ?? "" },
+          })
+        }
+        onMoveHabitFigure={(decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) =>
+          router.push({
+            pathname: "/child/tree-decorate",
+            params: {
+              moveHabitFigureDecorationId: decorationId,
+              habitFigureKey: figureKey,
+              habitFigureKindEmoji: kindEmoji ?? "",
+              posX: String(posX),
+              posY: String(posY),
+            },
           })
         }
       />

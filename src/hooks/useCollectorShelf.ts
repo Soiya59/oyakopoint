@@ -13,11 +13,13 @@ import { useSession } from "@/lib/session";
 import {
   fetchFamilyCollectedGachaDraws,
   fetchFamilyTreeCompletionDots,
+  fetchFamilyTreeHabitFigurePlacements,
   fetchFamilyTreeSeasonHistory,
   fetchFamilyTreeStickerPlacements,
   fetchFamilyTreeWeeklyCompletionCounts,
   type CollectedGachaDraw,
   type FamilyTreeCompletionDot,
+  type FamilyTreeHabitFigurePlacement,
   type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
@@ -104,6 +106,9 @@ export function usePastTreeSeasonDots(familyId: string) {
   // 取得する（dotsBySeasonIdと同じ「シーズンごとに一度だけ取得しキャッシュする」
   // 方式を踏襲）。
   const [stickerPlacementsBySeasonId, setStickerPlacementsBySeasonId] = useState<Record<string, FamilyTreeStickerPlacement[]>>({});
+  // [2026-09-17追加・要件定義書07-28章決定21] 自由配置フィギュアもステッカーと
+  // 同じ「見る」展開のタイミングで別クエリとして取得する。
+  const [habitFigurePlacementsBySeasonId, setHabitFigurePlacementsBySeasonId] = useState<Record<string, FamilyTreeHabitFigurePlacement[]>>({});
   const [weeklyBySeasonId, setWeeklyBySeasonId] = useState<Record<string, FamilyTreeWeeklyCompletionCount[]>>({});
   const [loadingSeasonIds, setLoadingSeasonIds] = useState<Record<string, boolean>>({});
   const [errorSeasonIds, setErrorSeasonIds] = useState<Record<string, boolean>>({});
@@ -117,23 +122,33 @@ export function usePastTreeSeasonDots(familyId: string) {
       // JST基準の暦月初日の日付のみを持つため、JSTの0時を明示してISOに変換する）。
       const seasonStartIso = new Date(`${season.season_start}T00:00:00+09:00`).toISOString();
       const seasonEndIso = season.season_end ? new Date(`${season.season_end}T00:00:00+09:00`).toISOString() : null;
-      const [dotsRes, weeklyRes, stickerPlacementsRes] = await Promise.all([
+      const [dotsRes, weeklyRes, stickerPlacementsRes, habitFigurePlacementsRes] = await Promise.all([
         fetchFamilyTreeCompletionDots(client, familyId, seasonStartIso, seasonEndIso),
         fetchFamilyTreeWeeklyCompletionCounts(client, season.id),
         fetchFamilyTreeStickerPlacements(client, familyId, season.id),
+        fetchFamilyTreeHabitFigurePlacements(client, familyId, season.id),
       ]);
       setLoadingSeasonIds((prev) => ({ ...prev, [season.id]: false }));
-      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok) {
+      if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok || !habitFigurePlacementsRes.ok) {
         setErrorSeasonIds((prev) => ({ ...prev, [season.id]: true }));
         return;
       }
       setDotsBySeasonId((prev) => ({ ...prev, [season.id]: dotsRes.data }));
       setWeeklyBySeasonId((prev) => ({ ...prev, [season.id]: weeklyRes.data }));
       setStickerPlacementsBySeasonId((prev) => ({ ...prev, [season.id]: stickerPlacementsRes.data }));
+      setHabitFigurePlacementsBySeasonId((prev) => ({ ...prev, [season.id]: habitFigurePlacementsRes.data }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [client, familyId, dotsBySeasonId, loadingSeasonIds]
   );
 
-  return { dotsBySeasonId, stickerPlacementsBySeasonId, weeklyBySeasonId, loadingSeasonIds, errorSeasonIds, loadSeason };
+  return {
+    dotsBySeasonId,
+    stickerPlacementsBySeasonId,
+    habitFigurePlacementsBySeasonId,
+    weeklyBySeasonId,
+    loadingSeasonIds,
+    errorSeasonIds,
+    loadSeason,
+  };
 }

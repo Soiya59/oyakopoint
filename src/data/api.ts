@@ -44,6 +44,11 @@ import type {
   GachaPresetOrnament,
   GachaPrizeKind,
   GratitudePoint,
+  HabitCard,
+  HabitFigureCatalogItem,
+  HabitFigureGrant,
+  HabitFigureGrantWithCatalog,
+  HabitFigureGrantWithPlacement,
   MemberAvatarRow,
   MemberBadge,
   MemberBadgeProgress,
@@ -1088,10 +1093,20 @@ export interface ChoreFormInput {
   category_id: string | null;
   title: string;
   emoji: string | null;
-  points: number;
+  // [2026-09-17改訂・要件定義書07-28章] 台紙型（reward_mode='habit_card'）で
+  // 保存するときはnullを送る（DB側`chk_chores_reward_mode_payload`が
+  // reward_mode='habit_card'ならpoints IS NULLを要求するため）。
+  points: number | null;
   is_repeatable: boolean;
   daily_limit: number | null;
   assigned_to: string | null;
+  // [新設・2026-09-17・要件定義書07-28章、スキーマ設計.sql 55.1章] たまり方。
+  // 省略時（undefined）はDB側の既定値'points'になる。作成後はUPDATEで
+  // 変更できない（決定55-9、`chores_before_write()`が拒否する）。
+  reward_mode?: "points" | "habit_card";
+  // 台紙の種類（habit_figure_catalog.kind_key）。reward_mode='habit_card'の
+  // ときのみ指定する。作成後はUPDATEで変更できない（決定55-9）。
+  habit_kind_key?: string | null;
 }
 
 /**
@@ -1122,6 +1137,10 @@ export async function createChore(
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
       assigned_to: input.assigned_to,
+      // [2026-09-17追加] undefinedの場合はJSONシリアライズ時にキー自体が
+      // 落ちるため、DB側の既定値'points'がそのまま使われる（後方互換）。
+      reward_mode: input.reward_mode,
+      habit_kind_key: input.habit_kind_key,
     })
     .select("*")
     .single();
@@ -1129,7 +1148,14 @@ export async function createChore(
   return { ok: true, data: data as Chore };
 }
 
-/** API仕様.md 3章「編集」: `supabase.from('chores').update({...}).eq('id', choreId)` */
+/**
+ * API仕様.md 3章「編集」: `supabase.from('chores').update({...}).eq('id', choreId)`
+ *
+ * [2026-09-17追加・要件定義書07-28章決定55-9] `reward_mode`・`habit_kind_key`は
+ * 意図的にペイロードに含めない（作成後は変更できない列。`updatePersonalChore`が
+ * `scope`列を含めないのと同じパターン）。編集画面はこの2項目を編集不可の表示に
+ * しておくこと（DB側の`chores_before_write()`が最終防衛線として拒否する）。
+ */
 export async function updateChore(
   client: SupabaseClient,
   choreId: string,
@@ -1227,9 +1253,14 @@ export async function updateReward(
 export interface PersonalChoreFormInput {
   title: string;
   emoji: string | null;
-  points: number;
+  // [2026-09-17改訂・要件定義書07-28章] 台紙型で保存するときはnullを送る。
+  points: number | null;
   is_repeatable: boolean;
   daily_limit: number | null;
+  // [新設・2026-09-17・要件定義書07-28章] たまり方・台紙の種類。ChoreFormInputと
+  // 同じ扱い（省略時はDB既定値'points'、作成後は変更不可）。
+  reward_mode?: "points" | "habit_card";
+  habit_kind_key?: string | null;
 }
 
 /**
@@ -1237,6 +1268,14 @@ export interface PersonalChoreFormInput {
  * （DBトリガーchores_before_writeが呼び出し本人のmember_idで強制上書きする）。
  * scope: 'personal' 固定。RLS chores_write_personal_by_creator によりrole='supporter'
  * かつ本人のみ許可される。
+ *
+ * [2026-09-17追加・要件定義書07-28章決定24・スキーマ設計.sql 55.1章「supporter_
+ * shared分岐との関係」] みまもりメンバーが自分の台紙型クエストを作りたい場合、
+ * この関数（scope='personal'）を使う。'personal'は`assigned_to=created_by`が
+ * DB側で常に補正されるため、台紙型の「担当者必須」要件と自然に両立する
+ * （scope='supporter_shared'は`assigned_to`が常にNULLへ強制されるため
+ * 構造的に台紙型にできない。S6画面側の呼び出し分岐はapp/supporter/chore-edit.tsx
+ * 参照）。
  */
 export async function createPersonalChore(
   client: SupabaseClient,
@@ -1253,6 +1292,8 @@ export async function createPersonalChore(
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
+      reward_mode: input.reward_mode,
+      habit_kind_key: input.habit_kind_key,
     })
     .select("*")
     .single();
@@ -2913,6 +2954,310 @@ export async function setFamilyStickerPrices(
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as SetFamilyStickerPricesResultRow[] };
+}
+
+// ============================================================
+// 習慣カード（台紙）とフィギュア（要件定義書07-28章、API仕様.md 15章、
+// スキーマ設計.sql 55章、開発部/成果物/実装メモ.md 237章、2026-09-17新設）
+// [重要] 新しい完了報告経路・新しい取消経路は一切作らない（決定5・6）。
+// 台紙型クエストの完了報告・取消はreportCompletion/cancelChoreCompletionを
+// そのまま使う。ここに追加するのは「台紙の種類一覧」「台紙の閲覧」
+// 「おわりにする」「木への配置」の4点のみ。
+// ============================================================
+
+/**
+ * API仕様.md 15.1節「台紙の種類一覧」。クライアント側でkind_keyごとに
+ * グルーピングし、1種類につき4段階（銅/銀/金/クリスタル）のプレビューを
+ * まとめて表示する（種類選択UI・見出しの絵文字表示の両方で使う）。
+ */
+export async function fetchHabitFigureCatalog(client: SupabaseClient): Promise<ApiResult<HabitFigureCatalogItem[]>> {
+  const { data, error } = await client
+    .from("habit_figure_catalog")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("tier");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as HabitFigureCatalogItem[] };
+}
+
+/**
+ * API仕様.md 15.2節「自分の進行中の台紙一覧」・「完成済み（アーカイブ済み）の
+ * 台紙一覧」。`habit_cards_select_same_family`により家族の誰でも他メンバーの
+ * 台紙を閲覧できる（決定12）ため、`memberId`には家族内の任意のメンバーIDを
+ * 渡してよい。
+ */
+export async function fetchHabitCards(
+  client: SupabaseClient,
+  memberId: string,
+  status: "active" | "archived"
+): Promise<ApiResult<HabitCard[]>> {
+  const { data, error } = await client
+    .from("habit_cards")
+    .select("*")
+    .eq("member_id", memberId)
+    .eq("status", status)
+    .order(status === "active" ? "started_at" : "archived_at", { ascending: status === "active" });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as HabitCard[] };
+}
+
+/**
+ * API仕様.md 15.2節「累計・次の段階までの残り件数（1枚分）」。新規Viewは
+ * 用意せず、`chore_completions`を都度COUNTする（スキーマ設計.sql 55.5章と
+ * 同じ計算式。`count: 'exact', head: true`で件数のみ取得し行本体は転送しない）。
+ */
+export async function fetchHabitCardProgressCount(
+  client: SupabaseClient,
+  choreId: string,
+  memberId: string,
+  startedAtIso: string
+): Promise<ApiResult<number>> {
+  const { count, error } = await client
+    .from("chore_completions")
+    .select("id", { count: "exact", head: true })
+    .eq("chore_id", choreId)
+    .eq("reported_by", memberId)
+    .gte("reported_at", startedAtIso);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: count ?? 0 };
+}
+
+/** API仕様.md 15.2節「獲得済みフィギュア一覧（1枚の台紙分）」。 */
+export async function fetchHabitFigureGrantsForCard(
+  client: SupabaseClient,
+  habitCardId: string
+): Promise<ApiResult<HabitFigureGrantWithCatalog[]>> {
+  const { data, error } = await client
+    .from("habit_figure_grants")
+    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name)")
+    .eq("habit_card_id", habitCardId)
+    .order("granted_at");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as HabitFigureGrantWithCatalog[] };
+}
+
+/**
+ * API仕様.md 15.4節「直近で新しく付与されたフィギュアが無いか確認する」。
+ * 完了報告成功直後に呼び、返ってきた行の`granted_at`が完了報告の
+ * `reported_at`以上であれば「今回の報告で新しく獲得した」ものとして演出を
+ * 出す（同一トランザクション内の`now()`は完全に一致するため`>=`で判定できる。
+ * 呼び出し元はComparisonの根拠をコード内コメントに残すこと）。
+ */
+export async function fetchLatestHabitFigureGrant(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<HabitFigureGrantWithCatalog | null>> {
+  const { data, error } = await client
+    .from("habit_figure_grants")
+    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name)")
+    .eq("member_id", memberId)
+    .order("granted_at", { ascending: false })
+    .limit(1);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as HabitFigureGrantWithCatalog[];
+  return { ok: true, data: rows[0] ?? null };
+}
+
+/**
+ * API仕様.md 15.3節「台紙を『おわりにする』」。`end_habit_card()`が権限・状態を
+ * 検証したうえでアーカイブする（獲得済みの累計・フィギュアは保持したまま）。
+ * 戻り値はアーカイブされた時刻（ISO文字列）。
+ */
+export async function endHabitCard(client: SupabaseClient, habitCardId: string): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("end_habit_card", { p_habit_card_id: habitCardId });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 15.4節「獲得したフィギュアを木の好きな位置に貼る」。
+ * `decorate_tree_with_habit_figure()`は自分の獲得物・今シーズンのみ受け付ける。
+ * `posX`・`posY`はキャンバス相対の0〜1000整数（ステッカーと同じ規約）。
+ */
+export async function decorateTreeWithHabitFigure(
+  client: SupabaseClient,
+  grantId: string,
+  posX: number,
+  posY: number
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("decorate_tree_with_habit_figure", {
+    p_grant_id: grantId,
+    p_pos_x: posX,
+    p_pos_y: posY,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 15.4節「貼ったフィギュアの座標を、その月のうちに動かす」。
+ * `move_tree_habit_figure()`は自分の配置・進行中シーズンの配置のみを対象にする。
+ */
+export async function moveTreeHabitFigure(
+  client: SupabaseClient,
+  decorationId: string,
+  posX: number,
+  posY: number
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("move_tree_habit_figure", {
+    p_decoration_id: decorationId,
+    p_pos_x: posX,
+    p_pos_y: posY,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 15.4節「木の表示への埋め込み」。ステッカーの
+ * `fetchFamilyTreeStickerPlacements`と同型（family_tree_decorations単独を
+ * 起点にした専用クエリ。decoration_source='habit_figure'の行のみを対象にする）。
+ */
+export interface FamilyTreeHabitFigurePlacement {
+  decorationId: string;
+  posX: number;
+  posY: number;
+  memberId: string;
+  avatarColor: string | null;
+  grantId: string;
+  tier: "bronze" | "silver" | "gold" | "crystal";
+  kindDisplayName: string;
+  kindEmoji: string | null;
+  figureKey: string;
+  displayName: string;
+  decoratedAt: string;
+}
+
+export async function fetchFamilyTreeHabitFigurePlacements(
+  client: SupabaseClient,
+  familyId: string,
+  seasonId: string
+): Promise<ApiResult<FamilyTreeHabitFigurePlacement[]>> {
+  const { data, error } = await client
+    .from("family_tree_decorations")
+    .select(
+      "id, pos_x, pos_y, decorated_at, " +
+        "habit_figure_grant:habit_figure_grants(id, member_id, tier, " +
+        "family_members!member_id(avatar_color), " +
+        "habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name))"
+    )
+    .eq("family_id", familyId)
+    .eq("season_id", seasonId)
+    .eq("decoration_source", "habit_figure");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    pos_x: number | null;
+    pos_y: number | null;
+    decorated_at: string;
+    habit_figure_grant: {
+      id: string;
+      member_id: string;
+      tier: "bronze" | "silver" | "gold" | "crystal";
+      family_members: { avatar_color: string | null } | null;
+      habit_figure_catalog: {
+        kind_display_name: string;
+        kind_emoji: string | null;
+        figure_key: string;
+        display_name: string;
+      } | null;
+    } | null;
+  }[];
+  const out: FamilyTreeHabitFigurePlacement[] = [];
+  for (const r of rows) {
+    // DB側CHECK制約（chk_family_tree_decorations_source_payload）により
+    // decoration_source='habit_figure'の行は常にpos_x/pos_y・
+    // habit_figure_grant_idが非NULLだが、埋め込みが辿れなかった場合
+    // （他家族参照等、通常発生しない）に備えて防御的にスキップする。
+    if (r.pos_x == null || r.pos_y == null || !r.habit_figure_grant || !r.habit_figure_grant.habit_figure_catalog) continue;
+    out.push({
+      decorationId: r.id,
+      posX: r.pos_x,
+      posY: r.pos_y,
+      memberId: r.habit_figure_grant.member_id,
+      avatarColor: r.habit_figure_grant.family_members?.avatar_color ?? null,
+      grantId: r.habit_figure_grant.id,
+      tier: r.habit_figure_grant.tier,
+      kindDisplayName: r.habit_figure_grant.habit_figure_catalog.kind_display_name,
+      kindEmoji: r.habit_figure_grant.habit_figure_catalog.kind_emoji,
+      figureKey: r.habit_figure_grant.habit_figure_catalog.figure_key,
+      displayName: r.habit_figure_grant.habit_figure_catalog.display_name,
+      decoratedAt: r.decorated_at,
+    });
+  }
+  return { ok: true, data: out };
+}
+
+/**
+ * コレクター棚「集めたもの」区画・フィギュア区分（主要画面ワイヤーフレーム.md
+ * 49.2章決定3-③・決定27、開発部/成果物/実装メモ.md 237章）。`fetchMyStickerPurchases`と
+ * 同じ「木への配置状況を付与する」パターン。`habit_figure_grants`は`member_id`列を
+ * 直接持つため、`ornament_sticker_purchases`と違いhabit_cardsへのJOINは不要。
+ */
+type HabitFigureGrantRow = HabitFigureGrant & {
+  habit_figure_catalog: HabitFigureGrantWithCatalog["habit_figure_catalog"];
+  family_tree_decorations:
+    | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }[]
+    | { id: string; season_id: string; pos_x: number | null; pos_y: number | null }
+    | null;
+};
+
+function mapHabitFigureGrantRow(r: HabitFigureGrantRow, currentSeasonId: string | null): HabitFigureGrantWithPlacement {
+  const deco = asEmbeddedArray(r.family_tree_decorations)[0] ?? null;
+  const placement =
+    deco && deco.pos_x != null && deco.pos_y != null
+      ? {
+          decorationId: deco.id,
+          seasonId: deco.season_id,
+          posX: deco.pos_x,
+          posY: deco.pos_y,
+          isCurrentSeason: currentSeasonId != null && deco.season_id === currentSeasonId,
+        }
+      : null;
+  return {
+    id: r.id,
+    family_id: r.family_id,
+    habit_card_id: r.habit_card_id,
+    member_id: r.member_id,
+    tier: r.tier,
+    figure_catalog_id: r.figure_catalog_id,
+    triggering_completion_id: r.triggering_completion_id,
+    granted_at: r.granted_at,
+    habit_figure_catalog: r.habit_figure_catalog,
+    placement,
+  };
+}
+
+export async function fetchMyHabitFigureGrants(
+  client: SupabaseClient,
+  memberId: string,
+  currentSeasonId: string | null
+): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
+  const { data, error } = await client
+    .from("habit_figure_grants")
+    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
+    .eq("member_id", memberId)
+    .order("granted_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as HabitFigureGrantRow[];
+  return { ok: true, data: rows.map((r) => mapHabitFigureGrantRow(r, currentSeasonId)) };
+}
+
+/** 「全員」選択時の「フィギュア」区分（`fetchFamilyStickerPurchases`と同じ考え方）。 */
+export async function fetchFamilyHabitFigureGrants(
+  client: SupabaseClient,
+  familyId: string,
+  currentSeasonId: string | null
+): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
+  const { data, error } = await client
+    .from("habit_figure_grants")
+    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
+    .eq("family_id", familyId)
+    .order("granted_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const rows = (data ?? []) as unknown as HabitFigureGrantRow[];
+  return { ok: true, data: rows.map((r) => mapHabitFigureGrantRow(r, currentSeasonId)) };
 }
 
 // ============================================================

@@ -89,7 +89,17 @@ export default function ChildReportScreen() {
       // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/
       // 成果物/主要画面ワイヤーフレーム.md 28.2節。取消リンクの対象を特定するため
       // completionIdを渡す（dispatchがREPORT_COMPLETION成功時に返すid、store.tsx参照）。
-      params: { choreTitle: chore.title, points: String(chore.points), completionId: result.completionId ?? "" },
+      // [2026-09-17追加・要件定義書07-28章、API仕様.md 15.4節] 台紙型クエストの
+      // 段階到達演出のため、choreId・reportedAtも渡す（habit_figure_grants.
+      // granted_atとの比較に使う。points=""の場合（台紙型）はC7側で「+◯pt」表示を
+      // 省略する）。
+      params: {
+        choreTitle: chore.title,
+        points: chore.points != null ? String(chore.points) : "",
+        completionId: result.completionId ?? "",
+        choreId: chore.id,
+        reportedAt: result.reportedAt ?? "",
+      },
     });
   };
 

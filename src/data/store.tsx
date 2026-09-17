@@ -137,7 +137,15 @@ export type Action =
  * （要件定義書07-17章）の対象を特定するために使う。他のアクションは従来どおり
  * `{ ok: true }`のみ（completionIdはoptionalなので後方互換）。
  */
-export type DispatchResult = { ok: true; completionId?: string } | { ok: false; error: ApiError };
+// [2026-09-17追加・要件定義書07-28章、API仕様.md 15.4節] REPORT_COMPLETION成功時、
+// `reportedAt`（サーバーのreported_at）も併せて返す。台紙型クエストの完了報告後、
+// 「直近で新しく付与されたフィギュアが無いか」を`habit_figure_grants.granted_at
+// >= reportedAt`で判定するために使う（同一トランザクション内のnow()は完全に
+// 一致するため`>=`で安全に判定できる）。他のアクションは従来どおりoptionalのため
+// 後方互換。
+export type DispatchResult =
+  | { ok: true; completionId?: string; reportedAt?: string }
+  | { ok: false; error: ApiError };
 
 export interface DataContextValue {
   state: State;
@@ -237,15 +245,19 @@ function buildLedgers(state: State) {
       .filter((r) => r.completion_id === completionId)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
+  // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型（reward_mode='habit_card'）の
+  // 完了報告はpoints=NULLのため、通帳（ポイント台帳）には一切表示しない
+  // （「ポイントには一切触れない」を通帳の表示でも徹底する）。台紙の進捗は
+  // じぶんタブの台紙カード・新設「台紙」画面（HabitCardStrip/HabitCardBoard）で見る。
   const earnLedger = (memberId: string): LedgerEntry[] =>
     state.completions
-      .filter((c) => c.reported_by === memberId)
+      .filter((c) => c.reported_by === memberId && c.points != null)
       .map((c) => ({
         id: c.id,
         kind: "earn" as const,
         label: c.chore_title,
         emoji: c.chore_emoji,
-        points: c.points,
+        points: c.points as number,
         occurredAt: c.reported_at,
         reactions: reactionsForCompletion(c.id),
       }));
@@ -739,7 +751,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           });
           if (!res.ok) return { ok: false, error: res.error };
           await load();
-          return { ok: true, completionId: res.data.id };
+          return { ok: true, completionId: res.data.id, reportedAt: res.data.reported_at };
         }
 
         // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・API仕様.md 4d節。
@@ -1063,7 +1075,10 @@ function computeMemberPoints(state: State): MemberPoints[] {
   return state.members
     .filter((m) => m.is_active)
     .map((m) => {
-      const earned = state.completions.filter((c) => c.reported_by === m.id).reduce((sum, c) => sum + c.points, 0);
+      // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLのため
+      // `?? 0`で無視する（`member_points`のSUM集計がNULLを自動的に無視するのと
+      // 同じ挙動をモック実装でも再現する）。
+      const earned = state.completions.filter((c) => c.reported_by === m.id).reduce((sum, c) => sum + (c.points ?? 0), 0);
       const spent = state.redemptions
         .filter((r) => r.member_id === m.id && r.status === "approved")
         .reduce((sum, r) => sum + r.cost, 0);
@@ -1080,9 +1095,9 @@ function computeDailySummary(state: State, fromDate: string, toDate: string): Da
     const existing = map.get(key);
     if (existing) {
       existing.completion_count += 1;
-      existing.total_points += c.points;
+      existing.total_points += c.points ?? 0;
     } else {
-      map.set(key, { activity_date: activityDate, member_id: c.reported_by, family_id: c.family_id, completion_count: 1, total_points: c.points });
+      map.set(key, { activity_date: activityDate, member_id: c.reported_by, family_id: c.family_id, completion_count: 1, total_points: c.points ?? 0 });
     }
   }
   return Array.from(map.values());
@@ -1113,8 +1128,9 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
     // Date.now()採番すると呼び出し元からは取得できないため）。
     if (action.type === "REPORT_COMPLETION") {
       const completionId = `completion-${Date.now()}`;
+      const reportedAt = new Date().toISOString();
       dispatchRaw({ ...action, completionId });
-      return { ok: true, completionId };
+      return { ok: true, completionId, reportedAt };
     }
     dispatchRaw(action);
     return { ok: true };
