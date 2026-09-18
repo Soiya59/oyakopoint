@@ -34,6 +34,10 @@ export default function ParentMemberAvatarScreen() {
   const [resetting, setResetting] = useState(false);
   const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
+  // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
+  // （お絵かき画面〈app/parent/drawing.tsx〉と同じ配線）。
+  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
   const handleSave = async (lineData: FamilyDrawingLineData): Promise<boolean> => {
     if (!memberId) return false;
@@ -90,7 +94,13 @@ export default function ParentMemberAvatarScreen() {
     "好きなものを描いてください。顔を描くなら、輪郭は色の丸がそのまま使えるので目と口だけで十分です。ほっぺに赤い点を打つとかわいくなります。";
 
   return (
-    <Screen tone="parent">
+    <Screen
+      tone="parent"
+      // [2026-09-18追加・実装メモ.md 248・243章] 描いている間だけスクロールを止める
+      // （決定的な手）。canCancelContentTouches=falseはiOSの保険（二重の守り）。
+      scrollEnabled={!canvasGestureActive}
+      canCancelContentTouches={false}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
           <Text style={theme.typography.parentBody}>← もどる</Text>
@@ -135,6 +145,7 @@ export default function ParentMemberAvatarScreen() {
             resetErrorMessage={resetErrorMessage}
             resetSuccessMessage={resetSuccessMessage}
             onReset={handleReset}
+            onGestureActiveChange={setCanvasGestureActive}
           />
         </View>
       )}

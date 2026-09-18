@@ -20,6 +20,13 @@
  *   および編集開始（`startEdit`）の瞬間に、倍率・パン位置を1倍・中央へリセットする
  *   （47.6節決定15）。呼び出し元（`DrawingBoard.tsx`）から`lines`・`editingId`を
  *   そのまま受け取り、その変化を見て自律的にリセットする。
+ *
+ * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章] `AvatarDrawingPanel.tsx`
+ * （アバターを描く画面）からも同じ部品を使うようになった。アバターには
+ * 「未公開の絵の編集」（`editingId`）・48章「まんなかに おおきく」ボタン
+ * （`fitToCircleSignal`）のどちらの概念も無いため、両propを省略可能にし
+ * （既定値は「一度も使われていない」状態と同じ値）、`DrawingBoard.tsx`の
+ * 既存の呼び出し（両方を必ず明示的に渡す）は1行も変えていない。
  */
 import React, { useEffect, useRef, useState } from "react";
 import { LayoutChangeEvent, StyleSheet, View } from "react-native";
@@ -54,16 +61,24 @@ interface ZoomableDrawingCanvasProps {
   /**
    * 47.6節決定15: nullから非nullへ変わった瞬間（未公開の絵の編集を開始した瞬間）に
    * 1倍・中央へリセットする。`DrawingBoard.tsx`の`editingId`をそのまま渡す。
+   * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章] `AvatarDrawingPanel.tsx`
+   * には「未公開の絵の編集」という概念自体が無いため、省略可能にした（既定`null`）。
+   * 既定値が家族の絵の「編集していない」状態と同じ値のため、`DrawingBoard.tsx`
+   * （常に明示的に渡している）の挙動は一切変わらない。
    */
-  editingId: string | null;
+  editingId?: string | null;
   /**
    * [2026-09-17追加・主要画面ワイヤーフレーム.md 48.5節決定17、実装メモ.md 236章]
    * 48章「まんなかに おおきく」ボタンで座標変換が成功するたびに1ずつ増える値。
    * `DrawingBoard.tsx`側でボタン押下・変換成功のたびにインクリメントして渡す。
    * 47.6節決定15の一覧（キャンバスが空になった瞬間・編集開始の瞬間）に、
    * 「48章のボタンを押した瞬間」を1行追記する形で1倍・中央へリセットする。
+   * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章] アバターには48章の
+   * ボタン自体を足さないため省略可能にした（既定`0`＝一度も押されていない状態と
+   * 同じ値。変化しないため`useEffect`は一度も発火しない）。`DrawingBoard.tsx`は
+   * 常に明示的に渡しているため挙動は変わらない。
    */
-  fitToCircleSignal: number;
+  fitToCircleSignal?: number;
   /**
    * [2026-09-17追加・実装メモ243章] `DrawingCanvas`の`onGestureActiveChange`を
    * そのまま上（`DrawingBoard.tsx`）へ橋渡しする。ここでは何も加工しない
@@ -71,6 +86,15 @@ interface ZoomableDrawingCanvasProps {
    * 止めるべきか」だけを伝えるためのもの）。
    */
   onGestureActiveChange?: (active: boolean) => void;
+  /**
+   * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章] 円の背景色。
+   * `DrawingCanvas.tsx`の同名propをそのまま橋渡しする。未指定時は`DrawingCanvas`
+   * 自身の既定値（`theme.colors.neutralSurface`、家族の絵の白背景）と同じに
+   * するため、ここでも既定値を明示的に揃えておく（`DrawingBoard.tsx`は
+   * このpropを渡さないため今までどおり白背景のまま。`AvatarDrawingPanel.tsx`は
+   * 対象メンバーの`avatar_color`を渡す）。
+   */
+  backgroundColor?: string;
 }
 
 export function ZoomableDrawingCanvas({
@@ -81,9 +105,10 @@ export function ZoomableDrawingCanvas({
   onStrokeEnd,
   disabled = false,
   zoomPickerDisabled = false,
-  editingId,
-  fitToCircleSignal,
+  editingId = null,
+  fitToCircleSignal = 0,
   onGestureActiveChange,
+  backgroundColor = theme.colors.neutralSurface,
 }: ZoomableDrawingCanvasProps) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
@@ -179,6 +204,7 @@ export function ZoomableDrawingCanvas({
             lines={lines}
             onStrokeEnd={onStrokeEnd}
             disabled={disabled}
+            backgroundColor={backgroundColor}
             chromeless
             onPan={handlePan}
             onGestureActiveChange={onGestureActiveChange}

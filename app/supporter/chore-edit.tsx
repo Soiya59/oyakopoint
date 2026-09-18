@@ -21,7 +21,14 @@ import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findSkillChoreTemplateById } from "@/data/skillChoreTemplates";
-import { useHabitFigureCatalog, groupHabitFigureCatalogByKind } from "@/hooks/useHabitCards";
+import { useHabitFigureCatalog, groupHabitFigureCatalogByKind, useActiveHabitCardCount, HABIT_CARDS_MAX_ACTIVE } from "@/hooks/useHabitCards";
+
+// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] DBの
+// `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言。保存を押す前
+// （クライアント側の事前チェックで上限と分かった時点）にも同じ文言を出すために
+// 定数化した（app/parent/chore-edit.tsxのHABIT_CARD_LIMIT_MESSAGEと同一文言）。
+const HABIT_CARD_LIMIT_MESSAGE =
+  "台紙は同時に3まいまでです。今の台紙をどれか「おわりにする」と、新しい台紙を始められます";
 import {
   FAMILY_DATA_NOT_READY_MESSAGE,
   NFC_UNLINK_ERROR_MESSAGE,
@@ -127,6 +134,16 @@ export default function SupporterChoreEditScreen() {
   // メンバー自身、state.activeParentMemberId）固定のため、P11のようなメンバー選択
   // ステップは無い（主要画面ワイヤーフレーム.md 7.6.2節）。
   const myMemberId = state.activeParentMemberId;
+  /**
+   * [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの新規
+   * 作成時、担当は常に自分自身（myMemberId）に固定される（決定55-21・上記コメント
+   * 「担当はあなた自身に固定されます」）。既に進行中の台紙を3枚（`HABIT_CARDS_MAX_ACTIVE`）
+   * 持っているかを、保存する前に確認する。編集モードは対象外（`habit_cards`への
+   * INSERTはクエスト新規作成の直後にしか起きないため、編集では起こらない事象）。
+   */
+  const habitCardLimitCheckMemberId = !isEditMode && rewardMode === "habit_card" ? myMemberId : null;
+  const { count: habitCardActiveCountForMe } = useActiveHabitCardCount(habitCardLimitCheckMemberId);
+  const atHabitCardLimit = habitCardLimitCheckMemberId !== null && habitCardActiveCountForMe >= HABIT_CARDS_MAX_ACTIVE;
   const [modalVisible, setModalVisible] = useState(false);
   const [nfcStep, setNfcStep] = useState<NfcModalStep>("list");
   const [nfcErrorMessage, setNfcErrorMessage] = useState<string | null>(null);
@@ -426,13 +443,24 @@ export default function SupporterChoreEditScreen() {
         </Text>
       )}
 
-      {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
+      {/* [2026-09-18変更・やること.md 4-47、実装メモ.md 248章] 従来は保存を押して
+          DB側に拒否された後（errorMessage）にしか出なかった赤字案内を、台紙型を
+          選んだ時点（atHabitCardLimit、クライアント側の事前チェック）でも同じ
+          文言で出す。errorMessageがある場合はそちらを優先表示する。 */}
+      {errorMessage ? (
+        <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
+      ) : atHabitCardLimit ? (
+        <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{HABIT_CARD_LIMIT_MESSAGE}</Text>
+      ) : null}
 
       <AppButton
         tone="supporter"
         label={saving ? "保存中…" : "保存する"}
         loading={saving}
-        disabled={saving || deleting}
+        // [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの
+        // 新規作成で、自分がすでに台紙3枚（上限）のときは押せなくする
+        // （atHabitCardLimit）。ポイント型へ「かえる」と対象外になり自動的に戻る。
+        disabled={saving || deleting || atHabitCardLimit}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={save}
       />

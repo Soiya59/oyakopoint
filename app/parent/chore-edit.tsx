@@ -28,13 +28,19 @@ import {
   NFC_WRITE_ERROR_MESSAGE,
   NFC_WRITE_RETRY_LABEL,
 } from "@/lib/errorMessages";
-import { useHabitFigureCatalog, groupHabitFigureCatalogByKind } from "@/hooks/useHabitCards";
+import { useHabitFigureCatalog, groupHabitFigureCatalogByKind, useActiveHabitCardCount, HABIT_CARDS_MAX_ACTIVE } from "@/hooks/useHabitCards";
 
 // [2026-09-17追加・要件定義書07-28章決定23a] 台紙型クエストは3枚上限に達している
 // メンバーを担当に選んだとき、DB側（habit_cards_before_write()）が返すメッセージ。
 // このメッセージが含まれる場合のみ「台紙を見る→」への軽い案内リンクを追加で出す
 // （決定23b、新しい確認モーダルは増やさない）。
 const HABIT_CARD_LIMIT_ERROR_HINT = "台紙は同時に3まいまでです";
+// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] DBの
+// `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言（統括が実機で
+// 「分かりやすい」と評価した文言、そのまま流用する）。保存を押す前（クライアント側の
+// 事前チェックで上限と分かった時点）にも同じ文言を出すために定数化した。
+const HABIT_CARD_LIMIT_MESSAGE =
+  "台紙は同時に3まいまでです。今の台紙をどれか「おわりにする」と、新しい台紙を始められます";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -152,6 +158,17 @@ export default function ChoreEditScreen() {
   }, [rewardMode, habitKindGroups.length]);
   // 編集モード専用（単一選択、変更なし。要件定義書07-26章決定18）。
   const [assignedTo, setAssignedTo] = useState<string | null>(chore?.assigned_to ?? null);
+  /**
+   * [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの新規作成
+   * （編集モードでは担当を変更できない＝この状況が起こらないため対象外、決定55-22）で、
+   * 選んだ担当がすでに進行中の台紙を3枚（`HABIT_CARDS_MAX_ACTIVE`）持っているかを、
+   * 「保存する」を押す前に確認する。`habitCardLimitCheckMemberId`が`null`のとき
+   * （台紙型を選んでいない・担当が未選択・編集モード）は何も取得しない
+   * （`useActiveHabitCardCount`側のガード）。
+   */
+  const habitCardLimitCheckMemberId = !isEditMode && rewardMode === "habit_card" ? assignedTo : null;
+  const { count: habitCardActiveCountForAssignee } = useActiveHabitCardCount(habitCardLimitCheckMemberId);
+  const atHabitCardLimit = habitCardLimitCheckMemberId !== null && habitCardActiveCountForAssignee >= HABIT_CARDS_MAX_ACTIVE;
   // [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md 39.3節]
   // 新規登録モード専用の複数選択状態。担当者はコピーでも引き継がない（決定9）ため、
   // copySourceの有無に関わらず常に空配列から始める。編集モードでは一切使わない。
@@ -793,12 +810,20 @@ export default function ChoreEditScreen() {
 
       </View>
 
-      {errorMessage && (
+      {/* [2026-09-18変更・やること.md 4-47、実装メモ.md 248章] 従来は保存を押して
+          DB側に拒否された後（errorMessage）にしか出なかった赤字案内を、担当を
+          選んだ時点（atHabitCardLimit、クライアント側の事前チェック）でも
+          同じ文言で出す。errorMessageがある場合はそちらを優先表示する
+          （実際に保存を試みて起きた結果のほうが新しい情報のため）。 */}
+      {errorMessage ? (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
-      )}
-      {/* [2026-09-17追加・要件定義書07-28章決定23b] 3枚上限のエラーのときだけ、
-          新設「台紙」画面への軽い案内リンクを添える（新しい確認モーダルは増やさない）。 */}
-      {errorMessage && errorMessage.includes(HABIT_CARD_LIMIT_ERROR_HINT) && (
+      ) : atHabitCardLimit ? (
+        <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{HABIT_CARD_LIMIT_MESSAGE}</Text>
+      ) : null}
+      {/* [2026-09-17追加・要件定義書07-28章決定23b] 3枚上限のときだけ、新設「台紙」
+          画面への軽い案内リンクを添える（新しい確認モーダルは増やさない）。
+          [2026-09-18変更・実装メモ.md 248章] 保存前のatHabitCardLimitでも表示する。 */}
+      {((errorMessage && errorMessage.includes(HABIT_CARD_LIMIT_ERROR_HINT)) || atHabitCardLimit) && (
         <Pressable onPress={() => router.push("/parent/habit-cards")}>
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
             台紙を見る →
@@ -822,7 +847,12 @@ export default function ChoreEditScreen() {
               : "保存する"
           }
           loading={saving}
-          disabled={saving}
+          // [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの
+          // 新規作成で、選んだ担当がすでに台紙3枚（上限）のときは押せなくする
+          // （atHabitCardLimit）。担当を選び直して上限に掛からなくなれば、
+          // habitCardLimitCheckMemberIdの変化に連動してatHabitCardLimitが
+          // falseへ戻り、自動的に押せる状態に戻る。
+          disabled={saving || atHabitCardLimit}
           style={{ marginTop: theme.spacing.s6 }}
           onPress={save}
         />

@@ -15,13 +15,19 @@
  * 算出し、`disabled={saving || atCapacity}`を`DrawingCanvas`へ渡してキャンバスを
  * 完全にロックする（43.1節 決定1〜3。150本側のガードが300本側のガードより
  * 先に効く、43.9節開発部への申し送り4）。
+ *
+ * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章] `DrawingCanvas`を直接
+ * 使っていた箇所を`ZoomableDrawingCanvas`（主要画面ワイヤーフレーム.md 47章、
+ * 実装メモ.md 235・245章）に置き換え、拡大表示（ふつう／おおきく／もっとおおきく）
+ * を追加した。48章「まんなかに おおきく」ボタンはアバターには足さない
+ * （`fitToCircleSignal`を渡さず既定値のまま使う）。
  */
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
 import MemberAvatar from "./MemberAvatar";
-import DrawingCanvas from "./DrawingCanvas";
+import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import theme from "@/theme/theme";
@@ -51,6 +57,14 @@ interface AvatarDrawingPanelProps {
   resetSuccessMessage: string | null;
   /** 「色にもどす」の確定。成功したらtrueを返すこと（確認表示を閉じるため）。 */
   onReset: () => Promise<boolean>;
+  /**
+   * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章・243章] キャンバスに
+   * 指が触れている間（ストローク中・2本指パン中の両方）trueで呼ばれる。
+   * `DrawingBoard.tsx`の`onCanvasGestureActiveChange`と同じ考え方で、呼び出し画面側
+   * （`app/{child,parent,supporter}/*-avatar.tsx`）が`Screen`の`scrollEnabled`へ
+   * `!値`を渡し、描いている間だけ画面のスクロールを止める。
+   */
+  onGestureActiveChange?: (active: boolean) => void;
 }
 
 export function AvatarDrawingPanel({
@@ -67,6 +81,7 @@ export function AvatarDrawingPanel({
   resetErrorMessage,
   resetSuccessMessage,
   onReset,
+  onGestureActiveChange,
 }: AvatarDrawingPanelProps) {
   // [決定28] 「なおす」の場合、画面を開いた時点で既存の絵をキャンバスへ読み込んだ
   // 状態にする。以後はprops(savedLineData)の変化に追従させない（「色にもどす」は
@@ -185,13 +200,21 @@ export function AvatarDrawingPanel({
         )}
       </Card>
 
-      <DrawingCanvas
+      {/* [2026-09-18変更・やること.md 2-51、実装メモ.md 248章] `DrawingCanvas`直接呼び出しから
+          `ZoomableDrawingCanvas`（47章拡大表示）へ置き換え。48章「まんなかに おおきく」用の
+          `editingId`・`fitToCircleSignal`は渡さず既定値のまま（アバターには無い概念、48章参照）。
+          倍率ボタンの無効化は`DrawingBoard.tsx`と同じく`saving`のみ（`atCapacity`では無効化
+          しない。拡大して見返す・「ひとつ もどす」後に続きを描く操作を妨げないため）。 */}
+      <ZoomableDrawingCanvas
+        tone={tone}
         backgroundColor={backgroundColor}
         color={color}
         strokeWidth={strokeWidth}
         lines={lines}
         onStrokeEnd={handleStrokeEnd}
         disabled={saving || atCapacity}
+        zoomPickerDisabled={saving}
+        onGestureActiveChange={onGestureActiveChange}
       />
 
       <View style={styles.paletteWrap}>

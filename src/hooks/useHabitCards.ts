@@ -148,6 +148,58 @@ export function useHabitCardsForMember(memberId: string) {
   return { loadState, activeCards, archivedCards, reload: load };
 }
 
+/**
+ * [2026-09-18追加・やること.md 4-47（台紙上限で保存ボタンが押せてしまう）、
+ * 実装メモ.md 248章] `habit_cards_before_write()`（`supabase/migrations/
+ * 20260925010000_habit_cards_and_figures.sql`）がINSERT時に強制する
+ * 「同時に進行中の台紙は1メンバーにつき3枚まで」の上限。DB側はこの数値を
+ * 直接返さない（メッセージ文字列のみ）ため、クライアント側で同じ値を持つ。
+ */
+export const HABIT_CARDS_MAX_ACTIVE = 3;
+
+/**
+ * [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] クエスト登録・編集画面
+ * （`app/parent/chore-edit.tsx`・`app/supporter/chore-edit.tsx`）が、台紙型
+ * クエストの新規作成時に「選んだ担当がすでに進行中の台紙を3枚持っているか」を
+ * 保存ボタンを押す前に判定するための軽量フック。`useHabitCardsForMember`は
+ * 台紙ごとの累計件数（`fetchHabitCardProgressCount`）まで取得する重い作りの
+ * ため使わず、`fetchHabitCards`（active分のみ）の件数だけを見る。
+ * `memberId`が`null`のとき（台紙型を選んでいない・担当が未選択・編集モード）は
+ * 何も取得しない。
+ */
+export function useActiveHabitCardCount(memberId: string | null) {
+  const { client } = useSession();
+  const [loadState, setLoadState] = useState<HabitCardLoadState>("ready");
+  const [count, setCount] = useState(0);
+
+  const load = useCallback(async () => {
+    if (!memberId) {
+      setCount(0);
+      setLoadState("ready");
+      return;
+    }
+    setLoadState("loading");
+    const res = await fetchHabitCards(client, memberId, "active");
+    if (!res.ok) {
+      // [方針] 取得に失敗しても保存ボタンを誤って封じ込め続けないよう、
+      // 「上限に達していない」側へフェイルセーフする。実際に上限を超えていた
+      // 場合はDB側のトリガーが従来どおり保存を拒否し、既存の赤字案内
+      // （HABIT_CARD_LIMIT_ERROR_HINT）がそのまま働く。
+      setLoadState("error");
+      setCount(0);
+      return;
+    }
+    setCount(res.data.length);
+    setLoadState("ready");
+  }, [client, memberId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { loadState, count, reload: load };
+}
+
 /** 完成済み（アーカイブ済み）台紙1件の獲得フィギュア一覧（決定17「見る▼」展開時に取得）。 */
 export function useHabitCardFigureGrants(habitCardId: string | null) {
   const { client } = useSession();

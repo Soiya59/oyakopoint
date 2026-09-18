@@ -30,6 +30,10 @@ export default function ChildMyAvatarScreen() {
   const [resetting, setResetting] = useState(false);
   const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
+  // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
+  // （お絵かき画面〈app/child/drawing.tsx〉と同じ配線）。
+  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
 
   const handleSave = async (lineData: FamilyDrawingLineData): Promise<boolean> => {
     setSaving(true);
@@ -66,7 +70,13 @@ export default function ChildMyAvatarScreen() {
   };
 
   return (
-    <Screen tone="child">
+    <Screen
+      tone="child"
+      // [2026-09-18追加・実装メモ.md 248・243章] 描いている間だけスクロールを止める
+      // （決定的な手）。canCancelContentTouches=falseはiOSの保険（二重の守り）。
+      scrollEnabled={!canvasGestureActive}
+      canCancelContentTouches={false}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
           <Text style={theme.typography.childBody}>← もどる</Text>
@@ -118,6 +128,7 @@ export default function ChildMyAvatarScreen() {
             resetErrorMessage={resetErrorMessage}
             resetSuccessMessage={resetSuccessMessage}
             onReset={handleReset}
+            onGestureActiveChange={setCanvasGestureActive}
           />
         </View>
       )}
