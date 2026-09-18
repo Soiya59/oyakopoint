@@ -35,6 +35,11 @@ import figureRabbitBronze from "../../assets/figures/figure_rabbit_bronze.png";
 import figureRabbitSilver from "../../assets/figures/figure_rabbit_silver.png";
 import figureRabbitGold from "../../assets/figures/figure_rabbit_gold.png";
 import figureRabbitCrystal from "../../assets/figures/figure_rabbit_crystal.png";
+// [2026-09-18追加] 3つ目の種類「星の精霊」。統括が制作。
+import figureSpiritBronze from "../../assets/figures/figure_spirit_bronze.png";
+import figureSpiritSilver from "../../assets/figures/figure_spirit_silver.png";
+import figureSpiritGold from "../../assets/figures/figure_spirit_gold.png";
+import figureSpiritCrystal from "../../assets/figures/figure_spirit_crystal.png";
 
 /**
  * `habit_figure_catalog.figure_key`をキーにした画像の対応表。
@@ -51,6 +56,10 @@ const FIGURE_IMAGES: Record<string, unknown> = {
   figure_rabbit_silver: figureRabbitSilver,
   figure_rabbit_gold: figureRabbitGold,
   figure_rabbit_crystal: figureRabbitCrystal,
+  figure_spirit_bronze: figureSpiritBronze,
+  figure_spirit_silver: figureSpiritSilver,
+  figure_spirit_gold: figureSpiritGold,
+  figure_spirit_crystal: figureSpiritCrystal,
 };
 
 export interface FigureIconProps {

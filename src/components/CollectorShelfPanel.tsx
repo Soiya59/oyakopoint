@@ -397,14 +397,32 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
 
       {selectedItem && (
         <Modal visible transparent animationType="fade" onRequestClose={closeDetail}>
-          <View style={styles.overlay}>
+          {/* [2026-09-18・250章・3回目の修正] 238章（absoluteFillの受け皿を下に敷く）・
+              246章（余白調整）とも実機（Android）で効いていなかった。原因は「受け皿が
+              効いていない」ことではなく、**受け皿より上に、見た目には無いが実際には
+              場所を取っている透明な層があった**こと。詳細は開発部/成果物/実装メモ.md
+              250章。対策は二段構え：
+              (a) ScrollViewの`flexGrow`を0にして、透明な層自体を小さくする（下記）。
+              (b) それでも塞がれる可能性（Web版では未確認・250章参照）に備え、
+                  `styles.overlay`自身に「誰も受け取らなかったタップは閉じる」という
+                  土台の仕組みを追加する（下のViewの`onStartShouldSetResponder`/
+                  `onResponderRelease`）。個々のPressableの当たり判定に依存しないため、
+                  間にどんな透明な層があっても、最終的にここへ辿り着く。 */}
+          <View
+            style={styles.overlay}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={closeDetail}
+          >
             {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
                 押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
                 中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
                 外側の Pressable が押下を受け取れない端末があった。**背景の受け皿を absoluteFill の
                 Pressable として下に敷き、カードを兄弟として上に置く**（入れ子に依存しない）。
                 あわせて統括の要望「絵と×以外はどこを押しても閉じる」を入れる：本文ブロックを
-                閉じる Pressable にし、絵（絵文字・お絵かき・ステッカー）だけ無反応の Pressable で包む。 */}
+                閉じる Pressable にし、絵（絵文字・お絵かき・ステッカー）だけ無反応の Pressable で包む。
+                [2026-09-18追記・250章] この対処（受け皿を敷く位置の変更）自体は効いていなかった
+                （build 9で未解決）。ここは読み上げ機（アクセシビリティ）向けに「閉じる」ボタンとして
+                残すために維持している（下記の`onStartShouldSetResponder`の土台が実質的な対処）。 */}
             <Pressable
               style={StyleSheet.absoluteFill}
               onPress={closeDetail}
@@ -417,8 +435,18 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                   とき）は、カードの外にはみ出させず内側でスクロールさせる。
                   カードの見た目（背景・枠線・角丸・内側の余白）は
                   `contentContainerStyle`側（`styles.expandedCard`）に置く。 */}
+              {/* [2026-09-18・250章] ScrollViewは既定スタイル（baseVertical）に
+                  `flexGrow: 1` を持つ（`node_modules/react-native/Libraries/
+                  Components/ScrollView/ScrollView.js`）。`style`に渡した
+                  `maxHeight`はこれを上書きしないため、中身が短くても`flex:1`の
+                  外側（`styles.overlay`）いっぱいまで透明に広がり、下に敷いた
+                  背景`Pressable`（絵の外の暗い部分を閉じる担当）へのタップを
+                  吸収してしまう**可能性がある**（Web版の検証では、この透明化
+                  自体は再現しなかった。実装メモ250章参照）。`flexGrow: 0`で
+                  「中身の高さぶんだけ」に戻す（`maxHeight`による内側スクロール
+                  は維持、225.7章の対応は壊さない）。 */}
               <ScrollView
-                style={{ maxHeight: modalMaxHeight }}
+                style={{ maxHeight: modalMaxHeight, flexGrow: 0, flexShrink: 1 }}
                 contentContainerStyle={[styles.expandedCard, { paddingTop: expandedCardPaddingTop }]}
                 showsVerticalScrollIndicator={false}
               >
