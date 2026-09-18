@@ -3,7 +3,7 @@ import { Slot, router } from "expo-router";
 import { View } from "react-native";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
-import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsentGate";
+import { PostConsentGuideScreen, TermsConsentModal, useTermsConsentGate, usePostConsentGuideGate } from "@/components/TermsConsentGate";
 
 /**
  * [2026-09-04追加・実装メモ.md 125章] `app/child/_layout.tsx`（子どもセッション以外を
@@ -37,9 +37,14 @@ import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsen
  * `status === "parent"` が確定したあと、Slotを描画する前に
  * `useTermsConsentGate`で同意状況を確認し、未同意ならSlotの代わりに
  * `TermsConsentModal`を描画する（同意するまでP7等の本来の画面には進めない）。
+ *
+ * [2026-09-18追加・主要画面ワイヤーフレーム.md 50.4節、実装メモ.md 247章]
+ * 規約同意の直後の「読んだ」ステップ（`PostConsentGuideScreen`）をここに追加した。
+ * `consent.needsConsent`が`false`になった後・`Slot`を描画する前に挿入する
+ * （`TermsConsentModal`と同じ`if`チェーンに1段追加する形、50.11節申し送り5）。
  */
 export default function ParentLayout() {
-  const { status, client } = useSession();
+  const { status, client, parentMember } = useSession();
 
   const redirectTo: string | null =
     status === "signedOut" || status === "parentNoFamily"
@@ -51,6 +56,8 @@ export default function ParentLayout() {
       : null; // "loading" と "parent" はリダイレクトしない
 
   const consent = useTermsConsentGate(status === "parent", client);
+  const guideActive = status === "parent" && !consent.loading && !consent.needsConsent;
+  const guide = usePostConsentGuideGate(guideActive, parentMember?.id ?? "");
 
   useEffect(() => {
     if (redirectTo) router.replace(redirectTo);
@@ -68,6 +75,16 @@ export default function ParentLayout() {
     }
     if (consent.needsConsent) {
       return <TermsConsentModal role="parent" onAgreed={consent.markAgreed} />;
+    }
+    if (guide.loading) {
+      return (
+        <Screen tone="parent">
+          <View style={{ flex: 1 }} />
+        </Screen>
+      );
+    }
+    if (guide.needsGuide) {
+      return <PostConsentGuideScreen role="parent" onDone={guide.markSeen} />;
     }
     return <Slot />;
   }

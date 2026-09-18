@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import MemberAvatar from "@/components/MemberAvatar";
 import ParentTabHeader from "@/components/ParentTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
@@ -127,6 +128,16 @@ export default function ParentFamilyTabScreen() {
           統括の実機確認「じぶんとかんりの左上のアイコンから、子供モードに飛べない」を受け、
           ここにだけあった子どもモードへの導線を共通部品へ移した。 */}
       <ParentTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.2節決定6、実装メモ.md 247章]
+          このタブに限り、45.1節「はじめの3つ」よりさらに上に置く（タブそのものの
+          説明のほうが、その中で何をするかの説明より粒度が粗いため先に読ませる）。 */}
+      <TabIntroBubble
+        tabKey="parent.family"
+        tone="parent"
+        memberId={state.activeParentMemberId}
+        text="👋 家族みんなの完了報告や掲示板をまとめて見るタブです。スタンプやひとことで応援してあげてください。"
+      />
 
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.1節決定1] ParentTabHeaderの
           直後、「家族の掲示板」Cardの直前に配置する。3項目とも完了済みならstarterItemsは

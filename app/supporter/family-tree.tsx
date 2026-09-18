@@ -7,7 +7,9 @@ import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import theme from "@/theme/theme";
+import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
 /**
@@ -19,6 +21,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * （デザイントークン.md 1.7節）。内訳の並び順・0件メンバーの扱いはP26/C20と完全に同一。
  */
 export default function SupporterFamilyTreeScreen() {
+  const { state } = useAppData();
   const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -40,6 +43,15 @@ export default function SupporterFamilyTreeScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/family")} />
       <Text style={theme.typography.supporterTitle}>家族の木</Text>
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章。
+          #3と同一文言（#7）。共通ヘッダー部品が無いため、タイトル直下・他のどの
+          要素よりも上に置く（決定6）。 */}
+      <TabIntroBubble
+        tabKey="supporter.tree"
+        tone="supporter"
+        memberId={state.activeParentMemberId}
+        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやメダルは、タップすると大きく見られます。"
+      />
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
           保護者側（app/parent/family-tree.tsx）と同一文言を流用する。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>

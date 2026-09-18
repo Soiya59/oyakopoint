@@ -6,7 +6,9 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import theme from "@/theme/theme";
+import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
 /**
@@ -17,6 +19,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * 07-10章必須3条件（ソート禁止・勝者演出禁止・比較誘発コピー禁止）はP26と共通。
  */
 export default function ChildFamilyTreeScreen() {
+  const { state } = useAppData();
   const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -40,6 +43,15 @@ export default function ChildFamilyTreeScreen() {
   return (
     <Screen tone="child">
       <Text style={theme.typography.childHeadline}>🌳 かぞくの木</Text>
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定18、実装メモ.md 247章。
+          共通ヘッダー部品が無いため、タイトル直下・他のどの要素よりも上に置く（決定6）。 */}
+      <TabIntroBubble
+        tabKey="child.tree"
+        tone="child"
+        memberId={state.activeChildMemberId}
+        text="👋 かざりを タップすると おおきく なるよ。"
+      />
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>

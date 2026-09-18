@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import MyPointsCard from "@/components/MyPointsCard";
 import HabitCardStrip from "@/components/HabitCardStrip";
 import { countRecentInbox } from "@/components/InboxPanel";
@@ -87,6 +88,14 @@ export default function SupporterSelfScreen() {
           <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
         </Pressable>
       </View>
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="supporter.self"
+        tone="supporter"
+        memberId={state.activeParentMemberId}
+        text="👋 ご自身のクエストやごほうび、お絵かき、台紙をまとめて見るタブです。台紙は、クエストを続けるとフィギュアがもらえる貯め方です。"
+      />
 
       {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
           決定9] アバターを自分で描いた絵にできるようにする機能の入口。 */}

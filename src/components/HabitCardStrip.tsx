@@ -6,7 +6,13 @@
  * 台紙が2枚以上ある場合は横スクロールで切り替える（決定10）。1枚の中身は
  * 「種類の見出し」「段階の目盛り（銅・銀・金・クリスタル）」「いまの10マス」
  * 「数字（累計/次の段階・あと何件）」の4要素で構成する（決定11のハイブリッド案）。
- * 対象クエストを1件も持たないメンバーには、このカード自体を表示しない（決定9）。
+ *
+ * [2026-09-18改訂・49.4節決定33、開発部/成果物/実装メモ.md 247章] 決定9が定めた
+ * 「対象クエストを1件も持たないメンバーには、このカード自体を表示しない」は撤回され、
+ * **見出し＋案内1行だけを常に出す**形に変わった（統括指摘「シール台帳を作成して
+ * いないときでも見出しはあってもよいかもね」）。進捗のマス目・段階の目盛りは
+ * 0件のときは出さない。タップしても何も起きない（新しい導線は追加しない、
+ * 49.4節決定33の「タップ時の挙動」）ため、0件時はPressableで包まない。
  */
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -140,8 +146,25 @@ export function HabitCardStrip({ tone, loadState, cards, chores, catalog, onPres
       />
     );
   }
-  if (cards.length === 0) return null;
   const headingStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBodyMedium : theme.typography.parentBodyMedium;
+
+  // [2026-09-18追加・49.4節決定33、実装メモ.md 247章] 台紙対象クエストを1件も
+  // 持たないメンバーにも、見出し＋案内1行だけは常に出す。進捗のマス目・段階の
+  // 目盛りは出さない。タップしても何も起きないため、Card自体をPressableで
+  // 包まない（新しい導線は追加しない、決定33「タップ時の挙動」）。
+  if (cards.length === 0) {
+    const captionStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
+    return (
+      <View style={{ marginTop: theme.spacing.s3 }}>
+        <Text style={[headingStyle, styles.heading]}>📔 台紙</Text>
+        <Card tone={tone} style={styles.singleCard}>
+          <Text style={captionStyle}>
+            {isChild ? "クエストを 台紙に すると、ここに たまるよ" : "クエストを『台紙』にすると、ここに貯まっていきます"}
+          </Text>
+        </Card>
+      </View>
+    );
+  }
 
   return (
     <View style={{ marginTop: theme.spacing.s3 }}>

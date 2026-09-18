@@ -3,7 +3,7 @@ import { Slot, router } from "expo-router";
 import { View } from "react-native";
 import { useSession } from "@/lib/session";
 import Screen from "@/components/Screen";
-import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsentGate";
+import { PostConsentGuideScreen, TermsConsentModal, useTermsConsentGate, usePostConsentGuideGate } from "@/components/TermsConsentGate";
 
 /**
  * [2026-09-04追加・実装メモ.md 125章] `app/parent/_layout.tsx`と対の、みまもり
@@ -23,9 +23,12 @@ import { TermsConsentModal, useTermsConsentGate } from "@/components/TermsConsen
  * [2026-09-09追加・実装メモ.md 181章] `app/parent/_layout.tsx`と対の、利用規約
  * への同意取得＋Play Families安全リマインダーのゲート（やること.md 2-22）。
  * 経緯・設計はそちらのコメント・src/components/TermsConsentGate.tsxを参照。
+ *
+ * [2026-09-18追加・主要画面ワイヤーフレーム.md 50.4節、実装メモ.md 247章]
+ * `app/parent/_layout.tsx`と対の、規約同意の直後の「読んだ」ステップ。
  */
 export default function SupporterLayout() {
-  const { status, client } = useSession();
+  const { status, client, parentMember } = useSession();
 
   const redirectTo: string | null =
     status === "signedOut" || status === "parentNoFamily"
@@ -37,6 +40,8 @@ export default function SupporterLayout() {
       : null; // "loading" と "supporter" はリダイレクトしない
 
   const consent = useTermsConsentGate(status === "supporter", client);
+  const guideActive = status === "supporter" && !consent.loading && !consent.needsConsent;
+  const guide = usePostConsentGuideGate(guideActive, parentMember?.id ?? "");
 
   useEffect(() => {
     if (redirectTo) router.replace(redirectTo);
@@ -54,6 +59,16 @@ export default function SupporterLayout() {
     }
     if (consent.needsConsent) {
       return <TermsConsentModal role="supporter" onAgreed={consent.markAgreed} />;
+    }
+    if (guide.loading) {
+      return (
+        <Screen tone="supporter">
+          <View style={{ flex: 1 }} />
+        </Screen>
+      );
+    }
+    if (guide.needsGuide) {
+      return <PostConsentGuideScreen role="supporter" onDone={guide.markSeen} />;
     }
     return <Slot />;
   }

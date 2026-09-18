@@ -10,7 +10,7 @@ import { useSession } from "@/lib/session";
 import { removeMember } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
-import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
 
 /** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
  *  2026-09-09に統括が決定。app/parent/family.tsxと同一アドレス。 */
@@ -72,6 +72,10 @@ export default function SupporterSettingsScreen() {
       </Text>
       <View style={{ marginTop: theme.spacing.s2 }}>
         <ExternalLinkRow tone="supporter" label="使い方ガイド（みまもり向け）" url={HELP_SUPPORTER_URL} />
+        {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.1節決定3、実装メモ.md 247章]
+            保護者向けと同じ「うまく使うコツ」を、みまもりメンバーの設定画面にも追加する
+            （子どもには追加しない。50.1.1節決定4）。 */}
+        <ExternalLinkRow tone="supporter" label="うまく使うコツ（保護者向け）" url={TIPS_URL} />
         {/* [2026-09-09追加・統括判断] 規約類が未公開の間はこの2本を出さない
             （LEGAL_PAGES_PUBLISHED）。押しても404になるため。制定日が決まり
             ページを書き出したら、定数をtrueにするだけで出る。 */}

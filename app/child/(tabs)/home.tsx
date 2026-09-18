@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import ChildTabHeader from "@/components/ChildTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -157,6 +158,14 @@ export default function ChildHomeScreen() {
           で「かぞく」タブにだけアバターの押し先が付いていた壊れ方の再発を避けるため、
           子どもは最初から共通部品にする。 */}
       <ChildTabHeader inboxCount={newReactionCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定18、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="child.home"
+        tone="child"
+        memberId={state.activeChildMemberId}
+        text="👋 きょう やること だよ。おわったら ボタン！"
+      />
 
       <View style={styles.pointsRow}>
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>

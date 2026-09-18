@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import ParentTabHeader from "@/components/ParentTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
 import HabitCardStrip from "@/components/HabitCardStrip";
@@ -90,6 +91,14 @@ export default function ParentSelfTabScreen() {
           いるだけだった。**同じ見た目なのに押せたり押せなかったりする**のは最も
           紛らわしいので、4タブとも同じ部品を使う。 */}
       <ParentTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="parent.self"
+        tone="parent"
+        memberId={state.activeParentMemberId}
+        text="👋 ご自身のクエストやごほうび、感謝ポイント、お絵かき、台紙をまとめて見るタブです。台紙は、クエストを続けるとフィギュアがもらえる貯め方です。"
+      />
 
       {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
           決定9・11] アバターを自分で描いた絵にできるようにする機能の入口

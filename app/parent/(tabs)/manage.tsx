@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ParentTabHeader from "@/components/ParentTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
@@ -69,6 +70,14 @@ export default function ParentManageTabScreen() {
           いるだけだった。**同じ見た目なのに押せたり押せなかったりする**のは最も
           紛らわしいので、4タブとも同じ部品を使う。 */}
       <ParentTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="parent.manage"
+        tone="parent"
+        memberId={state.activeParentMemberId}
+        text="👋 クエスト・ごほうびの登録編集、メンバーの管理はここから行います。設定を開くと、使い方ガイドとうまく使うコツも読めます。"
+      />
 
       <Text style={[theme.typography.parentBodyMedium, styles.sectionHeading]}>家族の管理</Text>
       <View style={{ marginTop: theme.spacing.s2 }}>

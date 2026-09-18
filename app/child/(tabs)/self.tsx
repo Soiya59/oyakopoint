@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ChildTabHeader from "@/components/ChildTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import MemberAvatar from "@/components/MemberAvatar";
 import HabitCardStrip from "@/components/HabitCardStrip";
 import ChildHabitCardModal from "@/components/ChildHabitCardModal";
@@ -60,8 +61,9 @@ export default function ChildSelfTabScreen() {
   const latestEntry = fullLedger(me.id)[0] ?? null;
 
   // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9・12]
-  // 台紙カード。対象クエストを1件も持たないメンバーにはHabitCardStrip自体が
-  // 何も描画しない（決定9、カード内部で0件判定済み）。
+  // 台紙カード。
+  // [2026-09-18改訂・49.4節決定33] 対象クエストを1件も持たないメンバーにも、
+  // 見出し＋案内1行だけは常に出す（HabitCardStrip.tsx内部で0件判定・出し分け済み）。
   // [2026-09-18修正・やること.md 4件目「台紙が画面から消える」・実装メモ246章]
   // `loadState`・`reload`を渡さずにいたため、読み込み中・通信エラーの間も
   // 「0件（対象クエスト無し）」と区別できず、カードが無言で消えて見えていた。
@@ -82,6 +84,14 @@ export default function ChildSelfTabScreen() {
   return (
     <Screen tone="child">
       <ChildTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="child.self"
+        tone="child"
+        memberId={me.id}
+        text="👋 ポイントと シールちょう、メダルこうかんが あるよ。"
+      />
 
       {/* [2026-09-11追加・要件定義書07-27章 決定9・18、主要画面ワイヤーフレーム.md
           43.2節 決定9] アバターを自分で描いた絵にできるようにする機能の入口。

@@ -7,7 +7,9 @@ import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import theme from "@/theme/theme";
+import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 
 /**
@@ -21,6 +23,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  * そのまま表示し、本画面側では一切ソートしない。
  */
 export default function ParentFamilyTreeScreen() {
+  const { state } = useAppData();
   const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -51,6 +54,16 @@ export default function ParentFamilyTreeScreen() {
           {new Date().toLocaleDateString("ja-JP", { month: "long" })}
         </Text>
       </View>
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章]
+          この画面には共通ヘッダー部品（ParentTabHeader）が無いため、
+          ScreenBackLink＋タイトル行の直下・他のどの要素よりも上に置く（決定6）。 */}
+      <TabIntroBubble
+        tabKey="parent.tree"
+        tone="parent"
+        memberId={state.activeParentMemberId}
+        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやメダルは、タップすると大きく見られます。"
+      />
 
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.2節、実装メモ.md 227章]
           常時表示の一文。theme.typography.parentCaption＋neutralTextSecondary

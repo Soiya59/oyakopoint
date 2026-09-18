@@ -7,6 +7,7 @@ import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState } from "@/components/StatusViews";
 import ChildTabHeader from "@/components/ChildTabHeader";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
@@ -110,6 +111,14 @@ export default function ChildFamilyTabScreen() {
   return (
     <Screen tone="child">
       <ChildTabHeader inboxCount={inboxCount} />
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定18、実装メモ.md 247章] */}
+      <TabIntroBubble
+        tabKey="child.family"
+        tone="child"
+        memberId={myId}
+        text="👋 かぞくの がんばりが みえるよ。"
+      />
 
       {/* [2026-09-10移設・実装メモ.md 188章] 旧C5「かぞくのけいじばん」カード。 */}
       <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>

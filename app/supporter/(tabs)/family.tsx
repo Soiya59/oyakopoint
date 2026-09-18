@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
+import TabIntroBubble from "@/components/TabIntroBubble";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
@@ -179,6 +180,16 @@ export default function SupporterFamilyScreen() {
           <Text style={styles.notifBadge}>🔔{inboxCount}</Text>
         </Pressable>
       </View>
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節、実装メモ.md 247章。
+          #1と同一文言（#5）。この画面には共通ヘッダー部品が無いため、独自の
+          headerRowの直下・他のどの要素よりも上に置く（決定6）。 */}
+      <TabIntroBubble
+        tabKey="supporter.family"
+        tone="supporter"
+        memberId={state.activeParentMemberId}
+        text="👋 家族みんなの完了報告や掲示板をまとめて見るタブです。スタンプやひとことで応援してあげてください。"
+      />
 
       {/* [2026-09-09並べ替え・実装メモ.md 183章] 統括指示の並び順1番目「家族の掲示板を
           いちばん上へ」。表記も「かぞくのけいじばん」（ひらがな）→「家族の掲示板」

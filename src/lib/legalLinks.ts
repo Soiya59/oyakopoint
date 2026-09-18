@@ -27,6 +27,15 @@ export const PRIVACY_POLICY_URL = `${BASE_URL}/legal/privacy.html`;
 export const TERMS_URL = `${BASE_URL}/legal/terms.html`;
 
 /**
+ * [2026-09-18追加・UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 50.1節決定1、
+ * 開発部/成果物/実装メモ.md 247章] 「うまく使うコツ（保護者向け）」の公開URL。
+ * 原本は`宣伝部/成果物/取扱説明書/04_うまく使うコツ_保護者向け.md`、公開先は
+ * `public/help/tips.html`（本部長により本番公開済み）。`HELP_*`と同じ命名パターン
+ * （役割＋用途）を踏襲する。
+ */
+export const TIPS_URL = `${BASE_URL}/help/tips.html`;
+
+/**
  * 規約類（プライバシーポリシー・利用規約）のページを公開済みかどうか。
  *
  * [2026-09-09・統括判断] **false の間は、この2つへのリンクを画面に出さない。**

@@ -6,10 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
+import ExternalLinkRow from "@/components/ExternalLinkRow";
 import theme from "@/theme/theme";
 import { hasAgreedToCurrentTerms, recordTermsConsent } from "@/data/api";
 import { openExternalUrl } from "@/lib/externalLink";
-import { LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL } from "@/lib/legalLinks";
+import { HELP_PARENT_URL, HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
+import { hydrateIntroSeen, isIntroSeen, markIntroSeen, subscribeIntroSeen, type IntroSurface } from "@/lib/introSeen";
 import { useSession } from "@/lib/session";
 
 /**
@@ -334,6 +336,126 @@ export function TermsConsentModal({ role, onAgreed }: TermsConsentModalProps) {
           label={submitting ? "処理中…" : isChild ? CHILD_BUTTON_LABEL : AGREE_BUTTON_LABEL}
           onPress={submit}
           disabled={submitting || (!isChild && !checked)}
+          style={{ marginTop: theme.spacing.s6 }}
+        />
+      </Card>
+    </Screen>
+  );
+}
+
+/**
+ * C. 規約同意の直後の「読んだ」ステップ（UIUXデザイン部/成果物/主要画面
+ * ワイヤーフレーム.md 50.4節、開発部/成果物/実装メモ.md 247章）。
+ *
+ * 保護者・みまもりメンバーのみ対象（子どもには出さない、50.4.1節決定11）。
+ * `TermsConsentModal`の`onAgreed`が呼ばれた直後・`Slot`を描画する前に、
+ * `app/parent/_layout.tsx`・`app/supporter/_layout.tsx`の2箇所だけに配線する。
+ */
+export type PostConsentGuideRole = "parent" | "supporter";
+
+const POST_CONSENT_GUIDE_SURFACE: IntroSurface = { kind: "postConsentGuide" };
+
+interface PostConsentGuideCopy {
+  guideLabel: string;
+  guideUrl: string;
+  note: string;
+}
+
+// [50.4.2節] タイトル・本文・「うまく使うコツ」へのリンクラベルは両ロール共通。
+// 使い方ガイドの行き先・注釈の書き方のみロールで異なる（かんりタブの有無、50.5節）。
+const POST_CONSENT_GUIDE_TITLE = "はじめに、使い方をご確認ください";
+const POST_CONSENT_GUIDE_BODY =
+  "「使い方ガイド」と「うまく使うコツ」をご用意しました。目を通しておくと、点数のつけ方やごほうびの選び方の参考になります。";
+const POST_CONSENT_GUIDE_TIPS_LABEL = "うまく使うコツ（保護者向け）";
+const POST_CONSENT_GUIDE_BUTTON_LABEL = "読んだ";
+
+const POST_CONSENT_GUIDE_COPY: Record<PostConsentGuideRole, PostConsentGuideCopy> = {
+  parent: {
+    guideLabel: "使い方ガイド（保護者向け）",
+    guideUrl: HELP_PARENT_URL,
+    note: "あとから「かんり」タブの「設定」でも読めます。",
+  },
+  supporter: {
+    guideLabel: "使い方ガイド（みまもり向け）",
+    guideUrl: HELP_SUPPORTER_URL,
+    // みまもりメンバーには「かんり」タブが無いため、タブ名を出さずに「設定」とだけ書く（50.4.2節）。
+    note: "あとから「設定」でも読めます。",
+  },
+};
+
+/**
+ * 同意状況ゲート（`useTermsConsentGate`）と対の、「読んだ」ステップの表示状況ゲート。
+ * `active`が`false`の間・`memberId`が確定していない間は何もしない
+ * （ロールが確定していない・リダイレクト待ちの間に無駄な読み込みをしないため、
+ * `useTermsConsentGate`と同じ考え方）。
+ *
+ * 記録は`src/lib/introSeen.ts`（端末保存、決定14）。DBの`terms_consents`とは
+ * 別物で、混同しない（50.4.4節）。
+ */
+export function usePostConsentGuideGate(active: boolean, memberId: string) {
+  const [, forceRender] = useState(0);
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+
+  useEffect(() => subscribeIntroSeen(() => forceRender((n) => n + 1)), []);
+
+  useEffect(() => {
+    if (!active || !memberId) return;
+    let mounted = true;
+    void hydrateIntroSeen(POST_CONSENT_GUIDE_SURFACE, memberId).then(() => {
+      if (mounted) setHydratedFor(memberId);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [active, memberId]);
+
+  if (!active || !memberId) {
+    return { loading: true, needsGuide: false, markSeen: () => {} };
+  }
+  if (hydratedFor !== memberId) {
+    return { loading: true, needsGuide: false, markSeen: () => {} };
+  }
+  const seen = isIntroSeen(POST_CONSENT_GUIDE_SURFACE, memberId);
+  return {
+    loading: false,
+    needsGuide: !seen,
+    markSeen: () => void markIntroSeen(POST_CONSENT_GUIDE_SURFACE, memberId),
+  };
+}
+
+interface PostConsentGuideScreenProps {
+  role: PostConsentGuideRole;
+  onDone: () => void;
+}
+
+/**
+ * `TermsConsentModal`と同じ`Screen`＋`Card`の型を流用した専用画面（決定12）。
+ * リンクを1つも開かなくても「読んだ」ボタンは常に押せる（決定13、既存の
+ * `TermsConsentModal`の非強制設計と同じ）。
+ */
+export function PostConsentGuideScreen({ role, onDone }: PostConsentGuideScreenProps) {
+  const copy = POST_CONSENT_GUIDE_COPY[role];
+  const titleStyle = role === "supporter" ? theme.typography.supporterTitle : theme.typography.parentTitle;
+  const bodyStyle = role === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
+
+  return (
+    <Screen tone={role}>
+      <Card tone={role} style={{ marginTop: theme.spacing.s6 }}>
+        <Text style={titleStyle}>{POST_CONSENT_GUIDE_TITLE}</Text>
+        <Text style={[bodyStyle, { marginTop: theme.spacing.s3 }]}>{POST_CONSENT_GUIDE_BODY}</Text>
+
+        <View style={{ marginTop: theme.spacing.s4 }}>
+          <ExternalLinkRow tone={role} label={copy.guideLabel} url={copy.guideUrl} />
+          <ExternalLinkRow tone={role} label={POST_CONSENT_GUIDE_TIPS_LABEL} url={TIPS_URL} />
+        </View>
+
+        {/* [50.5節決定15] この「読んだ」ステップにのみ1回だけ置く注釈。 */}
+        <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>{copy.note}</Text>
+
+        <AppButton
+          tone={role}
+          label={POST_CONSENT_GUIDE_BUTTON_LABEL}
+          onPress={onDone}
           style={{ marginTop: theme.spacing.s6 }}
         />
       </Card>
