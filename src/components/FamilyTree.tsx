@@ -810,8 +810,15 @@ type TreeTone = "parent" | "child" | "supporter";
 const treeCloseTapSizeFor = (tone: TreeTone) =>
   tone === "child" ? theme.tapTarget.child : tone === "supporter" ? theme.tapTarget.supporterPrimary : theme.tapTarget.parent;
 
-/** [2026-09-17新設・225.7章と同じ式] 拡大表示カードの上端の余白（閉じるボタンの下端＋余白）。 */
-const treeExpandedCardPaddingTopFor = (tone: TreeTone) => treeCloseTapSizeFor(tone) + theme.spacing.s2 * 2;
+/**
+ * [2026-09-17新設・225.7章と同じ式] 拡大表示カードの上端の余白（閉じるボタンの下端＋余白）。
+ * [2026-09-18改訂・統括の実機スクリーンショット指摘「×の位置はだいぶ上にあるので、
+ * 絵の位置をもう少し下げてもよいかも」・実装メモ246章] `CollectorShelfPanel.tsx`の
+ * `expandedCardPaddingTopFor`と全く同じ改訂（`src/components/CollectorShelfPanel.tsx`
+ * のコメント参照）。ボタン下端から絵までの余白を`theme.spacing.s2`（8pt）から
+ * `theme.spacing.s4`（16pt）に広げた（式は消さず2個目の項だけ変更）。
+ */
+const treeExpandedCardPaddingTopFor = (tone: TreeTone) => treeCloseTapSizeFor(tone) + theme.spacing.s2 + theme.spacing.s4;
 
 /** [2026-09-17新設・225章と同じ式] 拡大表示で絵を表示する一辺の長さを画面サイズから計算する。 */
 function computeTreeExpandedImageSize(windowWidth: number, windowHeight: number): number {
@@ -1452,7 +1459,13 @@ export function TreeStageVisual({
             const sideSize = leafRadius * 1.3;
             const dotRadius = Math.max(leafRadius - DOT_SIZE, 0);
             return (
-              <View style={{ width: boxWidth, height: boxHeight }}>
+              /**
+               * [2026-09-18追加・やること.md 症状1「木の飾りをタップしても拡大しない」・
+               * 実装メモ246章] `pointerEvents="none"`。理由は下のtrunk View・soil View
+               * ・sprout葉View・groundScatter Viewと共通のため、そちらのコメント
+               * （trunk View側）にまとめて書いた。
+               */
+              <View style={{ width: boxWidth, height: boxHeight }} pointerEvents="none">
                 <View
                   style={[
                     styles.leafShape,
@@ -1490,6 +1503,47 @@ export function TreeStageVisual({
               </View>
             );
           })()}
+          {/**
+           * [2026-09-18追加・やること.md 症状1「木の飾りをタップしても拡大しない」・
+           * 実装メモ246章] `pointerEvents="none"`。
+           *
+           * [原因] `handleCanvasPress`が受け取る`e.nativeEvent.locationX/locationY`は、
+           * Reactの`onPress`ハンドラが付いたView（＝木全体を覆う外側の`Pressable`、
+           * `styles.canvas`）ではなく、**実際にタップされた一番深いネイティブView**
+           * 基準で返る（React Nativeのタッチ判定の仕組み、
+           * `TouchTargetHelper.findTargetTagAndCoordinatesForTouch`が
+           * `locationX/Y`の基準にする「target」を決める処理。`pointerEvents`が
+           * `none`の祖先を持たない限り、子Viewが自分自身を対象にできてしまう）。
+           * 景品（`PrizeDotView`）・ステッカー（`FreeStickerView`）は樹冠・幹・
+           * 双葉・地面の「部位ごとの入れ物View」の内側に描かれるが、この入れ物に
+           * `pointerEvents="none"`が付いていなかったため、景品を直接タップすると
+           * その景品自身の小さなView（36pt角ほど）が対象になり、`locationX/Y`が
+           * 「景品の中の位置（0〜36程度）」になっていた。これを`tapTargets`の
+           * キャンバス絶対座標と比べても一致せず、`pickNearestTreeTapTarget`が
+           * 常に空振り（null）を返していた＝**まったく反応しない**という報告と一致する。
+           *
+           * [なぜ空（sky）・自由配置ステッカー（stickerOverlay）は元から動いていたか]
+           * この2層は元々`pointerEvents="none"`が付いていた（本ファイル内`skyLayer`・
+           * `stickerOverlay`参照）。景品は`pickTreeRegion`の設計上、空には絶対に
+           * 割り当てられない（139〜140章の理由）ため、景品は必ず樹冠・幹・双葉・
+           * 地面のいずれかに乗り、そのどれもが本コメントの修正まで
+           * `pointerEvents`未設定（既定値`auto`）のままだった＝**景品は原理的に
+           * 一度も正しく反応したことが無かった**。
+           *
+           * [直し方] 木の見た目を描くJSX（色・形・レイアウト）は一切変更せず、
+           * 各部位の入れ物Viewに`pointerEvents="none"`を追加するだけにした。
+           * `pointerEvents="none"`は見た目（レンダリング）に一切影響しない
+           * （タッチ判定のみに効く）ため、既存の見た目は完全に変わらない。
+           * これにより、部位の入れ物とその中の色丸・景品はどれもタップの対象に
+           * ならなくなり、タップは必ず一番外側の`Pressable`（`styles.canvas`）まで
+           * 素通りする。`handleCanvasPress`が受け取る`locationX/Y`は常にキャンバス
+           * 基準になり、`tapTargets`（同じくキャンバス基準で計算済み）との距離比較が
+           * 正しく機能する。`enableTapExpand`が`false`の既存呼び出し元
+           * （`TreeDecoratePanel.tsx`・`TreeStickerDragCanvas.tsx`・
+           * `CollectorShelfPanel.tsx`の過去の木）は、この4箇所の入れ物の内側に
+           * そもそも`onPress`を持つ要素が無いため、影響が無い
+           * （`pointerEvents="none"`にしてもしなくても元から無反応だった）。
+           */}
           <View
             style={{
               width: shape.trunkWidth,
@@ -1499,6 +1553,7 @@ export function TreeStageVisual({
               borderBottomLeftRadius: 3,
               borderBottomRightRadius: 3,
             }}
+            pointerEvents="none"
           >
             {renderGroup(
               byRegion.trunk.map((dot) => ({
@@ -1531,6 +1586,8 @@ export function TreeStageVisual({
         // 見えてしまう（初回実装の不具合）。CSSの正の回転は時計回りなので、
         // 左の葉が時計回り(+)・右の葉が反時計回り(-)でV字になる。
         const renderLeaf = (leafDots: FamilyTreeCompletionDot[], side: "left" | "right") => (
+          // [2026-09-18追加・やること.md 症状1・実装メモ246章] pointerEvents="none"。
+          // trunk View直上のコメント参照（部位の入れ物Viewをタップ対象から外す）。
           <View
             style={[
               styles.leafShape,
@@ -1543,6 +1600,7 @@ export function TreeStageVisual({
                 transform: [{ rotate: `${side === "left" ? SPROUT_LEAF_ANGLE_DEG : -SPROUT_LEAF_ANGLE_DEG}deg` }],
               },
             ]}
+            pointerEvents="none"
           >
             {renderGroup(
               leafDots.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) }))
@@ -1561,7 +1619,9 @@ export function TreeStageVisual({
       {/* stage0（種）はまだ何も生えていないので、まかれた種を土の上に散らして見せる。
           色丸が土に埋もれないよう、土より前面へ重ねる。 */}
       {shape.kind === "seed" && (
-        <View style={styles.groundScatter}>
+        // [2026-09-18追加・やること.md 症状1・実装メモ246章] pointerEvents="none"。
+        // trunk View直上のコメント参照。
+        <View style={styles.groundScatter} pointerEvents="none">
           {renderGroup(
             slots.map((dot) => ({
               dot,
@@ -1580,7 +1640,9 @@ export function TreeStageVisual({
 
       {/* 地面は全段階で画面幅いっぱい。上端だけ緩く丸めて、平らな板ではなく
           なだらかな地平線に見せる。 */}
-      <View style={styles.soil}>
+      {/* [2026-09-18追加・やること.md 症状1・実装メモ246章] pointerEvents="none"。
+          trunk View直上のコメント参照。 */}
+      <View style={styles.soil} pointerEvents="none">
         {renderGroup(
           byRegion.soil.map((dot) => ({
             dot,

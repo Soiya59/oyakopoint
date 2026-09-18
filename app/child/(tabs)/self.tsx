@@ -62,8 +62,11 @@ export default function ChildSelfTabScreen() {
   // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9・12]
   // 台紙カード。対象クエストを1件も持たないメンバーにはHabitCardStrip自体が
   // 何も描画しない（決定9、カード内部で0件判定済み）。
+  // [2026-09-18修正・やること.md 4件目「台紙が画面から消える」・実装メモ246章]
+  // `loadState`・`reload`を渡さずにいたため、読み込み中・通信エラーの間も
+  // 「0件（対象クエスト無し）」と区別できず、カードが無言で消えて見えていた。
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { activeCards } = useHabitCardsForMember(me.id);
+  const { loadState: habitCardsLoadState, activeCards, reload: reloadHabitCards } = useHabitCardsForMember(me.id);
   const [habitCardModalVisible, setHabitCardModalVisible] = useState(false);
 
   const shortcuts: ShortcutItem[] = [
@@ -110,10 +113,12 @@ export default function ChildSelfTabScreen() {
 
       <HabitCardStrip
         tone="child"
+        loadState={habitCardsLoadState}
         cards={activeCards}
         chores={state.chores}
         catalog={habitFigureCatalog}
         onPressCard={() => setHabitCardModalVisible(true)}
+        onRetry={reloadHabitCards}
       />
 
       <ChildHabitCardModal

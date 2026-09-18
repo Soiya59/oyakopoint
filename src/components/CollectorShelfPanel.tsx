@@ -213,8 +213,20 @@ const closeTapSizeFor = (tone: Tone) =>
  * 「ボタンの占める行範囲そのものを絵の描画領域から除外する」ことで解消する
  * （円の幾何学的な余白に頼った修正ではないため、既製の飾り〈四角い絵文字〉にも
  * 同じ根拠で効く）。
+ *
+ * [2026-09-18改訂・統括の実機スクリーンショット指摘「×の位置はだいぶ上にあるので、
+ * 絵の位置をもう少し下げてもよいかも」・実装メモ246章] ボタンの下端から絵までの
+ * 余白（旧式では`theme.spacing.s2`＝8pt）が窮屈だった。225.7章の式
+ * 「`closeTapSizeFor(tone) + 余白×2`」の考え方（1個目の`s2`＝ボタン自身の上端の
+ * 余白、2個目＝ボタン下端から絵までの余白）自体は消さず、**2個目の余白だけ**
+ * `theme.spacing.s2`（8pt）→`theme.spacing.s4`（16pt）に広げた（極端に空けすぎない
+ * よう、目盛り1段階分の変更に留めた）。結果、ボタン下端から絵までの余白は
+ * 保護者44pt／みまもり48pt／子ども56ptのボタンいずれでも8pt→16ptへ倍になり、
+ * `paddingTop`全体は各ロールとも+8ptになる（保護者60→68、みまもり64→72、
+ * 子ども72→80）。小さい端末でのはみ出しは225.7章の`ScrollView`（内側スクロール）
+ * がそのまま吸収する。
  */
-const expandedCardPaddingTopFor = (tone: Tone) => closeTapSizeFor(tone) + theme.spacing.s2 * 2;
+const expandedCardPaddingTopFor = (tone: Tone) => closeTapSizeFor(tone) + theme.spacing.s2 + theme.spacing.s4;
 
 /**
  * [2026-09-14追加・実装メモ225章] 拡大表示（`ShelfItemsGrid`の詳細モーダル）で

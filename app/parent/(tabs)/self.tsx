@@ -48,8 +48,14 @@ export default function ParentSelfTabScreen() {
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
   // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9]
+  // [2026-09-18修正・やること.md 4件目「台紙が画面から消える」・実装メモ246章]
+  // 子ども向けと同じ理由でloadState・reloadも受け取る。
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { activeCards: habitActiveCards } = useHabitCardsForMember(state.activeParentMemberId);
+  const {
+    loadState: habitCardsLoadState,
+    activeCards: habitActiveCards,
+    reload: reloadHabitCards,
+  } = useHabitCardsForMember(state.activeParentMemberId);
 
   // [2026-09-11並び替え・統括指示] 並びは統括の指定どおり
   // クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく→通帳。
@@ -105,10 +111,12 @@ export default function ParentSelfTabScreen() {
 
       <HabitCardStrip
         tone="parent"
+        loadState={habitCardsLoadState}
         cards={habitActiveCards}
         chores={state.chores}
         catalog={habitFigureCatalog}
         onPressCard={() => router.push("/parent/habit-cards")}
+        onRetry={reloadHabitCards}
       />
 
       <GachaHomeWidget

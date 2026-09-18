@@ -11,6 +11,7 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
+import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { HabitCardWithProgress } from "@/hooks/useHabitCards";
 import { computeHabitCardTierInfo } from "@/hooks/useHabitCards";
@@ -18,6 +19,7 @@ import { computeCurrentPageFilledCells, formatHabitCardProgressText, getHabitCar
 import type { Chore, HabitFigureCatalogItem } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
+type LoadState = "loading" | "error" | "ready";
 
 const TIER_LABEL: Record<"bronze" | "silver" | "gold" | "crystal", { child: string; adult: string }> = {
   bronze: { child: "どう", adult: "銅" },
@@ -28,10 +30,22 @@ const TIER_LABEL: Record<"bronze" | "silver" | "gold" | "crystal", { child: stri
 
 export interface HabitCardStripProps {
   tone: Tone;
+  /**
+   * [2026-09-18追加・やること.md 4件目、開発部/成果物/実装メモ.md 246章]
+   * `useHabitCardsForMember`自身の読み込み状態。**必須にした**（既定値を
+   * 付けて省略可能にすると、呼び出し元が付け忘れたまま気づかず動いてしまう
+   * ため）。理由は`cards.length === 0`直下のコメント参照。
+   */
+  loadState: LoadState;
   cards: HabitCardWithProgress[];
   chores: Chore[];
   catalog: HabitFigureCatalogItem[];
   onPressCard: (card: HabitCardWithProgress) => void;
+  /**
+   * [2026-09-18追加] `loadState === "error"`のときの再読み込み導線。
+   * `useHabitCardsForMember`が返す`reload`をそのまま渡す想定。
+   */
+  onRetry: () => void;
 }
 
 /** 決定11-A「段階の目盛り」。銅(10)・銀(30)・金(50)・クリスタル(100)の4点を横一列に置く。 */
@@ -90,9 +104,43 @@ function OneHabitCard({ tone, entry, chores, catalog }: { tone: Tone; entry: Hab
   );
 }
 
-export function HabitCardStrip({ tone, cards, chores, catalog, onPressCard }: HabitCardStripProps) {
-  if (cards.length === 0) return null;
+export function HabitCardStrip({ tone, loadState, cards, chores, catalog, onPressCard, onRetry }: HabitCardStripProps) {
   const isChild = tone === "child";
+
+  /**
+   * [2026-09-18修正・本部長差し戻し・やること.md 4件目「台紙が画面から消える」]
+   * 従来は`cards.length === 0`の1行だけで「対象クエストが無い」を判定していたが、
+   * これは「まだ読み込み中で0件」「読み込みに失敗して0件のまま」「本当に0件」の
+   * 3つを区別できていなかった。`useHabitCardsForMember`は失敗時に`activeCards`を
+   * 空配列のまま据え置く（`src/hooks/useHabitCards.ts`のload()参照。エラー時に
+   * 配列を上書きするコードは無い）ため、症状としては「エラーメッセージすら出ず、
+   * 台紙のカードだけが画面から静かに消える」という形になっていた。
+   *
+   * [根拠] 統括が実機（Android build 9）で「台紙型クエストで2回目の『できた』が
+   * 上限で止められたあと、台紙が画面から消えた」と報告。ローカルDBで同じ手順
+   * （同日2回目のINSERTを`chore_completions_before_insert`トリガーで拒否）を再現し、
+   * `habit_cards`行はrejectされた2回目のあとも無傷で残ることを確認済み
+   * （実装メモ246章）。つまりDBデータは失われておらず、この画面側の分岐だけが
+   * 原因だった。`app/child/(tabs)/self.tsx`・`app/parent/(tabs)/self.tsx`・
+   * `app/supporter/(tabs)/self.tsx`はいずれも本コンポーネントの前段（タブの
+   * 再マウント等）で`useHabitCardsForMember`を再実行する経路を持つため、
+   * 一時的な読み込み中・通信エラーが「カード消失」に見えてしまっていた。
+   *
+   * `HabitCardBoard.tsx`（台紙専用画面・子ども向けモーダルの中身）は元から
+   * `loadState`を見て読み込み中・エラーを描き分けていた（114〜117行目）ため、
+   * 本コンポーネントもそれと同じ分岐に揃える。
+   */
+  if (loadState === "loading") return <SkeletonList count={1} />;
+  if (loadState === "error") {
+    return (
+      <ErrorState
+        tone={isChild ? "child" : "parent"}
+        title={isChild ? "つうしんがおやすみ中みたい" : "台紙の読み込みに失敗しました"}
+        onRetry={onRetry}
+      />
+    );
+  }
+  if (cards.length === 0) return null;
   const headingStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBodyMedium : theme.typography.parentBodyMedium;
 
   return (

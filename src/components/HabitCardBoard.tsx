@@ -145,7 +145,12 @@ export function HabitCardBoard({
       )}
 
       {activeCards.length > 0 && (
-        <HabitCardStrip tone={tone} cards={activeCards} chores={chores} catalog={catalog} onPressCard={() => {}} />
+        // [2026-09-18追加・やること.md 4件目・実装メモ246章] HabitCardStripが
+        // loadState必須になったため渡す。この時点（この行に到達する条件）では
+        // 上のloadStateガード（114〜117行目）を通過済みで必ず"ready"、
+        // 呼び出し元（本コンポーネント）もloadStateが変わるたびに再描画されるため
+        // 「ready」固定で問題ない。onRetryは本コンポーネント自身のonRetryをそのまま渡す。
+        <HabitCardStrip tone={tone} loadState="ready" cards={activeCards} chores={chores} catalog={catalog} onPressCard={() => {}} onRetry={onRetry} />
       )}
 
       {/* 決定18-④「おわりにする」。自分の台紙のときのみ、対象を選んで操作できる。 */}
