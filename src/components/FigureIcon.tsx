@@ -26,30 +26,31 @@
 import React from "react";
 import { Image, Text, View } from "react-native";
 
-// ---- 画像が揃ったら、以下8行のコメントアウトを外す ----
-// import figureDragonBronze from "../../assets/figures/figure_dragon_bronze.png";
-// import figureDragonSilver from "../../assets/figures/figure_dragon_silver.png";
-// import figureDragonGold from "../../assets/figures/figure_dragon_gold.png";
-// import figureDragonCrystal from "../../assets/figures/figure_dragon_crystal.png";
-// import figureRabbitBronze from "../../assets/figures/figure_rabbit_bronze.png";
-// import figureRabbitSilver from "../../assets/figures/figure_rabbit_silver.png";
-// import figureRabbitGold from "../../assets/figures/figure_rabbit_gold.png";
-// import figureRabbitCrystal from "../../assets/figures/figure_rabbit_crystal.png";
+// [2026-09-18] 統括が8枚を制作し、本部長が透過PNG（512px）に変換して配置した。
+import figureDragonBronze from "../../assets/figures/figure_dragon_bronze.png";
+import figureDragonSilver from "../../assets/figures/figure_dragon_silver.png";
+import figureDragonGold from "../../assets/figures/figure_dragon_gold.png";
+import figureDragonCrystal from "../../assets/figures/figure_dragon_crystal.png";
+import figureRabbitBronze from "../../assets/figures/figure_rabbit_bronze.png";
+import figureRabbitSilver from "../../assets/figures/figure_rabbit_silver.png";
+import figureRabbitGold from "../../assets/figures/figure_rabbit_gold.png";
+import figureRabbitCrystal from "../../assets/figures/figure_rabbit_crystal.png";
 
 /**
  * `habit_figure_catalog.figure_key`をキーにした画像の対応表。
- * 画像が揃うまでは空オブジェクトのまま（＝常にプレースホルダ表示）。
- * 揃ったら下記のコメントアウトを外す（キーはDBの`figure_key`と完全一致させること）。
+ * キーはDBの`figure_key`と完全一致させること。
+ * [2026-09-18] 8枚とも配置済み。プレースホルダ（絵文字）の分岐は、
+ * 将来「種類を足したが画像がまだ」という状態のために残してある。
  */
 const FIGURE_IMAGES: Record<string, unknown> = {
-  // figure_dragon_bronze: figureDragonBronze,
-  // figure_dragon_silver: figureDragonSilver,
-  // figure_dragon_gold: figureDragonGold,
-  // figure_dragon_crystal: figureDragonCrystal,
-  // figure_rabbit_bronze: figureRabbitBronze,
-  // figure_rabbit_silver: figureRabbitSilver,
-  // figure_rabbit_gold: figureRabbitGold,
-  // figure_rabbit_crystal: figureRabbitCrystal,
+  figure_dragon_bronze: figureDragonBronze,
+  figure_dragon_silver: figureDragonSilver,
+  figure_dragon_gold: figureDragonGold,
+  figure_dragon_crystal: figureDragonCrystal,
+  figure_rabbit_bronze: figureRabbitBronze,
+  figure_rabbit_silver: figureRabbitSilver,
+  figure_rabbit_gold: figureRabbitGold,
+  figure_rabbit_crystal: figureRabbitCrystal,
 };
 
 export interface FigureIconProps {
