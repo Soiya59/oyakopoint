@@ -32,15 +32,32 @@ import { useHabitFigureCatalog, groupHabitFigureCatalogByKind, useActiveHabitCar
 
 // [2026-09-17追加・要件定義書07-28章決定23a] 台紙型クエストは3枚上限に達している
 // メンバーを担当に選んだとき、DB側（habit_cards_before_write()）が返すメッセージ。
-// このメッセージが含まれる場合のみ「台紙を見る→」への軽い案内リンクを追加で出す
+// このメッセージが含まれる場合のみ「シール帳を見る→」への軽い案内リンクを追加で出す
 // （決定23b、新しい確認モーダルは増やさない）。
-const HABIT_CARD_LIMIT_ERROR_HINT = "台紙は同時に3まいまでです";
-// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] DBの
+// [2026-09-18修正・実装メモ.md 251章] 画面の呼び名は「台紙」→「シール帳」に統一した。
+// DB側（habit_cards_before_write()）が実際に返す例外文言は、251章の時点では
+// まだ旧表記「台紙は同時に3まいまでです…」のままだったため、
+// 20260926020000_habit_card_limit_message_rename.sql で「シール帳は同時に
+// 3さつまでです…」（下のHABIT_CARD_LIMIT_MESSAGEと一字一句同じ文言）に直す
+// マイグレーションを追加した（本部長が次のビルドと同じタイミングで本番へ適用予定、
+// 実装メモ.md 251.9節）。**適用されるまでの間はDBはまだ旧表記のままなので**、
+// ここは画面に表示される文字列ではなく、DBが返した文言に含まれるかを判定するための
+// 一致キーとして、新旧どちらの呼び名でも共通して現れる断片「は同時に3」を
+// 引き続き使う（マイグレーション適用後もこの断片は変わらず一致するため、
+// 適用前後どちらでも安全。値自体は変えていない）。
+const HABIT_CARD_LIMIT_ERROR_HINT = "は同時に3";
+// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 元々はDBの
 // `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言（統括が実機で
-// 「分かりやすい」と評価した文言、そのまま流用する）。保存を押す前（クライアント側の
-// 事前チェックで上限と分かった時点）にも同じ文言を出すために定数化した。
+// 「分かりやすい」と評価した文言）をそのまま流用していたが、[2026-09-18修正・
+// 実装メモ.md 251章] 画面の呼び名統一（台紙→シール帳）にあわせてこちらは
+// 書き換えた。DB側の例外文言も20260926020000_habit_card_limit_message_rename.sql
+// で同じ文言に揃えたが、本部長が本番へ適用するまでの間は上の
+// HABIT_CARD_LIMIT_ERROR_HINTのコメントのとおりDBはまだ「台紙」表記のままのため、
+// 実際に保存が拒否されたとき（errorMessage経由）は稀に旧表記のままの文言が
+// 表示されることがある（クライアント側の事前チェックで先に弾かれる通常経路では
+// こちらの新しい文言が使われる）。
 const HABIT_CARD_LIMIT_MESSAGE =
-  "台紙は同時に3まいまでです。今の台紙をどれか「おわりにする」と、新しい台紙を始められます";
+  "シール帳は同時に3さつまでです。今のシール帳をどれか「おわりにする」と、新しいシール帳を始められます";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -313,7 +330,7 @@ export default function ChoreEditScreen() {
         if (!Number.isInteger(limitNum) || limitNum < 1) return "1日の上限回数は1以上の整数で入力してください（空欄で無制限）";
       }
     } else {
-      if (!habitKindKey) return "台紙の種類を選んでください";
+      if (!habitKindKey) return "シール帳の種類を選んでください";
       if (!isEditMode && !assignedTo) return "担当を選んでください";
     }
     return null;
@@ -660,7 +677,7 @@ export default function ChoreEditScreen() {
           49.7章決定22] たまり方（ポイント／台紙）。作成後は変更できない（決定55-9）
           ため、編集モードでは固定表示のみで「かえる」操作を出さない。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>
-        たまり方：{rewardMode === "habit_card" ? "台紙" : "ポイント"}
+        たまり方：{rewardMode === "habit_card" ? "シール帳" : "ポイント"}
         {!isEditMode && (
           <Text
             style={styles.inlineToggleLink}
@@ -677,7 +694,7 @@ export default function ChoreEditScreen() {
         おてつだい は ポイント。まいにちの おやくそく は シール。
       </Text>
       <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        1回ずつ手間がかかることはポイントに。毎日の小さな約束は台紙に。ポイントは「ごほうび」に、シールは「フィギュア」になります
+        1回ずつ手間がかかることはポイントに。毎日の小さな約束はシール帳に。ポイントは「ごほうび」に、シールは「フィギュア」になります
       </Text>
 
       {/* [新設・2026-09-17・決定5・6] 台紙の種類（habit_kind_key）。たまり方＝台紙の
@@ -685,7 +702,7 @@ export default function ChoreEditScreen() {
           縦積みリストを流用する（決定6、種類が増えても崩れない）。 */}
       {rewardMode === "habit_card" && (
         <>
-          <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>台紙の種類（必須）</Text>
+          <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>シール帳の種類（必須）</Text>
           <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
             {habitKindGroups.map((g) => (
               <Pressable
@@ -826,7 +843,7 @@ export default function ChoreEditScreen() {
       {((errorMessage && errorMessage.includes(HABIT_CARD_LIMIT_ERROR_HINT)) || atHabitCardLimit) && (
         <Pressable onPress={() => router.push("/parent/habit-cards")}>
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }]}>
-            台紙を見る →
+            シール帳を見る →
           </Text>
         </Pressable>
       )}

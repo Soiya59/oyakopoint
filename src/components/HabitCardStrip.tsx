@@ -1,4 +1,8 @@
 /**
+ * [2026-09-18追加・統括指示「台帳でなく、シール帳にしてね」・実装メモ.md 251章]
+ * 設計文書との対応を保つため、このコメント・変数名・型名では「台紙」という呼び名の
+ * まま残しているが、利用者の画面には「シール帳」と表示する。
+ *
  * じぶんタブの台紙カード（要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章）。
  * 新しい画面・新しいタブは作らず、保護者・みまもりメンバー・子どものそれぞれの
  * 既存「じぶん」タブ入口に1枚追加するカード（決定9）。
@@ -141,7 +145,7 @@ export function HabitCardStrip({ tone, loadState, cards, chores, catalog, onPres
     return (
       <ErrorState
         tone={isChild ? "child" : "parent"}
-        title={isChild ? "つうしんがおやすみ中みたい" : "台紙の読み込みに失敗しました"}
+        title={isChild ? "つうしんがおやすみ中みたい" : "シール帳の読み込みに失敗しました"}
         onRetry={onRetry}
       />
     );
@@ -156,10 +160,10 @@ export function HabitCardStrip({ tone, loadState, cards, chores, catalog, onPres
     const captionStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
     return (
       <View style={{ marginTop: theme.spacing.s3 }}>
-        <Text style={[headingStyle, styles.heading]}>📔 台紙</Text>
+        <Text style={[headingStyle, styles.heading]}>📔 シール帳</Text>
         <Card tone={tone} style={styles.singleCard}>
           <Text style={captionStyle}>
-            {isChild ? "クエストを 台紙に すると、ここに たまるよ" : "クエストを『台紙』にすると、ここに貯まっていきます"}
+            {isChild ? "クエストを シール帳に すると、ここに たまるよ" : "クエストを『シール帳』にすると、ここに貯まっていきます"}
           </Text>
         </Card>
       </View>
@@ -168,7 +172,7 @@ export function HabitCardStrip({ tone, loadState, cards, chores, catalog, onPres
 
   return (
     <View style={{ marginTop: theme.spacing.s3 }}>
-      <Text style={[headingStyle, styles.heading]}>📔 台紙</Text>
+      <Text style={[headingStyle, styles.heading]}>📔 シール帳</Text>
       {cards.length === 1 ? (
         <Pressable onPress={() => onPressCard(cards[0])}>
           <Card tone={tone} style={styles.singleCard}>

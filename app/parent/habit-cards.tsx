@@ -27,7 +27,7 @@ export default function ParentHabitCardsScreen() {
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
-      <Text style={theme.typography.parentTitle}>台紙</Text>
+      <Text style={theme.typography.parentTitle}>シール帳</Text>
 
       <HabitCardBoard
         tone="parent"

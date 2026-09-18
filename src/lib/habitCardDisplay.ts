@@ -24,9 +24,9 @@ export function getHabitCardKindInfo(
   catalog: HabitFigureCatalogItem[]
 ): HabitCardKindInfo {
   const kindKey = chore?.habit_kind_key ?? null;
-  if (!kindKey) return { kindKey: null, kindDisplayName: "台紙", kindEmoji: null };
+  if (!kindKey) return { kindKey: null, kindDisplayName: "シール帳", kindEmoji: null };
   const found = catalog.find((c) => c.kind_key === kindKey);
-  if (!found) return { kindKey, kindDisplayName: "台紙", kindEmoji: null };
+  if (!found) return { kindKey, kindDisplayName: "シール帳", kindEmoji: null };
   return { kindKey, kindDisplayName: found.kind_display_name, kindEmoji: found.kind_emoji };
 }
 

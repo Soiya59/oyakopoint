@@ -914,11 +914,28 @@ export function CollectorShelfPanel({
                       )}
                       {!loadingSeasonIds[season.id] && !errorSeasonIds[season.id] && dotsBySeasonId[season.id] && (
                         <>
+                          {/* [2026-09-18追加・統括指摘「コレクションされた家族の木は絵を
+                              拡大できるのか？8月の木はされていない」・実装メモ.md 251章]
+                              UIUX 46.4節決定8「過去の木には追加しない」を統括の判断で
+                              撤回し、現在の木（app/parent/family-tree.tsx等）と同じ
+                              `enableTapExpand`・`tone`を渡してタップ拡大を有効化する。
+                              46.5節決定9のとおりオプトインのため、この2行を足すだけで
+                              有効になる。過去シーズンの`dots`・`stickerPlacements`・
+                              `habitFigurePlacements`はいずれも現在の木と同じ取得関数
+                              （`fetchFamilyTreeCompletionDots`等、src/hooks/
+                              useCollectorShelf.tsのusePastTreeSeasonDots参照）で
+                              取得しており、拡大モーダルが読む`decoratedAt`・報告者
+                              member_id等のデータ形は現在の木と同一。メンバー名解決も
+                              TreeStageVisual内部の`useAppData()`（家族の現メンバー
+                              一覧）を使うため、過去シーズン用に別途membersを渡す必要は
+                              ない。 */}
                           <TreeStageVisual
                             stage={season.current_stage}
                             dots={dotsBySeasonId[season.id]}
                             stickerPlacements={stickerPlacementsBySeasonId[season.id]}
                             habitFigurePlacements={habitFigurePlacementsBySeasonId[season.id]}
+                            enableTapExpand
+                            tone={tone}
                           />
                           <PastTreeColorLegend
                             dots={dotsBySeasonId[season.id]}
@@ -1401,8 +1418,8 @@ function HabitFigureShelfSection({
         <Text style={bodyStyle}>
           {isViewingSelf
             ? isChild
-              ? "まだ フィギュアを もっていないよ。台紙をためて もらおう"
-              : "まだフィギュアを獲得していません。台紙をためると獲得できます"
+              ? "まだ フィギュアを もっていないよ。シール帳をためて もらおう"
+              : "まだフィギュアを獲得していません。シール帳をためると獲得できます"
             : isChild
             ? `${selectedMemberName}さんは まだ もっていないよ`
             : `${selectedMemberName}さんはまだ持っていません`}

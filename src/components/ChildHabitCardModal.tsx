@@ -42,7 +42,7 @@ export function ChildHabitCardModal({ visible, onClose, members, myMemberId, cho
       <View style={styles.backdrop}>
         <Card tone="child" style={styles.card}>
           <View style={styles.headerRow}>
-            <Text style={theme.typography.childHeadline}>📔 台紙</Text>
+            <Text style={theme.typography.childHeadline}>📔 シール帳</Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Text style={theme.typography.childBody}>×</Text>
             </Pressable>

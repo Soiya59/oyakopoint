@@ -32,7 +32,7 @@ export function HabitFigureGrantBanner({ tone, grant, onPlaceOnTree, onLater }: 
   const isChild = tone === "child";
   const headlineStyle = isChild ? theme.typography.childHeadline : tone === "supporter" ? theme.typography.supporterBodyMedium : theme.typography.parentBodyMedium;
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
-  const kindName = grant.habit_figure_catalog?.kind_display_name ?? "台紙";
+  const kindName = grant.habit_figure_catalog?.kind_display_name ?? "シール帳";
   const kindEmoji = grant.habit_figure_catalog?.kind_emoji ?? "🏳️";
   const tierLabel = (isChild ? TIER_LABEL[grant.tier]?.child : TIER_LABEL[grant.tier]?.adult) ?? grant.tier;
 

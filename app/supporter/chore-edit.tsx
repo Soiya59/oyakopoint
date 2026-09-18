@@ -23,12 +23,19 @@ import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findSkillChoreTemplateById } from "@/data/skillChoreTemplates";
 import { useHabitFigureCatalog, groupHabitFigureCatalogByKind, useActiveHabitCardCount, HABIT_CARDS_MAX_ACTIVE } from "@/hooks/useHabitCards";
 
-// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] DBの
-// `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言。保存を押す前
+// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 元々はDBの
+// `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言だった。保存を押す前
 // （クライアント側の事前チェックで上限と分かった時点）にも同じ文言を出すために
 // 定数化した（app/parent/chore-edit.tsxのHABIT_CARD_LIMIT_MESSAGEと同一文言）。
+// [2026-09-18修正・実装メモ.md 251章] 画面の呼び名統一（台紙→シール帳）にあわせて
+// 書き換えた。DB側（habit_cards_before_write()）の例外文言も
+// 20260926020000_habit_card_limit_message_rename.sql で同じ文言に揃えたが、
+// 本部長が本番へ適用するまでの間はまだ「台紙」表記のままで、実際に保存が
+// 拒否されたとき（errorMessage経由）は稀に旧表記のままの文言が表示されることが
+// ある（クライアント側の事前チェックで先に弾かれる通常経路ではこちらの新しい
+// 文言が使われる）。
 const HABIT_CARD_LIMIT_MESSAGE =
-  "台紙は同時に3まいまでです。今の台紙をどれか「おわりにする」と、新しい台紙を始められます";
+  "シール帳は同時に3さつまでです。今のシール帳をどれか「おわりにする」と、新しいシール帳を始められます";
 import {
   FAMILY_DATA_NOT_READY_MESSAGE,
   NFC_UNLINK_ERROR_MESSAGE,
@@ -240,7 +247,7 @@ export default function SupporterChoreEditScreen() {
         if (!Number.isInteger(limitNum) || limitNum < 1) return "1日の上限回数は1以上の整数で入力してください（空欄で無制限）";
       }
     } else if (!habitKindKey) {
-      return "台紙の種類を選んでください";
+      return "シール帳の種類を選んでください";
     }
     return null;
   };
@@ -386,7 +393,7 @@ export default function SupporterChoreEditScreen() {
       {/* [新設・2026-09-17・要件定義書07-28章決定2・3・22] たまり方（ポイント／
           台紙）。作成後は変更できないため（決定55-9）、編集モードでは固定表示のみ。 */}
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>
-        たまり方：{rewardMode === "habit_card" ? "台紙" : "ポイント"}
+        たまり方：{rewardMode === "habit_card" ? "シール帳" : "ポイント"}
         {!isEditMode && (
           <Text
             style={{ color: theme.colors.supporterAccent }}
@@ -403,12 +410,12 @@ export default function SupporterChoreEditScreen() {
         おてつだい は ポイント。まいにちの おやくそく は シール。
       </Text>
       <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        1回ずつ手間がかかることはポイントに。毎日の小さな約束は台紙に。ポイントは「ごほうび」に、シールは「フィギュア」になります
+        1回ずつ手間がかかることはポイントに。毎日の小さな約束はシール帳に。ポイントは「ごほうび」に、シールは「フィギュア」になります
       </Text>
 
       {rewardMode === "habit_card" && (
         <>
-          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>台紙の種類（必須）</Text>
+          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>シール帳の種類（必須）</Text>
           <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
             {habitKindGroups.map((g) => (
               <Pressable
@@ -425,7 +432,7 @@ export default function SupporterChoreEditScreen() {
             ))}
           </View>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
-            台紙は自分専用のクエストとして登録されます（担当はあなた自身に固定されます）
+            シール帳は自分専用のクエストとして登録されます（担当はあなた自身に固定されます）
           </Text>
         </>
       )}

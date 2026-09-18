@@ -223,6 +223,89 @@ export function pickDisplaySlots(
 }
 
 /**
+ * [2026-09-18追加・実装メモ252章] `pickDisplaySlots`が返す配列の中で、
+ * かざりつけモードで選択中の色丸（`highlightCompletionId`）だけを、
+ * **「今すでに景品だとしたら入るはずの時刻順の位置」**へ差し込み直す。
+ *
+ * [背景・なぜこの関数が要るか] `placeGroup`（本ファイル内`placeWithoutOverlap`）
+ * は「配列内で自分より先に処理された色丸を避けて座標を決める」という、
+ * **配列の並び順に依存する**方式である。`pickDisplaySlots`は`[...景品,
+ * ...通常]`の順で返す（景品優先確保、07-13-4章決定10）ため、ある色丸が
+ * 「通常」（配列の後ろのほう）から「景品」（配列の前のほう）に変わると、
+ * 配列内の自分の位置が大きく動き、部位（`pickTreeRegion`の結果）が同じでも
+ * 実際に描かれる座標がずれる（139・140章は部位までしか一致させておらず、
+ * この座標のずれには対処していなかった。252.0〜252.3節に詳しい）。
+ *
+ * [なぜ配列全体を`reported_at`昇順に並べ替える方式を採らなかったか
+ * （本部長差し戻し・2026-09-18）] 一度その方式で実装したが、2つの理由で
+ * 撤回した。
+ *   1. **景品が重なりやすくなる退行の恐れ。** `placeWithoutOverlap`は
+ *      `PLACEMENT_TRIES`回試して空きが無ければ「最も余裕のあった位置」
+ *      （＝重なりを許した位置）を返すため、**後に処理されるほど不利**になる。
+ *      景品（36pt）は通常の色丸（13pt）より必要な空きが大きく、
+ *      `[...景品, ...通常]`という順序は「景品に先に良い場所を取らせる」
+ *      という意味を持っていた。配列全体を時刻順にすると、直近に当たった
+ *      景品が、それより古い通常の色丸すべての後に処理されることになり、
+ *      空きが見つからず重なる確率が上がる。これは2026-08-27の本番不具合
+ *      （景品4件中2件が樹冠の裏に隠れた、`pickTreeRegion`直上のコメント参照）
+ *      と地続きの箇所であり、同じ種類の見えなくなり方を作り直す恐れがあった。
+ *   2. **既存の木の並びが、全家庭で一度だけ動いてしまう。** 座標はDBに
+ *      保存されておらず毎回その場で計算しているため、並べ替えの基準を
+ *      変えると、次のビルドを配った瞬間に「今ある木の色丸」全部が
+ *      いま見えている位置と違う位置に動く。統括はこれまでの木を何度も
+ *      見ているため、確実に気づく変化になる。
+ *
+ * [今回の方式] `pickDisplaySlots`が既に持っている性質を利用する。
+ * `prizeDots = dots.filter(isPrioritizedDot)`は`Array.prototype.filter`
+ * であり、`dots`の並び（`reported_at`昇順、API仕様のクエリが
+ * `order("reported_at")`で返す）をそのまま保つ（＝景品グループは
+ * 既に時刻順）。つまり
+ *   - 確定後: 選んだ色丸は`isPrioritizedDot`が`true`になり、景品グループの
+ *     中の自分の時刻位置に入る
+ *   - 確定前（かざりつけモードでの選択中）: 通常グループの、自分の
+ *     サンプリング結果の位置に入る ← ここだけが確定後と食い違っていた
+ * ので、選択中の色丸だけを景品グループ側の正しい時刻位置へ動かし、
+ * 通常グループからは外す。これにより
+ *   - `highlightCompletionId`が無い（かざりつけモードでない）通常表示は、
+ *     本関数が何もしない（早期return）ため**1ミリも変わらない**
+ *     （退行1・2のいずれも起きない）
+ *   - 既存の景品どうしの処理順（＝互いの重なり回避の有利不利）も、
+ *     選択中の色丸が割り込む分を除いて変わらない
+ * という2点を両立する。`treeDotPlacement.verify.ts`でこの2点を検証済み。
+ */
+export function reorderPreviewTargetAmongPrizes(
+  slots: FamilyTreeCompletionDot[],
+  highlightCompletionId: string | null | undefined,
+  previewDecorationSize: number | null | undefined
+): FamilyTreeCompletionDot[] {
+  // 140章の`isPreviewTarget`と全く同じ条件（`previewDecorationSize`が
+  // 指定されていて、かつ`highlightCompletionId`が指定されている場合のみ）。
+  if (highlightCompletionId == null || previewDecorationSize == null) return slots;
+  const target = slots.find((d) => d.id === highlightCompletionId);
+  // 対象が見つからない、または既に本物の景品（`prize`が付いている）なら
+  // 何もしない（既に`isPrioritizedDot`の`filter`だけで正しい時刻位置に
+  // 入っているため、差し込み直す必要が無い）。
+  if (!target || isPrioritizedDot(target)) return slots;
+
+  const rest = slots.filter((d) => d.id !== highlightCompletionId);
+  const targetTime = new Date(target.reported_at).getTime();
+  // 配列の先頭は必ず「景品グループ（時刻昇順）」である（`pickDisplaySlots`の
+  // `[...keptPrizes, ...keptNormal]`という組み立て方のとおり）。先頭から
+  // 「まだ景品が続いていて、かつその景品が自分より古い（＝自分より前に
+  // 来るべき）」間だけ進めることで、景品グループの中の正しい時刻位置を探す。
+  let insertIndex = 0;
+  while (
+    insertIndex < rest.length &&
+    isPrioritizedDot(rest[insertIndex]) &&
+    new Date(rest[insertIndex].reported_at).getTime() <= targetTime
+  ) {
+    insertIndex++;
+  }
+  rest.splice(insertIndex, 0, target);
+  return rest;
+}
+
+/**
  * 段階ごとの木の形。
  *
  * [2026-08-24再改訂・本部長] 初回の作り直しでは段階ごとに「大きさ」だけを変え、
@@ -1136,10 +1219,43 @@ export function TreeStageVisual({
    * 渡さない＝`undefined`のままなので、`pickDisplaySlots`は`forceIncludeId`無しの
    * 経路を通り、従来と完全に同じ結果になる（既存呼び出し元は無変更で動く）。
    */
-  const slots = useMemo(
-    () => pickDisplaySlots(dots, highlightCompletionId),
-    [dots, highlightCompletionId]
-  );
+  /**
+   * [2026-09-18追加・実装メモ252章・統括の実機報告「木に飾る場所を選んだのに
+   * 別の場所に出た」への対応] `pickDisplaySlots`の結果を、
+   * `reorderPreviewTargetAmongPrizes`（本ファイル冒頭・`pickDisplaySlots`直下）
+   * でさらに調整する。
+   *
+   * [なぜ必要か] `pickDisplaySlots`は`[...景品, ...通常]`の順で返す（景品優先確保、
+   * 決定10）。この配列の並び順は、そのまま`byRegion`の各部位配列の並び順になり、
+   * さらに`placeGroup`（本ファイル内`placeWithoutOverlap`）の**処理順**として使われる。
+   * `placeWithoutOverlap`は「自分より先に処理された色丸を避けて位置を決める」
+   * 方式のため、同じ色丸でも処理順が変わると実際に描かれるx,y座標が変わりうる
+   * （部位＝`pickTreeRegion`の結果が同じでも、部位の中のどこに描かれるかは
+   * 処理順に左右される）。
+   *
+   * かざりつけモードで色丸を選ぶと、その色丸は「通常」（配列の後ろのほう、
+   * 景品全部より後）から「景品」（`forceIncludeId`により先取り表示される、
+   * 配列の前のほう、景品の中）へ**配列内の位置が大きく動く**。139・140章の
+   * 対処（`previewDecorationSize`・`isPreviewTarget`）は**部位**を確定後と
+   * 一致させることに成功していたが、**部位の中の座標**まではケアしておらず、
+   * この配列内の位置の変化がそのまま座標のずれになっていた。統括の
+   * 「上のほうを選んだのに下に出た」は、部位そのものの変化（空→地面等）
+   * ではなく、この**部位内での座標のずれ**だったと考えられる（詳細・実測は
+   * 実装メモ252章）。
+   *
+   * [直し方] 選択中の色丸だけを、`reorderPreviewTargetAmongPrizes`で
+   * 「景品グループの中の正しい時刻位置」へ差し込み直す（配列全体を
+   * 並べ替えるのではない。全体を並べ替える方式は、景品どうしの重なり回避が
+   * 不利になる退行と、かざりつけモードでない通常表示まで並びが変わってしまう
+   * 副作用があり撤回した。理由は`reorderPreviewTargetAmongPrizes`直上の
+   * コメント・実装メモ252章参照）。`highlightCompletionId`が無い（かざりつけ
+   * モードでない）通常表示では`reorderPreviewTargetAmongPrizes`が早期returnで
+   * 何もしないため、`pickDisplaySlots`の結果が従来と1ミリも変わらない。
+   */
+  const slots = useMemo(() => {
+    const picked = pickDisplaySlots(dots, highlightCompletionId);
+    return reorderPreviewTargetAmongPrizes(picked, highlightCompletionId, previewDecorationSize);
+  }, [dots, highlightCompletionId, previewDecorationSize]);
   const shape = STAGE_GEOMETRY[stage] ?? STAGE_GEOMETRY[0];
   // 幅は固定値ではなく実測する。固定値だと画面幅とずれ、はみ出した分が
   // React Nativeの既定の切り取りで消える（空の色丸が出ない不具合の原因になった）。

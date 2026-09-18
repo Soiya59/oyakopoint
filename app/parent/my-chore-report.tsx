@@ -204,7 +204,7 @@ export default function ParentMyChoreReportScreen() {
       {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はポイントを持たないため
           文言を出し分ける。 */}
       <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        {chore.reward_mode === "habit_card" ? "記録すると台紙にたまります" : `記録すると +${chore.points}pt`}
+        {chore.reward_mode === "habit_card" ? "記録するとシール帳にたまります" : `記録すると +${chore.points}pt`}
       </Text>
 
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>

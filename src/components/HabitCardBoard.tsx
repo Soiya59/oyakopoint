@@ -7,6 +7,10 @@
  * 展開と同型）、③（対象が2人以上いる場合）他のメンバーの台紙を見るための
  * メンバー選択（決定18）、④「おわりにする」操作（決定18・19・29）、をまとめて
  * 1つのコンポーネントで担う。P38/S26/子どもモーダルの3箇所から共通で使う。
+ *
+ * [2026-09-18追加・統括指示「台帳でなく、シール帳にしてね」・実装メモ.md 251章]
+ * 上記の設計文書との対応を保つため、このコメント・変数名・型名では「台紙」という
+ * 呼び名のまま残しているが、利用者の画面には「シール帳」と表示する。
  */
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -68,7 +72,7 @@ function ArchivedCardRow({ tone, card }: { tone: Tone; card: HabitCard }) {
           {loadState === "ready" &&
             grants.map((g) => (
               <Text key={g.id} style={captionStyle}>
-                {g.habit_figure_catalog?.kind_emoji ?? "🏳️"} {g.habit_figure_catalog?.kind_display_name ?? "台紙"}・
+                {g.habit_figure_catalog?.kind_emoji ?? "🏳️"} {g.habit_figure_catalog?.kind_display_name ?? "シール帳"}・
                 {(isChild ? TIER_LABEL_CHILD : TIER_LABEL_ADULT)[g.tier]}を獲得
               </Text>
             ))}
@@ -140,7 +144,7 @@ export function HabitCardBoard({
 
       {activeCards.length === 0 && archivedCards.length === 0 && (
         <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>
-          {isChild ? "まだ台紙が ないよ" : "まだ台紙がありません"}
+          {isChild ? "まだ シール帳が ないよ" : "まだシール帳がありません"}
         </Text>
       )}
 
@@ -163,7 +167,14 @@ export function HabitCardBoard({
                 {confirmingEndId === entry.card.id ? (
                   <Card tone={tone} style={{ gap: theme.spacing.s2 }}>
                     <Text style={bodyStyle}>
-                      「{kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}」の台紙をおわりにしますか？
+                      {/* [2026-09-18改訂・実装メモ.md 251章] 単純に「台紙」→「シール帳」に
+                          置き換えると、kindDisplayName自体が既に「〇〇のシール帳」という
+                          形（DBのhabit_figure_catalog.kind_display_name、
+                          20260926010000_habit_figure_spirit_and_rename.sqlで改名済み）に
+                          なっているため「「〇〇のシール帳」のシール帳をおわりにしますか？」
+                          と二重表現になってしまう。末尾の「の台紙」を削り、
+                          kindDisplayNameだけで完結させた。 */}
+                      「{kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}」をおわりにしますか？
                     </Text>
                     <Text style={captionStyle}>
                       今までの記録・獲得したフィギュアはそのまま残ります。もう一度0からになります
@@ -195,7 +206,7 @@ export function HabitCardBoard({
 
       {archivedCards.length > 0 && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={[bodyStyle, { fontWeight: "700" }]}>できあがった台紙（{archivedCards.length}まい）</Text>
+          <Text style={[bodyStyle, { fontWeight: "700" }]}>できあがったシール帳（{archivedCards.length}さつ）</Text>
           {archivedCards.map((c) => (
             <ArchivedCardRow key={c.id} tone={tone} card={c} />
           ))}

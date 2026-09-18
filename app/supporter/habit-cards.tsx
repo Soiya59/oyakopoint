@@ -27,7 +27,7 @@ export default function SupporterHabitCardsScreen() {
   return (
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter")} />
-      <Text style={theme.typography.supporterTitle}>台紙</Text>
+      <Text style={theme.typography.supporterTitle}>シール帳</Text>
 
       <HabitCardBoard
         tone="supporter"

@@ -103,7 +103,7 @@ export default function ParentSupporterChoresScreen() {
                           自分専用クエスト（scope='personal'）はポイントを持たないため
                           「台紙」と表示する。 */}
                       <Text style={theme.typography.parentBodyMedium}>
-                        {c.reward_mode === "habit_card" ? "台紙" : `+${c.points}pt`}
+                        {c.reward_mode === "habit_card" ? "シール帳" : `+${c.points}pt`}
                       </Text>
                     </View>
                   ))}

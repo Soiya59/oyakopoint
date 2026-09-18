@@ -94,7 +94,7 @@ export default function SupporterSelfScreen() {
         tabKey="supporter.self"
         tone="supporter"
         memberId={state.activeParentMemberId}
-        text="👋 ご自身のクエストやごほうび、お絵かき、台紙をまとめて見るタブです。台紙は、クエストを続けるとフィギュアがもらえる貯め方です。"
+        text="👋 ご自身のクエストやごほうび、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとフィギュアがもらえる貯め方です。"
       />
 
       {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
