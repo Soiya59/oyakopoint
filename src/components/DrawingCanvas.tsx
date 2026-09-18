@@ -17,6 +17,7 @@ import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-nativ
 import Svg, { Circle, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
+import { normalizeDrawingPoint, denormalizeDrawingPoint } from "@/lib/drawingCanvasCoords";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -44,8 +45,9 @@ const MIN_POINT_DISTANCE_PX = 4;
 export function pointsToPolylineString(p: number[], size: number): string {
   const out: string[] = [];
   for (let i = 0; i < p.length - 1; i += 2) {
-    const x = (p[i] / 1000) * size;
-    const y = (p[i + 1] / 1000) * size;
+    // [2026-09-18変更・実装メモ245章] 式自体は変えず、src/lib/drawingCanvasCoords.ts
+    // （node単体検証あり）へ切り出した同じ式を呼ぶだけにした。
+    const [x, y] = denormalizeDrawingPoint(p[i], p[i + 1], size);
     out.push(`${x},${y}`);
   }
   return out.join(" ");
@@ -158,6 +160,23 @@ export function DrawingCanvas({
   disabledRef.current = disabled;
   const linesCountRef = useRef(lines.length);
   linesCountRef.current = lines.length;
+  /**
+   * [2026-09-18追加・実装メモ245章、やること.md統括報告「お絵かきの線がずれる」]
+   * `panResponder`（直下の`useRef(PanResponder.create({...}))`）は、Reactの
+   * `useRef`が「マウント時に渡した初期値だけを保持し、以降の再レンダーで渡された
+   * 引数は評価はされるが捨てられる」仕様（node_modules/react-native/Libraries/
+   * Renderer/implementations/ReactFabric-dev.jsのuseRef実装、マウント時＝
+   * `mountRef(initialValue)`は引数をそのまま`{current: initialValue}`にする一方、
+   * 更新時＝`useRef: function () { ... return updateWorkInProgressHook()
+   * .memoizedState; }`は引数を受け取ってすらいない）であるため、
+   * `onPanResponderGrant`・`onPanResponderMove`内で直接`size`（このpropの値）を
+   * 読むと、マウント時点の`size`に永久に固定される。`color`・`strokeWidth`・
+   * `disabled`・`lines.length`・`onPan`が既に同じ理由でrefにしてある
+   * （colorRef等、上記コメント）のに`size`だけrefにしていなかったのが235章の
+   * 見落とし（詳細は本ファイル下部・実装メモ245章）。
+   */
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
   const currentPointsRef = useRef<number[]>([]);
   // [2026-09-17追加・47.3節決定9〜10] 最新のonPanをrefで参照する（colorRefと同じ理由）。
   const onPanRef = useRef(onPan);
@@ -193,9 +212,12 @@ export function DrawingCanvas({
   }, []);
 
   const toNormalized = (px: number, py: number): [number, number] => {
-    const nx = Math.max(0, Math.min(1000, Math.round((px / size) * 1000)));
-    const ny = Math.max(0, Math.min(1000, Math.round((py / size) * 1000)));
-    return [nx, ny];
+    // [2026-09-18変更・実装メモ245章] `size`を直接読まず`sizeRef.current`を読む
+    // （上のsizeRef宣言のコメント参照）。この関数自体は毎レンダー作り直されるが、
+    // 呼び出し元の`panResponder`はマウント時のバージョンを使い続けるため、
+    // 関数の中身が「今の値をrefから読む」ようになっていないと意味がない。
+    // 式自体はsrc/lib/drawingCanvasCoords.ts（node単体検証あり）へ切り出し済み。
+    return normalizeDrawingPoint(px, py, sizeRef.current);
   };
 
   const finishStroke = () => {
@@ -286,7 +308,9 @@ export function DrawingCanvas({
         const lastY = pts[pts.length - 1];
         // 「一定距離未満の移動では点を追加しない」簡略化（33b章コメント対応）。
         // 正規化後(0-1000)スケールでの距離判定に、size基準のpxしきい値を変換して使う。
-        const thresholdNormalized = (MIN_POINT_DISTANCE_PX / size) * 1000;
+        // [2026-09-18変更・実装メモ245章] ここも`size`ではなく`sizeRef.current`を使う
+        // （上のtoNormalized・sizeRef宣言のコメントと同じ理由）。
+        const thresholdNormalized = (MIN_POINT_DISTANCE_PX / sizeRef.current) * 1000;
         const dx = nx - lastX;
         const dy = ny - lastY;
         if (dx * dx + dy * dy < thresholdNormalized * thresholdNormalized) return;
