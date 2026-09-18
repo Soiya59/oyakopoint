@@ -133,6 +133,10 @@ export default function ParentMemberAvatarScreen() {
         <View style={{ marginTop: theme.spacing.s4 }}>
           <AvatarDrawingPanel
             tone="parent"
+            // [2026-09-18追加・主要画面ワイヤーフレーム.md 52.6節決定7] 代理操作中でも
+            // 「2本指で動かせる」を学ぶのは指を動かしている人（ログイン中の保護者自身）
+            // であり、操作対象（`memberId`＝描いてもらう相手）ではない。
+            memberId={state.activeParentMemberId}
             isProxy={isProxy}
             displayName={target.display_name}
             backgroundColor={target.avatar_color ?? theme.colors.neutralBorder}

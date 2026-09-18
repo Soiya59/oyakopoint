@@ -47,6 +47,12 @@ const TREE_MINIATURE_SIZE = prizeInnerSize(PRIZE_DOT_SIZE);
 
 interface DrawingBoardProps {
   tone: Tone;
+  /**
+   * [2026-09-18追加・主要画面ワイヤーフレーム.md 52.4節・52.6節決定7、実装メモ.md
+   * 253章] 「今その端末を操作している本人」のmemberId。`ZoomableDrawingCanvas`へ
+   * そのまま橋渡しし、拡大中の「2本指で動かせる」案内の既読記録に使う。
+   */
+  memberId: string;
   /** 自分の未公開の絵一覧（新しい順）。上限到達時のサムネイル表示に使う。 */
   unpublished: FamilyDrawing[];
   /** unpublished.length >= 上限（呼び出し側でtheme.drawingLimits.maxUnpublishedと比較）。 */
@@ -112,6 +118,7 @@ interface DrawingBoardProps {
 
 export function DrawingBoard({
   tone,
+  memberId,
   unpublished,
   atLimit,
   saving,
@@ -477,6 +484,7 @@ export function DrawingBoard({
               `DrawingCanvas.tsx`側で一切変更していない（47.4節決定12）。 */}
           <ZoomableDrawingCanvas
             tone={tone}
+            memberId={memberId}
             color={color}
             strokeWidth={strokeWidth}
             lines={lines}
@@ -533,39 +541,13 @@ export function DrawingBoard({
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
           </View>
 
-          {/* [2026-09-05追加] 線の太さ選択（21.5b節 決定22）。10色パレットの直下・
-              題名入力欄の直上に1行。見出し・説明文は付けない。 */}
+          {/* [2026-09-05追加] 線の太さ選択（21.5b節 決定22）。10色パレットの直下に1行。
+              見出し・説明文は付けない。
+              [2026-09-18変更・本部長／軽微変更ルート、実装メモ.md 253章] 題名入力欄は
+              このすぐ下ではなく、ボタン3つの行（actionRow）より後ろへ移した。理由は
+              下記actionRow直前のコメント・実装メモ253章参照。 */}
           <View style={styles.strokeWidthWrap}>
             <DrawingStrokeWidthPicker selected={strokeWidth} onSelect={setStrokeWidth} disabled={saving} />
-          </View>
-
-          {/* [2026-09-02追加] お絵かきの題名（21.5a節）。10色パレット直下・保存ボタン直上に
-              常設し、ストロークの有無で出し入れしない（実装の分岐を増やさないため）。
-              題名の有無は保存ボタンの活性・非活性に一切関与しない（決定13、任意項目）。 */}
-          <View style={styles.titleWrap}>
-            <Text style={bodyStyle}>{titleLabel}</Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder={titlePlaceholder}
-              maxLength={theme.drawingLimits.maxTitleLength}
-              editable={!saving}
-              style={styles.titleInput}
-            />
-            {showTitleCounter && (
-              <Text
-                style={[
-                  captionStyle,
-                  styles.titleCounter,
-                  {
-                    color: titleNearLimit ? theme.colors.statusPending : theme.colors.neutralTextSecondary,
-                    fontWeight: titleRemaining === 0 ? "700" : "400",
-                  },
-                ]}
-              >
-                {title.length}/{theme.drawingLimits.maxTitleLength}
-              </Text>
-            )}
           </View>
         </>
       )}
@@ -612,6 +594,47 @@ export function DrawingBoard({
             onPress={handleSave}
             style={styles.saveButton}
           />
+        </View>
+      )}
+
+      {/* [2026-09-02追加、2026-09-18位置変更・統括実機報告・本部長／軽微変更ルート、
+          実装メモ.md 253章] お絵かきの題名（21.5a節）。以前は10色パレット直下・
+          保存ボタン直上に常設していたが、統括の実機報告「絵を描いてる時に一つ戻す
+          ボタンをさわれない」を受けてボタン3つの行（actionRow）より後ろへ移した。
+          題名入力欄は見出し＋TextInput＋文字数カウンタで90pt前後を占め、これが
+          ボタンの行の直前にあると、画面が小さい端末でボタンの行が画面外に押し
+          出されて「ひとつ もどす」に手が届かなくなっていた。
+          **21.5a節の「題名は10色パレット直下・保存ボタン直上に常設」という決定と
+          この配置は食い違う。ワイヤーフレームの書き換えは本部長がUIUX部に依頼する
+          （実装メモ253章）。**
+          ストロークの有無で出し入れしない（実装の分岐を増やさないため）・
+          題名の有無は保存ボタンの活性・非活性に一切関与しない（決定13、任意項目）・
+          文字数カウンタ・編集時の既存題名の初期表示は、いずれも移動前と一切変えていない。 */}
+      {showCanvas && (
+        <View style={styles.titleWrap}>
+          <Text style={bodyStyle}>{titleLabel}</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder={titlePlaceholder}
+            maxLength={theme.drawingLimits.maxTitleLength}
+            editable={!saving}
+            style={styles.titleInput}
+          />
+          {showTitleCounter && (
+            <Text
+              style={[
+                captionStyle,
+                styles.titleCounter,
+                {
+                  color: titleNearLimit ? theme.colors.statusPending : theme.colors.neutralTextSecondary,
+                  fontWeight: titleRemaining === 0 ? "700" : "400",
+                },
+              ]}
+            >
+              {title.length}/{theme.drawingLimits.maxTitleLength}
+            </Text>
+          )}
         </View>
       )}
 

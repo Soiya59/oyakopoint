@@ -116,6 +116,7 @@ export default function ChildMyAvatarScreen() {
         <View style={{ marginTop: theme.spacing.s4 }}>
           <AvatarDrawingPanel
             tone="child"
+            memberId={myId}
             isProxy={false}
             displayName={me.display_name}
             backgroundColor={me.avatar_color ?? theme.colors.neutralBorder}

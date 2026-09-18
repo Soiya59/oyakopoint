@@ -122,6 +122,7 @@ export default function ParentDrawingScreen() {
           )}
           <DrawingBoard
             tone="parent"
+            memberId={myId}
             unpublished={unpublished}
             atLimit={atLimit}
             saving={saving}

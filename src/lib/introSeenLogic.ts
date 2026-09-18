@@ -10,8 +10,16 @@
  * 入出力だけを担当する薄いラッパーにする。
  */
 
-/** どの案内を指すか。タブ案内は`tabKey`ごとに個別のキーを持つ。 */
-export type IntroSurface = { kind: "tab"; tabKey: string } | { kind: "postConsentGuide" };
+/**
+ * どの案内を指すか。タブ案内は`tabKey`ごとに個別のキーを持つ。
+ * [2026-09-18追加・主要画面ワイヤーフレーム.md 52.6節決定6] `drawingZoomPan`は
+ * お絵かき拡大中の「2本指で動かせる」案内（52章）。`tabKey`のようなタブ単位の
+ * 区別は不要で、`memberId`だけで足りるアプリ全体で1個のキーにする（52.6節理由）。
+ */
+export type IntroSurface =
+  | { kind: "tab"; tabKey: string }
+  | { kind: "postConsentGuide" }
+  | { kind: "drawingZoomPan" };
 
 /**
  * 保存キーを組み立てる（純粋関数）。`memberId`ごとに別のキーになることで、
@@ -20,9 +28,14 @@ export type IntroSurface = { kind: "tab"; tabKey: string } | { kind: "postConsen
  * 案内がもう片方にも閉じたことになる、という誤動作を避ける）。
  */
 export function buildIntroSeenKey(surface: IntroSurface, memberId: string): string {
-  return surface.kind === "tab"
-    ? `oyakopoint.introSeen.tab.${surface.tabKey}.${memberId}`
-    : `oyakopoint.introSeen.postConsentGuide.${memberId}`;
+  switch (surface.kind) {
+    case "tab":
+      return `oyakopoint.introSeen.tab.${surface.tabKey}.${memberId}`;
+    case "postConsentGuide":
+      return `oyakopoint.introSeen.postConsentGuide.${memberId}`;
+    case "drawingZoomPan":
+      return `oyakopoint.introSeen.drawingZoomPan.${memberId}`;
+  }
 }
 
 /**

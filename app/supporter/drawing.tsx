@@ -121,6 +121,7 @@ export default function SupporterDrawingScreen() {
           )}
           <DrawingBoard
             tone="supporter"
+            memberId={myId}
             unpublished={unpublished}
             atLimit={atLimit}
             saving={saving}

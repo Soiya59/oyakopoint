@@ -38,6 +38,14 @@ type Tone = "parent" | "child" | "supporter";
 
 interface AvatarDrawingPanelProps {
   tone: Tone;
+  /**
+   * [2026-09-18追加・主要画面ワイヤーフレーム.md 52.4節・52.6節決定7、実装メモ.md
+   * 253章] 「今その端末を操作している本人」のmemberId。代理操作中（`isProxy`）でも、
+   * 操作対象（描いてもらう相手）ではなく、操作している側（ログイン中の保護者自身）の
+   * memberIdを渡すこと。`ZoomableDrawingCanvas`へそのまま橋渡しし、拡大中の
+   * 「2本指で動かせる」案内の既読記録に使う。
+   */
+  memberId: string;
   /** 代理操作か（決定12代理バナー・決定25文言の出し分けに使う。バナー自体は呼び出し画面側の責務）。 */
   isProxy: boolean;
   /** 対象メンバーの表示名（代理操作時の確認文言・「今のすがた」プレビューの頭文字用）。 */
@@ -69,6 +77,7 @@ interface AvatarDrawingPanelProps {
 
 export function AvatarDrawingPanel({
   tone,
+  memberId,
   isProxy,
   displayName,
   backgroundColor,
@@ -207,6 +216,7 @@ export function AvatarDrawingPanel({
           しない。拡大して見返す・「ひとつ もどす」後に続きを描く操作を妨げないため）。 */}
       <ZoomableDrawingCanvas
         tone={tone}
+        memberId={memberId}
         backgroundColor={backgroundColor}
         color={color}
         strokeWidth={strokeWidth}

@@ -119,6 +119,7 @@ export default function ChildDrawingScreen() {
         <View style={{ marginTop: theme.spacing.s4 }}>
           <DrawingBoard
             tone="child"
+            memberId={myId}
             unpublished={unpublished}
             atLimit={atLimit}
             saving={saving}

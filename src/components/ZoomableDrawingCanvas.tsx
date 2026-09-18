@@ -27,9 +27,19 @@
  * （`fitToCircleSignal`）のどちらの概念も無いため、両propを省略可能にし
  * （既定値は「一度も使われていない」状態と同じ値）、`DrawingBoard.tsx`の
  * 既存の呼び出し（両方を必ず明示的に渡す）は1行も変えていない。
+ *
+ * [2026-09-18追加・主要画面ワイヤーフレーム.md 52章、実装メモ.md 253章] 拡大中
+ * （2倍・3倍）の「2本指で動かせる」案内。52.6節決定5改訂により、表示の
+ * 出し引きは「見た」のライブな状態を直接見ない。マウント時（`memberId`が
+ * 決まった時点）に一度だけ`hydrateIntroSeen`→`isIntroSeen`を読み、結果を
+ * `hintAlreadySeenAtOpen`へ固定する。以後このセッション中は`handlePan`で
+ * `markIntroSeen`を呼んでも`hintAlreadySeenAtOpen`は変えない（＝
+ * `subscribeIntroSeen`は使わない）。理由は、パン中に案内が消えると直下の
+ * 46-B見本・パレット・太さ選択の位置が詰まって画面が揺れるため（本部長差し戻し、
+ * 47章・48章が守ってきた「指を動かしている最中は何も動かさない」原則と同じ）。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, View } from "react-native";
+import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import DrawingCanvas from "./DrawingCanvas";
 import DrawingZoomPicker from "./DrawingZoomPicker";
 import theme from "@/theme/theme";
@@ -39,9 +49,23 @@ import {
   clampDrawingPan,
   type DrawingZoomLevel,
 } from "@/lib/drawingZoomPan";
+import { hydrateIntroSeen, isIntroSeen, markIntroSeen } from "@/lib/introSeen";
 import type { FamilyDrawingLine } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
+
+/**
+ * [2026-09-18・主要画面ワイヤーフレーム.md 52.2節決定1] 3ロールの確定文言。
+ * **統括が直接打った文言であり、1文字も変えないこと。** 子ども向けは分かち書き済みの
+ * 確定版（本部長が空白挿入・「タッチし」→「タッチして」の活用形のみ変更した版）。
+ * 保護者・みまもりメンバー向けはP30/S18で共用（21.5節決定4と同じくキャンバス周りの
+ * 部品・文言をロールで分けない慣習）。
+ */
+const PAN_INTRO_TEXT: Record<Tone, string> = {
+  child: "ゆびを どうじに えに タッチして うごかすと、かきたい ぶぶんに えを うごかす ことが できるよ",
+  parent: "絵は2本指でドラッグでき、描きたい部分に動かせます",
+  supporter: "絵は2本指でドラッグでき、描きたい部分に動かせます",
+};
 
 interface ZoomableDrawingCanvasProps {
   tone: Tone;
@@ -95,6 +119,13 @@ interface ZoomableDrawingCanvasProps {
    * 対象メンバーの`avatar_color`を渡す）。
    */
   backgroundColor?: string;
+  /**
+   * [2026-09-18追加・主要画面ワイヤーフレーム.md 52.4節・52.6節決定7] 「今その端末を
+   * 操作している本人」のmemberId。代理操作中（`AvatarDrawingPanel.tsx`のP38経由）でも、
+   * 操作対象（描いてもらう相手）ではなく、操作している側（ログイン中の保護者自身）の
+   * memberIdを渡すこと。「見た」の記録（`src/lib/introSeen.ts`）に使うキーの一部になる。
+   */
+  memberId: string;
 }
 
 export function ZoomableDrawingCanvas({
@@ -109,6 +140,7 @@ export function ZoomableDrawingCanvas({
   fitToCircleSignal = 0,
   onGestureActiveChange,
   backgroundColor = theme.colors.neutralSurface,
+  memberId,
 }: ZoomableDrawingCanvasProps) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
@@ -159,6 +191,43 @@ export function ZoomableDrawingCanvas({
     setMeasuredWidth(e.nativeEvent.layout.width);
   };
 
+  /**
+   * [2026-09-18・主要画面ワイヤーフレーム.md 52.6節決定5改訂、52.12節実装メモ3]
+   * 「見た」かどうかは画面を開いた時点（マウント・`memberId`が決まった時点）で
+   * 一度だけ判定し、ローカルstateへ固定する。既定値`true`＝読み込み中は非表示
+   * （50.3節と同じフリッカー防止）。**`subscribeIntroSeen`は使わない**。
+   * `handlePan`内の`markIntroSeen`（下記）による更新を受けて再描画すると、
+   * パン中に案内が消えて直下の要素が詰まる「揺れ」が再発するため
+   * （本部長差し戻し2026-09-18）。次にこの部品が新しくマウントされたときに限り、
+   * このuseEffectが再実行され、更新済みの記録が反映される。
+   */
+  const [hintAlreadySeenAtOpen, setHintAlreadySeenAtOpen] = useState(true);
+  /**
+   * [2026-09-18・本部長差し戻し反映、実装メモ253章] `handlePan`で`markIntroSeen`を
+   * 呼んだかどうかのフラグ。`handlePan`は2本指ドラッグ中、指が動くたびに（1回の
+   * ドラッグで数十〜百回以上）呼ばれるため、ここで「まだ呼んでいなければ呼ぶ」の
+   * 一度きりに絞る（下記`handlePan`のコメント参照）。`memberId`が変わったら
+   * （＝別の人が操作し始めたら）`hintAlreadySeenAtOpen`と同じタイミングでfalseへ
+   * 戻す。**この判定は表示（`hintAlreadySeenAtOpen`）とは完全に別に保つ**（52.6節
+   * 決定5改訂の要点。既読の人に付け直しても無害だが、逆に「案内が出ていないときは
+   * 記録しない」形にすると、案内を見ずにパンを覚えた人の記録が付かなくなる）。
+   */
+  const hasMarkedIntroSeenRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    hasMarkedIntroSeenRef.current = false;
+    const surface = { kind: "drawingZoomPan" as const };
+    void hydrateIntroSeen(surface, memberId).then(() => {
+      if (!cancelled) setHintAlreadySeenAtOpen(isIntroSeen(surface, memberId));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // memberIdが決まった時点（＝この部品が新しくマウントされた時点）でのみ
+    // 再評価する。意図的な一度きりの判定のため依存はmemberIdのみ。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberId]);
+
   const handleSelectZoom = (next: DrawingZoomLevel) => {
     setZoom(next);
     // 47.3節決定11: 倍率を切り替えるたびに、パン位置を中央へ戻す
@@ -170,6 +239,28 @@ export function ZoomableDrawingCanvas({
   // 47.3節決定9・10: 2本指ドラッグでのみ呼ばれる（DrawingCanvas.tsx側で保証、
   // 同ファイルのonPanResponderMove参照）。移動量をクランプ範囲内に収めて反映する。
   const handlePan = (dx: number, dy: number) => {
+    // [2026-09-18・52.6節決定5改訂、52.12節実装メモ4、本部長差し戻し反映]
+    // 「見た」の記録自体はここで付ける。ただし`hintAlreadySeenAtOpen`は更新しない
+    // （今回開いている画面の表示・非表示はその場では切り替えない、揺れ防止）。
+    // 次にこの部品が新しくマウントされたときの上のuseEffectで初めて反映される。
+    //
+    // [本部長差し戻し2026-09-18] `handlePan`は2本指ドラッグ中、指が動くたびに
+    // （1回のドラッグで数十〜百回以上）呼ばれる。`markIntroSeen`を無条件で
+    // 毎回呼ぶと、(1)`emit()`により`subscribeIntroSeen`で購読している
+    // `TabIntroBubble`等が毎フレーム再描画される、(2)`AsyncStorage.setItem`への
+    // 書き込みが毎フレーム走る（Androidでは毎回ブリッジを渡る）。パン中に画面を
+    // 重くしないために52.6節決定5を改訂したのに、この経路で同じ重さを起こして
+    // しまう。`markIntroSeen`は冪等（何度呼んでも記録は変わらない）ため、
+    // この部品が生きている間に1回だけ呼べば記録としては十分。
+    // **`hintAlreadySeenAtOpen`（表示の判定）はここでは参照しない。** 既読の人
+    // （表示していない人）でも記録の付け直しは無害である一方、「案内が出ていない
+    // ときは記録しない」形にしてしまうと、案内を見ずにパンを覚えた人の記録が
+    // 付かなくなる（表示の判定と記録を付けるかの判定は別に保つ、52.6節決定5改訂の
+    // 要点）。
+    if (!hasMarkedIntroSeenRef.current) {
+      hasMarkedIntroSeenRef.current = true;
+      void markIntroSeen({ kind: "drawingZoomPan" }, memberId);
+    }
     setPan((prev) => ({
       x: clampDrawingPan(prev.x + dx, baseDiameter, zoom),
       y: clampDrawingPan(prev.y + dy, baseDiameter, zoom),
@@ -177,6 +268,11 @@ export function ZoomableDrawingCanvas({
   };
 
   const innerSize = baseDiameter * zoom;
+
+  // [2026-09-18・52.5節決定4] 子どもロールは専用のcaptionトークンが無く
+  // `childBody`を流用する既存慣習（`DrawingBoard.tsx`のtreeMiniatureTextと同じ）。
+  const panIntroTextStyle =
+    tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
 
   return (
     <View style={styles.measureWrap} onLayout={handleLayout}>
@@ -211,6 +307,16 @@ export function ZoomableDrawingCanvas({
           />
         </View>
       </View>
+
+      {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 52.3節決定2・52.4節決定3]
+          円形キャンバス（窓）の直下に、「2本指で動かせる」案内を置く。倍率が
+          2倍・3倍のときのみ、かつ今回の画面を開いた時点で未読だったときのみ表示する
+          （52.6節決定5改訂、`hintAlreadySeenAtOpen`はこの画面が開いている間固定）。
+          `numberOfLines`は指定せず、幅は円の直径ではなく`measureWrap`の実測幅
+          いっぱいを使う（52.4節・52.5節追記、子ども向け文言は3行程度になる見込み）。 */}
+      {zoom > 1 && !hintAlreadySeenAtOpen && (
+        <Text style={[panIntroTextStyle, styles.panIntroText]}>{PAN_INTRO_TEXT[tone]}</Text>
+      )}
     </View>
   );
 }
@@ -226,6 +332,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
     overflow: "hidden",
     alignSelf: "center",
+  },
+  // [2026-09-18追加・52.5節決定4] 新しい視覚要素は増やさない。`DrawingBoard.tsx`の
+  // treeMiniatureText・sectionHintと同じ扱い（captionStyle相当・neutralTextSecondary・
+  // 中央寄せ）。固定height・numberOfLinesは持たせない（52.5節追記）。widthは
+  // 円の直径ではなく親（measureWrap、実測幅そのまま）いっぱいを使う（52.4節追記）。
+  panIntroText: {
+    width: "100%",
+    marginTop: theme.spacing.s2,
+    textAlign: "center",
+    color: theme.colors.neutralTextSecondary,
   },
 });
 

@@ -106,6 +106,32 @@ function check(label: string, ok: boolean) {
   check("「読んだ」ステップ自体は既読", computeIsSeen(state, guideKey) === true);
 }
 
+// 8. [2026-09-18追加・主要画面ワイヤーフレーム.md 52.6節決定6] drawingZoomPanは
+//    タブ単位の区別を持たず、memberIdだけで1つのキーになる。
+{
+  const keyA = buildIntroSeenKey({ kind: "drawingZoomPan" }, "member-1");
+  check(
+    "drawingZoomPanのキーはkind・memberIdのみで決まる",
+    keyA === "oyakopoint.introSeen.drawingZoomPan.member-1"
+  );
+  check(
+    "drawingZoomPanはメンバーが違えばキーも異なる",
+    buildIntroSeenKey({ kind: "drawingZoomPan" }, "member-1") !==
+      buildIntroSeenKey({ kind: "drawingZoomPan" }, "member-2")
+  );
+  check(
+    "drawingZoomPanは同じmemberIdのtab案内・postConsentGuideとは別キー",
+    keyA !== buildIntroSeenKey({ kind: "tab", tabKey: "parent.family" }, "member-1") &&
+      keyA !== buildIntroSeenKey({ kind: "postConsentGuide" }, "member-1")
+  );
+
+  const state = createIntroSeenState();
+  applyHydration(state, keyA, null);
+  check("drawingZoomPanもhydrate後・記録なしは未読扱い（表示する）", computeIsSeen(state, keyA) === false);
+  applyMarkSeen(state, keyA);
+  check("drawingZoomPanもmarkSeen後は既読扱い（表示しない）", computeIsSeen(state, keyA) === true);
+}
+
 console.log("");
 if (failCount === 0) {
   console.log("全件OK");

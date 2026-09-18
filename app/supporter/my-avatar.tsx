@@ -114,6 +114,7 @@ export default function SupporterMyAvatarScreen() {
         <View style={{ marginTop: theme.spacing.s4 }}>
           <AvatarDrawingPanel
             tone="supporter"
+            memberId={myId}
             isProxy={false}
             displayName={me.display_name}
             backgroundColor={me.avatar_color ?? theme.colors.neutralBorder}
