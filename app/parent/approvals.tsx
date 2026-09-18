@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, ListRenderItemInfo, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -13,7 +14,7 @@ import { useMarkSeen } from "@/hooks/useLastSeen";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
-import type { ChoreCompletion, StampKey } from "@/types/domain";
+import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 
 /**
  * P8 完了報告一覧・リアクション ＋ P9 完了報告詳細・リアクション（モーダルに統合）
@@ -30,8 +31,159 @@ import type { ChoreCompletion, StampKey } from "@/types/domain";
  * 消えない・未読/既読の概念も持たない（画面一覧・遷移図.md 3.4章）。
  *
  * 状態: 読み込み中 / 空状態 / 通常 / 通信エラー をワイヤーフレームどおりに実装。
+ *
+ * [2026-09-19改訂・実装メモ.md 255章、やること.md 4-47] `ScrollView`＋`completions.map()`
+ * （家族の全履歴を毎回すべてDOMへマウントする実装）を`FlatList`（仮想化）へ置き換えた。
+ * 完了報告が数千件ある家族で「保護者ホームの『最近の報告』を押してから、この画面が
+ * 操作できるようになるまで」が数秒かかる不具合（228・240・254章の対処では直らなかった）の
+ * 原因が、通信ではなくこの画面の描画（1,000件で約1.3秒のDOMコミット＋ペイント）だったと
+ * 実測で確認できたための変更。**見た目・操作・データの取得範囲は変えていない**
+ * （表示件数を絞る・ページ分けする等の変更は含まない。255章参照）。
  */
 type LoadState = "loading" | "error" | "ready";
+
+/**
+ * [2026-09-19新設・255章] 1行分のカード。`React.memo`で分離し、他の行の状態変化
+ * （スタンプ送信中・取消確認モーダル・コメント入力など）で無関係な行まで
+ * 再レンダーされないようにする。`FlatList`化により初回マウント時に実際にDOMへ
+ * 乗る行数自体は画面に映る分だけ（既定`initialNumToRender`程度）に絞られているため、
+ * このメモ化の効果は主に「一覧を開いたあとの操作（スタンプ送信・コメント入力等）で
+ * 表示中の数十行が毎回すべて再計算される」ケースを減らすことにある
+ * （255章、行の初回マウント自体を軽くする主対策は仮想化そのもの）。
+ *
+ * [既知の制約] `hasReactedWithStamp`はコンテキスト（`src/data/store.tsx`）から
+ * 渡された関数で、そのモジュールの`value`の`useMemo`依存が`state`全体であるため、
+ * リアクション以外の家族データが変わったときも関数の参照が変わり得る。その場合
+ * この行のメモ化は素通りして再レンダーされるが、`FlatList`仮想化により影響は
+ * 画面に見えている行数だけに閉じるため実害は小さいと判断した（store.tsx側の
+ * メモ化見直しは本修正の対象外・255章参照）。
+ */
+type CompletionRowProps = {
+  completion: ChoreCompletion;
+  member?: FamilyMember;
+  memberAvatarLineData?: FamilyDrawingLineData | null;
+  myParentId: string;
+  isCanceling: boolean;
+  cancelErrorMessage?: string;
+  onOpenDetail: (c: ChoreCompletion) => void;
+  onCancelTap: (c: ChoreCompletion) => void;
+  onSendStamp: (completionId: string, stampKey: StampKey) => void;
+  hasReactedWithStamp: (completionId: string, reactedBy: string, stampKey: StampKey) => boolean;
+};
+
+const CompletionRow = React.memo(function CompletionRow({
+  completion: c,
+  member,
+  memberAvatarLineData,
+  myParentId,
+  isCanceling,
+  cancelErrorMessage,
+  onOpenDetail,
+  onCancelTap,
+  onSendStamp,
+  hasReactedWithStamp,
+}: CompletionRowProps) {
+  // [2026-08-16追加] 主要画面ワイヤーフレーム.md 3.1章「保護者自身の完了報告（07-4章）
+  // もこのフィードに時系列で混在表示する」。トーンの書き分けはAPI仕様.md 4b章・
+  // 主要画面ワイヤーフレーム.md 9.3章のとおり、reported_by先family_members.roleで
+  // 判定する（chore側に区分列は無い。スキーマ設計.sql 12章確認5）。
+  const isChildCard = member?.role === "child";
+  // [2026-08-23改訂] 🤝/🎯バッジ（旧デザイントークン.md 1.7節）は要件定義書
+  // 07-7章4回目のスコープ変更（家族共有choreへの参加機能の撤回）に伴い廃止した。
+  // [2026-08-23再改訂・5回目のスコープ変更] 自分専用choreの公開方針の撤回により、
+  // みまもりメンバーの完了報告も再びこのフィードに表示されるようになった
+  // （chore_completions_select_scoped RLSがfamily_id一致のみに単純化されたため）。
+  // バッジは復活させないが、`color-supporter-accent-soft`の控えめな配色で
+  // 区別する（画面一覧・遷移図.md P8行参照）。
+  const isSupporterCard = member?.role === "supporter";
+  // 自分自身の完了報告カードにはリアクションボタン自体を表示しない
+  // （3.1章「自己リアクションは要件定義書に無い操作のため、UI側で選択肢自体を出さない」）。
+  const isOwnCard = c.reported_by === myParentId;
+  // [2026-09-19追加・255章] `setCancelTick`は親（1分以内の行がある間だけ動く。下記
+  // 参照）が変わるたびにこの行も再評価されるため、ここで毎回`isWithinCancelWindow`を
+  // 呼んでも無期限の家族全履歴ではなく画面に見えている行数ぶんで済む。
+  const showCancelLink = !isSupporterCard && isWithinCancelWindow(c.reported_at);
+
+  return (
+    <Pressable onPress={() => onOpenDetail(c)}>
+      <Card
+        style={
+          isChildCard
+            ? { ...styles.card, ...styles.cardChildTint }
+            : isSupporterCard
+            ? { ...styles.card, ...styles.cardSupporterTint }
+            : styles.card
+        }
+      >
+        <View style={styles.cardTop}>
+          <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={memberAvatarLineData} expandOnTap />
+          <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
+          <Text style={{ flex: 1 }} />
+          <Text style={theme.typography.parentBodyMedium}>
+            {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
+                のため何も添えない。 */}
+            {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
+          </Text>
+        </View>
+        <View style={[styles.cardMeta, styles.cardMetaRow]}>
+          <Text style={theme.typography.parentCaption}>
+            {formatDateTimeShort(c.reported_at)}{" "}
+            {isChildCard ? "とどいた" : "きろくした"}
+          </Text>
+          {/* [2026-09-03追加] 28.4節。みまもりメンバーの完了報告（scope='personal'
+              またはscope='supporter_shared'）には保護者の取消権限が無いため
+              リンク自体を出さない。[2026-09-06追記・要件定義書07-18章決定2・3、
+              スキーマ設計.sql 45.12章] supporter_shared新設後も、報告者が
+              supporterロールであれば personal/supporter_shared のいずれでも
+              保護者は取り消せない（cancel_chore_completion側でも同じ判定に
+              統一済み）ため、role判定のみで引き続き足りる。 */}
+          {showCancelLink && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onCancelTap(c);
+              }}
+              disabled={isCanceling}
+              hitSlop={8}
+            >
+              <Text style={styles.cancelLink}>{isCanceling ? "処理中…" : "取消"}</Text>
+            </Pressable>
+          )}
+        </View>
+        {cancelErrorMessage && (
+          <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>{cancelErrorMessage}</Text>
+        )}
+        {/* カード上のクイックスタンプ。タップで即座にトグルRPCを呼ぶ（3.1章、
+            2026-09-10改訂・実装メモ.md 157章）。自分自身の完了報告カードには
+            表示しない。[2026-09-10改訂] 送信済み（sent）でもdisabledにしない。
+            もう一度タップすると取消、違うスタンプをタップすると切替になる。 */}
+        {!isOwnCard && (
+          <View style={styles.stampRow}>
+            {theme.stampDefinitions.map((s) => {
+              const sent = hasReactedWithStamp(c.id, myParentId, s.key as StampKey);
+              return (
+                <Pressable
+                  key={s.key}
+                  onPress={() => onSendStamp(c.id, s.key as StampKey)}
+                  style={[styles.stampBtn, sent && styles.stampBtnSent]}
+                >
+                  <Text style={styles.stampEmoji}>
+                    {s.emoji}
+                    {sent ? "✓" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            <Text style={{ flex: 1 }} />
+            <Pressable onPress={() => onOpenDetail(c)}>
+              <Text style={styles.commentLink}>＋コメント</Text>
+            </Pressable>
+          </View>
+        )}
+      </Card>
+    </Pressable>
+  );
+});
 
 export default function ApprovalsScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, refresh, memberAvatars } = useAppData();
@@ -59,12 +211,6 @@ export default function ApprovalsScreen() {
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
   const [cancelConfirmTarget, setCancelConfirmTarget] = useState<ChoreCompletion | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
-  // 1分の経過でリンクごと消すため、表示中は10秒間隔で再評価する（28.0節決定4）。
-  const [, setCancelTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
-    return () => clearInterval(t);
-  }, []);
 
   // 自分（いま操作している保護者）のfamily_member_id。実接続時は
   // current_family_member_id()相当（session.parentMember.id）がstate.activeParentMemberIdに
@@ -75,56 +221,98 @@ export default function ApprovalsScreen() {
     if (!loading) setLoadState(loadError ? "error" : "ready");
   }, [loading, loadError]);
 
-  const completions = [...state.completions].sort(
-    (a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()
+  // [2026-09-19改訂・255章] 家族の全履歴を毎レンダー並べ替え直していた（`state.completions`
+  // が変わらない限り同じ結果なのに、スタンプ送信・コメント入力・取消チックなど無関係な
+  // 再レンダーのたびに数千件のsort+filterをやり直していた）。実測ではこの部分自体は
+  // 1,000件でも1〜2ms程度で体感の遅さの主因ではなかった（実装メモ255章）が、
+  // 無駄な再計算を避けるためuseMemoに揃える。
+  const completions = useMemo(
+    () => [...state.completions].sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()),
+    [state.completions]
   );
 
   // 「新着◯件」は消化すべきタスク数ではなく、直近24時間に届いた報告のお知らせという
   // 位置づけ（主要画面ワイヤーフレーム.md 3.1章）。未処理バッジの概念は持たない。
-  const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-  const newCount = completions.filter((c) => new Date(c.reported_at).getTime() >= oneDayAgoMs).length;
+  const newCount = useMemo(() => {
+    const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+    return completions.filter((c) => new Date(c.reported_at).getTime() >= oneDayAgoMs).length;
+  }, [completions]);
 
-  const memberOf = (id: string) => state.members.find((m) => m.id === id);
+  // [2026-09-19改訂・255章] 1分の経過でリンクごと消すため10秒間隔で再評価する
+  // （28.0節決定4）点は変えないが、**直近の報告が1分以内のときだけ動かす**ように
+  // した。以前は画面を開いている間ずっと（1分以内の報告が1件も無くても）無条件で
+  // 動き続けており、そのたびに家族の全履歴ぶんsort+filter・全行再レンダーの引き金に
+  // なっていた。`completions`は`reported_at`降順のため先頭（最新）だけを見れば足りる。
+  // intervalは「まだ必要か」をtickのたびに自分で確認し、不要になれば自分で止める
+  // （`completions`が変わらない限りこのeffectは再購読されないため、依存側からの
+  // 停止だけでは「1分経過したのに動き続ける」ケースを防げない）。
+  const [, setCancelTick] = useState(0);
+  useEffect(() => {
+    const newest = completions[0];
+    if (!newest || !isWithinCancelWindow(newest.reported_at)) return;
+    const id = setInterval(() => {
+      const stillNewest = completions[0];
+      if (!stillNewest || !isWithinCancelWindow(stillNewest.reported_at)) {
+        clearInterval(id);
+        return;
+      }
+      setCancelTick((n) => n + 1);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [completions]);
+
+  const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
 
   // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
   // 取消、違うスタンプをタップすると切替になる（統括指示）。以前あった
   // 「送信済みなら何もしない」ガードは撤去した（もう一度押したい操作そのものが
   // 取消の入口になったため）。
-  const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    setReactionError(null);
-    const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myParentId, stampKey });
-    if (!result.ok) setReactionError(STAMP_SEND_ERROR_MESSAGE);
-  };
+  // [2026-09-19・255章] 行コンポーネント（CompletionRow）へ安定した関数参照として
+  // 渡すためuseCallback化（React.memoが効くようにするため）。
+  const sendStamp = useCallback(
+    async (completionId: string, stampKey: StampKey) => {
+      setReactionError(null);
+      const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myParentId, stampKey });
+      if (!result.ok) setReactionError(STAMP_SEND_ERROR_MESSAGE);
+    },
+    [dispatch, myParentId]
+  );
 
-  const openDetail = (c: ChoreCompletion) => {
+  const openDetail = useCallback((c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
     setDetailTarget(c);
-  };
+  }, []);
 
   // [2026-09-03追加] 28.4節「決定5」：自分の報告は確認なしで即取消、自分以外
   // （子ども・配偶者）の報告は確認ダイアログを挟む。
-  const runCancel = async (completionId: string) => {
-    setCancelingId(completionId);
-    setCancelRowError(null);
-    const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
-    setCancelingId(null);
-    if (!result.ok) {
-      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
-      return;
-    }
-    setCancelConfirmTarget(null);
-    setCancelFlashMessage(CANCEL_SUCCESS_TEXT.parent);
-    setTimeout(() => setCancelFlashMessage(null), 1500);
-  };
+  const runCancel = useCallback(
+    async (completionId: string) => {
+      setCancelingId(completionId);
+      setCancelRowError(null);
+      const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
+      setCancelingId(null);
+      if (!result.ok) {
+        setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
+        return;
+      }
+      setCancelConfirmTarget(null);
+      setCancelFlashMessage(CANCEL_SUCCESS_TEXT.parent);
+      setTimeout(() => setCancelFlashMessage(null), 1500);
+    },
+    [dispatch]
+  );
 
-  const handleCancelTap = (c: ChoreCompletion) => {
-    if (c.reported_by === myParentId) {
-      void runCancel(c.id);
-    } else {
-      setCancelConfirmTarget(c);
-    }
-  };
+  const handleCancelTap = useCallback(
+    (c: ChoreCompletion) => {
+      if (c.reported_by === myParentId) {
+        void runCancel(c.id);
+      } else {
+        setCancelConfirmTarget(c);
+      }
+    },
+    [myParentId, runCancel]
+  );
 
   const sendComment = async () => {
     if (!detailTarget) return;
@@ -148,8 +336,19 @@ export default function ApprovalsScreen() {
     setDetailTarget(null);
   };
 
-  return (
-    <Screen tone="parent">
+  // [2026-09-19追加・255章] `Screen`の`scroll`（既定true・ScrollView）はネイティブの
+  // 仮想化と相性が悪い（`FlatList`をScrollViewへ入れ子にすると仮想化が効かず、
+  // 「VirtualizedLists should never be nested」警告も出る）ため、この画面だけ
+  // `scroll={false}`にし、`FlatList`自身を唯一のスクロールコンテナにする。
+  // `contentStyle={{ padding: 0 }}`で`Screen`側のpadding適用をやめ、`Screen.tsx`の
+  // `styles.content`・`BASE_BOTTOM_PADDING`と同じ値をFlatList自身の
+  // `contentContainerStyle`に持たせることで、スクロール領域にpaddingが含まれる
+  // 見た目・挙動を変えていない（`insets`は`Screen.tsx`と同じ`useSafeAreaInsets()`を
+  // ここでも呼んで揃えている）。
+  const insets = useSafeAreaInsets();
+
+  const listHeader = (
+    <>
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <View style={styles.header}>
         <Text style={theme.typography.parentTitle}>完了報告</Text>
@@ -165,109 +364,11 @@ export default function ApprovalsScreen() {
       {loadState === "ready" && completions.length === 0 && (
         <EmptyState emoji="📮" title="まだ完了報告がありません。クエストがはじまると、ここに届きます" />
       )}
+    </>
+  );
 
-      {loadState === "ready" &&
-        completions.map((c) => {
-          const member = memberOf(c.reported_by);
-          // [2026-08-16追加] 主要画面ワイヤーフレーム.md 3.1章「保護者自身の完了報告（07-4章）
-          // もこのフィードに時系列で混在表示する」。トーンの書き分けはAPI仕様.md 4b章・
-          // 主要画面ワイヤーフレーム.md 9.3章のとおり、reported_by先family_members.roleで
-          // 判定する（chore側に区分列は無い。スキーマ設計.sql 12章確認5）。
-          const isChildCard = member?.role === "child";
-          // [2026-08-23改訂] 🤝/🎯バッジ（旧デザイントークン.md 1.7節）は要件定義書
-          // 07-7章4回目のスコープ変更（家族共有choreへの参加機能の撤回）に伴い廃止した。
-          // [2026-08-23再改訂・5回目のスコープ変更] 自分専用choreの公開方針の撤回により、
-          // みまもりメンバーの完了報告も再びこのフィードに表示されるようになった
-          // （chore_completions_select_scoped RLSがfamily_id一致のみに単純化されたため）。
-          // バッジは復活させないが、`color-supporter-accent-soft`の控えめな配色で
-          // 区別する（画面一覧・遷移図.md P8行参照）。
-          const isSupporterCard = member?.role === "supporter";
-          // 自分自身の完了報告カードにはリアクションボタン自体を表示しない
-          // （3.1章「自己リアクションは要件定義書に無い操作のため、UI側で選択肢自体を出さない」）。
-          const isOwnCard = c.reported_by === myParentId;
-          return (
-            <Pressable key={c.id} onPress={() => openDetail(c)}>
-              <Card
-                style={
-                  isChildCard
-                    ? { ...styles.card, ...styles.cardChildTint }
-                    : isSupporterCard
-                    ? { ...styles.card, ...styles.cardSupporterTint }
-                    : styles.card
-                }
-              >
-                <View style={styles.cardTop}>
-                  <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
-                  <Text style={theme.typography.parentBodyMedium}>{member?.display_name}</Text>
-                  <Text style={{ flex: 1 }} />
-                  <Text style={theme.typography.parentBodyMedium}>
-                    {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
-                        のため何も添えない。 */}
-                    {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
-                  </Text>
-                </View>
-                <View style={[styles.cardMeta, styles.cardMetaRow]}>
-                  <Text style={theme.typography.parentCaption}>
-                    {formatDateTimeShort(c.reported_at)}{" "}
-                    {isChildCard ? "とどいた" : "きろくした"}
-                  </Text>
-                  {/* [2026-09-03追加] 28.4節。みまもりメンバーの完了報告（scope='personal'
-                      またはscope='supporter_shared'）には保護者の取消権限が無いため
-                      リンク自体を出さない。[2026-09-06追記・要件定義書07-18章決定2・3、
-                      スキーマ設計.sql 45.12章] supporter_shared新設後も、報告者が
-                      supporterロールであれば personal/supporter_shared のいずれでも
-                      保護者は取り消せない（cancel_chore_completion側でも同じ判定に
-                      統一済み）ため、role判定のみで引き続き足りる。 */}
-                  {!isSupporterCard && isWithinCancelWindow(c.reported_at) && (
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleCancelTap(c);
-                      }}
-                      disabled={cancelingId === c.id}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.cancelLink}>{cancelingId === c.id ? "処理中…" : "取消"}</Text>
-                    </Pressable>
-                  )}
-                </View>
-                {cancelRowError?.id === c.id && (
-                  <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>
-                    {cancelRowError.message}
-                  </Text>
-                )}
-                {/* カード上のクイックスタンプ。タップで即座にトグルRPCを呼ぶ（3.1章、
-                    2026-09-10改訂・実装メモ.md 157章）。自分自身の完了報告カードには
-                    表示しない。[2026-09-10改訂] 送信済み（sent）でもdisabledにしない。
-                    もう一度タップすると取消、違うスタンプをタップすると切替になる。 */}
-                {!isOwnCard && (
-                  <View style={styles.stampRow}>
-                    {theme.stampDefinitions.map((s) => {
-                      const sent = hasReactedWithStamp(c.id, myParentId, s.key as StampKey);
-                      return (
-                        <Pressable
-                          key={s.key}
-                          onPress={() => sendStamp(c.id, s.key as StampKey)}
-                          style={[styles.stampBtn, sent && styles.stampBtnSent]}
-                        >
-                          <Text style={styles.stampEmoji}>
-                            {s.emoji}
-                            {sent ? "✓" : ""}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                    <Text style={{ flex: 1 }} />
-                    <Pressable onPress={() => openDetail(c)}>
-                      <Text style={styles.commentLink}>＋コメント</Text>
-                    </Pressable>
-                  </View>
-                )}
-              </Card>
-            </Pressable>
-          );
-        })}
-
+  const listFooter = (
+    <>
       {/* [2026-09-03追加] 28.4節「取消成功」のスナックバー相当（1.5秒で自動消滅）。 */}
       {cancelFlashMessage && (
         <Text style={[theme.typography.parentCaption, styles.cancelFlash]}>{cancelFlashMessage}</Text>
@@ -275,6 +376,49 @@ export default function ApprovalsScreen() {
 
       {/* [2026-08-16修正・本部長] P16・P18と同じ理由でホームへ戻るボタンを追加した。 */}
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
+    </>
+  );
+
+  const renderItem = ({ item: c }: ListRenderItemInfo<ChoreCompletion>) => {
+    const member = memberOf(c.reported_by);
+    return (
+      <CompletionRow
+        completion={c}
+        member={member}
+        memberAvatarLineData={member ? memberAvatars[member.id] : undefined}
+        myParentId={myParentId}
+        isCanceling={cancelingId === c.id}
+        cancelErrorMessage={cancelRowError?.id === c.id ? cancelRowError.message : undefined}
+        onOpenDetail={openDetail}
+        onCancelTap={handleCancelTap}
+        onSendStamp={sendStamp}
+        hasReactedWithStamp={hasReactedWithStamp}
+      />
+    );
+  };
+
+  return (
+    <Screen tone="parent" scroll={false} contentStyle={{ padding: 0 }}>
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={{
+          paddingHorizontal: theme.spacing.s4,
+          paddingTop: theme.spacing.s4 + insets.top,
+          // Screen.tsxのBASE_BOTTOM_PADDING（theme.spacing.s8 * 2）と同じ値。
+          // Screen.tsx側の定数が変わった場合はここも合わせて直すこと（255章）。
+          paddingBottom: theme.spacing.s8 * 2 + insets.bottom,
+        }}
+        data={loadState === "ready" ? completions : []}
+        keyExtractor={(c) => c.id}
+        renderItem={renderItem}
+        ListHeaderComponent={listHeader}
+        ListFooterComponent={listFooter}
+        // [2026-09-19・255章] 見た目・並び順は変えていない。初期描画件数だけを絞り、
+        // スクロールに応じて追加描画する（仮想化）。
+        initialNumToRender={12}
+        windowSize={7}
+        removeClippedSubviews
+      />
 
       {/* [2026-09-03追加] 28.4節「確認モーダル（自分以外の報告を取り消す場合）」。
           22.4節の削除確認モーダルと同じ構成・トーン。 */}
@@ -457,6 +601,7 @@ export default function ApprovalsScreen() {
 }
 
 const styles = StyleSheet.create({
+  list: { flex: 1, width: "100%" },
   header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   card: { marginTop: theme.spacing.s3 },
   // [2026-08-16追加] 3.1章「子どものカード：…背景色は淡い彩色／保護者自身のカード：
