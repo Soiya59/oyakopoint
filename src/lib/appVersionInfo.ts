@@ -28,10 +28,10 @@ export interface AppVersionInfoInput {
   /** Constants.expoConfig?.version 等から取得したバージョン文字列。取得できなければnull。 */
   version: string | null;
   /**
-   * ビルド番号。expo-constants@56系では`nativeBuildVersion`が廃止されているため、
-   * 呼び出し側は`Constants.platform?.ios?.buildNumber` /
-   * `Constants.platform?.android?.versionCode`から作った文字列を渡す
-   * （実装メモ241章「決定事項」参照）。取得できなければnull。
+   * ビルド番号。expo-constants@56系では`nativeBuildVersion`が廃止されており、
+   * 代替の`Constants.platform`もAndroidでは値を返さないことが判明したため、
+   * 呼び出し側は`expo-application`の`Application.nativeBuildVersion`から作った
+   * 文字列を渡す（実装メモ241章・249章「決定事項」参照）。取得できなければnull。
    */
   buildNumber: string | null;
   /**

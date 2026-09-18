@@ -1,6 +1,7 @@
 import React from "react";
 import { Platform, Text } from "react-native";
 import Constants from "expo-constants";
+import * as Application from "expo-application";
 import * as Updates from "expo-updates";
 import theme from "@/theme/theme";
 import { formatAppVersionInfo } from "@/lib/appVersionInfo";
@@ -22,13 +23,24 @@ interface AppVersionInfoProps {
  * 統括・テスターが確かめる手段と、不具合報告のときに「どのバージョン？」と聞ける
  * 材料をこの表示で作る。
  *
- * [ビルド番号についての決定事項] 当初の指示は`Constants.nativeBuildVersion`だったが、
- * 実装時に確認したところ**expo-constants@56.0.23では既に廃止されている**
+ * [ビルド番号についての決定事項・2026-09-18改訂] 当初の指示は`Constants.nativeBuildVersion`
+ * だったが、expo-constants@56.0.23では既に廃止されている
  * （CHANGELOG.md: "Remove deprecated ... nativeAppVersion, nativeBuildVersion ...
- * properties"）。代わりに、廃止前のnativeBuildVersionが参照していたのと同じ値
- * （ネイティブバイナリに埋め込まれ、OTAでは変わらない値）を持つ
- * `Constants.platform?.ios?.buildNumber` /
- * `Constants.platform?.android?.versionCode`を使う。expo-applicationは追加していない。
+ * properties"）。代替として`Constants.platform?.ios?.buildNumber` /
+ * `Constants.platform?.android?.versionCode`を使ったが、これもAndroid実機
+ * （build 10）で「ビルド -」のまま取れなかった。原因は
+ * `node_modules/expo/node_modules/expo-modules-core/android/src/main/java/expo/modules/constants/ConstantsService.kt`
+ * が`"platform" to mapOf("android" to emptyMap())`とAndroidの`platform.android`を
+ * 空オブジェクトで固定で返しているため（`versionCode`キー自体が存在しない。iOS側の
+ * `ConstantsProvider.swift`は`CFBundleVersion`から`buildNumber`を入れており動く実装
+ * だったが、Android側だけ未実装のまま放置されていた）。
+ * これはJS側の書き方の問題ではなく`expo-constants`のAndroidネイティブ実装の欠落なので、
+ * `expo-application`を追加し`Application.nativeBuildVersion`に切り替えた
+ * （`node_modules/expo-application/android/.../ApplicationModule.kt`は
+ * `PackageManager.getPackageInfo(...).versionCode`を直接読んでおり、上記の
+ * 空オブジェクト問題と無関係。iOS側も`CFBundleVersion`を直接読む独立実装）。
+ * ネイティブモジュールの追加のため、この対応はOTA（expo-updates）では配信できず、
+ * 新しいビルドが必要（2026-09-18・統括承認済み）。
  *
  * expo-updates はネイティブ以外（Web・一部の開発ビルド）で値が取れないことがあるため、
  * try/catchと存在チェックで囲み、取れなければformatAppVersionInfo側で「更新 —」にする
@@ -56,17 +68,15 @@ export default function AppVersionInfo({ tone = "parent" }: AppVersionInfoProps)
   );
 }
 
-/** iOS/Androidそれぞれのネイティブビルド番号を文字列で返す。取れなければnull。 */
+/**
+ * iOS/Androidそれぞれのネイティブビルド番号を文字列で返す。取れなければnull。
+ * `expo-application`の`Application.nativeBuildVersion`を使う理由は本ファイル冒頭の
+ * コメント参照（`Constants.platform`はAndroidで取れないことが判明したため）。
+ */
 function readBuildNumber(): string | null {
   try {
-    if (Platform.OS === "ios") {
-      return Constants.platform?.ios?.buildNumber ?? null;
-    }
-    if (Platform.OS === "android") {
-      const versionCode = Constants.platform?.android?.versionCode;
-      return typeof versionCode === "number" ? String(versionCode) : null;
-    }
-    return null;
+    if (Platform.OS !== "ios" && Platform.OS !== "android") return null;
+    return Application.nativeBuildVersion ?? null;
   } catch {
     return null;
   }
