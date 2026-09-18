@@ -239,6 +239,56 @@ function isChoreLimitReachedFor(completions: ChoreCompletion[], chore: Chore, me
   return count >= chore.daily_limit;
 }
 
+/**
+ * [2026-09-18追加・やること.md 4-47原因①、実装メモ246.2章の続き] 完了報告・取消の
+ * 直後に`fetchCompletions()`をsinceIso無しで呼び直し、家族の全履歴を毎回まるごと
+ * 取り直していた（246.2.2節で特定）問題への対処。
+ *
+ * [なぜ「絞って置き換える」ではなく「絞って合体する」か] state.completionsは
+ * 以下の理由でどれも「古い記録を捨ててはいけない」依存先を持つ:
+ * - 通帳（`app/parent/points.tsx`等の`fullLedger`が呼ぶ`buildLedgers().earnLedger`）は
+ *   ページングも期間指定も無く、state.completionsの中身をそのまま全件表示する。
+ * - `isOneOffFinishedFor`（このファイル222行目）は「単発クエストが過去に一度でも
+ *   実施されたか」を判定するため、何日前の記録であっても消えてはならない
+ *   （コメント〔217〜220行目〕のとおり）。
+ * - `InboxPanel.tsx`の`myCompletions`（自分の完了報告へのリアクション検出）・
+ *   各ロールの履歴画面（child・parent・supporter配下のhistory.tsx）の
+ *   「選択した日の詳細一覧」も、
+ *   `dailySummary()`の400日窓とは別に`state.completions`を直接参照しており、
+ *   月送りナビゲーションで400日超に遡る可能性がある（実装メモ228.5章）。
+ *
+ * そのため、直近`windowStartMs`以降だけを`fetchCompletions(..., sinceIso)`で
+ * 取り直し、`windowStartMs`より古い既存データ（load()が確立した全履歴）と
+ * 合体させる。`chore_completions`はINSERT専用ログでUPDATE経路が無い
+ * （`src/types/domain.ts` 156〜158行目のコメントのとおり）ため、既存の古い行の
+ * 中身が後から書き換わることはなく、「新しい分だけ追加・消えた分だけ除く」という
+ * 単純な合体で常に正しい状態になる。
+ *
+ * 引数`fresh`は`sinceIso >= windowStartMs`の行のみを含む配列
+ * （`api.fetchCompletions`は`reported_at`降順で返す）。既存の`existing`も同じ
+ * 降順で保持されているため、`windowStartMs`未満の行（`older`）を抜き出して
+ * `fresh`の後ろに連結するだけで、全体の降順は崩れない。
+ */
+function mergeRecentCompletions(
+  existing: ChoreCompletion[],
+  windowStartMs: number,
+  fresh: ChoreCompletion[]
+): ChoreCompletion[] {
+  const older = existing.filter((c) => new Date(c.reported_at).getTime() < windowStartMs);
+  return [...fresh, ...older];
+}
+
+/**
+ * [2026-09-18追加・やること.md 4-47原因①] `mergeRecentCompletions`用の取り直し窓。
+ * 3日ぶん取れば、`isChoreLimitReachedFor`が見る「今日」（端末のタイムゾーンが
+ * JSTからずれても吸収できる余裕を持たせた）と、`cancel_chore_completion`の
+ * 「報告から1分以内」という取消可能時間（`supabase/migrations/
+ * 20260903010000_cancel_chore_completion.sql`冒頭コメント）のどちらも確実に
+ * 含む。家族の完了報告の総数に関わらず、この窓の中だけを取り直すため件数は
+ * 一定（重くならない）。
+ */
+const RECENT_COMPLETIONS_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
 function buildLedgers(state: State) {
   const reactionsForCompletion = (completionId: string): ChoreReaction[] =>
     state.reactions
@@ -397,6 +447,23 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
    */
   const loadGenerationRef = useRef(0);
 
+  /**
+   * [2026-09-18追加・やること.md 4-47原因①、本部長差し戻し対応] `state.completions`の
+   * 「今いちばん新しい値」を、`load()`の`useCallback`内から読むためのref。
+   *
+   * `load`は`useCallback`の依存配列に`state`（したがって`state.completions`）を
+   * 含めていない（既存の設計。173行下の`eslint-disable-next-line react-hooks/
+   * exhaustive-deps`参照）ため、`load`のクロージャの中で`state.completions`を
+   * 直接読むと「`load`が最後に作られた時点の値」に固定された古い値（stale
+   * closure）を読んでしまう。`useEffect`で`state.completions`が変わるたびに
+   * このrefへ同期しておけば、`load()`が呼ばれた瞬間の実際の最新値を
+   * （関数の再生成を待たずに）常に読める。
+   */
+  const completionsRef = useRef<ChoreCompletion[]>(EMPTY_STATE.completions);
+  useEffect(() => {
+    completionsRef.current = state.completions;
+  }, [state.completions]);
+
   const load = useCallback(async (options?: { background?: boolean }) => {
     if (!familyId) return;
     const background = options?.background ?? false;
@@ -453,6 +520,31 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // activeParentMemberIdのどちらか一方だけが非空になる設計、上記参照）。
     const activeMemberId = activeChildMemberId || activeParentMemberId;
 
+    // [2026-09-18変更・やること.md 4-47原因①、本部長差し戻し対応] load()のcompletions
+    // 取得を「初回は全件・背景更新（background=true）は直近3日＋既存と合体」に
+    // 分けた。差し戻し前は「load()は一切絞らない」としていたが、本部長の指摘
+    // 「置き換えなければ縮まない」のとおり、背景更新でも`mergeRecentCompletions`を
+    // 使えば全履歴を失わずに絞り込める。以下、まだ絞れない理由・絞れるように
+    // なった理由を分けて記録する。
+    //
+    // [絞らない（絞れない）部分]
+    // (1) 初回（background=false、下記`useBackgroundAutoRefresh`は`loadedOnce`が
+    //     trueになるまで発火しないため、background=trueのload()は必ず初回成功後）
+    //     はstate.completionsが空であり、ここで絞ると絞った分より古い履歴が
+    //     二度と手に入らなくなる。初回は必ず全件のまま。
+    // (3) 通帳（`app/parent/points.tsx`等の`fullLedger`）はページング無しでstate.
+    //     completionsを全件表示し、`isOneOffFinishedFor`（222行目）は単発クエストの
+    //     完了判定に全履歴を要る。この2つの依存先は変わらず「無期限の履歴」を
+    //     要求するため、絞った窓で置き換えることは今後もしない。
+    //
+    // [絞れるようになった部分]
+    // (2) 背景更新（15秒間引き、558行目`useBackgroundAutoRefresh`）は、
+    //     `mergeRecentCompletions()`で既存の全履歴（`completionsRef.current`。
+    //     クロージャのstate参照が古くならないよう、上部でuseEffect同期している
+    //     ref経由で読む）と直近3日分を合体する。「置き換え」ではなく「合体」の
+    //     ため、(1)(3)の「全履歴が要る」要求を壊さずに済む。
+    const recentWindowStartMs = Date.now() - RECENT_COMPLETIONS_WINDOW_MS;
+    const recentWindowStartIso = new Date(recentWindowStartMs).toISOString();
     const [
       completionsRes,
       reactionsRes,
@@ -463,7 +555,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dailySummaryRes,
       dailyFlagsRes,
     ] = await Promise.all([
-      api.fetchCompletions(client, familyId),
+      api.fetchCompletions(client, familyId, background ? recentWindowStartIso : undefined),
       api.fetchReactions(client, familyId),
       api.fetchRedemptions(client, familyId),
       api.fetchMemberPoints(client, familyId),
@@ -518,12 +610,20 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // [2026-09-18追加・やること.md 4-47原因①] background=trueのときだけ、直近窓の
+    // 結果を既存の全履歴（completionsRef.current）と合体する。background=falseの
+    // ときはcompletionsResが既に無条件（sinceIso無し）の全件取得のため、
+    // そのまま使う（mergeRecentCompletionsを通す必要が無い）。
+    const mergedCompletions = background
+      ? mergeRecentCompletions(completionsRef.current, recentWindowStartMs, completionsRes.data)
+      : completionsRes.data;
+
     setState({
       family: bundleRes.data.family,
       members: bundleRes.data.members,
       categories: bundleRes.data.categories,
       chores: bundleRes.data.chores,
-      completions: completionsRes.data,
+      completions: mergedCompletions,
       reactions: reactionsRes.data,
       rewards: bundleRes.data.rewards,
       redemptions: redemptionsRes.data,
@@ -698,6 +798,14 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
    * （窓の縮小は今回のスコープ外。228章の申し送り参照）。
    *
    * いずれかの取得に失敗した場合は、従来どおり`load()`にフォールバックする。
+   *
+   * [2026-09-18変更・やること.md 4-47原因①、本部長差し戻し対応] `refreshAfterReport`と
+   * 同じ理由・同じ手法（`mergeRecentCompletions`・`RECENT_COMPLETIONS_WINDOW_MS`）で
+   * `completions`の取り直しを直近3日に絞り、既存の全履歴と合体するように変更した。
+   * 取消の対象行は`cancel_chore_completion()`の「報告から1分以内」制約により必ず
+   * 直近3日の窓に収まるため、取消による行の消失（DELETE）も窓の中の`fresh`側が
+   * 正しく反映する（消えた行は`fresh`に含まれず、`older`側にも元々存在しないため
+   * 結果に残らない）。
    */
   const refreshAfterCancel = useCallback(async () => {
     if (!familyId) {
@@ -711,9 +819,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       d.setDate(d.getDate() - 400);
       return toJstDateString(d);
     })();
+    const recentWindowStartMs = Date.now() - RECENT_COMPLETIONS_WINDOW_MS;
+    const recentWindowStartIso = new Date(recentWindowStartMs).toISOString();
 
     const [completionsRes, reactionsRes, memberPointsRes, dailySummaryRes] = await Promise.all([
-      api.fetchCompletions(client, familyId),
+      api.fetchCompletions(client, familyId, recentWindowStartIso),
       api.fetchReactions(client, familyId),
       api.fetchMemberPoints(client, familyId),
       client
@@ -729,7 +839,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setState((prev) => ({ ...prev, completions: completionsRes.data, reactions: reactionsRes.data }));
+    setState((prev) => ({
+      ...prev,
+      completions: mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data),
+      reactions: reactionsRes.data,
+    }));
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
   }, [familyId, session.client, load]);
@@ -777,6 +891,13 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
    * 同じ計算式をそのまま使う（窓の縮小は今回もスコープ外）。
    *
    * いずれかの取得に失敗した場合は、従来どおり`load()`にフォールバックする。
+   *
+   * [2026-09-18変更・やること.md 4-47原因①、実装メモ246.2章の続き] `completions`の
+   * 取り直しを、`sinceIso`無し（家族の全履歴）から直近`RECENT_COMPLETIONS_WINDOW_MS`
+   * だけに絞り、`mergeRecentCompletions()`で既存の`state.completions`（load()が
+   * 確立した全履歴）と合体するように変更した。`load()`自体は変更していない
+   * （`mergeRecentCompletions`直前のコメント参照。通帳・単発クエスト判定が
+   * 全履歴前提のため、家族の完了履歴を最初に揃えるload()は絞れない）。
    */
   const refreshAfterReport = useCallback(async () => {
     if (!familyId) {
@@ -790,9 +911,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       d.setDate(d.getDate() - 400);
       return toJstDateString(d);
     })();
+    const recentWindowStartMs = Date.now() - RECENT_COMPLETIONS_WINDOW_MS;
+    const recentWindowStartIso = new Date(recentWindowStartMs).toISOString();
 
     const [completionsRes, memberPointsRes, dailySummaryRes] = await Promise.all([
-      api.fetchCompletions(client, familyId),
+      api.fetchCompletions(client, familyId, recentWindowStartIso),
       api.fetchMemberPoints(client, familyId),
       client
         .from("chore_completion_daily_summary")
@@ -807,7 +930,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setState((prev) => ({ ...prev, completions: completionsRes.data }));
+    setState((prev) => ({
+      ...prev,
+      completions: mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data),
+    }));
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
   }, [familyId, session.client, load]);
