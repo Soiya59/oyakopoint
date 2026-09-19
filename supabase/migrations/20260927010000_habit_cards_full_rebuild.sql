@@ -483,7 +483,6 @@ DECLARE
   v_member_id UUID := current_family_member_id();
   v_family_id UUID := current_family_id();
   v_card RECORD;
-  v_progress INT;
 BEGIN
   IF v_member_id IS NULL OR v_family_id IS NULL THEN
     RAISE EXCEPTION 'ログインが必要です' USING ERRCODE = 'insufficient_privilege';
@@ -505,27 +504,27 @@ BEGIN
     RAISE EXCEPTION '指定された絵柄が存在しないか無効化されています' USING ERRCODE = 'foreign_key_violation';
   END IF;
 
-  -- [設計書との食い違い・実装上の訂正・開発部が発見し報告する点・その3
-  -- 「境界の完了報告がどちらの冊に属するか」問題] クリスタル到達（100件目）の
-  -- その完了報告は、`habit_card_progress_bump()`が同一トランザクション内で
-  -- 「旧の冊を完成させる（completed_at=now()）」と「次の冊を作る
-  -- （started_at=now()）」を連続して行うため、**その完了報告のreported_atと
-  -- 次の冊のstarted_atが1マイクロ秒までまったく同じ値になる**（PostgreSQLの
-  -- `now()`はトランザクション内で固定されるため、実運用の1件ずつの完了報告
-  -- でも必ずこうなる。テスト環境固有の現象ではない）。下記のとおり`>=`
-  -- （境界を含む）で判定すると、クリスタルを100件目にした完了報告そのものが
-  -- 「次の冊」に属するとみなされてしまい、**冊が完成した直後は常に
-  -- 進行中の冊の累計が0ではなく1になる**——つまり決定42「クリスタル到達の
-  -- 直後に絵柄を選び直せる」が実運用で一度も成立しない（常にこの
-  -- check_violationで拒否される）ことを、実際にREST API経由で100件到達
-  -- させて確認した（開発部/成果物/実装メモ.md 256章）。**境界の完了報告は
-  -- 「それを100件目にして完成させた旧の冊」に属するべきであり、「次の冊」に
-  -- 属するべきではない**ため、下限を`>`（境界を含めない）に訂正する。
-  SELECT count(*) INTO v_progress
-  FROM chore_completions cc
-  WHERE cc.reported_by = v_card.member_id AND cc.reported_at > v_card.started_at;
-
-  IF v_progress > 0 THEN
+  -- 【2026-09-19差分修正・決定57-12改訂、要件定義書07-28章決定34/3-3節(1)・
+  -- 主要画面ワイヤーフレーム.md 49-B.4章決定60・API仕様.md 17.5節、開発部/
+  -- 成果物/実装メモ.md 256章の続き】選び直せる期間を「その冊の完了報告累計が
+  -- 0件のとき」から「その冊でまだフィギュアを1体も獲得していない間」へ広げる。
+  -- 判定は`habit_figure_grants`への存在チェックで行い、しきい値の数値
+  -- （現行の銅=10件）では判定しない（銅のしきい値は密度監視の結果次第で
+  -- 将来変わりうるため。数値判定だと閾値変更時に直し忘れる恐れがあるが、
+  -- 存在チェックなら閾値が変わっても自動的に正しいままになる、統括必須要件）。
+  -- 旧実装（256章時点）は`chore_completions`のCOUNTで「累計0件」を判定して
+  -- いたが、その判定自体は256.4節③で境界条件（`>`への訂正）を確認済みであり、
+  -- 本差分はその判定対象を`chore_completions`のCOUNTから`habit_figure_grants`
+  -- への存在チェックへ置き換えるのみで、256.4節③の境界条件の教訓
+  -- （`habit_card_progress_bump()`が同一トランザクション内で旧の冊への
+  -- フィギュア付与→次の冊のINSERTの順に処理するため、次の冊のidを参照する
+  -- `habit_figure_grants`行は新しい冊が作られた瞬間には1件も存在しえない
+  -- という整理、設計部スキーマ設計.sql 57.6章の確認コメント参照）とも矛盾
+  -- しない。
+  IF EXISTS (
+    SELECT 1 FROM habit_figure_grants hfg
+    WHERE hfg.habit_card_id = v_card.id
+  ) THEN
     RAISE EXCEPTION 'すでに始まっているシール帳の絵柄は変えられません' USING ERRCODE = 'check_violation';
   END IF;
 
@@ -538,7 +537,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.choose_habit_card_kind(UUID, TEXT) IS
-  '要件定義書07-28章決定29・企画部3-3節(1)。自分の進行中のシール帳の絵柄を選び直す。何も積み上がっていない（累計0件の）間だけ変更できる（57.6章、設計部の判断）。課金によるプラン判定は今回実装しない（ベータ無料期間、07-11章）。';
+  '要件定義書07-28章決定29・34・企画部3-3節(1)。自分の進行中のシール帳の絵柄を選び直す。【2026-09-19差分修正】その冊でまだフィギュアを1体も獲得していない間（habit_figure_grantsに対象の冊の行が存在しない間）だけ変更できる（57.6章）。判定はしきい値の数値ではなく存在チェックで行うため、段階到達の閾値（現在10/30/50/100）が将来変わっても自動的に正しいまま。課金によるプラン判定は今回実装しない（ベータ無料期間、07-11章）。';
 
 REVOKE ALL ON FUNCTION public.choose_habit_card_kind(UUID, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.choose_habit_card_kind(UUID, TEXT) TO authenticated;

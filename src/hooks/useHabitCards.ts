@@ -118,12 +118,18 @@ export function computeHabitCardTierInfo(count: number): {
  * （API仕様.md 17.2節・17.3節）。帯（進み具合のみ）・タップ先（進行中の
  * 内訳）の両方がこの1回の取得結果を共用する（N+1にしない）。決定27
  * 「進行中の冊は常に1冊」により、`card`が`null`になるのは異常系のみ。
+ *
+ * 【2026-09-19差分修正・主要画面ワイヤーフレーム.md 49-B.5章開発部への実装
+ * メモ】絵柄の選び直し可否（決定60）の判定用に、進行中の冊の`habit_figure_
+ * grants`もあわせて取得する（`fetchHabitFigureGrantsForCards`を1件のIDで
+ * 流用。N+1にはならない、この画面の1回の遷移につき常に1回だけ呼ぶ）。
  */
 export function useActiveHabitCard(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
   const [card, setCard] = useState<HabitCard | null>(null);
   const [breakdown, setBreakdown] = useState<HabitCardChoreBreakdownRow[]>([]);
+  const [grants, setGrants] = useState<HabitFigureGrantWithCatalog[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -136,15 +142,20 @@ export function useActiveHabitCard(memberId: string) {
     setCard(cardRes.data);
     if (!cardRes.data) {
       setBreakdown([]);
+      setGrants([]);
       setLoadState("ready");
       return;
     }
-    const breakdownRes = await fetchHabitCardChoreBreakdown(client, [cardRes.data.id]);
-    if (!breakdownRes.ok) {
+    const [breakdownRes, grantsRes] = await Promise.all([
+      fetchHabitCardChoreBreakdown(client, [cardRes.data.id]),
+      fetchHabitFigureGrantsForCards(client, [cardRes.data.id]),
+    ]);
+    if (!breakdownRes.ok || !grantsRes.ok) {
       setLoadState("error");
       return;
     }
     setBreakdown(breakdownRes.data);
+    setGrants(grantsRes.data);
     setLoadState("ready");
   }, [client, memberId]);
 
@@ -156,7 +167,7 @@ export function useActiveHabitCard(memberId: string) {
   // 側で合計する」。
   const totalCount = breakdown.reduce((sum, row) => sum + row.completion_count, 0);
 
-  return { loadState, card, breakdown, totalCount, reload: load };
+  return { loadState, card, breakdown, totalCount, grants, reload: load };
 }
 
 /** 完成済み（コレクション）のシール帳一覧＋内訳＋獲得フィギュア（API仕様.md 17.4節）。 */

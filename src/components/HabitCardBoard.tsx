@@ -18,7 +18,7 @@ import { groupHabitFigureCatalogByKind, useChooseHabitCardKindAction, computeHab
 import { computeCurrentPageFilledCells, formatHabitCardProgressText, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import type { Chore, FamilyMember, HabitCard, HabitCardChoreBreakdownRow, HabitFigureCatalogItem } from "@/types/domain";
+import type { Chore, FamilyMember, HabitCard, HabitCardChoreBreakdownRow, HabitFigureCatalogItem, HabitFigureGrantWithCatalog } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -38,6 +38,13 @@ export interface HabitCardBoardProps {
   card: HabitCard | null;
   breakdown: HabitCardChoreBreakdownRow[];
   totalCount: number;
+  /**
+   * 【2026-09-19差分修正・主要画面ワイヤーフレーム.md 49-B.4章決定60】
+   * 進行中の冊（`card`）に紐づく獲得済みフィギュア。選び直し可否は
+   * `totalCount === 0`ではなく、この配列が空かどうか（存在チェック）で
+   * 判定する。`count < 10`等の数値比較は使わない（決定60必須要件）。
+   */
+  grants: HabitFigureGrantWithCatalog[];
   onRetry: () => void;
   /** 絵柄の選び直しが成功したら呼ぶ（呼び出し元が再取得する）。 */
   onKindChosen: () => void;
@@ -89,6 +96,7 @@ export function HabitCardBoard({
   card,
   breakdown,
   totalCount,
+  grants,
   onRetry,
   onKindChosen,
 }: HabitCardBoardProps) {
@@ -126,7 +134,10 @@ export function HabitCardBoard({
     : "";
   const summary = summarizeHabitCardBreakdown(breakdown, chores, 5);
   const isViewingSelf = selectedMemberId === myMemberId;
-  const canChooseKind = isViewingSelf && card != null && totalCount === 0;
+  // [決定60・必須] 判定は`habit_figure_grants`の存在チェックで行う。
+  // `totalCount === 0`（完了報告の累計）や`count < 10`のような数値比較には
+  // 戻さないこと（銅のしきい値が将来変わると直し忘れる事故になる）。
+  const canChooseKind = isViewingSelf && card != null && grants.length === 0;
 
   return (
     <View>
@@ -164,11 +175,20 @@ export function HabitCardBoard({
             <TenCellsGrid filled={filled} />
             <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>{progressText}</Text>
 
-            {/* [決定42②副経路・決定45③] 累計0件のときだけ、絵柄の選び直しリンクを常設する。 */}
+            {/* [決定42②副経路・決定45③・決定60] まだフィギュアを1体も獲得していない
+                間だけ、絵柄の選び直しリンクを常設する（habit_figure_grantsの
+                存在チェック。決定61の気づける案内をリンクの直前に置く）。 */}
             {canChooseKind && !kindPickerOpen && (
-              <Pressable onPress={() => setKindPickerOpen(true)}>
-                <Text style={[captionStyle, styles.link]}>えらびなおす →</Text>
-              </Pressable>
+              <>
+                <Text style={[captionStyle, { marginTop: theme.spacing.s2 }]}>
+                  {isChild
+                    ? "まだ 1こも もらってないから、えを かえられるよ（かえなくても いいよ）"
+                    : "まだフィギュアを1体も獲得していないため、絵柄を変えられます（変えなくても大丈夫です）"}
+                </Text>
+                <Pressable onPress={() => setKindPickerOpen(true)}>
+                  <Text style={[captionStyle, styles.link]}>えらびなおす →</Text>
+                </Pressable>
+              </>
             )}
             {canChooseKind && kindPickerOpen && (
               <View style={{ marginTop: theme.spacing.s3 }}>

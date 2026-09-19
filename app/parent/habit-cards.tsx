@@ -23,7 +23,7 @@ export default function ParentHabitCardsScreen() {
   const myMemberId = state.activeParentMemberId;
   const [selectedMemberId, setSelectedMemberId] = useState(myMemberId);
   const { catalog } = useHabitFigureCatalog();
-  const { loadState, card, breakdown, totalCount, reload } = useActiveHabitCard(selectedMemberId);
+  const { loadState, card, breakdown, totalCount, grants, reload } = useActiveHabitCard(selectedMemberId);
 
   return (
     <Screen tone="parent">
@@ -42,6 +42,7 @@ export default function ParentHabitCardsScreen() {
         card={card}
         breakdown={breakdown}
         totalCount={totalCount}
+        grants={grants}
         onRetry={reload}
         onKindChosen={reload}
       />
