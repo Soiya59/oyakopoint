@@ -17,6 +17,7 @@ import {
   cancelCompletionErrorText,
 } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
+import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
  * P19 じぶんのお手伝い一覧（保護者、要件定義書07-4章「親の完了報告」）
@@ -43,6 +44,15 @@ export default function ParentMyChoresScreen() {
   const params = useLocalSearchParams<{ justChoreId?: string; justTitle?: string; justPoints?: string }>();
   const [snackbar, setSnackbar] = useState<{ choreId: string; title: string; points: string } | null>(null);
 
+  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.2節]
+  // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
+  // （56.4章決定56-6、N+1にしない）。
+  const {
+    loadState: totalsLoadState,
+    lookup: totalsLookup,
+    reload: reloadCompletionTotals,
+  } = useChoreCompletionTotals();
+
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 350);
     return () => clearTimeout(t);
@@ -55,8 +65,11 @@ export default function ParentMyChoresScreen() {
   useEffect(() => {
     if (params.justChoreId && params.justTitle && params.justPoints) {
       setSnackbar({ choreId: params.justChoreId, title: params.justTitle, points: params.justPoints });
+      // [2026-09-19追加・56.4章申し送り] 完了報告の成功直後、この画面が個別に
+      // 累計回数を再取得する（家族全体を洗い直すload()には加えない）。
+      void reloadCompletionTotals();
     }
-  }, [params.justChoreId, params.justTitle, params.justPoints]);
+  }, [params.justChoreId, params.justTitle, params.justPoints, reloadCompletionTotals]);
 
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
@@ -106,6 +119,9 @@ export default function ParentMyChoresScreen() {
       setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
       return;
     }
+    // [2026-09-19追加・56.4章申し送り] 取消直後は累計回数も減るため、この画面が
+    // 個別に再取得する（家族全体を洗い直すload()には加えない）。
+    void reloadCompletionTotals();
     setCancelFlashMessage(CANCEL_SUCCESS_TEXT.parent);
     setTimeout(() => setCancelFlashMessage(null), 1500);
   };
@@ -216,12 +232,21 @@ export default function ParentMyChoresScreen() {
                 <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.title}
                 </Text>
+                {/* [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.2節・
+                    53.3節・53.6節決定7] 大人向けは0回でも「計0回」と出す。取得に失敗した
+                    ときは回数の部分だけ出さない（53.7節）。 */}
                 {done ? (
-                  <Text style={styles.doneLabel}>きろくずみ</Text>
+                  <Text style={styles.doneLabel}>
+                    きろくずみ
+                    {totalsLoadState !== "error" &&
+                      `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
+                  </Text>
                 ) : (
                   <>
                     <Text style={theme.typography.parentBodyMedium}>
                       {formatChoreRowRewardLabel(c)}
+                      {totalsLoadState !== "error" &&
+                        `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
                     </Text>
                     <Text style={styles.chevron}>›</Text>
                   </>

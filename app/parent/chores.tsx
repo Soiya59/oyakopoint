@@ -12,6 +12,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
 import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRows";
+import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
  * P10 お手伝い管理一覧（スタブ／簡易実装）
@@ -48,6 +49,11 @@ export default function ChoresListScreen() {
   // （27章「クエストのおすすめ集」の空状態限定パターンはここでは使わない。
   // 既存ユーザーのほぼ全員が入口を見られなくなるため）。
   const [skillTemplatesVisible, setSkillTemplatesVisible] = useState(false);
+  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.2節]
+  // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
+  // （56.4章決定56-6、N+1にしない）。この画面はマウント時の取得のみでよい
+  // （P10自体は完了報告・取消を行わない画面のため）。
+  const { loadState: totalsLoadState, lookup: totalsLookup } = useChoreCompletionTotals();
 
   // [2026-08-29修正・本部長／軽微変更ルート] 家族共有（scope='family'）のみを対象にする。
   //
@@ -93,6 +99,14 @@ export default function ChoresListScreen() {
   // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
   const renderRow = (c: Chore, dimmed: boolean, indent = false) => {
     const assigneeLabel = resolveAssigneeLabel(c.assigned_to, state.members, "誰でも実行可");
+    // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.1節決定2・
+    // 53.2.2節] 担当（assigned_to）が特定の1人に決まっている行にのみ「・計◯回」を
+    // 追記する。「誰でも実行可」（assigned_to===null）の行には追記しない。取得に
+    // 失敗したときは回数の部分だけ出さない（53.7節）。
+    const completionTotalSuffix =
+      c.assigned_to !== null && totalsLoadState !== "error"
+        ? `・計${totalsLookup[keyChoreCompletionTotal(c.id, c.assigned_to)] ?? 0}回`
+        : "";
     return (
       <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
         <Card
@@ -112,6 +126,7 @@ export default function ChoresListScreen() {
             {c.points}pt{" "}
             {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
             {assigneeLabel ? `・${assigneeLabel}` : ""}
+            {completionTotalSuffix}
           </Text>
         </Card>
       </Pressable>

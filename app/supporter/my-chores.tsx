@@ -18,6 +18,7 @@ import {
 } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
+import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
  * S5 クエスト一覧（みまもりメンバー）
@@ -63,6 +64,16 @@ export default function SupporterMyChoresScreen() {
   }, {});
   const creatorOf = (id: string) => state.members.find((m) => m.id === id);
 
+  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.3節]
+  // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
+  // （56.4章決定56-6、N+1にしない）。「かぞくのほかのみまもりメンバーの
+  // クエスト」（othersChores）には出さない（53.2.3節決定4）。
+  const {
+    loadState: totalsLoadState,
+    lookup: totalsLookup,
+    reload: reloadCompletionTotals,
+  } = useChoreCompletionTotals();
+
   // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.11節・28.11.2節「さっきの記録」。決定9のとおり
   // P19（app/parent/my-chores.tsx）と完全に同一のロジック。データソースは
@@ -103,6 +114,9 @@ export default function SupporterMyChoresScreen() {
       setCancelRowError({ id: completionId, message: cancelCompletionErrorText("supporter", result.error) });
       return;
     }
+    // [2026-09-19追加・56.4章申し送り] 取消直後は累計回数も減るため、この画面が
+    // 個別に再取得する（家族全体を洗い直すload()には加えない）。
+    void reloadCompletionTotals();
     setCancelFlashMessage(CANCEL_SUCCESS_TEXT.supporter);
     setTimeout(() => setCancelFlashMessage(null), 1500);
   };
@@ -118,8 +132,11 @@ export default function SupporterMyChoresScreen() {
   useEffect(() => {
     if (params.justChoreId && params.justTitle && params.justPoints) {
       setCelebration({ title: params.justTitle, points: params.justPoints });
+      // [2026-09-19追加・56.4章申し送り] 完了報告の成功直後、この画面が個別に
+      // 累計回数を再取得する（家族全体を洗い直すload()には加えない）。
+      void reloadCompletionTotals();
     }
-  }, [params.justChoreId, params.justTitle, params.justPoints]);
+  }, [params.justChoreId, params.justTitle, params.justPoints, reloadCompletionTotals]);
 
   return (
     // お祝いポップアップをScreen（内部はScrollView）の外側に重ねる理由は
@@ -207,11 +224,20 @@ export default function SupporterMyChoresScreen() {
                 >
                   <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
                   <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>{c.title}</Text>
+                  {/* [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.3節・
+                      53.3節・53.6節決定7] 大人向けは0回でも「計0回」と出す。取得に失敗した
+                      ときは回数の部分だけ出さない（53.7節）。 */}
                   {done ? (
-                    <Text style={styles.doneLabel}>きろくずみ</Text>
+                    <Text style={styles.doneLabel}>
+                      きろくずみ
+                      {totalsLoadState !== "error" &&
+                        `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
+                    </Text>
                   ) : (
                     <Text style={theme.typography.supporterBodyMedium}>
                       {formatChoreRowRewardLabel(c)}
+                      {totalsLoadState !== "error" &&
+                        `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
                     </Text>
                   )}
                 </Pressable>

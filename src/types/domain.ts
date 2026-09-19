@@ -713,6 +713,19 @@ export interface HabitCardChoreBreakdownRow {
   completion_count: number;
 }
 
+/**
+ * chore_completion_totals View（スキーマ設計.sql 56章、やること.md 4-55）の
+ * 1行。クエスト（chore_id）×実施した本人（member_id）ごとの生涯累計実施
+ * 回数。期間の絞り込みは無い（4-47①のsinceIsoとは無関係、56.1章）。
+ * `chore_id`がNULLの行（choreが物理削除された場合）も理論上現れうるが、
+ * 削除済みchoreはクライアントの一覧に表示されないため無害（56.3章）。
+ */
+export interface ChoreCompletionTotalEntry {
+  chore_id: string | null;
+  member_id: string;
+  total_count: number;
+}
+
 /** habit_figure_grants テーブルの1行（段階到達ごとの自動付与記録。選択の余地は無い）。 */
 export interface HabitFigureGrant {
   id: string;

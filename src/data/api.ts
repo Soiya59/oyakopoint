@@ -23,6 +23,7 @@ import type {
   Category,
   Chore,
   ChoreCompletion,
+  ChoreCompletionTotalEntry,
   ChoreNfcTag,
   ChoreNfcTagWithMember,
   ChoreReaction,
@@ -3007,6 +3008,26 @@ export async function fetchHabitCardChoreBreakdown(
     .in("habit_card_id", habitCardIds);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as HabitCardChoreBreakdownRow[] };
+}
+
+/**
+ * API仕様.md 16章「クエストごとの累計実施回数」（やること.md 4-55）。
+ * `chore_completion_totals`（スキーマ設計.sql 56章）を`family_id`のみで
+ * 絞って家族ぶんをまとめて1回で取る（決定56-6。C5・P19・S5・P10の4画面
+ * 共通の標準パターン、クエストごとに問い合わせを飛ばさない＝N+1にしない）。
+ * 呼び出し側（`useChoreCompletionTotals`）が`chore_id`をキーにしたルックアップ
+ * を1つ作る。
+ */
+export async function fetchChoreCompletionTotals(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<ChoreCompletionTotalEntry[]>> {
+  const { data, error } = await client
+    .from("chore_completion_totals")
+    .select("chore_id, member_id, total_count")
+    .eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as ChoreCompletionTotalEntry[] };
 }
 
 /**

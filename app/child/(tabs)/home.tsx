@@ -15,6 +15,7 @@ import { useUnreadSince } from "@/hooks/useLastSeen";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
+import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
  * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
@@ -57,6 +58,15 @@ export default function ChildHomeScreen() {
   } = useGachaProgress(state.activeChildMemberId);
   // [2026-09-10削除・実装メモ.md 188章] 「かぞくのけいじばん」カードは
   // かぞくタブ（`app/child/(tabs)/family.tsx`）へ移設した（36.5.2節）。
+
+  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.1節]
+  // クエストごとの「これまで何回やったか」。マウント時（＝C6→C7→このC5への
+  // 復帰時を含む）に1回、家族ぶんをまとめて取得する（56.4章決定56-6、N+1にしない）。
+  const {
+    loadState: totalsLoadState,
+    lookup: totalsLookup,
+    reload: reloadCompletionTotals,
+  } = useChoreCompletionTotals();
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -101,6 +111,9 @@ export default function ChildHomeScreen() {
     // 最新値を個別に再取得する（家族の木はC5に常設ウィジェットが無いため対象外。
     // ガチャ「あと◯回」ウィジェットのみ再取得する）。
     void reloadGachaProgress();
+    // [2026-09-19追加・56.4章申し送り] 取消直後は累計回数も減るため、この画面が
+    // 個別に再取得する（家族全体を洗い直すload()には加えない）。
+    void reloadCompletionTotals();
     setCancelFlashMessage(CANCEL_SUCCESS_TEXT.child);
     setTimeout(() => setCancelFlashMessage(null), 1500);
   };
@@ -313,6 +326,20 @@ export default function ChildHomeScreen() {
                       {formatChoreRowRewardLabel(chore)}
                     </Text>
                   )}
+                  {/* [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.1節]
+                      「✅ きろくずみ」の状態でも回数行は消さない（今日やったか／これまで
+                      何回かは別の軸）。0回のときは行自体を出さない（53.6節決定7）。取得に
+                      失敗したときは回数の部分だけ出さない（53.7節、一覧全体は壊さない）。 */}
+                  {totalsLoadState !== "error" &&
+                    (() => {
+                      const count = totalsLookup[keyChoreCompletionTotal(chore.id, me.id)] ?? 0;
+                      if (count === 0) return null;
+                      return (
+                        <Text style={styles.completionTotalLabel} numberOfLines={1}>
+                          {count}かい やったよ
+                        </Text>
+                      );
+                    })()}
                 </Pressable>
                 <Pressable
                   onPress={() => toggleDaily(chore.id, !isDaily)}
@@ -407,6 +434,9 @@ const styles = StyleSheet.create({
   cardTitle: { marginTop: theme.spacing.s1, textAlign: "center" },
   pointLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  // [2026-09-19追加・主要画面ワイヤーフレーム.md 53.3節・53.7節] pointLabelと同じ役割の
+  // captionスタイル。新しいデザイントークンは追加しない（既存のneutralTextSecondaryを流用）。
+  completionTotalLabel: { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary, fontSize: 12 },
   // [37.4節決定4] hitSlopに加え、paddingVerticalで単独の当たり判定の余白を確保する。
   dailyToggleWrap: { marginTop: theme.spacing.s1, paddingVertical: theme.spacing.s2 },
   dailyToggle: { fontSize: 11, color: theme.colors.neutralTextSecondary },
