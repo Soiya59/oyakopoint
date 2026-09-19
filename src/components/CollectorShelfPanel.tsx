@@ -742,9 +742,11 @@ export function CollectorShelfPanel({
           <Text style={[bodyMediumStyleFor(tone), tab === "pastTrees" && styles.tabTextActive]}>{pastTreesLabel}</Text>
         </Pressable>
         {/* [2026-09-19追加・要件定義書07-28章決定31、主要画面ワイヤーフレーム.md
-            49-B.6章決定47] 「しまったシール帳」タブ。現行実装が帯のタップ先に
+            49-B.6章決定47] 「シール帳」タブ。現行実装が帯のタップ先に
             置いていた「できあがったシール帳（Nさつ）」の一覧をここへ移す
-            （2か所に出さない、依頼文決定11）。 */}
+            （2か所に出さない、依頼文決定11）。
+            [2026-09-20改称・決定76] 実機（3タブ横並び）で「しまったシール…」と
+            末尾が切れたため、「シール帳」（子ども「シールちょう」）に短縮した。 */}
         <Pressable
           onPress={() => setTab("habitCardArchive")}
           style={[styles.tabButton, tab === "habitCardArchive" && styles.tabButtonActive]}
@@ -752,7 +754,7 @@ export function CollectorShelfPanel({
           accessibilityState={{ selected: tab === "habitCardArchive" }}
         >
           <Text style={[bodyMediumStyleFor(tone), tab === "habitCardArchive" && styles.tabTextActive]} numberOfLines={1}>
-            {isChild ? "しまった シールちょう" : "しまったシール帳"}
+            {isChild ? "シールちょう" : "シール帳"}
           </Text>
         </Pressable>
       </View>
@@ -1037,12 +1039,12 @@ function HabitCardArchiveSection({ tone, members, myMemberId }: { tone: Tone; me
             <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={reload} />
           )}
           {loadState === "ready" && cards.length === 0 && (
-            <Text style={bodyStyle}>{isChild ? "まだ できあがった シール帳は ないよ" : "まだ完成したシール帳はありません"}</Text>
+            <Text style={bodyStyle}>{isChild ? "まだ できあがった シールちょうは ないよ" : "まだ完成したシール帳はありません"}</Text>
           )}
           {loadState === "ready" &&
             cards.map((card) => {
               const expanded = expandedCardId === card.id;
-              const kindInfo = getHabitCardKindInfo(card, catalog);
+              const kindInfo = getHabitCardKindInfo(card, catalog, isChild);
               const cardBreakdown = breakdown.filter((b) => b.habit_card_id === card.id);
               // [決定46を完成済みの冊にも適用、決定50] 多い順上位5件＋ほか◯件。
               const summary = summarizeHabitCardBreakdown(cardBreakdown, state.chores, 5);
@@ -1537,7 +1539,7 @@ function HabitFigureShelfSection({
         <Text style={bodyStyle}>
           {isViewingSelf
             ? isChild
-              ? "まだ フィギュアを もっていないよ。シール帳をためて もらおう"
+              ? "まだ フィギュアを もっていないよ。シールちょうを ためて もらおう"
               : "まだフィギュアを獲得していません。シール帳をためると獲得できます"
             : isChild
             ? `${selectedMemberName}さんは まだ もっていないよ`

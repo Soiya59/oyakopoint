@@ -230,13 +230,13 @@ export default function ParentMyChoresScreen() {
         const renderRow = ({ chore: c, done }: { chore: (typeof withDaily)[number]["chore"]; done: boolean }) => {
           const highlighted = snackbar?.choreId === c.id;
           const isDaily = state.dailyFlaggedChoreIds.includes(c.id);
+          // [2026-09-20追加・主要画面ワイヤーフレーム.md 9.1a節決定1・3] rowMainと
+          // 2行目の報告用当たり判定（reportHitArea）で同じ遷移を使い回すために切り出す。
+          const goToReport = () =>
+            router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } });
           return (
             <Card key={c.id} style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
-              <Pressable
-                disabled={done || !me}
-                onPress={() => router.push({ pathname: "/parent/my-chore-report", params: { choreId: c.id } })}
-                style={styles.rowMain}
-              >
+              <Pressable disabled={done || !me} onPress={goToReport} style={styles.rowMain}>
                 <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
                 <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.title}
@@ -272,13 +272,33 @@ export default function ParentMyChoresScreen() {
                   [2026-09-20修正・実装メモ.md 260章] CardはalignItems未指定（既定"stretch"）
                   のため、この行のPressableが幅指定なしだとカード幅いっぱいに広がり、
                   文字の無い右側の余白までお気に入りの当たり判定になっていた（統括が実機で
-                  発見）。app/child/(tabs)/home.tsxのdailyToggleWrap（37.4節決定4）と同じ
-                  考え方で、alignSelf:"flex-start"により当たり判定を文字の幅に収める。 */}
-              <Pressable onPress={() => toggleDaily(c.id, !isDaily)} hitSlop={8} style={styles.dailyToggleWrap}>
-                <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
-                  {isDaily ? "★ お気に入り" : "★ お気に入りにする"}
-                </Text>
-              </Pressable>
+                  発見）。alignSelf:"flex-start"で当たり判定を文字の幅に収めていた。
+                  [2026-09-20再修正・主要画面ワイヤーフレーム.md 9.1a節決定1〜3] ★の右側に
+                  できた余白（依頼文4）を、完了報告の当たり判定にする。2行目をrow方向の
+                  Viewにし、左＝★（alignSelf:"flex-start"は不要になったため削除。row内では
+                  既定で文字幅になる）・右＝新設のreportHitArea（flex:1）を兄弟として並べる。
+                  ネストしたPressableは作らない（37.2節決定1、9.1a節「却下した代替案」1・2）。 */}
+              <View style={styles.rowSecondary}>
+                <Pressable
+                  onPress={() => toggleDaily(c.id, !isDaily)}
+                  hitSlop={8}
+                  style={styles.dailyToggleWrap}
+                >
+                  <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
+                    {isDaily ? "★ お気に入り" : "★ お気に入りにする"}
+                  </Text>
+                </Pressable>
+                {/* [2026-09-20新設・9.1a節決定1・3] ★の右側の余白を完了報告の当たり判定に
+                    する、見た目を追加しない透明なPressable。rowMainと同じdisabled・同じ
+                    遷移。hitSlopは付けない（★側へ拡張して誤反応を招かないため、決定2）。 */}
+                <Pressable
+                  disabled={done || !me}
+                  onPress={goToReport}
+                  style={styles.reportHitArea}
+                  accessibilityRole="button"
+                  accessibilityLabel="完了を報告する"
+                />
+              </View>
             </Card>
           );
         };
@@ -345,12 +365,21 @@ const styles = StyleSheet.create({
   row: {},
   rowMain: { flexDirection: "row", alignItems: "center" },
   rowHighlighted: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
+  // [2026-09-20追加・主要画面ワイヤーフレーム.md 9.1a節決定1〜3] 2行目をrow方向の
+  // ただの入れ物にする。左＝★（dailyToggleWrap）・右＝報告用当たり判定（reportHitArea）
+  // を兄弟として並べる（ネストしたPressableは作らない、37.2節決定1）。
+  // minHeightでタップターゲット最小サイズ（44dp）を確保する（決定3）。
+  rowSecondary: { flexDirection: "row", alignItems: "center", minHeight: theme.tapTarget.parent },
   // [2026-09-20追加・実装メモ.md 260章] Card（src/components/Card.tsx）はalignItems未指定
-  // （既定"stretch"）のため、幅指定の無いPressableは直接の子としてカード幅いっぱいに
-  // 広がる。alignSelf:"flex-start"で自身の当たり判定を内容（テキスト）幅に縮める。
-  // 見た目（文字の位置・大きさ・色）は不変。hitSlop={8}は既存のまま維持し、押しやすさは
-  // 変えていない（app/child/(tabs)/home.tsxのdailyToggleWrap・37.4節と同じ考え方）。
-  dailyToggleWrap: { alignSelf: "flex-start" },
+  // （既定"stretch"）だったが、rowSecondary（row方向）の子は既定で内容幅になるため、
+  // alignSelf:"flex-start"は不要になった（9.1a節開発部への実装メモ1）。
+  // marginRightでdailyToggleWrapとreportHitAreaの間に12px以上の隙間を確保する（決定2）。
+  // ★の当たり判定はhitSlop={8}のまま維持し、拡張分（8px）より大きい値にすることで、
+  // ★の拡張された当たり判定が報告用の当たり判定に食い込まないようにする（決定2）。
+  dailyToggleWrap: { marginRight: theme.spacing.s3 },
+  // [2026-09-20新設・9.1a節決定1・3] ★の右側の余白を完了報告の当たり判定にする、
+  // 見た目を追加しない透明なPressable。hitSlopは付けない（決定2）。
+  reportHitArea: { flex: 1, minHeight: theme.tapTarget.parent },
   dailyToggle: { marginTop: theme.spacing.s1, fontSize: 11, color: theme.colors.neutralTextSecondary },
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },

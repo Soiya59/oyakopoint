@@ -3061,7 +3061,7 @@ export async function fetchHabitFigureGrantsForCards(
   if (habitCardIds.length === 0) return { ok: true, data: [] };
   const { data, error } = await client
     .from("habit_figure_grants")
-    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name)")
+    .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name)")
     .in("habit_card_id", habitCardIds)
     .order("granted_at");
   if (error) return { ok: false, error: fromPostgrestError(error) };
@@ -3081,7 +3081,7 @@ export async function fetchLatestHabitFigureGrant(
 ): Promise<ApiResult<HabitFigureGrantWithCatalog | null>> {
   const { data, error } = await client
     .from("habit_figure_grants")
-    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name)")
+    .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name)")
     .eq("member_id", memberId)
     .order("granted_at", { ascending: false })
     .limit(1);
@@ -3144,6 +3144,8 @@ export interface FamilyTreeHabitFigurePlacement {
   grantId: string;
   tier: "bronze" | "silver" | "gold" | "crystal";
   kindDisplayName: string;
+  /** 決定71（主要画面ワイヤーフレーム.md 49-B.15章）。子ども向けひらがな表記。NULL=未入力。 */
+  kindDisplayNameChild: string | null;
   kindEmoji: string | null;
   figureKey: string;
   displayName: string;
@@ -3161,7 +3163,7 @@ export async function fetchFamilyTreeHabitFigurePlacements(
       "id, pos_x, pos_y, decorated_at, " +
         "habit_figure_grant:habit_figure_grants(id, member_id, tier, " +
         "family_members!member_id(avatar_color), " +
-        "habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name))"
+        "habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name))"
     )
     .eq("family_id", familyId)
     .eq("season_id", seasonId)
@@ -3179,6 +3181,7 @@ export async function fetchFamilyTreeHabitFigurePlacements(
       family_members: { avatar_color: string | null } | null;
       habit_figure_catalog: {
         kind_display_name: string;
+        kind_display_name_child: string | null;
         kind_emoji: string | null;
         figure_key: string;
         display_name: string;
@@ -3201,6 +3204,7 @@ export async function fetchFamilyTreeHabitFigurePlacements(
       grantId: r.habit_figure_grant.id,
       tier: r.habit_figure_grant.tier,
       kindDisplayName: r.habit_figure_grant.habit_figure_catalog.kind_display_name,
+      kindDisplayNameChild: r.habit_figure_grant.habit_figure_catalog.kind_display_name_child,
       kindEmoji: r.habit_figure_grant.habit_figure_catalog.kind_emoji,
       figureKey: r.habit_figure_grant.habit_figure_catalog.figure_key,
       displayName: r.habit_figure_grant.habit_figure_catalog.display_name,
@@ -3257,7 +3261,7 @@ export async function fetchMyHabitFigureGrants(
 ): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
   const { data, error } = await client
     .from("habit_figure_grants")
-    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
+    .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("member_id", memberId)
     .order("granted_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
@@ -3273,7 +3277,7 @@ export async function fetchFamilyHabitFigureGrants(
 ): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
   const { data, error } = await client
     .from("habit_figure_grants")
-    .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
+    .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("family_id", familyId)
     .order("granted_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };

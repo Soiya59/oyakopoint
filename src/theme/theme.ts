@@ -375,6 +375,22 @@ export const stickerRingWidth = 2;
 // 提供の画像表示へ切り替えたことで参照元がなくなったため削除した。色・質感の
 // 決定内容（統括決定26）自体は`デザイントークン.md`1.11節に記録が残る。
 
+// [2026-09-20新設・主要画面ワイヤーフレーム.md 49-B.14章決定66・67、
+// 同日49-B.14節決定72〜75で再改訂] シール帳タップ先「いまの10マス」グリッド
+// （HabitCardBoard.tsx TenCellsGrid）で、いまの頁が目指す段階の色として使う塗り色。
+// 当初は1.11節「木を飾るステッカー」の配色（統括決定26）をそのまま流用したが、
+// 実機確認で銀`#F5F5F5`が白いCard背景と同化し判別できないことが判明したため、
+// デザイントークン.md 1.11a節「シール帳のマス目専用配色」の値に差し替えた
+// （決定72〜75）。1.11節の値自体は一切変更していない（メダル表示は別のまま）。
+export const habitCardCellColors: Record<StickerRarity, string> = {
+  bronze: "#D99757", // 決定73: 実機で視認性確認済み、据え置き（1.11a節`habit-card-cell-bronze`）
+  silver: "#9CA3AF", // 決定73: sticker-rarity-silverグラデーションの影側の点を転用（1.11a節`habit-card-cell-silver`）
+  gold: "#C99A2E", // 決定73: sticker-rarity-goldグラデーションの影側の点を転用（1.11a節`habit-card-cell-gold`）
+  crystal: "#8B95D9", // 決定73: 寒色系を維持しつつ明度を落とした新規値（1.11a節`habit-card-cell-crystal`）
+};
+/** マスの縁取り（決定67「段階ごとに変えず共通」）。1.11節記載済みの汎用の縁取り値。 */
+export const habitCardCellBorderColor = "rgba(0,0,0,0.16)";
+
 /** 12種のカタログをUI表示用に並べる固定順（32.1節ワイヤーフレーム: 形ごとに1行、レアリティ4段を列に固定）。 */
 export const stickerCatalogOrder: readonly { shape: StickerShape; rarity: StickerRarity }[] = stickerShapes.flatMap(
   (shape) => stickerRarities.map((rarity) => ({ shape, rarity }))
@@ -499,6 +515,8 @@ export const theme = {
   stickerRingWidth,
   stickerCatalogOrder,
   stickerKeyOf,
+  habitCardCellColors,
+  habitCardCellBorderColor,
   badgeDefinitions,
   badgeInitialThresholds,
   badgeProgressInfo,

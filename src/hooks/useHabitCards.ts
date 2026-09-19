@@ -66,6 +66,8 @@ export function useHabitFigureCatalog() {
 export interface HabitKindGroup {
   kindKey: string;
   kindDisplayName: string;
+  /** 決定71（主要画面ワイヤーフレーム.md 49-B.15章）。子ども向けひらがな表記。NULL=未入力。 */
+  kindDisplayNameChild: string | null;
   kindEmoji: string | null;
   isFree: boolean;
   tiers: HabitFigureCatalogItem[]; // bronze/silver/gold/crystalの順
@@ -84,6 +86,7 @@ export function groupHabitFigureCatalogByKind(catalog: HabitFigureCatalogItem[])
       map.set(item.kind_key, {
         kindKey: item.kind_key,
         kindDisplayName: item.kind_display_name,
+        kindDisplayNameChild: item.kind_display_name_child,
         kindEmoji: item.kind_emoji,
         isFree: item.is_free,
         tiers: [item],

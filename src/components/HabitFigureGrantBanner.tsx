@@ -10,6 +10,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import theme from "@/theme/theme";
+import { resolveChildFriendlyKindDisplayName } from "@/lib/habitCardDisplay";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -32,7 +33,13 @@ export function HabitFigureGrantBanner({ tone, grant, onPlaceOnTree, onLater }: 
   const isChild = tone === "child";
   const headlineStyle = isChild ? theme.typography.childHeadline : tone === "supporter" ? theme.typography.supporterBodyMedium : theme.typography.parentBodyMedium;
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
-  const kindName = grant.habit_figure_catalog?.kind_display_name ?? "シール帳";
+  // [2026-09-20改訂・主要画面ワイヤーフレーム.md 49-B.15章決定71] 子ども向けは
+  // ひらがな表記（kind_display_name_child、NULLなら漢字にフォールバック）。
+  const kindName = grant.habit_figure_catalog
+    ? isChild
+      ? resolveChildFriendlyKindDisplayName(grant.habit_figure_catalog.kind_display_name, grant.habit_figure_catalog.kind_display_name_child)
+      : grant.habit_figure_catalog.kind_display_name
+    : "シール帳";
   const kindEmoji = grant.habit_figure_catalog?.kind_emoji ?? "🏳️";
   const tierLabel = (isChild ? TIER_LABEL[grant.tier]?.child : TIER_LABEL[grant.tier]?.adult) ?? grant.tier;
 

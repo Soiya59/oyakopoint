@@ -24,6 +24,7 @@ import Card from "./Card";
 import FigureFrame from "./FigureFrame";
 import FigureIcon from "./FigureIcon";
 import theme from "@/theme/theme";
+import { resolveChildFriendlyKindDisplayName } from "@/lib/habitCardDisplay";
 import type { HabitKindGroup } from "@/hooks/useHabitCards";
 
 /** 決定62・63の絵柄プレビュー1マスの直径。既存のFigureFrame利用例（48px系）を踏襲。 */
@@ -48,7 +49,7 @@ export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, ch
 
   return (
     <View>
-      <Text style={[bodyStyle, styles.heading]}>{isChild ? "シール帳の えを えらぶ" : "シール帳の絵を選ぶ"}</Text>
+      <Text style={[bodyStyle, styles.heading]}>{isChild ? "シールちょうの えを えらぶ" : "シール帳の絵を選ぶ"}</Text>
       <View style={styles.list}>
         {groups.map((g) => {
           const selected = g.kindKey === currentKindKey;
@@ -65,7 +66,7 @@ export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, ch
               <Card tone={tone} style={selected ? { ...styles.rowCard, ...styles.rowCardSelected } : styles.rowCard}>
                 <Text style={bodyStyle}>
                   {selected ? "✓ " : "  "}
-                  {g.kindEmoji ?? "🏳️"} {g.kindDisplayName}
+                  {g.kindEmoji ?? "🏳️"} {isChild ? resolveChildFriendlyKindDisplayName(g.kindDisplayName, g.kindDisplayNameChild) : g.kindDisplayName}
                   {/* [決定44] is_free===falseの行にのみ印を付ける。ベータ期間中は
                       選択の可否そのものをDB側で強制していない（暫定）。 */}
                   {!g.isFree && <Text style={[captionStyle, { color: theme.colors.neutralTextSecondary }]}> ・有料</Text>}

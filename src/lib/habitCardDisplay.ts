@@ -14,21 +14,50 @@ export interface HabitCardKindInfo {
 }
 
 /**
+ * 決定71「絵柄の名前も子ども向けはひらがな」（主要画面ワイヤーフレーム.md
+ * 49-B.15章、API仕様.md 17.10節）。`kind_display_name_child`がNULL（未入力）
+ * の場合は、既存の`kind_display_name`（漢字・大人向け）にフォールバックする
+ * （60.1章決定60-3、書き忘れても壊れない設計）。大人・みまもり向け
+ * （`isChild=false`）は常に`kind_display_name`のみを使う。
+ *
+ * 呼び出し元によってフィールド名がsnake_case（`HabitFigureCatalogItem`）と
+ * camelCase（`HabitKindGroup`）の両方があるため、値そのもの（adultName /
+ * childName）を受け取る形にしている。
+ */
+export function resolveChildFriendlyKindDisplayName(adultName: string, childName: string | null | undefined): string {
+  return childName ?? adultName;
+}
+
+/** `HabitFigureCatalogItem`（snake_case）向けの薄いラッパー。 */
+export function getChildFriendlyKindDisplayName(item: Pick<HabitFigureCatalogItem, "kind_display_name" | "kind_display_name_child">): string {
+  return resolveChildFriendlyKindDisplayName(item.kind_display_name, item.kind_display_name_child);
+}
+
+/**
  * シール帳の絵柄（habit_figure_catalog.kind_key）は`habit_cards`自身が持つ
  * （決定29・スキーマ設計.sql 57.3章、クエストに紐づかなくなったため）。
  * 対応するカタログ行が見つからない場合（データ不整合・読み込みタイミングの
  * ずれ）は、画面が壊れないよう「シール帳」という素の見出しにフォールバック
  * する。
+ *
+ * `isChild`（決定71）: trueのときは`getChildFriendlyKindDisplayName()`で
+ * 解決した子ども向け表示名を返す。省略時はfalse扱い（既存呼び出し元との
+ * 後方互換のため、呼び出し元は大人向け画面のまま動く）。
  */
 export function getHabitCardKindInfo(
   card: HabitCard | null | undefined,
-  catalog: HabitFigureCatalogItem[]
+  catalog: HabitFigureCatalogItem[],
+  isChild = false
 ): HabitCardKindInfo {
   const kindKey = card?.kind_key ?? null;
   if (!kindKey) return { kindKey: null, kindDisplayName: "シール帳", kindEmoji: null };
   const found = catalog.find((c) => c.kind_key === kindKey);
   if (!found) return { kindKey, kindDisplayName: "シール帳", kindEmoji: null };
-  return { kindKey, kindDisplayName: found.kind_display_name, kindEmoji: found.kind_emoji };
+  return {
+    kindKey,
+    kindDisplayName: isChild ? getChildFriendlyKindDisplayName(found) : found.kind_display_name,
+    kindEmoji: found.kind_emoji,
+  };
 }
 
 /**
@@ -66,6 +95,22 @@ export function formatHabitCardProgressText(count: number, tierLabelForNext: (ti
     currentTier === "gold" ? "crystal" : currentTier === "silver" ? "gold" : currentTier === "bronze" ? "silver" : "bronze";
   const remaining = nextThreshold - count;
   return `${count}/${nextThreshold}（${tierLabelForNext(nextTier)}まで あと${remaining}）`;
+}
+
+/**
+ * 決定66「いまの頁が目指す段階の色」（主要画面ワイヤーフレーム.md 49-B.14章）:
+ * 「いまの10マス」は常に現在進行中の1頁だけを表示する（`computeCurrentPageFilledCells`）。
+ * この頁を埋め終えると到達する段階（`computeHabitCardTierInfo(count).nextThreshold`が
+ * 指す段階）の名前を返す純関数。クリスタル到達済み（`nextThreshold === null`）の
+ * ときは`nextThreshold`ではなく`currentTier`（＝"crystal"のはず）をそのまま返す。
+ */
+export function computeHabitCardPageTier(count: number): "bronze" | "silver" | "gold" | "crystal" {
+  const { currentTier, nextThreshold } = computeHabitCardTierInfo(count);
+  if (nextThreshold == null) return currentTier ?? "crystal";
+  if (nextThreshold === 10) return "bronze";
+  if (nextThreshold === 30) return "silver";
+  if (nextThreshold === 50) return "gold";
+  return "crystal"; // nextThreshold === 100
 }
 
 /**

@@ -87,12 +87,16 @@ export function HabitCardStrip({ tone, loadState, card, totalCount, catalog, onP
     );
   }
 
+  // [2026-09-20改訂・主要画面ワイヤーフレーム.md 49-B.15章決定70(#1・#2)]
+  // 子ども向けは漢字「シール帳」ではなく「シールちょう」。大人・みまもりは変更なし。
+  const heading = isChild ? "📔 シールちょう" : "📔 シール帳";
+
   // [決定36] card===nullは異常系のみ（家族参加時に必ず1冊自動作成されるため）。
   // 画面を壊さないよう、見出しだけの控えめな表示にとどめる（新しい導線は足さない）。
   if (!card) {
     return (
       <View style={{ marginTop: theme.spacing.s3 }}>
-        <Text style={[headingStyle, styles.heading]}>📔 シール帳</Text>
+        <Text style={[headingStyle, styles.heading]}>{heading}</Text>
         <Card tone={tone} style={styles.card}>
           <Text style={isChild ? theme.typography.childBody : theme.typography.parentCaption}>
             {isChild ? "また あとで みてみてね" : "読み込めませんでした"}
@@ -102,11 +106,12 @@ export function HabitCardStrip({ tone, loadState, card, totalCount, catalog, onP
     );
   }
 
-  const kindInfo = getHabitCardKindInfo(card, catalog);
+  // [決定71] 絵柄の名前も子ども向けはひらがな（isChildをそのまま渡す）。
+  const kindInfo = getHabitCardKindInfo(card, catalog, isChild);
 
   return (
     <View style={{ marginTop: theme.spacing.s3 }}>
-      <Text style={[headingStyle, styles.heading]}>📔 シール帳</Text>
+      <Text style={[headingStyle, styles.heading]}>{heading}</Text>
       <Pressable onPress={onPress}>
         <Card tone={tone} style={styles.card}>
           <View style={styles.row}>

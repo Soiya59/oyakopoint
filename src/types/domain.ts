@@ -663,6 +663,11 @@ export interface HabitFigureCatalogItem {
   id: string;
   kind_key: string;
   kind_display_name: string;
+  // [2026-09-20新設・スキーマ設計.sql 60章、API仕様.md 17.10節] 子ども向け画面で
+  // 使う、絵柄の種類名のひらがな表記。NULL許容＝未入力を許す。NULLの場合は
+  // 読み出し側（クライアント）が既存のkind_display_name（漢字・大人向け）に
+  // フォールバックする（src/lib/habitCardDisplay.ts参照）。
+  kind_display_name_child: string | null;
   kind_emoji: string | null;
   tier: "bronze" | "silver" | "gold" | "crystal";
   figure_key: string;
@@ -742,7 +747,7 @@ export interface HabitFigureGrant {
 export interface HabitFigureGrantWithCatalog extends HabitFigureGrant {
   habit_figure_catalog: Pick<
     HabitFigureCatalogItem,
-    "kind_display_name" | "kind_emoji" | "figure_key" | "display_name"
+    "kind_display_name" | "kind_display_name_child" | "kind_emoji" | "figure_key" | "display_name"
   > | null;
 }
 

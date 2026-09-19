@@ -15,7 +15,13 @@ import HabitCardKindPicker from "./HabitCardKindPicker";
 import MemberAvatar from "./MemberAvatar";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import { groupHabitFigureCatalogByKind, useChooseHabitCardKindAction, computeHabitCardTierInfo } from "@/hooks/useHabitCards";
-import { computeCurrentPageFilledCells, formatHabitCardProgressText, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
+import {
+  computeCurrentPageFilledCells,
+  computeHabitCardPageTier,
+  formatHabitCardProgressText,
+  getHabitCardKindInfo,
+  summarizeHabitCardBreakdown,
+} from "@/lib/habitCardDisplay";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore, FamilyMember, HabitCard, HabitCardChoreBreakdownRow, HabitFigureCatalogItem, HabitFigureGrantWithCatalog } from "@/types/domain";
@@ -70,15 +76,66 @@ function TierGauge({ tone, count }: { tone: Tone; count: number }) {
   );
 }
 
-/** 決定11-B「いまの10マス」。5×2のマス目で表示する。 */
-function TenCellsGrid({ filled }: { filled: number }) {
+// [2026-09-20新設・本部長差し戻し対応（49-B.14節決定64・69）] セル幅は
+// `width: "18%"`という相対値のため、端末幅によって実際のpx幅が変わる
+// （本部長の実測は保護者画面で81px）。borderRadius（決定69「一辺の約25%」）・
+// 絵文字サイズ（本部長の指示「マスの半分弱35〜40px程度」）を固定pxで決め打ち
+// すると幅の違う端末で崩れるため、1つ目のセルのonLayoutで実測したpx幅から
+// 比率で算出する。onLayout発火前（初回描画の一瞬）だけは、本部長が実測した
+// 81px（保護者のシール帳画面、3枚貼った状態）を仮定したフォールバック値を使う。
+const CELL_SIZE_FALLBACK_PX = 81; // 本部長実測値（差し戻しコメント記載の実測）
+const CELL_BORDER_RADIUS_RATIO = 0.25; // 決定69「一辺の約25%」
+const CELL_EMOJI_SIZE_RATIO = 0.45; // 差し戻し指示「マスの半分弱（35〜40px程度）」→81px×0.45≒36px
+
+/**
+ * 決定11-B「いまの10マス」。5×2のマス目で表示する。
+ * [2026-09-20改訂・主要画面ワイヤーフレーム.md 49-B.14章決定64〜69、同日本部長差し戻し
+ * 対応] 円（⬤/◯）から角丸四角形へ変更（決定69）。埋まっているマスは、いまの頁が
+ * 目指す段階の色（決定66・67）で塗り、中央にその種類の絵文字（決定65）を表示する。
+ * 未到達マスは形はそのまま、塗りを透明にし縁取りだけneutralBorderにする
+ * （決定68、絵文字は出さない）。borderRadius・絵文字サイズは実測セル幅に追従する。
+ */
+function TenCellsGrid({
+  filled,
+  kindEmoji,
+  pageTier,
+}: {
+  filled: number;
+  kindEmoji: string | null;
+  pageTier: "bronze" | "silver" | "gold" | "crystal";
+}) {
+  // [差し戻し対応] 1つ目のセル（常に描画される）のonLayoutで実測px幅を取得する。
+  // 全セルは同じstyles.cell（width: "18%", aspectRatio: 1）のため、1回の測定で足りる。
+  const [measuredCellSize, setMeasuredCellSize] = useState<number | null>(null);
+  const cellSizePx = measuredCellSize ?? CELL_SIZE_FALLBACK_PX;
+  const borderRadius = Math.round(cellSizePx * CELL_BORDER_RADIUS_RATIO);
+  const emojiFontSize = Math.round(cellSizePx * CELL_EMOJI_SIZE_RATIO);
+
   const cells = Array.from({ length: 10 }, (_, i) => i < filled);
+  const fillColor = theme.habitCardCellColors[pageTier];
   return (
     <View style={styles.cellsWrap}>
       {cells.map((isFilled, i) => (
-        <Text key={i} style={styles.cell}>
-          {isFilled ? "⬤" : "◯"}
-        </Text>
+        <View
+          key={i}
+          onLayout={
+            i === 0
+              ? (e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0 && w !== measuredCellSize) setMeasuredCellSize(w);
+                }
+              : undefined
+          }
+          style={[
+            styles.cell,
+            { borderRadius },
+            isFilled
+              ? { backgroundColor: fillColor, borderColor: theme.habitCardCellBorderColor }
+              : { backgroundColor: "transparent", borderColor: theme.colors.neutralBorder },
+          ]}
+        >
+          {isFilled && <Text style={[styles.cellEmoji, { fontSize: emojiFontSize }]}>{kindEmoji ?? "🏳️"}</Text>}
+        </View>
       ))}
     </View>
   );
@@ -127,8 +184,9 @@ export function HabitCardBoard({
     return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />;
   }
 
-  const kindInfo = getHabitCardKindInfo(card, catalog);
+  const kindInfo = getHabitCardKindInfo(card, catalog, isChild);
   const filled = card ? computeCurrentPageFilledCells(totalCount) : 0;
+  const pageTier = computeHabitCardPageTier(totalCount);
   const progressText = card
     ? formatHabitCardProgressText(totalCount, (tier) => (isChild ? TIER_LABEL_CHILD[tier] : TIER_LABEL_ADULT[tier]))
     : "";
@@ -172,7 +230,7 @@ export function HabitCardBoard({
               {kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}　{totalCount}/100
             </Text>
             <TierGauge tone={tone} count={totalCount} />
-            <TenCellsGrid filled={filled} />
+            <TenCellsGrid filled={filled} kindEmoji={kindInfo.kindEmoji} pageTier={pageTier} />
             <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>{progressText}</Text>
 
             {/* [決定42②副経路・決定45③・決定60] まだフィギュアを1体も獲得していない
@@ -259,8 +317,23 @@ const styles = StyleSheet.create({
   gaugeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: theme.spacing.s1 },
   gaugeItem: { fontSize: 11, color: theme.colors.neutralTextSecondary },
   gaugeItemReached: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  cellsWrap: { flexDirection: "row", flexWrap: "wrap", width: 110, marginTop: theme.spacing.s1 },
-  cell: { fontSize: 16, width: 22 },
+  // [決定64] 固定110px幅を廃止し、5列×2行の並びは維持したままコンテナ幅
+  // いっぱいに敷き詰める。列間の余白（justifyContent: space-between）を
+  // 差し引いた比率として各セル幅を18%前後にする。
+  cellsWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: theme.spacing.s1 },
+  // [決定69・2026-09-20本部長差し戻し対応] 丸ではなく角丸四角形。borderRadiusは
+  // 固定値をやめ、TenCellsGrid内で実測セル幅×25%を算出してインラインで指定する
+  // （ここでは幅・アスペクト比など、実測に依存しない部分のみ定義する）。
+  cell: {
+    width: "18%",
+    aspectRatio: 1,
+    marginBottom: theme.spacing.s1,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // fontSizeはTenCellsGrid内で実測セル幅から算出しインライン指定する（ここでは指定しない）。
+  cellEmoji: {},
   link: { color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s2 },
   breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 });
