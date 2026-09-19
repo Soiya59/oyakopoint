@@ -268,8 +268,13 @@ export default function ParentMyChoresScreen() {
                 )}
               </Pressable>
               {/* [2026-09-08修正・本部長／実装メモ.md 155章]「まいにち」→「お気に入り」の
-                  言い換え（統括決定）。印も☀️→★へ。変数名・DB列名はそのまま維持している。 */}
-              <Pressable onPress={() => toggleDaily(c.id, !isDaily)} hitSlop={8}>
+                  言い換え（統括決定）。印も☀️→★へ。変数名・DB列名はそのまま維持している。
+                  [2026-09-20修正・実装メモ.md 260章] CardはalignItems未指定（既定"stretch"）
+                  のため、この行のPressableが幅指定なしだとカード幅いっぱいに広がり、
+                  文字の無い右側の余白までお気に入りの当たり判定になっていた（統括が実機で
+                  発見）。app/child/(tabs)/home.tsxのdailyToggleWrap（37.4節決定4）と同じ
+                  考え方で、alignSelf:"flex-start"により当たり判定を文字の幅に収める。 */}
+              <Pressable onPress={() => toggleDaily(c.id, !isDaily)} hitSlop={8} style={styles.dailyToggleWrap}>
                 <Text style={[styles.dailyToggle, isDaily && styles.dailyToggleOn]}>
                   {isDaily ? "★ お気に入り" : "★ お気に入りにする"}
                 </Text>
@@ -340,6 +345,12 @@ const styles = StyleSheet.create({
   row: {},
   rowMain: { flexDirection: "row", alignItems: "center" },
   rowHighlighted: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
+  // [2026-09-20追加・実装メモ.md 260章] Card（src/components/Card.tsx）はalignItems未指定
+  // （既定"stretch"）のため、幅指定の無いPressableは直接の子としてカード幅いっぱいに
+  // 広がる。alignSelf:"flex-start"で自身の当たり判定を内容（テキスト）幅に縮める。
+  // 見た目（文字の位置・大きさ・色）は不変。hitSlop={8}は既存のまま維持し、押しやすさは
+  // 変えていない（app/child/(tabs)/home.tsxのdailyToggleWrap・37.4節と同じ考え方）。
+  dailyToggleWrap: { alignSelf: "flex-start" },
   dailyToggle: { marginTop: theme.spacing.s1, fontSize: 11, color: theme.colors.neutralTextSecondary },
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },
