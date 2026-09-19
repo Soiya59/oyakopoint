@@ -40,6 +40,24 @@ export function buildChoreCompletionTotalsLookup(entries: ChoreCompletionTotalEn
 }
 
 /**
+ * 担当「誰でも実行可」（`chore.assigned_to === null`）の行向け、`chore_id`単位の
+ * 家族合計ルックアップ（要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.9節5）。
+ *
+ * 新しい問い合わせは発生させない。`useChoreCompletionTotals`が既に1回で取得している
+ * 家族ぶんの`entries`（`chore_id`×`member_id`×`total_count`）を、同じ`chore_id`ごとに
+ * クライアント側で合算するだけ。DB側の変更・新しい種類のクエリは不要（07-31章
+ * 「技術面・データモデルへの示唆」）。
+ */
+export function buildChoreCompletionFamilyTotalsLookup(entries: ChoreCompletionTotalEntry[]): Record<string, number> {
+  const lookup: Record<string, number> = {};
+  for (const e of entries) {
+    if (!e.chore_id) continue; // choreが物理削除された行は参照されないため無視（56.3章）
+    lookup[e.chore_id] = (lookup[e.chore_id] ?? 0) + e.total_count;
+  }
+  return lookup;
+}
+
+/**
  * 家族ぶんの累計回数（決定56-6）。familyIdは`state.family.id`から自前で取得する
  * （`useFamilyTreeSummary`と同じ形。呼び出し側は引数を渡す必要が無い）。
  */

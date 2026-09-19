@@ -12,7 +12,11 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
 import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRows";
-import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
+import {
+  buildChoreCompletionFamilyTotalsLookup,
+  keyChoreCompletionTotal,
+  useChoreCompletionTotals,
+} from "@/hooks/useChoreCompletionTotals";
 
 /**
  * P10 お手伝い管理一覧（スタブ／簡易実装）
@@ -53,7 +57,11 @@ export default function ChoresListScreen() {
   // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
   // （56.4章決定56-6、N+1にしない）。この画面はマウント時の取得のみでよい
   // （P10自体は完了報告・取消を行わない画面のため）。
-  const { loadState: totalsLoadState, lookup: totalsLookup } = useChoreCompletionTotals();
+  const { loadState: totalsLoadState, lookup: totalsLookup, entries: totalsEntries } = useChoreCompletionTotals();
+  // [2026-09-20追加・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.9節5]
+  // 担当「誰でも実行可」の行向け、chore_id単位の家族合計。totalsEntries（既存の
+  // 家族ぶん取得）をクライアント側で合算するだけで、新しい問い合わせは発生しない。
+  const familyTotalsLookup = buildChoreCompletionFamilyTotalsLookup(totalsEntries);
 
   // [2026-08-29修正・本部長／軽微変更ルート] 家族共有（scope='family'）のみを対象にする。
   //
@@ -99,14 +107,17 @@ export default function ChoresListScreen() {
   // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
   const renderRow = (c: Chore, dimmed: boolean, indent = false) => {
     const assigneeLabel = resolveAssigneeLabel(c.assigned_to, state.members, "誰でも実行可");
-    // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.1節決定2・
-    // 53.2.2節] 担当（assigned_to）が特定の1人に決まっている行にのみ「・計◯回」を
-    // 追記する。「誰でも実行可」（assigned_to===null）の行には追記しない。取得に
-    // 失敗したときは回数の部分だけ出さない（53.7節）。
+    // [2026-09-20改訂・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.1節
+    // 決定8・53.11.9節3] 担当が特定の1人に決まっている行はその人の回数のまま
+    // （旧53.1節決定2）。担当「誰でも実行可」（assigned_to===null）の行も、
+    // 旧53.1節決定2の除外を撤回し、家族合計「・家族で計◯回」を追記する（0回でも
+    // 表示、決定11）。取得に失敗したときは回数の部分だけ出さない（53.7節）。
     const completionTotalSuffix =
-      c.assigned_to !== null && totalsLoadState !== "error"
+      totalsLoadState === "error"
+        ? ""
+        : c.assigned_to !== null
         ? `・計${totalsLookup[keyChoreCompletionTotal(c.id, c.assigned_to)] ?? 0}回`
-        : "";
+        : `・家族で計${familyTotalsLookup[c.id] ?? 0}回`;
     return (
       <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
         <Card

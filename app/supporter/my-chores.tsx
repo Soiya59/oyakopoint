@@ -18,7 +18,11 @@ import {
 } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
-import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
+import {
+  buildChoreCompletionFamilyTotalsLookup,
+  keyChoreCompletionTotal,
+  useChoreCompletionTotals,
+} from "@/hooks/useChoreCompletionTotals";
 
 /**
  * S5 クエスト一覧（みまもりメンバー）
@@ -71,8 +75,13 @@ export default function SupporterMyChoresScreen() {
   const {
     loadState: totalsLoadState,
     lookup: totalsLookup,
+    entries: totalsEntries,
     reload: reloadCompletionTotals,
   } = useChoreCompletionTotals();
+  // [2026-09-20追加・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.9節5]
+  // 担当「誰でも実行可」の行向け、chore_id単位の家族合計。totalsEntries（既存の
+  // 家族ぶん取得）をクライアント側で合算するだけで、新しい問い合わせは発生しない。
+  const familyTotalsLookup = buildChoreCompletionFamilyTotalsLookup(totalsEntries);
 
   // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.11節・28.11.2節「さっきの記録」。決定9のとおり
@@ -224,20 +233,26 @@ export default function SupporterMyChoresScreen() {
                 >
                   <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
                   <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>{c.title}</Text>
-                  {/* [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.3節・
-                      53.3節・53.6節決定7] 大人向けは0回でも「計0回」と出す。取得に失敗した
-                      ときは回数の部分だけ出さない（53.7節）。 */}
+                  {/* [2026-09-20改訂・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md
+                      53.11.1節決定8・53.11.9節2] 担当「誰でも実行可」（assigned_to===null）
+                      の行は、本人の回数ではなく家族合計「・家族で計◯回」に置き換える
+                      （0回でも表示、決定11）。担当が自分自身の行は従来どおり本人の回数
+                      「・計◯回」のまま。取得に失敗したときは回数の部分だけ出さない（53.7節）。 */}
                   {done ? (
                     <Text style={styles.doneLabel}>
                       きろくずみ
                       {totalsLoadState !== "error" &&
-                        `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
+                        (c.assigned_to === null
+                          ? `・家族で計${familyTotalsLookup[c.id] ?? 0}回`
+                          : `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`)}
                     </Text>
                   ) : (
                     <Text style={theme.typography.supporterBodyMedium}>
                       {formatChoreRowRewardLabel(c)}
                       {totalsLoadState !== "error" &&
-                        `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`}
+                        (c.assigned_to === null
+                          ? `・家族で計${familyTotalsLookup[c.id] ?? 0}回`
+                          : `・計${me ? totalsLookup[keyChoreCompletionTotal(c.id, me.id)] ?? 0 : 0}回`)}
                     </Text>
                   )}
                 </Pressable>

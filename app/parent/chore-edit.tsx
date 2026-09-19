@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
@@ -12,9 +12,11 @@ import {
   createChoreNfcTag,
   deleteChore,
   fetchActiveChoreNfcTags,
+  fetchChoreCompletionTotals,
   revokeChoreNfcTag,
   updateChore,
 } from "@/data/api";
+import { buildChoreCompletionFamilyTotalsLookup } from "@/hooks/useChoreCompletionTotals";
 import { generateNfcTagToken, isNfcWriteSupported, writeNfcTag } from "@/lib/nfc";
 import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
@@ -124,6 +126,38 @@ export default function ChoreEditScreen() {
   );
   // 編集モード専用（単一選択、変更なし。要件定義書07-26章決定18）。
   const [assignedTo, setAssignedTo] = useState<string | null>(chore?.assigned_to ?? null);
+  // [2026-09-20追加・要件定義書07-31章決定5、主要画面ワイヤーフレーム.md 53.11.3節
+  // 決定10・53.11.9節4] 担当変更時の一言（「家族で計{n}回」）向け。画面を開いたときの
+  // 元の担当（chore?.assigned_to ?? null）と現在選択中のassignedToを比較する。
+  const originalAssignedTo = chore?.assigned_to ?? null;
+  // P11はこれまで回数の取得（useChoreCompletionTotals）を一切行っていない
+  // （53.1節決定1「詳細画面には回数を出さない」）。担当を元の値から変更した
+  // ときだけ新たに取得する（常時先読みしない。無駄な通信を避ける、53.11.3節
+  // 「技術面」）。DB側の変更・新しい種類の問い合わせは不要（既存の
+  // fetchChoreCompletionTotalsをここでも呼ぶだけ）。
+  const [familyTotalCount, setFamilyTotalCount] = useState<number | null>(null);
+  const [familyTotalLoadState, setFamilyTotalLoadState] = useState<"idle" | "loading" | "error" | "ready">("idle");
+  // [2026-09-20追加・差し戻し対応] 「担当を何度選び直しても通信は1回」の判定を、
+  // 依存配列に含まれるstate（familyTotalLoadState）ではなくrefで持つ。stateを
+  // 依存に入れると、効果の中でそのstateをsetした瞬間に効果自身が作り直され、
+  // 自分が開始した取得を自分のクリーンアップ（cancelled=true）で捨ててしまう
+  // 不具合が起きていた（`ZoomableDrawingCanvas.tsx`のhasMarkedIntroSeenRefと
+  // 同じ形で回避する。詳細は実装メモ259章「259.7 差し戻しと修正」）。
+  const familyTotalFetchStartedRef = useRef(false);
+  // [2026-09-20追加・差し戻し対応] setState後の反映先ガードは「毎回の効果の
+  // クリーンアップ」ではなく「アンマウント時のみtrueになるref」で行う。
+  // 依存配列のassignedTo自体は正当な変更（担当をもう一度選び直す）でも変わりうる
+  // ため、依存が変わるたびにクリーンアップで前回の取得をcancelled扱いにすると、
+  // familyTotalFetchStartedRefで2回目以降の新規取得をブロックしているせいで
+  // 「取得中のPromiseは捨てられたのに、代わりの取得も始まらない」まま
+  // loadingに固定される再発リスクがある。アンマウント時だけ真になるrefなら、
+  // 依存の変化では捨てず、コンポーネントが本当に消えたときだけ結果を捨てる。
+  const isUnmountedRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
   // [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md 39.3節]
   // 新規登録モード専用の複数選択状態。担当者はコピーでも引き継がない（決定9）ため、
   // copySourceの有無に関わらず常に空配列から始める。編集モードでは一切使わない。
@@ -182,6 +216,44 @@ export default function ChoreEditScreen() {
   }, [chore?.id]);
 
   const tagCountFor = (memberId: string) => tags.filter((t) => t.member_id === memberId).length;
+
+  // [2026-09-20追加・要件定義書07-31章決定5、主要画面ワイヤーフレーム.md 53.11.3節
+  // 決定10・53.11.9節4] 担当チップを元の値から変更したときだけ、家族ぶんの完了件数
+  // （family_id単位、既存のfetchChoreCompletionTotalsと同じ問い合わせ）を取得する。
+  // 一度取得を開始したら（familyTotalFetchStartedRef）再取得しない（担当を何度
+  // 選び直しても通信は1回）。
+  // [2026-09-20差し戻し対応] 依存配列に取得状態そのもの（familyTotalLoadState）を
+  // 入れないこと。効果の中でsetFamilyTotalLoadStateを呼ぶと、依存が変わって
+  // 効果自身が作り直され、自分が開始した取得をクリーンアップ（cancelled=true）で
+  // 即座に捨ててしまい、通信は成功するのに画面には一生反映されない不具合になる
+  // （本部長差し戻し、詳細は実装メモ259章「259.7 差し戻しと修正」）。
+  useEffect(() => {
+    if (!isEditMode || !chore) return;
+    if (assignedTo === originalAssignedTo) return; // 元の値のままなら取得不要
+    if (familyTotalFetchStartedRef.current) return; // 既に取得を開始済みなら再取得しない
+    const familyId = state.family.id;
+    if (!familyId) return;
+    familyTotalFetchStartedRef.current = true;
+    setFamilyTotalLoadState("loading");
+    void (async () => {
+      const res = await fetchChoreCompletionTotals(client, familyId);
+      // [2026-09-20差し戻し対応] ここで捨てるのはアンマウント後のみ（isUnmountedRef）。
+      // 「担当をもう一度選び直した」という正当な依存変化のたびにこの取得自体を
+      // キャンセル扱いにはしない（familyTotalFetchStartedRefが既にtrueのため
+      // 代わりの取得も始まらず、loadingに固定されたまま戻ってこなくなるため）。
+      if (isUnmountedRef.current) return;
+      if (!res.ok) {
+        // [53.7節「回数のみ取得失敗」と同じ扱い] 一言ごと出さない。他の編集操作は
+        // 巻き込まない。
+        setFamilyTotalLoadState("error");
+        return;
+      }
+      const familyTotalsLookup = buildChoreCompletionFamilyTotalsLookup(res.data);
+      setFamilyTotalCount(familyTotalsLookup[chore.id] ?? 0);
+      setFamilyTotalLoadState("ready");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, chore?.id, assignedTo, originalAssignedTo, state.family.id, client]);
 
   const openIssueModal = () => {
     if (!chore) return;
@@ -597,6 +669,17 @@ export default function ChoreEditScreen() {
               </Pressable>
             ))}
           </View>
+          {/* [2026-09-20追加・要件定義書07-31章決定5、主要画面ワイヤーフレーム.md
+              53.11.3節決定10] 担当の選択が元の値と異なるときだけ「家族で計{n}回」を
+              出す。抽象的な説明文（「記録は消えません」等）は出さない（統括指示で
+              撤回済み）。数字そのものを見せることで、担当を誰に変えても家族合計は
+              変わらないという事実を読み手が自分で確認できる形にする。取得に失敗した
+              ときはキャプションごと出さない（53.7節と同じ扱い）。 */}
+          {assignedTo !== originalAssignedTo && familyTotalLoadState === "ready" && familyTotalCount !== null && (
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              家族で計{familyTotalCount}回
+            </Text>
+          )}
         </>
       ) : (
         // [2026-09-11追加・要件定義書07-26章決定14〜21／主要画面ワイヤーフレーム.md
