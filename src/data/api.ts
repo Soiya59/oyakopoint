@@ -179,6 +179,25 @@ export const AUTH_ERRCODE = {
   otpExpired: "otp_expired",
   overEmailSendRateLimit: "over_email_send_rate_limit",
   overRequestRateLimit: "over_request_rate_limit",
+  /**
+   * [2026-09-20追加・実装メモ.md 262章] 上3つと違い、GoTrueのerror_code文字列
+   * ではなく、`error.code`が無いときにverifyEmailOtp/signInWithPassword等が
+   * フォールバックする`error.name`（`AuthError.name`、
+   * node_modules/@supabase/auth-js/dist/module/lib/errors.js）。
+   * node_modules/@supabase/auth-js/dist/module/lib/fetch.js 25〜43行目・109〜121行目
+   * で確認済み: この名前になるのは次の2パターンのみで、いずれも`code`は付かない。
+   * - fetch自体が失敗した場合（オフライン・DNS失敗・TLS拒否等）。この場合は
+   *   `status`が`0`になる（120行目）。
+   * - 500・501・502・503・504・520〜530番台（Cloudflare含む）のサーバー
+   *   ゲートウェイ系エラーの場合。この場合は`status`に実際のHTTPステータスが入る
+   *   （37行目・43行目）。
+   * `status`も併せて見ることで、本当の通信断（0）とサーバー側の一時的な異常
+   * （500番台）を区別できる（EmailCodeVerifyForm.tsx参照）。
+   */
+  retryableFetch: "AuthRetryableFetchError",
+  /** 上記と同じ理由でerror.nameにフォールバックする値。JSONのパース等、
+   * supabase-js自身が原因を特定できなかった場合に付く（同fetch.js 39行目）。 */
+  unknown: "AuthUnknownError",
 } as const;
 
 /**

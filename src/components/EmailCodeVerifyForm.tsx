@@ -5,6 +5,7 @@ import theme from "@/theme/theme";
 import { verifyEmailOtp, AUTH_ERRCODE, type ApiResult } from "@/data/api";
 import { useSession } from "@/lib/session";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { formatAuthFailureRef } from "@/lib/authFailureRef";
 
 /**
  * P3「メール送信完了」・S0「招待プレビュー・参加確認」未ログイン時状態の
@@ -26,6 +27,23 @@ import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
  * イベントを待たず、検証成功をこの場で知っているこの関数から直接
  * `refreshParentMember()`を呼ぶことで、イベントの取り合い・時間切れの懸念を
  * 構造的に無くした（詳細はsrc/lib/session.tsxのコメント）。
+ *
+ * [2026-09-20変更・実装メモ.md 262章・軽微変更ルート（統括指示）] 本番で
+ * みまもりメンバー1名がログインできず（TestFlight build 18・iPhone）、
+ * 表示は常に「通信エラーが発生しました」の1文だった。以前は
+ * 429/overRequestRateLimit・otpExpired以外の失敗を全てこの1文に丸めており、
+ * 本当の通信断・サーバー側の一時的な異常・その他の未知の失敗を区別できず、
+ * 本部長が本番の`auth.users`・`auth.audit_log_entries`（記録が残らない設定）
+ * を見ても手がかりが無かった。教訓: 失敗を1つの文言に丸めると、本番で
+ * 原因が追えなくなる。
+ * 対応: (1) AuthRetryableFetchError（status===0＝端末側のfetch自体が失敗＝
+ * 真の通信断、status>=500＝サーバー側ゲートウェイ異常。AUTH_ERRCODE.retryableFetch
+ * 参照）を切り分け、行動が変わる2つの文言（MSG_OFFLINE・MSG_SERVER_BUSY）に
+ * 分けた。(2) それでも原因不明な失敗のために、利用者向け文言はそのまま、
+ * 小さく控えめな識別子（formatAuthFailureRef、src/lib/authFailureRef.ts）を
+ * 添えた。統括のスクリーンショット1枚から本部長が原因を絞り込める。
+ * コード誤り・期限切れ・使い回しの区別は128章の実測どおりGoTrue側が同一の
+ * `otp_expired`しか返さないため、今回も区別できない（申し送りは262章）。
  */
 
 const RESEND_COOLDOWN_MS = 30000;
@@ -38,6 +56,13 @@ const MSG_RATE_LIMIT = "何度か試していただいたようです。少し�
 // [2026-09-17変更・やること.md 4-40] 文言はsrc/lib/errorMessages.tsに集約した
 // （元々ここと同一の文言だった）。
 const MSG_NETWORK = GENERIC_ERROR_MESSAGE;
+// [2026-09-20新設・実装メモ.md 262章] fetch自体が失敗した場合（status===0）専用。
+// 「電波」という言葉で、アプリ側ではなく端末の通信状態を確認してほしいことを示す
+// （MSG_NETWORKの「もう一度お試しください」より具体的な行動を示せる）。
+const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
+// [2026-09-20新設・実装メモ.md 262章] サーバー側のゲートウェイ異常（status>=500）専用。
+// 今すぐの再試行ではなく少し時間を置くことを促す点がMSG_NETWORKと異なる。
+const MSG_SERVER_BUSY = "サーバーが混み合っているようです。少し時間をおいてから、もう一度お試しください。";
 const MSG_RESEND_RATE_LIMIT =
   "メールの送信回数が上限に達しました。しばらく時間をおいてからもう一度お試しください。";
 
@@ -55,6 +80,10 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-20新設・実装メモ.md 262章] 利用者向け文言とは別に、原因追跡用の
+  // 短い識別子（個人情報を含まない）。errorMessageと連動して出し分けるため、
+  // 別state（同じ失敗のたびに一緒に更新・一緒にクリアする）にしている。
+  const [errorRef, setErrorRef] = useState<string | null>(null);
   const [resendState, setResendState] = useState<"idle" | "sending" | "cooldown">("idle");
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,16 +100,26 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
     if (candidate.length !== 6 || verifying) return;
     setVerifying(true);
     setErrorMessage(null);
+    setErrorRef(null);
     const res = await verifyEmailOtp(email, candidate);
     if (!res.ok) {
       setVerifying(false);
+      // [2026-09-20変更・実装メモ.md 262章] AuthRetryableFetchErrorの2パターン
+      // （status===0＝真の通信断、status>=500＝サーバー側ゲートウェイ異常）を
+      // 追加で切り分ける。それ以外（AuthUnknownError・想定外のAuthApiError等）は
+      // 引き続きMSG_NETWORKに丸めるが、errorRefで見分けられるようにする。
       setErrorMessage(
         res.error.status === 429 || res.error.code === AUTH_ERRCODE.overRequestRateLimit
           ? MSG_RATE_LIMIT
           : res.error.code === AUTH_ERRCODE.otpExpired
           ? MSG_CODE_INVALID
+          : res.error.code === AUTH_ERRCODE.retryableFetch && res.error.status === 0
+          ? MSG_OFFLINE
+          : res.error.code === AUTH_ERRCODE.retryableFetch
+          ? MSG_SERVER_BUSY
           : MSG_NETWORK
       );
+      setErrorRef(formatAuthFailureRef(res.error));
       return;
     }
     // 成功時: こどもモードから保護者に戻る場合を含め、ここで明示的に
@@ -159,6 +198,15 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
       {errorMessage && (
         <Text style={[bodyTypography, { marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }]}>
           {errorMessage}
+        </Text>
+      )}
+      {/* [2026-09-20新設・実装メモ.md 262章] 原因追跡用の識別子。利用者向けの
+          文言（上のerrorMessage）とは見た目を分け、小さく・目立たない色にする
+          （赤字にしない＝01章3原則「不安を煽らない」）。個人情報は含まない
+          （src/lib/authFailureRef.ts参照）。 */}
+      {errorRef && (
+        <Text style={[captionTypography, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          {errorRef}
         </Text>
       )}
 

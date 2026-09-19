@@ -76,24 +76,32 @@ function TierGauge({ tone, count }: { tone: Tone; count: number }) {
   );
 }
 
-// [2026-09-20新設・本部長差し戻し対応（49-B.14節決定64・69）] セル幅は
-// `width: "18%"`という相対値のため、端末幅によって実際のpx幅が変わる
-// （本部長の実測は保護者画面で81px）。borderRadius（決定69「一辺の約25%」）・
-// 絵文字サイズ（本部長の指示「マスの半分弱35〜40px程度」）を固定pxで決め打ち
-// すると幅の違う端末で崩れるため、1つ目のセルのonLayoutで実測したpx幅から
-// 比率で算出する。onLayout発火前（初回描画の一瞬）だけは、本部長が実測した
-// 81px（保護者のシール帳画面、3枚貼った状態）を仮定したフォールバック値を使う。
-const CELL_SIZE_FALLBACK_PX = 81; // 本部長実測値（差し戻しコメント記載の実測）
+// [2026-09-20差し戻し対応その2・実装メモ261.10章] 当初は1つ目のセル自身に
+// `onLayout`を付けて実測していたが、そのセルの幅自体が`width: "18%"`という
+// 相対値・`aspectRatio: 1`という比率指定に依存しており、Android実機では
+// レイアウト計算のタイミング（Yogaの解決順）が異なるらしく、実測が一度も
+// 走らずフォールバック値に固定されたまま、しかも枠自体の高さが0に潰れる
+// 不具合が発生した（Web版では再現しなかった、詳細は実装メモ261.10章）。
+// 対策として、①測る対象をセルではなく「入れ物」（cellsWrap、幅は親からの
+// stretchで確定済み）に変える、②セルの大きさは`width`/`height`ともpx値を
+// 明示し、`aspectRatio`・`%`指定を一切使わない、③5列×2行を`flexWrap`による
+// 自動折り返しに頼らず、行を2つの明示的なViewとして分ける（折り返しタイミングに
+// 依存する余地そのものを無くす）、の3点で「環境によって解決のされ方が違う」
+// 指定を排除した。
+const HABIT_CARD_GRID_COLUMNS = 5;
+const HABIT_CARD_GRID_ROWS = 2;
+const HABIT_CARD_CELL_GAP_PX = theme.spacing.s2; // 列・行とも8px（決定64「列間の余白を差し引いた比率」を固定pxの隙間として具体化した値）
 const CELL_BORDER_RADIUS_RATIO = 0.25; // 決定69「一辺の約25%」
-const CELL_EMOJI_SIZE_RATIO = 0.45; // 差し戻し指示「マスの半分弱（35〜40px程度）」→81px×0.45≒36px
+const CELL_EMOJI_SIZE_RATIO = 0.45; // 差し戻し指示「マスの半分弱（35〜40px程度）」
 
 /**
  * 決定11-B「いまの10マス」。5×2のマス目で表示する。
  * [2026-09-20改訂・主要画面ワイヤーフレーム.md 49-B.14章決定64〜69、同日本部長差し戻し
- * 対応] 円（⬤/◯）から角丸四角形へ変更（決定69）。埋まっているマスは、いまの頁が
- * 目指す段階の色（決定66・67）で塗り、中央にその種類の絵文字（決定65）を表示する。
- * 未到達マスは形はそのまま、塗りを透明にし縁取りだけneutralBorderにする
- * （決定68、絵文字は出さない）。borderRadius・絵文字サイズは実測セル幅に追従する。
+ * 対応、実装メモ261.10章で再修正] 円（⬤/◯）から角丸四角形へ変更（決定69）。埋まって
+ * いるマスは、いまの頁が目指す段階の色（決定66・67）で塗り、中央にその種類の絵文字
+ * （決定65）を表示する。未到達マスは形はそのまま、塗りを透明にし縁取りだけ
+ * neutralBorderにする（決定68、絵文字は出さない）。borderRadius・絵文字サイズは
+ * 実測した「入れ物」の幅から算出したpxのセル幅に追従する（aspectRatio・%は不使用）。
  */
 function TenCellsGrid({
   filled,
@@ -104,39 +112,63 @@ function TenCellsGrid({
   kindEmoji: string | null;
   pageTier: "bronze" | "silver" | "gold" | "crystal";
 }) {
-  // [差し戻し対応] 1つ目のセル（常に描画される）のonLayoutで実測px幅を取得する。
-  // 全セルは同じstyles.cell（width: "18%", aspectRatio: 1）のため、1回の測定で足りる。
-  const [measuredCellSize, setMeasuredCellSize] = useState<number | null>(null);
-  const cellSizePx = measuredCellSize ?? CELL_SIZE_FALLBACK_PX;
-  const borderRadius = Math.round(cellSizePx * CELL_BORDER_RADIUS_RATIO);
-  const emojiFontSize = Math.round(cellSizePx * CELL_EMOJI_SIZE_RATIO);
+  // [261.10章] セルではなく「入れ物」の幅を測る。cellsWrapは親（Card内のView、
+  // column方向のflexで既定alignItems:"stretch"）から横幅いっぱいにstretchされる
+  // ため、セル自身の相対値と違い、この時点で確定済みのpx幅を持つ。
+  const [wrapWidthPx, setWrapWidthPx] = useState<number | null>(null);
+  const cellSizePx =
+    wrapWidthPx != null
+      ? Math.floor((wrapWidthPx - HABIT_CARD_CELL_GAP_PX * (HABIT_CARD_GRID_COLUMNS - 1)) / HABIT_CARD_GRID_COLUMNS)
+      : null;
+  const borderRadius = cellSizePx != null ? Math.round(cellSizePx * CELL_BORDER_RADIUS_RATIO) : 0;
+  const emojiFontSize = cellSizePx != null ? Math.round(cellSizePx * CELL_EMOJI_SIZE_RATIO) : 0;
 
   const cells = Array.from({ length: 10 }, (_, i) => i < filled);
   const fillColor = theme.habitCardCellColors[pageTier];
+  const rows = [cells.slice(0, HABIT_CARD_GRID_COLUMNS), cells.slice(HABIT_CARD_GRID_COLUMNS, HABIT_CARD_GRID_COLUMNS * HABIT_CARD_GRID_ROWS)];
+
   return (
-    <View style={styles.cellsWrap}>
-      {cells.map((isFilled, i) => (
-        <View
-          key={i}
-          onLayout={
-            i === 0
-              ? (e) => {
-                  const w = e.nativeEvent.layout.width;
-                  if (w > 0 && w !== measuredCellSize) setMeasuredCellSize(w);
-                }
-              : undefined
-          }
-          style={[
-            styles.cell,
-            { borderRadius },
-            isFilled
-              ? { backgroundColor: fillColor, borderColor: theme.habitCardCellBorderColor }
-              : { backgroundColor: "transparent", borderColor: theme.colors.neutralBorder },
-          ]}
-        >
-          {isFilled && <Text style={[styles.cellEmoji, { fontSize: emojiFontSize }]}>{kindEmoji ?? "🏳️"}</Text>}
-        </View>
-      ))}
+    <View
+      style={styles.cellsWrap}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && w !== wrapWidthPx) setWrapWidthPx(w);
+      }}
+    >
+      {/* [261.10章決定4] 幅を測り終える（cellSizePxが決まる）前は、崩れて見えうる
+          マスを一切描画しない。入れ物のonLayoutは初回レンダリング直後に発火するため、
+          未測定の状態が画面に見える時間は実質無い。 */}
+      {cellSizePx != null &&
+        rows.map((rowCells, rowIndex) => (
+          <View
+            key={rowIndex}
+            style={[styles.cellRow, rowIndex < rows.length - 1 && { marginBottom: HABIT_CARD_CELL_GAP_PX }]}
+          >
+            {rowCells.map((isFilled, colIndex) => {
+              const i = rowIndex * HABIT_CARD_GRID_COLUMNS + colIndex;
+              const isLastColumn = colIndex === rowCells.length - 1;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.cell,
+                    {
+                      width: cellSizePx,
+                      height: cellSizePx,
+                      borderRadius,
+                      marginRight: isLastColumn ? 0 : HABIT_CARD_CELL_GAP_PX,
+                    },
+                    isFilled
+                      ? { backgroundColor: fillColor, borderColor: theme.habitCardCellBorderColor }
+                      : { backgroundColor: "transparent", borderColor: theme.colors.neutralBorder },
+                  ]}
+                >
+                  {isFilled && <Text style={[styles.cellEmoji, { fontSize: emojiFontSize }]}>{kindEmoji ?? "🏳️"}</Text>}
+                </View>
+              );
+            })}
+          </View>
+        ))}
     </View>
   );
 }
@@ -317,17 +349,21 @@ const styles = StyleSheet.create({
   gaugeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: theme.spacing.s1 },
   gaugeItem: { fontSize: 11, color: theme.colors.neutralTextSecondary },
   gaugeItemReached: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  // [決定64] 固定110px幅を廃止し、5列×2行の並びは維持したままコンテナ幅
-  // いっぱいに敷き詰める。列間の余白（justifyContent: space-between）を
-  // 差し引いた比率として各セル幅を18%前後にする。
-  cellsWrap: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: theme.spacing.s1 },
-  // [決定69・2026-09-20本部長差し戻し対応] 丸ではなく角丸四角形。borderRadiusは
-  // 固定値をやめ、TenCellsGrid内で実測セル幅×25%を算出してインラインで指定する
-  // （ここでは幅・アスペクト比など、実測に依存しない部分のみ定義する）。
+  // [決定64、2026-09-20実装メモ261.10章で再修正] 固定110px幅を廃止し、5列×2行の
+  // 並びは維持したままコンテナ幅いっぱいに敷き詰める。当初は`justifyContent:
+  // "space-between"`＋セル側`width:"18%"`で実現していたが、Android実機で
+  // レイアウトが崩れる不具合が発生したため撤回した（実装メモ261.10章）。
+  // 列・行の並びは`TenCellsGrid`内で2つの明示的な行Viewとして組み、この
+  // コンテナは「入れ物」として幅を`onLayout`で測るためだけに使う（column方向）。
+  cellsWrap: { marginTop: theme.spacing.s1 },
+  // [261.10章] 1行=5マスを横に並べるだけの入れ物。マス自体の幅・高さは
+  // TenCellsGrid内で実測px値をインライン指定する（%・aspectRatioは使わない）。
+  cellRow: { flexDirection: "row" },
+  // [決定69・2026-09-20本部長差し戻し対応、261.10章で再修正] 丸ではなく角丸四角形。
+  // width/height/borderRadiusはいずれもTenCellsGrid内で実測pxからインライン指定する
+  // （ここでは実測に依存しない部分〈枠線・中央寄せ〉のみ定義する。width・aspectRatio
+  // は指定しない。261.10章の原因になった相対値指定を再導入しないための意図的な省略）。
   cell: {
-    width: "18%",
-    aspectRatio: 1,
-    marginBottom: theme.spacing.s1,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
