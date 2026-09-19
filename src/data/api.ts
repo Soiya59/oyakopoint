@@ -46,6 +46,7 @@ import type {
   GachaPrizeKind,
   GratitudePoint,
   HabitCard,
+  HabitCardChoreBreakdownRow,
   HabitFigureCatalogItem,
   HabitFigureGrant,
   HabitFigureGrantWithCatalog,
@@ -1094,20 +1095,14 @@ export interface ChoreFormInput {
   category_id: string | null;
   title: string;
   emoji: string | null;
-  // [2026-09-17改訂・要件定義書07-28章] 台紙型（reward_mode='habit_card'）で
-  // 保存するときはnullを送る（DB側`chk_chores_reward_mode_payload`が
-  // reward_mode='habit_card'ならpoints IS NULLを要求するため）。
-  points: number | null;
+  // [2026-09-19改訂・要件定義書07-28章決定25・26、スキーマ設計.sql 57.1章]
+  // 0以上の整数。「たまり方（ポイント／台紙）」の区別は撤去され、
+  // クエストは1種類のみになった。0ポイントも許すが、既定値は0にせず
+  // 0を推奨する文言も出さない（UI側の責務）。
+  points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
   assigned_to: string | null;
-  // [新設・2026-09-17・要件定義書07-28章、スキーマ設計.sql 55.1章] たまり方。
-  // 省略時（undefined）はDB側の既定値'points'になる。作成後はUPDATEで
-  // 変更できない（決定55-9、`chores_before_write()`が拒否する）。
-  reward_mode?: "points" | "habit_card";
-  // 台紙の種類（habit_figure_catalog.kind_key）。reward_mode='habit_card'の
-  // ときのみ指定する。作成後はUPDATEで変更できない（決定55-9）。
-  habit_kind_key?: string | null;
 }
 
 /**
@@ -1138,10 +1133,6 @@ export async function createChore(
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
       assigned_to: input.assigned_to,
-      // [2026-09-17追加] undefinedの場合はJSONシリアライズ時にキー自体が
-      // 落ちるため、DB側の既定値'points'がそのまま使われる（後方互換）。
-      reward_mode: input.reward_mode,
-      habit_kind_key: input.habit_kind_key,
     })
     .select("*")
     .single();
@@ -1151,11 +1142,6 @@ export async function createChore(
 
 /**
  * API仕様.md 3章「編集」: `supabase.from('chores').update({...}).eq('id', choreId)`
- *
- * [2026-09-17追加・要件定義書07-28章決定55-9] `reward_mode`・`habit_kind_key`は
- * 意図的にペイロードに含めない（作成後は変更できない列。`updatePersonalChore`が
- * `scope`列を含めないのと同じパターン）。編集画面はこの2項目を編集不可の表示に
- * しておくこと（DB側の`chores_before_write()`が最終防衛線として拒否する）。
  */
 export async function updateChore(
   client: SupabaseClient,
@@ -1254,14 +1240,9 @@ export async function updateReward(
 export interface PersonalChoreFormInput {
   title: string;
   emoji: string | null;
-  // [2026-09-17改訂・要件定義書07-28章] 台紙型で保存するときはnullを送る。
-  points: number | null;
+  points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
-  // [新設・2026-09-17・要件定義書07-28章] たまり方・台紙の種類。ChoreFormInputと
-  // 同じ扱い（省略時はDB既定値'points'、作成後は変更不可）。
-  reward_mode?: "points" | "habit_card";
-  habit_kind_key?: string | null;
 }
 
 /**
@@ -1270,13 +1251,11 @@ export interface PersonalChoreFormInput {
  * scope: 'personal' 固定。RLS chores_write_personal_by_creator によりrole='supporter'
  * かつ本人のみ許可される。
  *
- * [2026-09-17追加・要件定義書07-28章決定24・スキーマ設計.sql 55.1章「supporter_
- * shared分岐との関係」] みまもりメンバーが自分の台紙型クエストを作りたい場合、
- * この関数（scope='personal'）を使う。'personal'は`assigned_to=created_by`が
- * DB側で常に補正されるため、台紙型の「担当者必須」要件と自然に両立する
- * （scope='supporter_shared'は`assigned_to`が常にNULLへ強制されるため
- * 構造的に台紙型にできない。S6画面側の呼び出し分岐はapp/supporter/chore-edit.tsx
- * 参照）。
+ * [2026-09-19改訂・要件定義書07-28章決定25] 台紙型（habit_card）という区分が
+ * 撤去されたため、この関数は新規登録では呼ばれなくなった
+ * （app/supporter/chore-edit.tsxは常にcreateSupporterSharedChoreを使う）。
+ * 既存のscope='personal'行の編集はupdatePersonalChoreが引き続き担うため、
+ * この関数自体は削除しない。
  */
 export async function createPersonalChore(
   client: SupabaseClient,
@@ -1293,8 +1272,6 @@ export async function createPersonalChore(
       points: input.points,
       is_repeatable: input.is_repeatable,
       daily_limit: input.daily_limit,
-      reward_mode: input.reward_mode,
-      habit_kind_key: input.habit_kind_key,
     })
     .select("*")
     .single();
@@ -2958,18 +2935,18 @@ export async function setFamilyStickerPrices(
 }
 
 // ============================================================
-// 習慣カード（台紙）とフィギュア（要件定義書07-28章、API仕様.md 15章、
-// スキーマ設計.sql 55章、開発部/成果物/実装メモ.md 237章、2026-09-17新設）
-// [重要] 新しい完了報告経路・新しい取消経路は一切作らない（決定5・6）。
-// 台紙型クエストの完了報告・取消はreportCompletion/cancelChoreCompletionを
-// そのまま使う。ここに追加するのは「台紙の種類一覧」「台紙の閲覧」
-// 「おわりにする」「木への配置」の4点のみ。
+// シール帳（習慣カード）とフィギュア（要件定義書07-28章2026-09-19全面改訂・
+// 決定25〜33、API仕様.md 17章、スキーマ設計.sql 57章、開発部/成果物/
+// 実装メモ.md 256章、2026-09-17新設・2026-09-19全面作り替え）
+// [重要] 新しい完了報告経路・新しい取消経路は一切作らない（決定25。
+// どのクエストの完了報告でもシールが埋まる）。完了報告・取消は
+// reportCompletion/cancelChoreCompletionをそのまま使う。
 // ============================================================
 
 /**
- * API仕様.md 15.1節「台紙の種類一覧」。クライアント側でkind_keyごとに
- * グルーピングし、1種類につき4段階（銅/銀/金/クリスタル）のプレビューを
- * まとめて表示する（種類選択UI・見出しの絵文字表示の両方で使う）。
+ * API仕様.md 17.6節「絵柄の一覧（作成/選び直し画面用）」。クライアント側で
+ * kind_keyごとにグルーピングし、1種類につき4段階（銅/銀/金/クリスタル）の
+ * プレビューをまとめて表示する（絵柄選び直し画面で使う）。
  */
 export async function fetchHabitFigureCatalog(client: SupabaseClient): Promise<ApiResult<HabitFigureCatalogItem[]>> {
   const { data, error } = await client
@@ -2983,63 +2960,95 @@ export async function fetchHabitFigureCatalog(client: SupabaseClient): Promise<A
 }
 
 /**
- * API仕様.md 15.2節「自分の進行中の台紙一覧」・「完成済み（アーカイブ済み）の
- * 台紙一覧」。`habit_cards_select_same_family`により家族の誰でも他メンバーの
- * 台紙を閲覧できる（決定12）ため、`memberId`には家族内の任意のメンバーIDを
- * 渡してよい。
+ * API仕様.md 17.2節「帯（じぶんタブのシール帳カード・進み具合のみ）」。
+ * `habit_cards_select_same_family`により家族の誰でも他メンバーのシール帳を
+ * 閲覧できる（決定12）ため、`memberId`には家族内の任意のメンバーIDを渡して
+ * よい。決定27「進行中の冊は常に1冊」により、常にちょうど1件が返る
+ * （nullが返るのは異常系のみ）。
  */
-export async function fetchHabitCards(
-  client: SupabaseClient,
-  memberId: string,
-  status: "active" | "archived"
-): Promise<ApiResult<HabitCard[]>> {
+export async function fetchActiveHabitCard(client: SupabaseClient, memberId: string): Promise<ApiResult<HabitCard | null>> {
   const { data, error } = await client
     .from("habit_cards")
     .select("*")
     .eq("member_id", memberId)
-    .eq("status", status)
-    .order(status === "active" ? "started_at" : "archived_at", { ascending: status === "active" });
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as HabitCard | null) ?? null };
+}
+
+/** API仕様.md 17.4節「完成した冊の一覧」（コレクション、決定31）。 */
+export async function fetchCompletedHabitCards(client: SupabaseClient, memberId: string): Promise<ApiResult<HabitCard[]>> {
+  const { data, error } = await client
+    .from("habit_cards")
+    .select("*")
+    .eq("member_id", memberId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as HabitCard[] };
 }
 
 /**
- * API仕様.md 15.2節「累計・次の段階までの残り件数（1枚分）」。新規Viewは
- * 用意せず、`chore_completions`を都度COUNTする（スキーマ設計.sql 55.5章と
- * 同じ計算式。`count: 'exact', head: true`で件数のみ取得し行本体は転送しない）。
+ * API仕様.md 17.2節・17.3節「進み具合・進行中の内訳」、17.4節「完成した冊
+ * すべての内訳（まとめて1回）」。`habit_card_chore_breakdown`（スキーマ設計.sql
+ * 57.7章View）を冊のID配列で1回だけ取得する（N+1にしない。冊の枚数ぶん
+ * 個別に呼ばない）。並び替え・件数の絞り込み（多い順上位5件＋ほか◯件）は
+ * クライアント側の仕事（DB側は素の集計行を返すのみ）。
  */
-export async function fetchHabitCardProgressCount(
+export async function fetchHabitCardChoreBreakdown(
   client: SupabaseClient,
-  choreId: string,
-  memberId: string,
-  startedAtIso: string
-): Promise<ApiResult<number>> {
-  const { count, error } = await client
-    .from("chore_completions")
-    .select("id", { count: "exact", head: true })
-    .eq("chore_id", choreId)
-    .eq("reported_by", memberId)
-    .gte("reported_at", startedAtIso);
+  habitCardIds: string[]
+): Promise<ApiResult<HabitCardChoreBreakdownRow[]>> {
+  if (habitCardIds.length === 0) return { ok: true, data: [] };
+  const { data, error } = await client
+    .from("habit_card_chore_breakdown")
+    .select("*")
+    .in("habit_card_id", habitCardIds);
   if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: count ?? 0 };
+  return { ok: true, data: (data ?? []) as HabitCardChoreBreakdownRow[] };
 }
 
-/** API仕様.md 15.2節「獲得済みフィギュア一覧（1枚の台紙分）」。 */
-export async function fetchHabitFigureGrantsForCard(
+/**
+ * API仕様.md 17.5節「絵柄の選び直し」。`choose_habit_card_kind()`は
+ * 「まだ何も積み上がっていない（累計0件）」の間だけ呼び出せる
+ * （スキーマ設計.sql 57.6章、check_violationで拒否されうる）。
+ */
+export async function chooseHabitCardKind(
   client: SupabaseClient,
-  habitCardId: string
+  habitCardId: string,
+  kindKey: string
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("choose_habit_card_kind", {
+    p_habit_card_id: habitCardId,
+    p_kind_key: kindKey,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
+}
+
+/**
+ * API仕様.md 17.4節「完成した冊すべての内訳」と同じ理由で、獲得済み
+ * フィギュア（決定30「獲得したフィギュア: 銅・銀・金・クリスタルの4体」）も
+ * 冊のID配列でまとめて1回取得する（N+1にしない、49-B.6節開発部への
+ * 実装メモ）。
+ */
+export async function fetchHabitFigureGrantsForCards(
+  client: SupabaseClient,
+  habitCardIds: string[]
 ): Promise<ApiResult<HabitFigureGrantWithCatalog[]>> {
+  if (habitCardIds.length === 0) return { ok: true, data: [] };
   const { data, error } = await client
     .from("habit_figure_grants")
     .select("*, habit_figure_catalog(kind_display_name, kind_emoji, figure_key, display_name)")
-    .eq("habit_card_id", habitCardId)
+    .in("habit_card_id", habitCardIds)
     .order("granted_at");
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as HabitFigureGrantWithCatalog[] };
 }
 
 /**
- * API仕様.md 15.4節「直近で新しく付与されたフィギュアが無いか確認する」。
+ * API仕様.md 17.7節「直近で新しく付与されたフィギュアが無いか確認する」。
  * 完了報告成功直後に呼び、返ってきた行の`granted_at`が完了報告の
  * `reported_at`以上であれば「今回の報告で新しく獲得した」ものとして演出を
  * 出す（同一トランザクション内の`now()`は完全に一致するため`>=`で判定できる。
@@ -3061,20 +3070,10 @@ export async function fetchLatestHabitFigureGrant(
 }
 
 /**
- * API仕様.md 15.3節「台紙を『おわりにする』」。`end_habit_card()`が権限・状態を
- * 検証したうえでアーカイブする（獲得済みの累計・フィギュアは保持したまま）。
- * 戻り値はアーカイブされた時刻（ISO文字列）。
- */
-export async function endHabitCard(client: SupabaseClient, habitCardId: string): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("end_habit_card", { p_habit_card_id: habitCardId });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: data as string };
-}
-
-/**
- * API仕様.md 15.4節「獲得したフィギュアを木の好きな位置に貼る」。
+ * API仕様.md 17.7節「段階到達時の自動付与・木への配置」。
  * `decorate_tree_with_habit_figure()`は自分の獲得物・今シーズンのみ受け付ける。
  * `posX`・`posY`はキャンバス相対の0〜1000整数（ステッカーと同じ規約）。
+ * 57.9章のとおり変更なし。
  */
 export async function decorateTreeWithHabitFigure(
   client: SupabaseClient,
@@ -3092,7 +3091,7 @@ export async function decorateTreeWithHabitFigure(
 }
 
 /**
- * API仕様.md 15.4節「貼ったフィギュアの座標を、その月のうちに動かす」。
+ * API仕様.md 17.7節「貼ったフィギュアの座標を、その月のうちに動かす」。
  * `move_tree_habit_figure()`は自分の配置・進行中シーズンの配置のみを対象にする。
  */
 export async function moveTreeHabitFigure(
@@ -3111,7 +3110,7 @@ export async function moveTreeHabitFigure(
 }
 
 /**
- * API仕様.md 15.4節「木の表示への埋め込み」。ステッカーの
+ * API仕様.md 17.7節「木の表示への埋め込み」。ステッカーの
  * `fetchFamilyTreeStickerPlacements`と同型（family_tree_decorations単独を
  * 起点にした専用クエリ。decoration_source='habit_figure'の行のみを対象にする）。
  */

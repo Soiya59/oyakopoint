@@ -35,26 +35,25 @@ import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 type CancelState = "idle" | "processing" | "success" | "error" | "networkError";
 
 export default function ReportSentScreen() {
-  const { choreTitle, points, completionId, choreId, reportedAt } = useLocalSearchParams<{
+  const { choreTitle, points, completionId, reportedAt } = useLocalSearchParams<{
     choreTitle?: string;
     points?: string;
     completionId?: string;
-    choreId?: string;
     reportedAt?: string;
   }>();
   const { state, dispatch } = useAppData();
 
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
-  // 台紙型クエストの段階到達演出。対象choreがhabit_card型のときだけ、直近で新しく
-  // 付与されたフィギュアが無いか確認する（サーバー側トリガーが自動で付与するため、
+  // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂決定25、主要画面
+  // ワイヤーフレーム.md 49-B.10章決定59] シール帳は全クエスト共通の記録に
+  // なったため、どのクエストの完了報告でも段階到達の確認を行う（reward_mode
+  // という区別自体が撤去された。サーバー側トリガーが自動で付与するため、
   // クライアントは「付与されたはず」を後から確認するだけでよい）。
-  const chore = choreId ? state.chores.find((c) => c.id === choreId) : undefined;
   const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
   const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
   const [figureCheckDone, setFigureCheckDone] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    if (chore?.reward_mode === "habit_card" && reportedAt) {
+    if (reportedAt) {
       void checkNewGrant(state.activeChildMemberId, reportedAt).then((grant) => {
         if (!cancelled) {
           setFigureGrant(grant);
@@ -150,13 +149,11 @@ export default function ReportSentScreen() {
           とどいたよ！
         </Text>
         <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
-          {/* [2026-09-17改訂・要件定義書07-28章] 台紙型（points=""）は「ポイントが
-              とどいた」と言わない（決定9、ポイントには一切触れない）。 */}
-          {points
-            ? `「${choreTitle}」+${points}ptとどいたよ！`
-            : chore?.reward_mode === "habit_card"
-            ? `「${choreTitle}」がとどいたよ！`
-            : `「${choreTitle}」のポイントがとどいたよ`}
+          {/* [2026-09-19改訂・要件定義書07-28章決定26] pointsは常に0以上の整数
+              （NOT NULL）になったため、出し分けは不要。0ptのクエストも
+              「+0ptとどいたよ！」とそのまま表示する（決定26「0を勧める作りには
+              しない」であり、0の表示自体を隠す・特別扱いする必要はない）。 */}
+          {`「${choreTitle}」+${points}ptとどいたよ！`}
         </Text>
         <Text
           style={[

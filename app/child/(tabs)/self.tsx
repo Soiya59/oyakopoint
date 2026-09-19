@@ -5,12 +5,11 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import ChildTabHeader from "@/components/ChildTabHeader";
 import TabIntroBubble from "@/components/TabIntroBubble";
-import MemberAvatar from "@/components/MemberAvatar";
 import HabitCardStrip from "@/components/HabitCardStrip";
 import ChildHabitCardModal from "@/components/ChildHabitCardModal";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -60,15 +59,11 @@ export default function ChildSelfTabScreen() {
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const latestEntry = fullLedger(me.id)[0] ?? null;
 
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9・12]
-  // 台紙カード。
-  // [2026-09-18改訂・49.4節決定33] 対象クエストを1件も持たないメンバーにも、
-  // 見出し＋案内1行だけは常に出す（HabitCardStrip.tsx内部で0件判定・出し分け済み）。
-  // [2026-09-18修正・やること.md 4件目「台紙が画面から消える」・実装メモ246章]
-  // `loadState`・`reload`を渡さずにいたため、読み込み中・通信エラーの間も
-  // 「0件（対象クエスト無し）」と区別できず、カードが無言で消えて見えていた。
+  // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
+  // 49-B.3章決定36〜40] シール帳の帯。進行中の冊は常に1冊（決定27）のため、
+  // 単数の`card`を受け取る形に変わった。
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { loadState: habitCardsLoadState, activeCards, reload: reloadHabitCards } = useHabitCardsForMember(me.id);
+  const { loadState: habitCardsLoadState, card: habitCard, totalCount: habitCardTotalCount, reload: reloadHabitCards } = useActiveHabitCard(me.id);
   const [habitCardModalVisible, setHabitCardModalVisible] = useState(false);
 
   const shortcuts: ShortcutItem[] = [
@@ -93,17 +88,18 @@ export default function ChildSelfTabScreen() {
         text="👋 ポイントと シールちょう、メダルこうかんが あるよ。"
       />
 
-      {/* [2026-09-11追加・要件定義書07-27章 決定9・18、主要画面ワイヤーフレーム.md
-          43.2節 決定9] アバターを自分で描いた絵にできるようにする機能の入口。
-          タブヘッダー直下・残高カードより上に配置する。 */}
+      {/* [2026-09-19改訂・やること.md 4-57、主要画面ワイヤーフレーム.md 49-B.8章決定54]
+          アバターカード（約240px、アバター画像64px＋名前＋「えを かく/なおす →」）を
+          1行のテキストリンクに縮める。**ヘッダー（ChildTabHeader、画面最上部）が
+          既に同じアバター（36px）＋名前を常時表示しており〈プロフィール切り替えの
+          入口、/child/profile-switch〉**、直下でもう一度64pxで繰り返す必要が
+          無いため。統括実機指摘「同じ見た目のアバターが縦に2つ並び、押すと違う
+          ところに行く」に対応する。入口（/child/my-avatar）自体は変更しない。
+          ヘッダー側のアバター・切り替え導線は絶対に消さない（別機能のため）。 */}
       <Pressable onPress={() => router.push("/child/my-avatar")}>
-        <Card tone="child" style={styles.avatarCard}>
-          <MemberAvatar name={me.display_name} color={me.avatar_color} size={64} lineData={memberAvatars[me.id]} />
-          <Text style={theme.typography.childBody}>{me.display_name}</Text>
-          <Text style={[theme.typography.childBody, styles.avatarLink]}>
-            {memberAvatars[me.id] ? "えを なおす →" : "えを かく →"}
-          </Text>
-        </Card>
+        <Text style={[theme.typography.childBody, styles.avatarLinkRow]}>
+          🎨 じぶんの えを {memberAvatars[me.id] ? "なおす" : "かく"} →
+        </Text>
       </Pressable>
 
       <Pressable onPress={() => router.push("/child/points")}>
@@ -124,10 +120,10 @@ export default function ChildSelfTabScreen() {
       <HabitCardStrip
         tone="child"
         loadState={habitCardsLoadState}
-        cards={activeCards}
-        chores={state.chores}
+        card={habitCard}
+        totalCount={habitCardTotalCount}
         catalog={habitFigureCatalog}
-        onPressCard={() => setHabitCardModalVisible(true)}
+        onPress={() => setHabitCardModalVisible(true)}
         onRetry={reloadHabitCards}
       />
 
@@ -156,8 +152,7 @@ export default function ChildSelfTabScreen() {
 }
 
 const styles = StyleSheet.create({
-  avatarCard: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
-  avatarLink: { color: theme.colors.brandPrimaryStrong },
+  avatarLinkRow: { marginTop: theme.spacing.s3, color: theme.colors.brandPrimaryStrong },
   balanceCard: { marginTop: theme.spacing.s3 },
   balanceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   chevron: { fontSize: 24, color: theme.colors.neutralTextSecondary },

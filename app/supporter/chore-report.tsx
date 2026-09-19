@@ -45,7 +45,9 @@ export default function SupporterChoreReportScreen() {
   // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
   // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
   const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
+  // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂決定25] シール帳は
+  // 全クエスト共通の記録になったため、どのクエストの完了報告でも段階到達演出を
+  // 確認する。
   const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
   const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
 
@@ -89,7 +91,7 @@ export default function SupporterChoreReportScreen() {
     // 到達しないため、ここで鳴らせば「成功時に1回だけ」を満たせる）。
     playSound("report");
 
-    if (chore.reward_mode === "habit_card" && result.reportedAt) {
+    if (result.reportedAt) {
       const grant = await checkNewGrant(me.id, result.reportedAt);
       if (grant) {
         setFigureGrant(grant);
@@ -194,10 +196,11 @@ export default function SupporterChoreReportScreen() {
         </Text>
       </View>
 
-      {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はポイントを持たないため
-          文言を出し分ける。 */}
+      {/* [2026-09-19改訂・要件定義書07-28章決定25・26] 全クエストにポイントが
+          付き、同時にシール帳が1マス埋まる（0ptのクエストも「+0pt」と
+          そのまま表示する）。 */}
       <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        {chore.reward_mode === "habit_card" ? "きろくするとシール帳にたまります" : `きろくすると +${chore.points}pt`}
+        きろくすると +{chore.points}pt
       </Text>
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         👀 この完了報告は家族に公開され、リアクションをもらえます。

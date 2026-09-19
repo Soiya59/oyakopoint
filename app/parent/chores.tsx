@@ -109,10 +109,7 @@ export default function ChoresListScreen() {
             {resolveRegistrantSuffix(c)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary }}>
-            {/* [2026-09-17改訂・要件定義書07-28章] 台紙型はポイントを持たないため
-                「台紙」と表示する（決定14の対象はC5・P19・S5のみだが、この管理一覧でも
-                「+nullpt」のような表示崩れを避けるため最小限の分岐を入れる）。 */}
-            {c.reward_mode === "habit_card" ? "シール帳" : `${c.points}pt`}{" "}
+            {c.points}pt{" "}
             {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
             {assigneeLabel ? `・${assigneeLabel}` : ""}
           </Text>
@@ -150,7 +147,7 @@ export default function ChoresListScreen() {
                 {isOpen ? "▾" : "▸"} {head.emoji} {head.title}
               </Text>
               <Text style={{ color: theme.colors.neutralTextSecondary }}>
-                {head.reward_mode === "habit_card" ? "シール帳" : `${head.points}pt`}（{g.items.length}）
+                {head.points}pt（{g.items.length}）
               </Text>
             </Card>
           </Pressable>

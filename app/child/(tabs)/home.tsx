@@ -14,7 +14,6 @@ import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 
 /**
@@ -66,9 +65,6 @@ export default function ChildHomeScreen() {
 
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const myPoints = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.5章決定14]
-  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { activeCards: habitActiveCards } = useHabitCardsForMember(me.id);
 
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.5a節「さっき とどけた ほうこく」。統括決定B対応
@@ -314,7 +310,7 @@ export default function ChildHomeScreen() {
                     </Text>
                   ) : (
                     <Text style={styles.pointLabel} numberOfLines={1}>
-                      {formatChoreRowRewardLabel(chore, habitActiveCards, habitFigureCatalog)}
+                      {formatChoreRowRewardLabel(chore)}
                     </Text>
                   )}
                 </Pressable>

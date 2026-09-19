@@ -1,20 +1,28 @@
 /**
- * 習慣カード（台紙）とフィギュア（要件定義書07-28章、API仕様.md 15章）向けの
+ * シール帳（習慣カード）とフィギュア（要件定義書07-28章2026-09-19全面改訂・
+ * 決定25〜33、API仕様.md 17章、開発部/成果物/実装メモ.md 256章）向けの
  * データ取得・操作フック。
- * 参照: src/data/api.ts（fetchHabitFigureCatalog/fetchHabitCards/
- * fetchHabitCardProgressCount/fetchHabitFigureGrantsForCard/endHabitCard/
- * decorateTreeWithHabitFigure/moveTreeHabitFigure）。
+ * 参照: src/data/api.ts（fetchHabitFigureCatalog/fetchActiveHabitCard/
+ * fetchCompletedHabitCards/fetchHabitCardChoreBreakdown/chooseHabitCardKind/
+ * fetchHabitFigureGrantsForCards/decorateTreeWithHabitFigure/
+ * moveTreeHabitFigure）。
+ *
+ * [load()の中心バンドルに追加しないこと・API仕様.md 17.9節] このファイルの
+ * フックはいずれもシール帳の画面がマウントされたときにだけ個別に通信する。
+ * `src/data/store.tsx`の`load()`には一切クエリを足していない（254章・
+ * 56.4章と同じ申し送り）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import {
+  chooseHabitCardKind,
   decorateTreeWithHabitFigure,
-  endHabitCard,
+  fetchActiveHabitCard,
+  fetchCompletedHabitCards,
   fetchFamilyHabitFigureGrants,
-  fetchHabitCardProgressCount,
-  fetchHabitCards,
+  fetchHabitCardChoreBreakdown,
   fetchHabitFigureCatalog,
-  fetchHabitFigureGrantsForCard,
+  fetchHabitFigureGrantsForCards,
   fetchLatestHabitFigureGrant,
   fetchMyHabitFigureGrants,
   moveTreeHabitFigure,
@@ -22,6 +30,7 @@ import {
 } from "@/data/api";
 import type {
   HabitCard,
+  HabitCardChoreBreakdownRow,
   HabitFigureCatalogItem,
   HabitFigureGrantWithCatalog,
   HabitFigureGrantWithPlacement,
@@ -29,7 +38,7 @@ import type {
 
 export type HabitCardLoadState = "loading" | "error" | "ready";
 
-/** 台紙の種類一覧（クエスト作成時の種類選択・見出し表示の両方で使う、家族共通の静的カタログ）。 */
+/** シール帳の絵柄一覧（絵柄選び直し画面用、家族共通の静的カタログ）。 */
 export function useHabitFigureCatalog() {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
@@ -53,17 +62,18 @@ export function useHabitFigureCatalog() {
   return { loadState, catalog, reload: load };
 }
 
-/** kind_keyごとに4段階（銅/銀/金/クリスタル）をまとめた種類選択用の1グループ。 */
+/** kind_keyごとに4段階（銅/銀/金/クリスタル）をまとめた絵柄選択用の1グループ。 */
 export interface HabitKindGroup {
   kindKey: string;
   kindDisplayName: string;
   kindEmoji: string | null;
+  isFree: boolean;
   tiers: HabitFigureCatalogItem[]; // bronze/silver/gold/crystalの順
 }
 
 const TIER_ORDER: Record<string, number> = { bronze: 1, silver: 2, gold: 3, crystal: 4 };
 
-/** 決定5・6「1行1種類、4段階プレビュー」の表示用に、カタログをkind_keyでグルーピングする純関数。 */
+/** 決定43「1行1種類、4段階プレビュー」の表示用に、カタログをkind_keyでグルーピングする純関数。 */
 export function groupHabitFigureCatalogByKind(catalog: HabitFigureCatalogItem[]): HabitKindGroup[] {
   const map = new Map<string, HabitKindGroup>();
   for (const item of catalog) {
@@ -75,26 +85,21 @@ export function groupHabitFigureCatalogByKind(catalog: HabitFigureCatalogItem[])
         kindKey: item.kind_key,
         kindDisplayName: item.kind_display_name,
         kindEmoji: item.kind_emoji,
+        isFree: item.is_free,
         tiers: [item],
       });
     }
   }
   const groups = Array.from(map.values());
   for (const g of groups) g.tiers.sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0));
-  // sort_orderの昇順（同じkind_keyの4行は同じ値、55.2章）。
+  // sort_orderの昇順（同じkind_keyの4行は同じ値、57.2章）。
   groups.sort((a, b) => (a.tiers[0]?.sort_order ?? 0) - (b.tiers[0]?.sort_order ?? 0));
   return groups;
 }
 
-/** 1枚の台紙の累計・段階の表示に必要な情報（habit_cards 1行 + 累計件数）。 */
-export interface HabitCardWithProgress {
-  card: HabitCard;
-  count: number;
-}
-
 /**
  * 累計件数から「現在の段階（未到達ならnull）」「次の段階の閾値
- * （クリスタル達成済みならnull）」を導く純関数（スキーマ設計.sql 55.5章の
+ * （クリスタル達成済みならnull）」を導く純関数（スキーマ設計.sql 57.5章の
  * `habit_card_progress_bump()`と全く同じ閾値・同じ判定順）。
  */
 export function computeHabitCardTierInfo(count: number): {
@@ -109,87 +114,37 @@ export function computeHabitCardTierInfo(count: number): {
 }
 
 /**
- * 台紙一覧（じぶんタブの台紙カード・新設「台紙」画面の両方で使う）。
- * `memberId`には家族内の任意のメンバーIDを渡してよい（決定12、家族の誰でも
- * 他メンバーの台紙を閲覧できる）。
+ * 自分（または家族の任意メンバー、決定12）の進行中のシール帳1冊＋その内訳
+ * （API仕様.md 17.2節・17.3節）。帯（進み具合のみ）・タップ先（進行中の
+ * 内訳）の両方がこの1回の取得結果を共用する（N+1にしない）。決定27
+ * 「進行中の冊は常に1冊」により、`card`が`null`になるのは異常系のみ。
  */
-export function useHabitCardsForMember(memberId: string) {
+export function useActiveHabitCard(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
-  const [activeCards, setActiveCards] = useState<HabitCardWithProgress[]>([]);
-  const [archivedCards, setArchivedCards] = useState<HabitCard[]>([]);
+  const [card, setCard] = useState<HabitCard | null>(null);
+  const [breakdown, setBreakdown] = useState<HabitCardChoreBreakdownRow[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
-    const [activeRes, archivedRes] = await Promise.all([
-      fetchHabitCards(client, memberId, "active"),
-      fetchHabitCards(client, memberId, "archived"),
-    ]);
-    if (!activeRes.ok || !archivedRes.ok) {
+    const cardRes = await fetchActiveHabitCard(client, memberId);
+    if (!cardRes.ok) {
       setLoadState("error");
       return;
     }
-    const withProgress = await Promise.all(
-      activeRes.data.map(async (card) => {
-        const countRes = await fetchHabitCardProgressCount(client, card.chore_id, card.member_id, card.started_at);
-        return { card, count: countRes.ok ? countRes.data : 0 };
-      })
-    );
-    setActiveCards(withProgress);
-    setArchivedCards(archivedRes.data);
-    setLoadState("ready");
-  }, [client, memberId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return { loadState, activeCards, archivedCards, reload: load };
-}
-
-/**
- * [2026-09-18追加・やること.md 4-47（台紙上限で保存ボタンが押せてしまう）、
- * 実装メモ.md 248章] `habit_cards_before_write()`（`supabase/migrations/
- * 20260925010000_habit_cards_and_figures.sql`）がINSERT時に強制する
- * 「同時に進行中の台紙は1メンバーにつき3枚まで」の上限。DB側はこの数値を
- * 直接返さない（メッセージ文字列のみ）ため、クライアント側で同じ値を持つ。
- */
-export const HABIT_CARDS_MAX_ACTIVE = 3;
-
-/**
- * [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] クエスト登録・編集画面
- * （`app/parent/chore-edit.tsx`・`app/supporter/chore-edit.tsx`）が、台紙型
- * クエストの新規作成時に「選んだ担当がすでに進行中の台紙を3枚持っているか」を
- * 保存ボタンを押す前に判定するための軽量フック。`useHabitCardsForMember`は
- * 台紙ごとの累計件数（`fetchHabitCardProgressCount`）まで取得する重い作りの
- * ため使わず、`fetchHabitCards`（active分のみ）の件数だけを見る。
- * `memberId`が`null`のとき（台紙型を選んでいない・担当が未選択・編集モード）は
- * 何も取得しない。
- */
-export function useActiveHabitCardCount(memberId: string | null) {
-  const { client } = useSession();
-  const [loadState, setLoadState] = useState<HabitCardLoadState>("ready");
-  const [count, setCount] = useState(0);
-
-  const load = useCallback(async () => {
-    if (!memberId) {
-      setCount(0);
+    setCard(cardRes.data);
+    if (!cardRes.data) {
+      setBreakdown([]);
       setLoadState("ready");
       return;
     }
-    setLoadState("loading");
-    const res = await fetchHabitCards(client, memberId, "active");
-    if (!res.ok) {
-      // [方針] 取得に失敗しても保存ボタンを誤って封じ込め続けないよう、
-      // 「上限に達していない」側へフェイルセーフする。実際に上限を超えていた
-      // 場合はDB側のトリガーが従来どおり保存を拒否し、既存の赤字案内
-      // （HABIT_CARD_LIMIT_ERROR_HINT）がそのまま働く。
+    const breakdownRes = await fetchHabitCardChoreBreakdown(client, [cardRes.data.id]);
+    if (!breakdownRes.ok) {
       setLoadState("error");
-      setCount(0);
       return;
     }
-    setCount(res.data.length);
+    setBreakdown(breakdownRes.data);
     setLoadState("ready");
   }, [client, memberId]);
 
@@ -197,53 +152,71 @@ export function useActiveHabitCardCount(memberId: string | null) {
     void load();
   }, [load]);
 
-  return { loadState, count, reload: load };
+  // 帯に出す進み具合（n/100）。API仕様.md 17.2節「completion_countをクライアント
+  // 側で合計する」。
+  const totalCount = breakdown.reduce((sum, row) => sum + row.completion_count, 0);
+
+  return { loadState, card, breakdown, totalCount, reload: load };
 }
 
-/** 完成済み（アーカイブ済み）台紙1件の獲得フィギュア一覧（決定17「見る▼」展開時に取得）。 */
-export function useHabitCardFigureGrants(habitCardId: string | null) {
+/** 完成済み（コレクション）のシール帳一覧＋内訳＋獲得フィギュア（API仕様.md 17.4節）。 */
+export function useCompletedHabitCards(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [cards, setCards] = useState<HabitCard[]>([]);
+  const [breakdown, setBreakdown] = useState<HabitCardChoreBreakdownRow[]>([]);
   const [grants, setGrants] = useState<HabitFigureGrantWithCatalog[]>([]);
 
   const load = useCallback(async () => {
-    if (!habitCardId) return;
+    if (!memberId) return;
     setLoadState("loading");
-    const res = await fetchHabitFigureGrantsForCard(client, habitCardId);
-    if (!res.ok) {
+    const cardsRes = await fetchCompletedHabitCards(client, memberId);
+    if (!cardsRes.ok) {
       setLoadState("error");
       return;
     }
-    setGrants(res.data);
+    setCards(cardsRes.data);
+    const ids = cardsRes.data.map((c) => c.id);
+    // [N+1にしない・49-B.6節開発部への実装メモ] 冊の枚数ぶん個別に呼ばない。
+    const [breakdownRes, grantsRes] = await Promise.all([
+      fetchHabitCardChoreBreakdown(client, ids),
+      fetchHabitFigureGrantsForCards(client, ids),
+    ]);
+    if (!breakdownRes.ok || !grantsRes.ok) {
+      setLoadState("error");
+      return;
+    }
+    setBreakdown(breakdownRes.data);
+    setGrants(grantsRes.data);
     setLoadState("ready");
-  }, [client, habitCardId]);
+  }, [client, memberId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  return { loadState, grants, reload: load };
+  return { loadState, cards, breakdown, grants, reload: load };
 }
 
-export type EndHabitCardActionResult = { ok: true; archivedAt: string } | { ok: false; error: ApiError };
+export type ChooseHabitCardKindActionResult = { ok: true; habitCardId: string } | { ok: false; error: ApiError };
 
-/** 「おわりにする」操作（決定18・19）。 */
-export function useEndHabitCardAction() {
+/** 絵柄の選び直し（決定29・42、57.6章。累計0件のときのみ成功する）。 */
+export function useChooseHabitCardKindAction() {
   const { client } = useSession();
-  const [ending, setEnding] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
-  const end = useCallback(
-    async (habitCardId: string): Promise<EndHabitCardActionResult> => {
-      setEnding(true);
-      const res = await endHabitCard(client, habitCardId);
-      setEnding(false);
+  const choose = useCallback(
+    async (habitCardId: string, kindKey: string): Promise<ChooseHabitCardKindActionResult> => {
+      setChoosing(true);
+      const res = await chooseHabitCardKind(client, habitCardId, kindKey);
+      setChoosing(false);
       if (!res.ok) return { ok: false, error: res.error };
-      return { ok: true, archivedAt: res.data };
+      return { ok: true, habitCardId: res.data };
     },
     [client]
   );
 
-  return { ending, end };
+  return { choosing, choose };
 }
 
 export type DecorateHabitFigureActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };
@@ -268,12 +241,9 @@ export function useDecorateTreeWithHabitFigureAction() {
 }
 
 /**
- * API仕様.md 15.4節「直近で新しく付与されたフィギュアが無いか確認する」。
- * 台紙型クエストの完了報告が成功した直後（`dispatch`が返す`reportedAt`を渡す）に
- * 呼ぶ。新しい付与が見つかれば演出用の情報を返し、無ければ`null`を返す。
- * クライアントが明示的に呼び出す通常のAPIは他に存在しない（サーバー側の
- * トリガーが完全に自動で行うため、これは「差分を検知する」ための後追いの
- * 確認クエリにすぎない）。
+ * API仕様.md 17.7節「直近で新しく付与されたフィギュアが無いか確認する」。
+ * 完了報告が成功した直後（`dispatch`が返す`reportedAt`を渡す）に呼ぶ。
+ * 新しい付与が見つかれば演出用の情報を返し、無ければ`null`を返す。
  */
 export function useCheckNewHabitFigureGrant() {
   const { client } = useSession();

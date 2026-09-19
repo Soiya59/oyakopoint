@@ -99,12 +99,7 @@ export default function ParentSupporterChoresScreen() {
                           トークンが定める形が`||`であり、空文字が入っても拾える広いほうに合わせる。 */}
                       <Text style={{ fontSize: 18 }}>{c.emoji || "📝"}</Text>
                       <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
-                      {/* [2026-09-17改訂・要件定義書07-28章] みまもりメンバーの台紙型
-                          自分専用クエスト（scope='personal'）はポイントを持たないため
-                          「台紙」と表示する。 */}
-                      <Text style={theme.typography.parentBodyMedium}>
-                        {c.reward_mode === "habit_card" ? "シール帳" : `+${c.points}pt`}
-                      </Text>
+                      <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>
                     </View>
                   ))}
                 </View>

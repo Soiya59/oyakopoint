@@ -7,13 +7,14 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import HabitCardBoard from "@/components/HabitCardBoard";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 
 /**
- * P38 台紙（保護者、新設）
- * 参照: 要件定義書07-28章、主要画面ワイヤーフレーム.md 49.6章決定16〜18
+ * P38 シール帳（保護者、新設）
+ * 参照: 要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
+ * 49-B.5章決定45〜46
  *
- * じぶんタブの台紙カードから遷移する、本章で新設する唯一の画面
+ * じぶんタブのシール帳カードから遷移する、本章で新設する唯一の画面
  * （みまもりメンバー版はapp/supporter/habit-cards.tsx、子どもは新規画面を
  * 持たずChildHabitCardModalで同じ内容を見る）。
  */
@@ -22,7 +23,7 @@ export default function ParentHabitCardsScreen() {
   const myMemberId = state.activeParentMemberId;
   const [selectedMemberId, setSelectedMemberId] = useState(myMemberId);
   const { catalog } = useHabitFigureCatalog();
-  const { loadState, activeCards, archivedCards, reload } = useHabitCardsForMember(selectedMemberId);
+  const { loadState, card, breakdown, totalCount, reload } = useActiveHabitCard(selectedMemberId);
 
   return (
     <Screen tone="parent">
@@ -38,10 +39,11 @@ export default function ParentHabitCardsScreen() {
         chores={state.chores}
         catalog={catalog}
         loadState={loadState}
-        activeCards={activeCards}
-        archivedCards={archivedCards}
+        card={card}
+        breakdown={breakdown}
+        totalCount={totalCount}
         onRetry={reload}
-        onEndedCard={reload}
+        onKindChosen={reload}
       />
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />

@@ -1,14 +1,15 @@
 /**
- * 子ども向け「台紙」軽量モーダル（主要画面ワイヤーフレーム.md 49.4章決定12・
- * 49.6章）。保護者・みまもりメンバーは新設「台紙」画面（P38/S26）へ画面遷移するが、
- * 子どもは画面遷移せず、同じ内容（HabitCardBoard）を表示するモーダルを開く
- * （新しい画面としてカウントしない、46章・21.6節と同じ慣行）。
+ * 子ども向け「シール帳」軽量モーダル（主要画面ワイヤーフレーム.md 49-B.3章
+ * 決定40・49-B.5章）。保護者・みまもりメンバーは新設「シール帳」画面
+ * （P38/S26）へ画面遷移するが、子どもは画面遷移せず、同じ内容
+ * （HabitCardBoard）を表示するモーダルを開く（新しい画面としてカウントしない、
+ * 46章・21.6節と同じ慣行）。
  *
  * [自己完結の設計理由] React Nativeの`Modal`は`visible=false`でも子要素が
- * マウントされたまま（表示だけが切り替わる）ため、`useHabitCardsForMember`を
+ * マウントされたまま（表示だけが切り替わる）ため、`useActiveHabitCard`を
  * 呼び出し側で常時実行すると開いていない間も通信が発生する。本コンポーネントは
  * `visible`のときだけ実際のmemberIdを、そうでなければ空文字列を
- * `useHabitCardsForMember`へ渡す（同フックの`if (!memberId) return;`ガードに
+ * `useActiveHabitCard`へ渡す（同フックの`if (!memberId) return;`ガードに
  * より、モーダルを開くまで通信が発生しない）。決定18「家族の全メンバーが対象」を
  * 満たすため、選択メンバーの状態もこのモーダル内に閉じ込めて自己完結させる。
  */
@@ -16,7 +17,7 @@ import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import HabitCardBoard from "./HabitCardBoard";
-import { useHabitCardsForMember } from "@/hooks/useHabitCards";
+import { useActiveHabitCard } from "@/hooks/useHabitCards";
 import theme from "@/theme/theme";
 import type { Chore, FamilyMember, HabitFigureCatalogItem } from "@/types/domain";
 
@@ -35,7 +36,7 @@ export function ChildHabitCardModal({ visible, onClose, members, myMemberId, cho
     if (visible) setSelectedMemberId(myMemberId);
   }, [visible, myMemberId]);
 
-  const { loadState, activeCards, archivedCards, reload } = useHabitCardsForMember(visible ? selectedMemberId : "");
+  const { loadState, card, breakdown, totalCount, reload } = useActiveHabitCard(visible ? selectedMemberId : "");
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -57,10 +58,11 @@ export function ChildHabitCardModal({ visible, onClose, members, myMemberId, cho
               chores={chores}
               catalog={catalog}
               loadState={loadState}
-              activeCards={activeCards}
-              archivedCards={archivedCards}
+              card={card}
+              breakdown={breakdown}
+              totalCount={totalCount}
               onRetry={reload}
-              onEndedCard={reload}
+              onKindChosen={reload}
             />
           </ScrollView>
         </Card>

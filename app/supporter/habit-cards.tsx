@@ -7,11 +7,12 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import HabitCardBoard from "@/components/HabitCardBoard";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 
 /**
- * S26 台紙（みまもりメンバー、新設）
- * 参照: 要件定義書07-28章、主要画面ワイヤーフレーム.md 49.6章決定16〜18
+ * S26 シール帳（みまもりメンバー、新設）
+ * 参照: 要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
+ * 49-B.5章決定45〜46
  *
  * app/parent/habit-cards.tsx（P38）と同一設計の複製（49.0節「役割ごとに
  * P38・S26の番号を持つが、同一設計の複製であり複雑さの上限が言う『新画面1つ』は
@@ -22,7 +23,7 @@ export default function SupporterHabitCardsScreen() {
   const myMemberId = state.activeParentMemberId;
   const [selectedMemberId, setSelectedMemberId] = useState(myMemberId);
   const { catalog } = useHabitFigureCatalog();
-  const { loadState, activeCards, archivedCards, reload } = useHabitCardsForMember(selectedMemberId);
+  const { loadState, card, breakdown, totalCount, reload } = useActiveHabitCard(selectedMemberId);
 
   return (
     <Screen tone="supporter">
@@ -38,10 +39,11 @@ export default function SupporterHabitCardsScreen() {
         chores={state.chores}
         catalog={catalog}
         loadState={loadState}
-        activeCards={activeCards}
-        archivedCards={archivedCards}
+        card={card}
+        breakdown={breakdown}
+        totalCount={totalCount}
         onRetry={reload}
-        onEndedCard={reload}
+        onKindChosen={reload}
       />
 
       <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter")} />

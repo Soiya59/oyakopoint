@@ -137,12 +137,12 @@ export type Action =
  * （要件定義書07-17章）の対象を特定するために使う。他のアクションは従来どおり
  * `{ ok: true }`のみ（completionIdはoptionalなので後方互換）。
  */
-// [2026-09-17追加・要件定義書07-28章、API仕様.md 15.4節] REPORT_COMPLETION成功時、
-// `reportedAt`（サーバーのreported_at）も併せて返す。台紙型クエストの完了報告後、
-// 「直近で新しく付与されたフィギュアが無いか」を`habit_figure_grants.granted_at
-// >= reportedAt`で判定するために使う（同一トランザクション内のnow()は完全に
-// 一致するため`>=`で安全に判定できる）。他のアクションは従来どおりoptionalのため
-// 後方互換。
+// [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂、API仕様.md 17.7節]
+// REPORT_COMPLETION成功時、`reportedAt`（サーバーのreported_at）も併せて
+// 返す。全クエストの完了報告後、「直近で新しく付与されたフィギュアが無いか」を
+// `habit_figure_grants.granted_at >= reportedAt`で判定するために使う
+// （同一トランザクション内のnow()は完全に一致するため`>=`で安全に判定できる）。
+// 他のアクションは従来どおりoptionalのため後方互換。
 export type DispatchResult =
   | { ok: true; completionId?: string; reportedAt?: string }
   | { ok: false; error: ApiError };
@@ -295,19 +295,21 @@ function buildLedgers(state: State) {
       .filter((r) => r.completion_id === completionId)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-  // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型（reward_mode='habit_card'）の
-  // 完了報告はpoints=NULLのため、通帳（ポイント台帳）には一切表示しない
-  // （「ポイントには一切触れない」を通帳の表示でも徹底する）。台紙の進捗は
-  // じぶんタブの台紙カード・新設「台紙」画面（HabitCardStrip/HabitCardBoard）で見る。
+  // [2026-09-19改訂・要件定義書07-28章決定25・26] シール帳の全面作り替えに
+  // より、`chore_completions.points`は常に0以上の整数（NOT NULL）になった。
+  // 0ポイントの完了報告も通帳（ポイント台帳）にそのまま表示する（決定26は
+  // 「0を勧める作りにしない」であり、0を隠す・特別扱いする要件ではない）。
+  // シール帳の進捗はじぶんタブの帯・タップ先の画面（HabitCardStrip/
+  // HabitCardBoard）で見る。
   const earnLedger = (memberId: string): LedgerEntry[] =>
     state.completions
-      .filter((c) => c.reported_by === memberId && c.points != null)
+      .filter((c) => c.reported_by === memberId)
       .map((c) => ({
         id: c.id,
         kind: "earn" as const,
         label: c.chore_title,
         emoji: c.chore_emoji,
-        points: c.points as number,
+        points: c.points,
         occurredAt: c.reported_at,
         reactions: reactionsForCompletion(c.id),
       }));
@@ -867,19 +869,20 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
    * `trg_member_badges_check_chore_completion`が書き込む`member_badges`も
    * load()の8クエリには含まれていない（バッジ画面は別途専用フックを持つ）。
    *
-   * [台紙型（reward_mode='habit_card'）・237章との整合] `trg_habit_card_progress_bump`
-   * （`20260925010000_habit_cards_and_figures.sql`、AFTER INSERT）も同じ
-   * `chore_completions`に付いているが、書き込み先は`habit_cards`・
-   * `habit_figure_grants`のみで、トリガーのコメント自身に明記されているとおり
-   * 「member_pointsには一切触れない」。この2表はload()の8クエリに元々含まれて
-   * おらず（`useHabitCardsForMember`・`useCheckNewHabitFigureGrant`という、
-   * `dispatch`の戻り値の`reportedAt`を受け取って呼び出し元の画面が個別に叩く
-   * 別系統のフック、`src/hooks/useHabitCards.ts`参照）、`app/parent/
-   * my-chore-report.tsx`・`app/supporter/chore-report.tsx`・
-   * `app/child/report.tsx`はいずれも`load()`の完了を待たずに`checkNewGrant`を
-   * 呼んでいる（`store.tsx`の`load()`とは無関係に動く設計）。したがって今回
-   * `load()`を呼ばなくしても、台紙・フィギュア付与の表示更新経路には一切
-   * 触れておらず、取りこぼしは無い。
+   * [シール帳（要件定義書07-28章2026-09-19全面改訂）との整合] `trg_habit_card_
+   * progress_bump`（`20260927010000_habit_cards_full_rebuild.sql`、
+   * AFTER INSERT）も同じ`chore_completions`に付いているが、書き込み先は
+   * `habit_cards`・`habit_figure_grants`のみで、トリガーのコメント自身に
+   * 明記されているとおり「member_pointsには一切触れない」。この2表は
+   * load()の8クエリに元々含まれておらず（`useActiveHabitCard`・
+   * `useCheckNewHabitFigureGrant`という、`dispatch`の戻り値の`reportedAt`を
+   * 受け取って呼び出し元の画面が個別に叩く別系統のフック、
+   * `src/hooks/useHabitCards.ts`参照）、`app/parent/my-chore-report.tsx`・
+   * `app/supporter/chore-report.tsx`・`app/child/report.tsx`はいずれも
+   * `load()`の完了を待たずに`checkNewGrant`を呼んでいる（`store.tsx`の
+   * `load()`とは無関係に動く設計）。したがって今回`load()`を呼ばなくしても、
+   * シール帳・フィギュア付与の表示更新経路には一切触れておらず、取りこぼしは
+   * 無い。
    *
    * `chore_completions`のINSERTにより`completions`（新しい行が増える）・
    * `memberPoints`（Viewが`chore_completions`を集計）・`dailySummary`（Viewが
@@ -1320,10 +1323,9 @@ function computeMemberPoints(state: State): MemberPoints[] {
   return state.members
     .filter((m) => m.is_active)
     .map((m) => {
-      // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLのため
-      // `?? 0`で無視する（`member_points`のSUM集計がNULLを自動的に無視するのと
-      // 同じ挙動をモック実装でも再現する）。
-      const earned = state.completions.filter((c) => c.reported_by === m.id).reduce((sum, c) => sum + (c.points ?? 0), 0);
+      // [2026-09-19改訂・要件定義書07-28章決定26] pointsは常に0以上の整数
+      // （NOT NULL）。
+      const earned = state.completions.filter((c) => c.reported_by === m.id).reduce((sum, c) => sum + c.points, 0);
       const spent = state.redemptions
         .filter((r) => r.member_id === m.id && r.status === "approved")
         .reduce((sum, r) => sum + r.cost, 0);

@@ -9,7 +9,6 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import {
   createChoreNfcTag,
-  createPersonalChore,
   createSupporterSharedChore,
   deleteChore,
   fetchActiveChoreNfcTags,
@@ -21,21 +20,6 @@ import { toJstDateString } from "@/lib/calendarDates";
 import type { ChoreNfcTagWithMember } from "@/types/domain";
 import { MAX_NFC_TAGS_PER_CHORE_MEMBER } from "@/lib/nfcTags";
 import { findSkillChoreTemplateById } from "@/data/skillChoreTemplates";
-import { useHabitFigureCatalog, groupHabitFigureCatalogByKind, useActiveHabitCardCount, HABIT_CARDS_MAX_ACTIVE } from "@/hooks/useHabitCards";
-
-// [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 元々はDBの
-// `habit_cards_before_write()`が返すメッセージ本文と全く同じ文言だった。保存を押す前
-// （クライアント側の事前チェックで上限と分かった時点）にも同じ文言を出すために
-// 定数化した（app/parent/chore-edit.tsxのHABIT_CARD_LIMIT_MESSAGEと同一文言）。
-// [2026-09-18修正・実装メモ.md 251章] 画面の呼び名統一（台紙→シール帳）にあわせて
-// 書き換えた。DB側（habit_cards_before_write()）の例外文言も
-// 20260926020000_habit_card_limit_message_rename.sql で同じ文言に揃えたが、
-// 本部長が本番へ適用するまでの間はまだ「台紙」表記のままで、実際に保存が
-// 拒否されたとき（errorMessage経由）は稀に旧表記のままの文言が表示されることが
-// ある（クライアント側の事前チェックで先に弾かれる通常経路ではこちらの新しい
-// 文言が使われる）。
-const HABIT_CARD_LIMIT_MESSAGE =
-  "シール帳は同時に3さつまでです。今のシール帳をどれか「おわりにする」と、新しいシール帳を始められます";
 import {
   FAMILY_DATA_NOT_READY_MESSAGE,
   NFC_UNLINK_ERROR_MESSAGE,
@@ -107,30 +91,10 @@ export default function SupporterChoreEditScreen() {
   const [title, setTitle] = useState(chore?.title ?? skillTemplate?.title ?? "");
   const [emoji, setEmoji] = useState<string | null>(chore?.emoji ?? skillTemplate?.emoji ?? null);
   const [pointsText, setPointsText] = useState(
-    chore
-      ? chore.points != null
-        ? String(chore.points)
-        : ""
-      : skillTemplate && skillTemplate.rewardMode === "points"
-      ? String(skillTemplate.points ?? "")
-      : ""
+    chore ? String(chore.points) : skillTemplate ? String(skillTemplate.points ?? "") : ""
   );
   const [isRepeatable, setIsRepeatable] = useState(chore?.is_repeatable ?? (skillTemplate ? true : false));
   const [dailyLimitText, setDailyLimitText] = useState(chore?.daily_limit != null ? String(chore.daily_limit) : "");
-  // [新設・2026-09-17・要件定義書07-28章] たまり方（ポイント／台紙）。作成後は
-  // 変更できない（決定55-9）。
-  const [rewardMode, setRewardMode] = useState<"points" | "habit_card">(
-    chore?.reward_mode ?? skillTemplate?.rewardMode ?? "points"
-  );
-  const [habitKindKey, setHabitKindKey] = useState<string | null>(chore?.habit_kind_key ?? skillTemplate?.habitKindKey ?? null);
-  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const habitKindGroups = groupHabitFigureCatalogByKind(habitFigureCatalog);
-  useEffect(() => {
-    if (rewardMode === "habit_card" && !habitKindKey && habitKindGroups.length > 0) {
-      setHabitKindKey(habitKindGroups[0].kindKey);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rewardMode, habitKindGroups.length]);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -139,18 +103,8 @@ export default function SupporterChoreEditScreen() {
   // [2026-09-01追加・実装メモ.md 108章] NFCタグ管理（要件定義書07-2章判断事項7）。
   // 自分専用クエストのタグの持ち主は常に作成者本人（＝いまログイン中のみまもり
   // メンバー自身、state.activeParentMemberId）固定のため、P11のようなメンバー選択
-  // ステップは無い（主要画面ワイヤーフレーム.md 7.6.2節）。
+  // ステップは無い（主要画面ワイヤーフレーム.md 7.6.2章）。
   const myMemberId = state.activeParentMemberId;
-  /**
-   * [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの新規
-   * 作成時、担当は常に自分自身（myMemberId）に固定される（決定55-21・上記コメント
-   * 「担当はあなた自身に固定されます」）。既に進行中の台紙を3枚（`HABIT_CARDS_MAX_ACTIVE`）
-   * 持っているかを、保存する前に確認する。編集モードは対象外（`habit_cards`への
-   * INSERTはクエスト新規作成の直後にしか起きないため、編集では起こらない事象）。
-   */
-  const habitCardLimitCheckMemberId = !isEditMode && rewardMode === "habit_card" ? myMemberId : null;
-  const { count: habitCardActiveCountForMe } = useActiveHabitCardCount(habitCardLimitCheckMemberId);
-  const atHabitCardLimit = habitCardLimitCheckMemberId !== null && habitCardActiveCountForMe >= HABIT_CARDS_MAX_ACTIVE;
   const [modalVisible, setModalVisible] = useState(false);
   const [nfcStep, setNfcStep] = useState<NfcModalStep>("list");
   const [nfcErrorMessage, setNfcErrorMessage] = useState<string | null>(null);
@@ -239,15 +193,12 @@ export default function SupporterChoreEditScreen() {
   const validate = (): string | null => {
     if (!title.trim()) return "タイトルを入力してください";
     if (title.trim().length > 100) return "タイトルは100文字以内で入力してください";
-    if (rewardMode === "points") {
-      const pointsNum = Number(pointsText);
-      if (!Number.isInteger(pointsNum) || pointsNum < 1) return "ポイントは1以上の整数で入力してください";
-      if (isRepeatable && dailyLimitText.trim()) {
-        const limitNum = Number(dailyLimitText);
-        if (!Number.isInteger(limitNum) || limitNum < 1) return "1日の上限回数は1以上の整数で入力してください（空欄で無制限）";
-      }
-    } else if (!habitKindKey) {
-      return "シール帳の種類を選んでください";
+    // [2026-09-19改訂・要件定義書07-28章決定26] 0ポイントのクエストを許す。
+    const pointsNum = Number(pointsText);
+    if (!Number.isInteger(pointsNum) || pointsNum < 0) return "ポイントは0以上の整数で入力してください";
+    if (isRepeatable && dailyLimitText.trim()) {
+      const limitNum = Number(dailyLimitText);
+      if (!Number.isInteger(limitNum) || limitNum < 1) return "1日の上限回数は1以上の整数で入力してください（空欄で無制限）";
     }
     return null;
   };
@@ -265,25 +216,18 @@ export default function SupporterChoreEditScreen() {
     setErrorMessage(null);
     setSaving(true);
 
-    const isHabitCard = rewardMode === "habit_card";
     const input = {
       title: title.trim(),
       emoji,
-      points: isHabitCard ? null : Number(pointsText),
-      is_repeatable: isHabitCard ? true : isRepeatable,
-      daily_limit: isHabitCard ? 1 : isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null,
-      reward_mode: rewardMode,
-      habit_kind_key: isHabitCard ? habitKindKey : null,
+      points: Number(pointsText),
+      is_repeatable: isRepeatable,
+      daily_limit: isRepeatable && dailyLimitText.trim() ? Number(dailyLimitText) : null,
     };
 
-    // [2026-09-17改訂・要件定義書07-28章決定24] 新規作成時、たまり方＝台紙なら
-    // scope='personal'（createPersonalChore、担当者は自分自身に自動固定）を、
-    // ポイントなら従来どおりscope='supporter_shared'を使う。編集時は
+    // 新規作成は常にscope='supporter_shared'（みまもり共通）。編集時は
     // updatePersonalChoreがどちらのscopeにもそのまま使える（既存の仕様）。
     const res = chore
       ? await updatePersonalChore(client, chore.id, input)
-      : isHabitCard
-      ? await createPersonalChore(client, state.family.id, input)
       : await createSupporterSharedChore(client, state.family.id, input);
 
     setSaving(false);
@@ -346,128 +290,67 @@ export default function SupporterChoreEditScreen() {
         ))}
       </View>
 
-      {rewardMode === "points" && (
-        <>
-          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>ポイント（1以上の整数）</Text>
-          <TextInput
-            value={pointsText}
-            onChangeText={(t) => setPointsText(t.replace(/[^0-9]/g, ""))}
-            keyboardType="number-pad"
-            placeholder="例：10"
-            style={styles.input}
-          />
+      {/* [2026-09-19改訂・要件定義書07-28章決定25・26] 「たまり方」選択欄は
+          撤去され、元のポイントのみの1択フォームに戻った。0ポイントも許すが
+          既定値は0にせず・0を推奨する文言も出さない。 */}
+      <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>ポイント（0以上の整数）</Text>
+      <TextInput
+        value={pointsText}
+        onChangeText={(t) => setPointsText(t.replace(/[^0-9]/g, ""))}
+        keyboardType="number-pad"
+        placeholder="例：10"
+        style={styles.input}
+      />
 
-          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>繰り返し設定</Text>
-          <View style={styles.chipRow}>
-            <Pressable onPress={() => setIsRepeatable(false)} style={[styles.chip, !isRepeatable && styles.chipSelected]}>
-              <Text>1回だけ</Text>
-            </Pressable>
-            <Pressable onPress={() => setIsRepeatable(true)} style={[styles.chip, isRepeatable && styles.chipSelected]}>
-              <Text>くり返す</Text>
-            </Pressable>
-          </View>
+      <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>繰り返し設定</Text>
+      <View style={styles.chipRow}>
+        <Pressable onPress={() => setIsRepeatable(false)} style={[styles.chip, !isRepeatable && styles.chipSelected]}>
+          <Text>1回だけ</Text>
+        </Pressable>
+        <Pressable onPress={() => setIsRepeatable(true)} style={[styles.chip, isRepeatable && styles.chipSelected]}>
+          <Text>くり返す</Text>
+        </Pressable>
+      </View>
 
-          {/* [2026-09-06追加・要件定義書07-18章決定7・UIUXデザイン部30.3節決定9]
-              「1回だけ」選択時のみ、早い者勝ちの挙動を前向きな言葉で事前に伝える。 */}
-          {!isRepeatable && (
-            <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
-              1回だけのクエストは、だれか1人が完了報告すると一覧から消えます（みまもりメンバー全員が対象です）
-            </Text>
-          )}
-
-          {isRepeatable && (
-            <>
-              <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>1日の上限回数（空欄で無制限）</Text>
-              <TextInput
-                value={dailyLimitText}
-                onChangeText={(t) => setDailyLimitText(t.replace(/[^0-9]/g, ""))}
-                keyboardType="number-pad"
-                placeholder="空欄=無制限"
-                style={styles.input}
-              />
-            </>
-          )}
-        </>
+      {/* [2026-09-06追加・要件定義書07-18章決定7・UIUXデザイン部30.3節決定9]
+          「1回だけ」選択時のみ、早い者勝ちの挙動を前向きな言葉で事前に伝える。 */}
+      {!isRepeatable && (
+        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+          1回だけのクエストは、だれか1人が完了報告すると一覧から消えます（みまもりメンバー全員が対象です）
+        </Text>
       )}
 
-      {/* [新設・2026-09-17・要件定義書07-28章決定2・3・22] たまり方（ポイント／
-          台紙）。作成後は変更できないため（決定55-9）、編集モードでは固定表示のみ。 */}
-      <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>
-        たまり方：{rewardMode === "habit_card" ? "シール帳" : "ポイント"}
-        {!isEditMode && (
-          <Text
-            style={{ color: theme.colors.supporterAccent }}
-            onPress={() => setRewardMode((prev) => (prev === "points" ? "habit_card" : "points"))}
-          >
-            {"  （かえる）"}
-          </Text>
-        )}
-      </Text>
-      {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ239章] たまり方の一言案内。
-          rewardModeの値（ポイント／台紙）どちらでも見える位置（「たまり方」欄の直下・
-          分岐の外）に置く。子ども向け画面には出さない（S6はみまもりメンバー専用画面）。 */}
-      <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        おてつだい は ポイント。まいにちの おやくそく は シール。
-      </Text>
-      <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        1回ずつ手間がかかることはポイントに。毎日の小さな約束はシール帳に。ポイントは「ごほうび」に、シールは「フィギュア」になります
-      </Text>
-
-      {rewardMode === "habit_card" && (
+      {isRepeatable && (
         <>
-          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>シール帳の種類（必須）</Text>
-          <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
-            {habitKindGroups.map((g) => (
-              <Pressable
-                key={g.kindKey}
-                disabled={isEditMode}
-                onPress={() => setHabitKindKey(g.kindKey)}
-                style={[styles.chip, { flexDirection: "row", alignItems: "center" }, habitKindKey === g.kindKey && styles.chipSelected]}
-              >
-                <Text>
-                  {g.kindEmoji ?? "🏳️"} {g.kindDisplayName}
-                </Text>
-                <Text style={{ marginLeft: theme.spacing.s2 }}>🥉🥈🥇💎</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
-            シール帳は自分専用のクエストとして登録されます（担当はあなた自身に固定されます）
-          </Text>
+          <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>1日の上限回数（空欄で無制限）</Text>
+          <TextInput
+            value={dailyLimitText}
+            onChangeText={(t) => setDailyLimitText(t.replace(/[^0-9]/g, ""))}
+            keyboardType="number-pad"
+            placeholder="空欄=無制限"
+            style={styles.input}
+          />
         </>
       )}
 
       {/* [2026-09-06改訂・要件定義書07-18章決定8・UIUXデザイン部30.3節決定8]
           対象chore（既存か新規か）で文言を出し分ける。既存のscope='personal'行に
-          限り、決定4'・決定22の案内（削除して登録し直す）も兼ねる。
-          [2026-09-17追加] たまり方＝台紙のときは常にscope='personal'のため、この
-          文言ではなく上の専用文言（台紙は自分専用のクエストとして…）を表示する。 */}
-      {rewardMode === "points" && (
-        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-          {chore?.scope === "personal"
-            ? "※ このクエストは家族みんなに見えますが、完了報告できるのはあなただけです。今後あたらしく登録するクエストは、みまもりメンバーなら誰でも完了報告できるようになります。共通にしたい場合は、いちど削除して登録し直してください（これまでの記録は残ります）。"
-            : "※ このクエストは家族みんなに見え、みまもりメンバーなら誰でも完了報告できます。編集・削除ができるのはあなただけです。"}
-        </Text>
-      )}
+          限り、決定4'・決定22の案内（削除して登録し直す）も兼ねる。 */}
+      <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
+        {chore?.scope === "personal"
+          ? "※ このクエストは家族みんなに見えますが、完了報告できるのはあなただけです。今後あたらしく登録するクエストは、みまもりメンバーなら誰でも完了報告できるようになります。共通にしたい場合は、いちど削除して登録し直してください（これまでの記録は残ります）。"
+          : "※ このクエストは家族みんなに見え、みまもりメンバーなら誰でも完了報告できます。編集・削除ができるのはあなただけです。"}
+      </Text>
 
-      {/* [2026-09-18変更・やること.md 4-47、実装メモ.md 248章] 従来は保存を押して
-          DB側に拒否された後（errorMessage）にしか出なかった赤字案内を、台紙型を
-          選んだ時点（atHabitCardLimit、クライアント側の事前チェック）でも同じ
-          文言で出す。errorMessageがある場合はそちらを優先表示する。 */}
-      {errorMessage ? (
+      {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
-      ) : atHabitCardLimit ? (
-        <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{HABIT_CARD_LIMIT_MESSAGE}</Text>
-      ) : null}
+      )}
 
       <AppButton
         tone="supporter"
         label={saving ? "保存中…" : "保存する"}
         loading={saving}
-        // [2026-09-18追加・やること.md 4-47、実装メモ.md 248章] 台紙型クエストの
-        // 新規作成で、自分がすでに台紙3枚（上限）のときは押せなくする
-        // （atHabitCardLimit）。ポイント型へ「かえる」と対象外になり自動的に戻る。
-        disabled={saving || deleting || atHabitCardLimit}
+        disabled={saving || deleting}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={save}
       />

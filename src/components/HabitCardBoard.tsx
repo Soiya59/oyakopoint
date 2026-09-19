@@ -1,30 +1,24 @@
 /**
- * 新設「台紙」画面の中身（P38・保護者／S26・みまもりメンバー／子どもは軽量
- * モーダル内で同じ内容を表示、主要画面ワイヤーフレーム.md 49.6章決定16〜18）。
+ * タップ先「シール帳」画面の中身（P38・保護者／S26・みまもりメンバー／子どもは
+ * 軽量モーダル、主要画面ワイヤーフレーム.md 49-B.5章決定45〜46、全面改訂）。
  *
- * ①横スクロールで複数枚を切り替えられる進行中の台紙一覧（HabitCardStripと同じ
- * 表示、決定10〜11）、②各台紙の完成済みアーカイブ一覧（決定17、21.6節「見る▼」
- * 展開と同型）、③（対象が2人以上いる場合）他のメンバーの台紙を見るための
- * メンバー選択（決定18）、④「おわりにする」操作（決定18・19・29）、をまとめて
- * 1つのコンポーネントで担う。P38/S26/子どもモーダルの3箇所から共通で使う。
- *
- * [2026-09-18追加・統括指示「台帳でなく、シール帳にしてね」・実装メモ.md 251章]
- * 上記の設計文書との対応を保つため、このコメント・変数名・型名では「台紙」という
- * 呼び名のまま残しているが、利用者の画面には「シール帳」と表示する。
+ * 役割を「進行中の内訳」に絞る（決定45）: ①進行中の冊の詳しい進捗（段階
+ * ゲージ・いまの10マス・数字、帯から移設）、②進行中の内訳（多い順上位5件＋
+ * ほか◯件）、③絵柄の選び直し（累計0件のときのみ）、④他メンバーの閲覧
+ * （決定12・18を維持）。「しまった冊」の一覧・「おわりにする」操作は置かない
+ * （コレクションへ移設、依頼文決定11／手動終了は撤去、決定27）。
  */
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import AppButton from "./AppButton";
 import Card from "./Card";
-import HabitCardStrip from "./HabitCardStrip";
+import HabitCardKindPicker from "./HabitCardKindPicker";
 import MemberAvatar from "./MemberAvatar";
 import { ErrorState, SkeletonList } from "./StatusViews";
-import { useHabitCardFigureGrants, useEndHabitCardAction, type HabitCardWithProgress } from "@/hooks/useHabitCards";
-import { getHabitCardKindInfo } from "@/lib/habitCardDisplay";
-import { toJstDateString } from "@/lib/calendarDates";
+import { groupHabitFigureCatalogByKind, useChooseHabitCardKindAction, computeHabitCardTierInfo } from "@/hooks/useHabitCards";
+import { computeCurrentPageFilledCells, formatHabitCardProgressText, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import type { Chore, FamilyMember, HabitCard, HabitFigureCatalogItem } from "@/types/domain";
+import type { Chore, FamilyMember, HabitCard, HabitCardChoreBreakdownRow, HabitFigureCatalogItem } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -41,43 +35,44 @@ export interface HabitCardBoardProps {
   chores: Chore[];
   catalog: HabitFigureCatalogItem[];
   loadState: LoadState;
-  activeCards: HabitCardWithProgress[];
-  archivedCards: HabitCard[];
+  card: HabitCard | null;
+  breakdown: HabitCardChoreBreakdownRow[];
+  totalCount: number;
   onRetry: () => void;
-  /** 「おわりにする」が成功したら呼ぶ（呼び出し元が一覧を再取得する）。 */
-  onEndedCard: () => void;
-  /** 「木に飾る→」導線（フィギュア詳細から、既存メダルの導線に合流する画面へ）。個別メンバー選択時（＝自分）のみ表示。 */
-  onGoToFigureShelf?: () => void;
+  /** 絵柄の選び直しが成功したら呼ぶ（呼び出し元が再取得する）。 */
+  onKindChosen: () => void;
 }
 
-function ArchivedCardRow({ tone, card }: { tone: Tone; card: HabitCard }) {
+/** 決定11-A「段階の目盛り」。銅(10)・銀(30)・金(50)・クリスタル(100)の4点を横一列に置く。 */
+function TierGauge({ tone, count }: { tone: Tone; count: number }) {
+  const { currentTier } = computeHabitCardTierInfo(count);
   const isChild = tone === "child";
-  const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
-  const captionStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
-  const [open, setOpen] = useState(false);
-  const { loadState, grants } = useHabitCardFigureGrants(open ? card.id : null);
-
+  const order: ("bronze" | "silver" | "gold" | "crystal")[] = ["bronze", "silver", "gold", "crystal"];
+  const label = isChild ? TIER_LABEL_CHILD : TIER_LABEL_ADULT;
   return (
-    <View style={styles.archivedRow}>
-      <Pressable onPress={() => setOpen((v) => !v)}>
-        <Text style={bodyStyle}>
-          {open ? "▾" : "▸"} {toJstDateString(card.archived_at ?? card.updated_at).replace(/-/g, "/")}ごろ おわり
+    <View style={styles.gaugeRow}>
+      {order.map((tier) => {
+        const reached = currentTier != null && order.indexOf(tier) <= order.indexOf(currentTier);
+        return (
+          <Text key={tier} style={[styles.gaugeItem, reached && styles.gaugeItemReached]}>
+            {label[tier]}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 決定11-B「いまの10マス」。5×2のマス目で表示する。 */
+function TenCellsGrid({ filled }: { filled: number }) {
+  const cells = Array.from({ length: 10 }, (_, i) => i < filled);
+  return (
+    <View style={styles.cellsWrap}>
+      {cells.map((isFilled, i) => (
+        <Text key={i} style={styles.cell}>
+          {isFilled ? "⬤" : "◯"}
         </Text>
-      </Pressable>
-      {open && (
-        <View style={{ marginLeft: theme.spacing.s3, marginTop: theme.spacing.s1 }}>
-          {loadState === "loading" && <Text style={captionStyle}>読み込み中…</Text>}
-          {loadState === "error" && <Text style={captionStyle}>読み込みに失敗しました</Text>}
-          {loadState === "ready" && grants.length === 0 && <Text style={captionStyle}>獲得したフィギュアはありません</Text>}
-          {loadState === "ready" &&
-            grants.map((g) => (
-              <Text key={g.id} style={captionStyle}>
-                {g.habit_figure_catalog?.kind_emoji ?? "🏳️"} {g.habit_figure_catalog?.kind_display_name ?? "シール帳"}・
-                {(isChild ? TIER_LABEL_CHILD : TIER_LABEL_ADULT)[g.tier]}を獲得
-              </Text>
-            ))}
-        </View>
-      )}
+      ))}
     </View>
   );
 }
@@ -91,34 +86,47 @@ export function HabitCardBoard({
   chores,
   catalog,
   loadState,
-  activeCards,
-  archivedCards,
+  card,
+  breakdown,
+  totalCount,
   onRetry,
-  onEndedCard,
+  onKindChosen,
 }: HabitCardBoardProps) {
   const isChild = tone === "child";
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
   const captionStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
   const { memberAvatars } = useAppData();
-  const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
-  const [endError, setEndError] = useState<string | null>(null);
-  const { ending, end } = useEndHabitCardAction();
+  const { choosing, choose } = useChooseHabitCardKindAction();
+  const [kindPickerOpen, setKindPickerOpen] = useState(false);
+  const [chooseError, setChooseError] = useState<string | null>(null);
 
-  const handleEnd = async (habitCardId: string) => {
-    setEndError(null);
-    const res = await end(habitCardId);
+  const kindGroups = groupHabitFigureCatalogByKind(catalog);
+
+  const handleChoose = async (kindKey: string) => {
+    if (!card) return;
+    setChooseError(null);
+    const res = await choose(card.id, kindKey);
     if (!res.ok) {
-      setEndError(res.error.message);
+      setChooseError(res.error.message);
       return;
     }
-    setConfirmingEndId(null);
-    onEndedCard();
+    setKindPickerOpen(false);
+    onKindChosen();
   };
 
   if (loadState === "loading") return <SkeletonList count={3} />;
   if (loadState === "error") {
     return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />;
   }
+
+  const kindInfo = getHabitCardKindInfo(card, catalog);
+  const filled = card ? computeCurrentPageFilledCells(totalCount) : 0;
+  const progressText = card
+    ? formatHabitCardProgressText(totalCount, (tier) => (isChild ? TIER_LABEL_CHILD[tier] : TIER_LABEL_ADULT[tier]))
+    : "";
+  const summary = summarizeHabitCardBreakdown(breakdown, chores, 5);
+  const isViewingSelf = selectedMemberId === myMemberId;
+  const canChooseKind = isViewingSelf && card != null && totalCount === 0;
 
   return (
     <View>
@@ -142,75 +150,73 @@ export function HabitCardBoard({
         </View>
       )}
 
-      {activeCards.length === 0 && archivedCards.length === 0 && (
+      {!card ? (
         <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>
-          {isChild ? "まだ シール帳が ないよ" : "まだシール帳がありません"}
+          {isChild ? "また あとで みてみてね" : "読み込めませんでした"}
         </Text>
-      )}
+      ) : (
+        <>
+          <View style={{ marginTop: theme.spacing.s3 }}>
+            <Text style={bodyStyle}>
+              {kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}　{totalCount}/100
+            </Text>
+            <TierGauge tone={tone} count={totalCount} />
+            <TenCellsGrid filled={filled} />
+            <Text style={[captionStyle, { marginTop: theme.spacing.s1 }]}>{progressText}</Text>
 
-      {activeCards.length > 0 && (
-        // [2026-09-18追加・やること.md 4件目・実装メモ246章] HabitCardStripが
-        // loadState必須になったため渡す。この時点（この行に到達する条件）では
-        // 上のloadStateガード（114〜117行目）を通過済みで必ず"ready"、
-        // 呼び出し元（本コンポーネント）もloadStateが変わるたびに再描画されるため
-        // 「ready」固定で問題ない。onRetryは本コンポーネント自身のonRetryをそのまま渡す。
-        <HabitCardStrip tone={tone} loadState="ready" cards={activeCards} chores={chores} catalog={catalog} onPressCard={() => {}} onRetry={onRetry} />
-      )}
+            {/* [決定42②副経路・決定45③] 累計0件のときだけ、絵柄の選び直しリンクを常設する。 */}
+            {canChooseKind && !kindPickerOpen && (
+              <Pressable onPress={() => setKindPickerOpen(true)}>
+                <Text style={[captionStyle, styles.link]}>えらびなおす →</Text>
+              </Pressable>
+            )}
+            {canChooseKind && kindPickerOpen && (
+              <View style={{ marginTop: theme.spacing.s3 }}>
+                <HabitCardKindPicker
+                  tone={tone}
+                  groups={kindGroups}
+                  currentKindKey={card.kind_key}
+                  onChoose={handleChoose}
+                  choosing={choosing}
+                  error={chooseError}
+                />
+                <Pressable onPress={() => setKindPickerOpen(false)}>
+                  <Text style={[captionStyle, styles.link]}>とじる</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
 
-      {/* 決定18-④「おわりにする」。自分の台紙のときのみ、対象を選んで操作できる。 */}
-      {selectedMemberId === myMemberId && activeCards.length > 0 && (
-        <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
-          {activeCards.map((entry) => {
-            const kindInfo = getHabitCardKindInfo(chores.find((c) => c.id === entry.card.chore_id), catalog);
-            return (
-              <View key={entry.card.id}>
-                {confirmingEndId === entry.card.id ? (
-                  <Card tone={tone} style={{ gap: theme.spacing.s2 }}>
-                    <Text style={bodyStyle}>
-                      {/* [2026-09-18改訂・実装メモ.md 251章] 単純に「台紙」→「シール帳」に
-                          置き換えると、kindDisplayName自体が既に「〇〇のシール帳」という
-                          形（DBのhabit_figure_catalog.kind_display_name、
-                          20260926010000_habit_figure_spirit_and_rename.sqlで改名済み）に
-                          なっているため「「〇〇のシール帳」のシール帳をおわりにしますか？」
-                          と二重表現になってしまう。末尾の「の台紙」を削り、
-                          kindDisplayNameだけで完結させた。 */}
-                      「{kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}」をおわりにしますか？
+          {/* [決定45②・46] 進行中の内訳。多い順上位5件＋ほか◯件。 */}
+          <View style={{ marginTop: theme.spacing.s4 }}>
+            <Text style={[bodyStyle, { fontWeight: "700" }]}>
+              {isViewingSelf
+                ? isChild
+                  ? "いま やっていること"
+                  : "いま やっていること"
+                : `${members.find((m) => m.id === selectedMemberId)?.display_name ?? ""}の いま やっていること`}
+            </Text>
+            {summary.total === 0 ? (
+              <Text style={[captionStyle, { marginTop: theme.spacing.s2 }]}>
+                {isChild ? "まだ なにも やっていないよ" : "まだ実施記録がありません"}
+              </Text>
+            ) : (
+              <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s1 }}>
+                {summary.top.map((entry) => (
+                  <View key={entry.choreId ?? entry.title} style={styles.breakdownRow}>
+                    <Text style={bodyStyle} numberOfLines={1}>
+                      {entry.emoji ?? "📝"} {entry.title}
                     </Text>
-                    <Text style={captionStyle}>
-                      今までの記録・獲得したフィギュアはそのまま残ります。もう一度0からになります
-                    </Text>
-                    {endError && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{endError}</Text>}
-                    <View style={{ flexDirection: "row", gap: theme.spacing.s2 }}>
-                      <AppButton tone={tone} label="やめる" variant="ghost" disabled={ending} onPress={() => setConfirmingEndId(null)} />
-                      <AppButton
-                        tone={tone}
-                        label={ending ? "おわりにしています…" : "おわりにする"}
-                        variant="danger"
-                        disabled={ending}
-                        onPress={() => handleEnd(entry.card.id)}
-                      />
-                    </View>
-                  </Card>
-                ) : (
-                  <Pressable onPress={() => setConfirmingEndId(entry.card.id)}>
-                    <Text style={[captionStyle, styles.endLink]}>
-                      「{kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}」をおわりにする
-                    </Text>
-                  </Pressable>
+                    <Text style={captionStyle}>{isChild ? `${entry.count}かい` : `${entry.count}回`}</Text>
+                  </View>
+                ))}
+                {summary.otherCount > 0 && (
+                  <Text style={captionStyle}>{isChild ? `ほか${summary.otherCount}けん` : `ほか${summary.otherCount}件`}</Text>
                 )}
               </View>
-            );
-          })}
-        </View>
-      )}
-
-      {archivedCards.length > 0 && (
-        <View style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={[bodyStyle, { fontWeight: "700" }]}>できあがったシール帳（{archivedCards.length}さつ）</Text>
-          {archivedCards.map((c) => (
-            <ArchivedCardRow key={c.id} tone={tone} card={c} />
-          ))}
-        </View>
+            )}
+          </View>
+        </>
       )}
     </View>
   );
@@ -230,8 +236,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
   },
   memberChipActive: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
-  archivedRow: { marginTop: theme.spacing.s2 },
-  endLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  gaugeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: theme.spacing.s1 },
+  gaugeItem: { fontSize: 11, color: theme.colors.neutralTextSecondary },
+  gaugeItemReached: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  cellsWrap: { flexDirection: "row", flexWrap: "wrap", width: 110, marginTop: theme.spacing.s1 },
+  cell: { fontSize: 16, width: 22 },
+  link: { color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s2 },
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 });
 
 export default HabitCardBoard;

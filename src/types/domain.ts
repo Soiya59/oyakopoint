@@ -55,10 +55,10 @@ export interface Chore {
   category_id: string | null;
   title: string;
   emoji: string | null;
-  // [2026-09-17改訂・要件定義書07-28章、スキーマ設計.sql 55.1章] 台紙型
-  // （reward_mode='habit_card'）の行は常にNULL（ポイントに一切触れない、決定9）。
-  // ポイント型（既定）は従来どおり1以上の整数。
-  points: number | null;
+  // [2026-09-19改訂・要件定義書07-28章決定26、スキーマ設計.sql 57.1章]
+  // 0以上の整数（NOT NULL）。0ポイントのクエストを許すが、既定値は0にせず
+  // 0を推奨する文言も出さない（UI側の責務）。
+  points: number;
   is_repeatable: boolean;
   daily_limit: number | null;
   assigned_to: string | null; // family_members.id、nullなら誰でも実行可
@@ -98,13 +98,13 @@ export interface Chore {
   // 場合はundefinedになりうる）。
   creator?: FamilyMemberBrief | null;
   editor?: FamilyMemberBrief | null;
-  // [新設・2026-09-17] 習慣カード（台紙）とフィギュア（要件定義書07-28章、
-  // スキーマ設計.sql 55.1章）。'points'（既定、既存行はすべてこちら）または
-  // 'habit_card'。台紙型は作成後に変更できない（決定55-9）。
-  reward_mode: "points" | "habit_card";
-  // 台紙の種類（habit_figure_catalog.kind_key）。reward_mode='habit_card'の
-  // ときのみ非NULL。作成後に変更できない（決定55-9）。
-  habit_kind_key: string | null;
+  // [2026-09-17新設・2026-09-19撤去] 習慣カード（台紙）の型区分
+  // （reward_mode・habit_kind_key）は、シール帳の全面作り替え
+  // （要件定義書07-28章2026-09-19全面改訂・決定25、スキーマ設計.sql 57.1章）
+  // により撤去された。クエストは1種類のみになり、どのクエストの完了報告でも
+  // 常にポイントが付き、同時に報告者本人のシール帳（habit_cards、メンバー
+  // 単位に作り替え済み）が1マス埋まる。詳細は src/hooks/useHabitCards.ts・
+  // src/lib/habitCardDisplay.ts参照。
 }
 
 // [新設・2026-09-01] chore_nfc_tags（要件定義書07-2章「作り直し：タグの人ごと化」、
@@ -135,10 +135,8 @@ export interface ReportChoreCompletionByNfcTagResult {
   chore_id: string;
   chore_title: string;
   chore_emoji: string | null;
-  // [2026-09-17改訂・要件定義書07-28章決定9] 台紙型（reward_mode='habit_card'）の
-  // クエストはNFCクイック完了でもpoints=NULLになる（49.5章決定15、chores.pointsを
-  // そのまま返すRPCのSELECT元がNULLになるため）。
-  points: number | null;
+  // [2026-09-19改訂・要件定義書07-28章決定26] 0以上の整数（NOT NULL）。
+  points: number;
   member_id: string;
   member_display_name: string;
 }
@@ -156,12 +154,10 @@ export interface ChoreCompletion {
   // [削除] status/review_note/reviewed_by/reviewed_at（スキーマ設計.sql 5章「[廃止]」参照）。
   // 承認/差し戻しという状態遷移自体が無くなり、chore_completionsはINSERTのみの
   // 追記専用ログになった（UPDATE経路自体が存在しない）。
-  // [2026-09-17改訂・要件定義書07-28章、スキーマ設計.sql 55.1章] 台紙型
-  // （reward_mode='habit_card'）クエストの完了報告は常にNULL（chores.pointsを
-  // そのままコピーするchore_completions_before_insertの既存ロジックにより、
-  // chores.pointsがNULLならここも自動的にNULLになる。member_pointsのSUM集計は
-  // NULLを自動的に無視するため、ポイントには一切触れない）。
-  points: number | null;
+  // [2026-09-19改訂・要件定義書07-28章決定26、スキーマ設計.sql 57.1章]
+  // 0以上の整数（NOT NULL）。chore_completions_before_insertがchores.pointsを
+  // そのままコピーする（0ポイントのクエストは0のまま記録される）。
+  points: number;
   // [2026-09-09削除] 証拠写真機能の残骸撤去（やること.md 5-4、開発部/成果物/
   // 実装メモ.md 180章）。photo_url列はDBから削除済み（マイグレーション
   // 20260917020000_drop_chore_photos.sql）。
@@ -658,9 +654,9 @@ export interface FamilyHomeCard {
   digest_generated_at: string | null;
 }
 
-// [新設・2026-09-17] 習慣カード（台紙）とフィギュア（要件定義書07-28章、
-// 設計部/成果物/スキーマ設計.sql 55章、API仕様.md 15章、開発部/成果物/
-// 実装メモ.md 237章）。
+// [2026-09-17新設・2026-09-19全面作り替え] シール帳（習慣カード）とフィギュア
+// （要件定義書07-28章2026-09-19全面改訂・決定25〜33、設計部/成果物/
+// スキーマ設計.sql 57章、API仕様.md 17章、開発部/成果物/実装メモ.md 256章）。
 
 /** habit_figure_catalog テーブルの1行（全家族共通グローバルカタログ、静的）。 */
 export interface HabitFigureCatalogItem {
@@ -673,23 +669,48 @@ export interface HabitFigureCatalogItem {
   display_name: string;
   sort_order: number;
   is_active: boolean;
+  // [2026-09-19新設・07-11章課金軸4（付け替え）、スキーマ設計.sql 57.2章]
+  // 無料版でも選べるか（true）、有料版限定か（false）。現行3種類
+  // （dragon/rabbit/spirit）はいずれもtrue。選択の可否そのものはベータ
+  // 無料期間中DB側で強制されない（印だけ出す暫定状態、57.2章決定57-4）。
+  is_free: boolean;
   created_at: string;
 }
 
-/** habit_cards テーブルの1行（習慣×メンバー単位の台紙インスタンス）。 */
+/**
+ * habit_cards テーブルの1行（2026-09-19作り替え・メンバー単位）。
+ * 「クエスト×メンバー」単位だった旧構造（chore_id・chore_title・
+ * chore_emoji・archive_reason）は撤去され、シール帳は1人につき常に
+ * ちょうど1件の`status='active'`行を持つ（決定27、DB側
+ * `uq_habit_cards_active_per_member`で保証）。絵柄（kind_key）は
+ * クエストに紐づかず、この行自身が持つ（決定29）。
+ */
 export interface HabitCard {
   id: string;
   family_id: string;
-  chore_id: string;
   member_id: string;
-  chore_title: string;
-  chore_emoji: string | null;
-  status: "active" | "archived";
+  kind_key: string;
+  status: "active" | "completed";
   started_at: string;
-  archived_at: string | null;
-  archive_reason: "manual" | "crystal_completed" | null;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * habit_card_chore_breakdown View（57.7章）の1行。1冊（habit_card_id）の
+ * うち、あるクエスト（chore_id）が何回完了報告されたか。
+ * `chore_id`が`state.chores`に見つからない場合（クエスト削除済み）は
+ * クライアント側でフォールバック表示する（API仕様.md 17.3節）。
+ */
+export interface HabitCardChoreBreakdownRow {
+  habit_card_id: string;
+  family_id: string;
+  member_id: string;
+  started_at: string;
+  completed_at: string | null;
+  chore_id: string | null;
+  completion_count: number;
 }
 
 /** habit_figure_grants テーブルの1行（段階到達ごとの自動付与記録。選択の余地は無い）。 */

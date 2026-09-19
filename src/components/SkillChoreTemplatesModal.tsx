@@ -59,7 +59,7 @@ export function SkillChoreTemplatesModal({ visible, tone = "parent", onClose, on
                       {t.emoji} {t.title}
                     </Text>
                     <Text style={[captionStyle, { color: theme.colors.neutralTextSecondary }]}>
-                      {t.rewardMode === "habit_card" ? "シール帳" : `${t.points}pt（目安）`}
+                      {t.points}pt（目安）
                     </Text>
                   </Pressable>
                 ))}

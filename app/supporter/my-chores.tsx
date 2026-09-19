@@ -16,7 +16,6 @@ import {
   CANCEL_SUCCESS_TEXT,
   cancelCompletionErrorText,
 } from "@/lib/cancelChoreCompletion";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
 
@@ -47,9 +46,6 @@ import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
 export default function SupporterMyChoresScreen() {
   const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.5章決定14]
-  const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { activeCards: habitActiveCards } = useHabitCardsForMember(state.activeParentMemberId);
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
   // [2026-09-06改訂・07-18章] 'personal'（既存分）に加え'supporter_shared'（新規分）も
@@ -215,7 +211,7 @@ export default function SupporterMyChoresScreen() {
                     <Text style={styles.doneLabel}>きろくずみ</Text>
                   ) : (
                     <Text style={theme.typography.supporterBodyMedium}>
-                      {formatChoreRowRewardLabel(c, habitActiveCards, habitFigureCatalog)}
+                      {formatChoreRowRewardLabel(c)}
                     </Text>
                   )}
                 </Pressable>

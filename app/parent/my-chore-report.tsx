@@ -40,8 +40,9 @@ export default function ParentMyChoreReportScreen() {
   // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
   // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
   const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.8章決定24〜26]
-  // 台紙型クエストの段階到達演出。新規画面へは遷移せず、この画面上に一時的に表示する。
+  // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂決定25] シール帳は
+  // 全クエスト共通の記録になったため、どのクエストの完了報告でも段階到達演出を
+  // 確認する。新規画面へは遷移せず、この画面上に一時的に表示する。
   const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
   const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
 
@@ -90,10 +91,11 @@ export default function ParentMyChoreReportScreen() {
     // 瞬間」を確実に1回だけ捉えられるここで鳴らす。
     playSound("report");
 
-    // [2026-09-17追加・要件定義書07-28章、API仕様.md 15.4節] 台紙型クエストなら、
-    // P19へ戻る前に段階到達の確認を挟む（新しい付与が見つかった場合のみ、この
-    // 画面上にバナーを表示して遷移を保留する）。
-    if (chore.reward_mode === "habit_card" && result.reportedAt) {
+    // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂決定25、API仕様.md
+    // 17.7節] どのクエストの完了報告でも、P19へ戻る前に段階到達の確認を挟む
+    // （新しい付与が見つかった場合のみ、この画面上にバナーを表示して遷移を
+    // 保留する）。
+    if (result.reportedAt) {
       const grant = await checkNewGrant(me.id, result.reportedAt);
       if (grant) {
         setFigureGrant(grant);
@@ -201,10 +203,11 @@ export default function ParentMyChoreReportScreen() {
         </Text>
       </View>
 
-      {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はポイントを持たないため
-          文言を出し分ける。 */}
+      {/* [2026-09-19改訂・要件定義書07-28章決定25・26] 全クエストにポイントが
+          付き、同時にシール帳が1マス埋まる（0ptのクエストも「+0pt」と
+          そのまま表示する）。 */}
       <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        {chore.reward_mode === "habit_card" ? "記録するとシール帳にたまります" : `記録すると +${chore.points}pt`}
+        記録すると +{chore.points}pt
       </Text>
 
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>

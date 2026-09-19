@@ -2,7 +2,6 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
-import Card from "@/components/Card";
 import GachaHomeWidget from "@/components/GachaHomeWidget";
 import MemberAvatar from "@/components/MemberAvatar";
 import TabIntroBubble from "@/components/TabIntroBubble";
@@ -10,7 +9,7 @@ import MyPointsCard from "@/components/MyPointsCard";
 import HabitCardStrip from "@/components/HabitCardStrip";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
-import { useHabitCardsForMember, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -44,15 +43,16 @@ export default function SupporterSelfScreen() {
   const myPoints =
     memberPoints.find((m) => m.member_id === state.activeParentMemberId)?.current_points ?? 0;
 
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.4章決定9]
-  // [2026-09-18修正・やること.md 4件目「台紙が画面から消える」・実装メモ246章]
-  // 保護者向けと同じ理由でloadState・reloadも受け取る。
+  // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
+  // 49-B.3章決定36〜40] 進行中の冊は常に1冊（決定27）のため、単数の`card`を
+  // 受け取る形に変わった。
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
   const {
     loadState: habitCardsLoadState,
-    activeCards: habitActiveCards,
+    card: habitCard,
+    totalCount: habitCardTotalCount,
     reload: reloadHabitCards,
-  } = useHabitCardsForMember(state.activeParentMemberId);
+  } = useActiveHabitCard(state.activeParentMemberId);
 
   // [2026-09-11並び替え・統括指示] 保護者の「じぶん」タブと同じ並びにそろえた
   // （クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく）。
@@ -97,17 +97,15 @@ export default function SupporterSelfScreen() {
         text="👋 ご自身のクエストやごほうび、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとフィギュアがもらえる貯め方です。"
       />
 
-      {/* [2026-09-11追加・要件定義書07-27章 決定9、主要画面ワイヤーフレーム.md 43.2節
-          決定9] アバターを自分で描いた絵にできるようにする機能の入口。 */}
+      {/* [2026-09-19改訂・やること.md 4-57、主要画面ワイヤーフレーム.md 49-B.8章決定54
+          （子ども向けを保護者・みまもりにも同様に適用。ヘッダーが既に同じ
+          アバター（24px）＋名前を表示しており、直下でもう一度64pxで繰り返す
+          必要が無いため、1行のテキストリンクに縮める。入口自体は変更しない）。 */}
       {myMember && (
         <Pressable onPress={() => router.push("/supporter/my-avatar")}>
-          <Card style={styles.avatarCard}>
-            <MemberAvatar name={myMember.display_name} color={myMember.avatar_color} size={64} lineData={memberAvatars[myMember.id]} />
-            <Text style={theme.typography.supporterBody}>{myMember.display_name}</Text>
-            <Text style={[theme.typography.supporterBody, styles.avatarLink]}>
-              {memberAvatars[myMember.id] ? "アバターを描きなおす →" : "アバターを描く →"}
-            </Text>
-          </Card>
+          <Text style={[theme.typography.supporterBody, styles.avatarLinkRow]}>
+            🎨 {memberAvatars[myMember.id] ? "じぶんの えを なおす →" : "じぶんの えを かく →"}
+          </Text>
         </Pressable>
       )}
 
@@ -116,10 +114,10 @@ export default function SupporterSelfScreen() {
       <HabitCardStrip
         tone="supporter"
         loadState={habitCardsLoadState}
-        cards={habitActiveCards}
-        chores={state.chores}
+        card={habitCard}
+        totalCount={habitCardTotalCount}
         catalog={habitFigureCatalog}
-        onPressCard={() => router.push("/supporter/habit-cards")}
+        onPress={() => router.push("/supporter/habit-cards")}
         onRetry={reloadHabitCards}
       />
 
@@ -147,8 +145,7 @@ export default function SupporterSelfScreen() {
 }
 
 const styles = StyleSheet.create({
-  avatarCard: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
-  avatarLink: { color: theme.colors.supporterAccent },
+  avatarLinkRow: { marginTop: theme.spacing.s3, color: theme.colors.supporterAccent },
   headerRow: { flexDirection: "row", alignItems: "center" },
   headerMe: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   headerFamilyName: { flex: 1, marginLeft: theme.spacing.s3 },

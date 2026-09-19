@@ -389,6 +389,32 @@
 -- 07-28章の担当外だがこのタスクの中であわせて反映した（S1に+1、S3に+2、
 -- S4に+2、A31を新設）。
 --
+-- [2026-09-19更新・開発部・実装メモ.md 256章] シール帳の全面作り替え
+-- （要件定義書07-28章2026-09-19全面改訂・決定25〜33、設計部/成果物/
+-- スキーマ設計.sql 57章、`supabase/migrations/
+-- 20260927010000_habit_cards_full_rebuild.sql`）に伴い、S1（34のまま。
+-- 新しいテーブルは追加していない。`habit_card_chore_breakdown`はViewの
+-- ためS1には数えない）・S3（63のまま。既存3ポリシー〈habit_cards_select_
+-- same_family・habit_figure_catalog_select_authenticated・habit_figure_
+-- grants_select_same_family〉はいずれも無変更、新規ポリシーも追加して
+-- いない）を確認した。**S4は71→70（-2+1）**：撤去した
+-- `chores_after_insert_create_habit_card`・`end_habit_card`の2件を一覧
+-- から削除し、新設した`choose_habit_card_kind`を1件追加した。
+-- `habit_card_progress_bump`・`habit_cards_before_write`・
+-- `chores_before_write`はいずれも`CREATE OR REPLACE`（名前を変えていない）
+-- ため一覧の増減には影響しない。新設した
+-- `family_members_after_insert_create_habit_card`（トリガー関数、
+-- SECURITY DEFINERだが明示的なREVOKEを行っていない）も一覧に追加した
+-- （+1）。したがって内訳は「-2（撤去2件）+1（choose_habit_card_kind）
+-- +1（family_members_after_insert_create_habit_card）=70」。設計部57.10章の
+-- 見込み「S4は±0（内訳-1+1）」とは、`family_members_after_insert_create_
+-- habit_card`をトリガー関数のため対象外とした前提が実測と食い違った
+-- （89章〜149行目の教訓と同じパターン：トリガー関数もS4の対象になる）。
+-- ローカルDockerで実測して確認したうえで報告し、期待値を実測どおりに
+-- 更新した（96.5章「期待値が実測と違ったら期待値を書き換えず報告する」を
+-- 遵守。詳細は開発部/成果物/実装メモ.md 256章）。ローカルDocker環境に
+-- 適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -738,14 +764,18 @@ WITH expected(f) AS (VALUES
   -- 新規関数作成時にauthenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動）。
   ('chore_nfc_tags_before_write'),
   ('chore_reactions_before_insert'),
-  -- [2026-09-17追加] chores_after_insert_create_habit_card（習慣カードの台紙自動
-  -- 作成、要件定義書07-28章、設計部/成果物/スキーマ設計.sql 55.6章、開発部/成果物/
-  -- 実装メモ.md 237章）。SECURITY DEFINERだが明示的なREVOKEを行っていない
-  -- （chores_after_insert_create_habit_card自体は書き込み対象をhabit_cardsに
-  -- 限定する専用トリガーのため、他の非SECURITY DEFINERトリガー関数と同じ扱いで
-  -- 問題ない）ため、新規関数作成時にauthenticatedへEXECUTE権限が自動付与される
-  -- （34.5章の既知の挙動）。
-  ('chores_after_insert_create_habit_card'),
+  -- [2026-09-19追加・シール帳の全面作り替え] choose_habit_card_kind
+  -- （進行中のシール帳の絵柄を選び直す、要件定義書07-28章決定29、設計部/成果物/
+  -- スキーマ設計.sql 57.6章、開発部/成果物/実装メモ.md 256章）。
+  -- cancel_chore_completion()等と同じくSECURITY DEFINERであり、PUBLIC/anonから
+  -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
+  ('choose_habit_card_kind'),
+  -- [2026-09-17追加・2026-09-19撤去] chores_after_insert_create_habit_card
+  -- （習慣カードの台紙自動作成、旧要件定義書07-28章、設計部/成果物/スキーマ設計.sql
+  -- 55.6章）は、シール帳の全面作り替え（57.1章決定57-1）によりreward_mode列
+  -- そのものが撤去されたため、この関数・対応トリガーも不要になりDROP FUNCTIONで
+  -- 撤去した（`20260927010000_habit_cards_full_rebuild.sql`手順8）。この一覧
+  -- からも削除する。
   ('chores_before_write'),('create_family_with_owner'),('current_family_id'),
   ('current_family_member_id'),('current_family_role'),
   -- [2026-09-02追加] current_join_consent_version（招待受諾フローにおける可視範囲の
@@ -773,12 +803,20 @@ WITH expected(f) AS (VALUES
   -- PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   ('decorate_tree_with_sticker'),
   ('delete_family_board_post'),('draw_gacha'),('edit_unpublished_drawing'),
-  -- [2026-09-17追加] end_habit_card（習慣カードを「おわりにする」、要件定義書
-  -- 07-28章決定18・19、設計部/成果物/スキーマ設計.sql 55.8章、開発部/成果物/
-  -- 実装メモ.md 237章）。cancel_chore_completion()等と同じくSECURITY DEFINERで
-  -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的に
-  -- GRANTしている。
-  ('end_habit_card'),
+  -- [2026-09-17追加・2026-09-19撤去] end_habit_card（習慣カードを「おわりにする」、
+  -- 旧要件定義書07-28章決定18・19）は、シール帳の全面作り替え（依頼文決定4
+  -- 「1人1冊ずつ・進行中は常に1冊」）により手動終了という操作自体が不要になった
+  -- ため、DROP FUNCTIONで撤去した（設計部/成果物/スキーマ設計.sql 57.3章決定
+  -- 57-6、`20260927010000_habit_cards_full_rebuild.sql`手順9）。この一覧からも
+  -- 削除する。
+  -- [2026-09-19追加] family_members_after_insert_create_habit_card（家族に
+  -- 新しいメンバーが加わった瞬間に進行中のシール帳を1冊自動作成する、要件定義書
+  -- 07-28章決定27、設計部/成果物/スキーマ設計.sql 57.4章、開発部/成果物/
+  -- 実装メモ.md 256章）。SECURITY DEFINERのトリガー関数だが明示的なREVOKEを
+  -- 行っていないため、他の非REVOKEトリガー関数（member_badges_check_*等）と
+  -- 同じ理由でS4に含まれる（89〜149行目の教訓のとおり、RETURNS TRIGGERで
+  -- あることはS4の対象外を意味しない）。
+  ('family_members_after_insert_create_habit_card'),
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
   ('family_board_posts_daily_used'),
@@ -907,7 +945,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数71件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数70件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

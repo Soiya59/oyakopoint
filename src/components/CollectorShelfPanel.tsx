@@ -39,6 +39,9 @@ import FigureIcon from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
+import { useCompletedHabitCards, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { computeHabitCardDurationDays, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
+import { toJstDateString } from "@/lib/calendarDates";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { BadgeRow } from "@/hooks/useBadges";
@@ -53,7 +56,9 @@ import type {
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
-type ShelfTab = "collected" | "pastTrees";
+// [2026-09-19追加・要件定義書07-28章2026-09-19全面改訂決定31、主要画面
+// ワイヤーフレーム.md 49-B.6章決定47] 「しまったシール帳」タブを追加した。
+type ShelfTab = "collected" | "pastTrees" | "habitCardArchive";
 
 /** メンバー選択チップの「全員」を表す番兵値（実在のmember_idと衝突しない）。 */
 export const ALL_MEMBERS_ID = "__all__";
@@ -736,6 +741,20 @@ export function CollectorShelfPanel({
         >
           <Text style={[bodyMediumStyleFor(tone), tab === "pastTrees" && styles.tabTextActive]}>{pastTreesLabel}</Text>
         </Pressable>
+        {/* [2026-09-19追加・要件定義書07-28章決定31、主要画面ワイヤーフレーム.md
+            49-B.6章決定47] 「しまったシール帳」タブ。現行実装が帯のタップ先に
+            置いていた「できあがったシール帳（Nさつ）」の一覧をここへ移す
+            （2か所に出さない、依頼文決定11）。 */}
+        <Pressable
+          onPress={() => setTab("habitCardArchive")}
+          style={[styles.tabButton, tab === "habitCardArchive" && styles.tabButtonActive]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: tab === "habitCardArchive" }}
+        >
+          <Text style={[bodyMediumStyleFor(tone), tab === "habitCardArchive" && styles.tabTextActive]} numberOfLines={1}>
+            {isChild ? "しまった シールちょう" : "しまったシール帳"}
+          </Text>
+        </Pressable>
       </View>
 
       {tab === "collected" && (
@@ -968,6 +987,106 @@ export function CollectorShelfPanel({
                           )}
                         </>
                       )}
+                    </View>
+                  )}
+                </Card>
+              );
+            })}
+        </View>
+      )}
+
+      {tab === "habitCardArchive" && (
+        <HabitCardArchiveSection tone={tone} members={members} myMemberId={myMemberId} />
+      )}
+    </View>
+  );
+}
+
+/**
+ * 「しまったシール帳」タブの中身（主要画面ワイヤーフレーム.md 49-B.6章決定47〜50）。
+ * ChildHabitCardModal.tsxと同じ「自己完結」の設計（visible時のみ通信、選択メンバーの
+ * 状態もこのコンポーネント内に閉じ込める）を踏襲する。メンバー選択の既定は自分自身
+ * （決定49。「集めたもの」タブの既定「全員」とは異なる）。「全員」を選んだときは
+ * 一覧を出さず案内のみ表示する（決定48。家族共有プールという概念がここには無いため）。
+ */
+function HabitCardArchiveSection({ tone, members, myMemberId }: { tone: Tone; members: FamilyMember[]; myMemberId: string }) {
+  const isChild = tone === "child";
+  const bodyStyle = bodyStyleFor(tone);
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
+  const { state } = useAppData();
+  const { catalog } = useHabitFigureCatalog();
+  const [selectedMemberId, setSelectedMemberId] = useState(myMemberId);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const isAll = selectedMemberId === ALL_MEMBERS_ID;
+  const { loadState, cards, breakdown, grants, reload } = useCompletedHabitCards(isAll ? "" : selectedMemberId);
+
+  return (
+    <View style={{ marginTop: theme.spacing.s4 }}>
+      <MemberSelectionChips tone={tone} members={members} myMemberId={myMemberId} selectedMemberId={selectedMemberId} onSelectMember={setSelectedMemberId} />
+
+      {isAll ? (
+        // [決定48] 「全員」を選んだときは一覧を出さず、案内のみ表示する。
+        <Text style={[bodyStyle, { marginTop: theme.spacing.s4 }]}>
+          {isChild ? "ひとりずつ えらんでね" : "メンバーを選んでください"}
+        </Text>
+      ) : (
+        <View style={{ marginTop: theme.spacing.s4 }}>
+          {loadState === "loading" && <SkeletonList count={2} />}
+          {loadState === "error" && (
+            <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={reload} />
+          )}
+          {loadState === "ready" && cards.length === 0 && (
+            <Text style={bodyStyle}>{isChild ? "まだ できあがった シール帳は ないよ" : "まだ完成したシール帳はありません"}</Text>
+          )}
+          {loadState === "ready" &&
+            cards.map((card) => {
+              const expanded = expandedCardId === card.id;
+              const kindInfo = getHabitCardKindInfo(card, catalog);
+              const cardBreakdown = breakdown.filter((b) => b.habit_card_id === card.id);
+              // [決定46を完成済みの冊にも適用、決定50] 多い順上位5件＋ほか◯件。
+              const summary = summarizeHabitCardBreakdown(cardBreakdown, state.chores, 5);
+              const cardGrants = grants.filter((g) => g.habit_card_id === card.id);
+              const days = computeHabitCardDurationDays(card.started_at, card.completed_at);
+              const period = `${toJstDateString(card.started_at).replace(/-/g, "/")}〜${
+                card.completed_at ? toJstDateString(card.completed_at).replace(/-/g, "/") : ""
+              }（${days}日間）`;
+              return (
+                <Card key={card.id} tone={tone} style={{ marginTop: theme.spacing.s3 }}>
+                  <Pressable
+                    onPress={() => setExpandedCardId(expanded ? null : card.id)}
+                    style={styles.seasonHeaderRow}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded }}
+                  >
+                    <Text style={bodyMediumStyle} numberOfLines={1}>
+                      {expanded ? "▾" : "▸"} {kindInfo.kindEmoji ?? "🏳️"} {kindInfo.kindDisplayName}（クリスタル）
+                    </Text>
+                  </Pressable>
+                  {expanded && (
+                    <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+                      <Text style={captionStyle}>{period}</Text>
+                      <View>
+                        {summary.top.map((entry) => (
+                          <View key={entry.choreId ?? entry.title} style={styles.breakdownRow}>
+                            <Text style={bodyStyle} numberOfLines={1}>
+                              {entry.emoji ?? "📝"} {entry.title}
+                            </Text>
+                            <Text style={captionStyle}>{isChild ? `${entry.count}かい` : `${entry.count}回`}</Text>
+                          </View>
+                        ))}
+                        {summary.otherCount > 0 && (
+                          <Text style={captionStyle}>{isChild ? `ほか${summary.otherCount}けん` : `ほか${summary.otherCount}件`}</Text>
+                        )}
+                      </View>
+                      <Text style={bodyStyle}>
+                        {cardGrants.length > 0
+                          ? cardGrants
+                              .map((g) => ({ bronze: "🥉", silver: "🥈", gold: "🥇", crystal: "💎" }[g.tier]))
+                              .join("")
+                          : "🥉🥈🥇💎"}{" "}
+                        {isChild ? "ぜんだんかい獲得" : "全段階獲得"}
+                      </Text>
                     </View>
                   )}
                 </Card>
@@ -1746,6 +1865,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.neutralBorder,
   },
   stickerMemberChipActive: { borderColor: theme.gachaColors.accent, backgroundColor: theme.gachaColors.accentSoft },
+  // [2026-09-19追加・しまったシール帳タブ] 内訳の1行（クエスト名＋回数）。
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   // [2026-09-11改訂] 旧・横1行表示（stickerRow等）はグリッド化に伴い廃止し、
   // 「うごかす」リンクのスタイルのみ残す（実装メモ151章）。
   stickerRowMoveLink: { color: theme.colors.brandPrimaryStrong, textDecorationLine: "underline" },
