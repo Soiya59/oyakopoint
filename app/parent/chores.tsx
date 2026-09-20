@@ -6,8 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import { EmptyState } from "@/components/StatusViews";
-import ChoreSuggestionsModal from "@/components/ChoreSuggestionsModal";
-import SkillChoreTemplatesModal from "@/components/SkillChoreTemplatesModal";
+import ChoreExamplesModal from "@/components/ChoreExamplesModal";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
@@ -44,15 +43,13 @@ export default function ChoresListScreen() {
   // （finishedOpen）とは独立に管理する（38.4節「入れ子構造」）。
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (key: string) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
-  // [2026-09-02追加] クエストのおすすめ集（要件定義書07-16章、主要画面ワイヤーフレーム.md
-  // 27.1・27.2節）。P10の空状態限定で開くモーダル。選択するとP11へプレフィル遷移する
-  // だけで、モーダル側にDB書き込みは一切発生しない。
-  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
-  // [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.7章決定19]
-  // スキルの型付きクエストひな形。常時表示のテキストリンクとして追加する
-  // （27章「クエストのおすすめ集」の空状態限定パターンはここでは使わない。
-  // 既存ユーザーのほぼ全員が入口を見られなくなるため）。
-  const [skillTemplatesVisible, setSkillTemplatesVisible] = useState(false);
+  // [2026-09-20改訂・主要画面ワイヤーフレーム.md 54章決定1〜6、開発部への申し送り
+  // 54.11節1.] 旧「🌱 おやくそくの型から選ぶ」テキストリンク（suggestionsVisible）と
+  // 旧「🔍 おすすめを見る」ボタン（skillTemplatesVisible）を、統合モーダル
+  // ChoreExamplesModal 1つ・1状態にまとめた。表示条件（0件時はEmptyState直下＋
+  // 案内文、1件以上時は＋新規追加の直下に常時表示）は旧「🔍 おすすめを見る」
+  // ボタンのものをそのまま踏襲する（54.1節決定3）。
+  const [examplesVisible, setExamplesVisible] = useState(false);
   // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.2節]
   // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
   // （56.4章決定56-6、N+1にしない）。この画面はマウント時の取得のみでよい
@@ -191,34 +188,17 @@ export default function ChoresListScreen() {
         <AppButton label="＋ 新規追加" variant="secondary" onPress={() => router.push("/parent/chore-edit")} />
       </View>
 
-      {/* [2026-09-17追加・要件定義書07-28章、主要画面ワイヤーフレーム.md 49.7章決定19]
-          常時表示のテキストリンク。 */}
-      <Pressable onPress={() => setSkillTemplatesVisible(true)} style={{ marginTop: theme.spacing.s2 }}>
-        <Text style={[theme.typography.parentBody, { color: theme.colors.brandPrimaryStrong }]}>
-          🌱 おやくそくの型から選ぶ
-        </Text>
-      </Pressable>
-
-      <SkillChoreTemplatesModal
-        visible={skillTemplatesVisible}
-        tone="parent"
-        onClose={() => setSkillTemplatesVisible(false)}
-        onSelect={(t) => {
-          setSkillTemplatesVisible(false);
-          router.push({ pathname: "/parent/chore-edit", params: { recId: t.id } });
-        }}
-      />
-
-      {/* [2026-09-07移動・統括指示／実装メモ147章] 146章で「＋新規追加」ボタンの下に常設化
-          したが、一覧の一番下に置いたため、クエストやごほうびの件数が増えるほど埋もれる
-          という指摘を受け、「＋新規追加」の直下（一覧より上）へ移動した。見た目・文言・
-          variant="secondary"は変更していない。位置のみの変更。 */}
+      {/* [2026-09-20改訂・主要画面ワイヤーフレーム.md 54章決定1〜4、開発部への申し送り
+          54.11節1.] 旧「🌱 おやくそくの型から選ぶ」テキストリンクと旧「🔍 おすすめを
+          見る」ボタンを「💡 見本から選ぶ」1つに統合した。位置（実装メモ147章の
+          「＋新規追加」直下）・表示条件は旧「🔍 おすすめを見る」ボタンをそのまま
+          踏襲する（54.1節決定3）。 */}
       {!(active.length === 0 && finished.length === 0) && (
         <AppButton
-          label="🔍 おすすめを見る"
+          label="💡 見本から選ぶ"
           variant="secondary"
           style={{ marginTop: theme.spacing.s3 }}
-          onPress={() => setSuggestionsVisible(true)}
+          onPress={() => setExamplesVisible(true)}
         />
       )}
 
@@ -235,24 +215,29 @@ export default function ChoresListScreen() {
         <>
           <EmptyState emoji="📝" title="まだクエストが登録されていません。「＋ 新規追加」から最初のクエストを作ってみましょう" />
           {/* [2026-09-02追加] 主要画面ワイヤーフレーム.md 27.1節どおり、EmptyState
-              （変更なし）の直下にセカンダリボタンとして追加する。 */}
+              （変更なし）の直下にセカンダリボタンとして追加する。
+              [2026-09-20改訂・54章決定3] 文言の「おすすめ」を「見本」に置換。 */}
           <Text style={[theme.typography.parentBody, styles.suggestionsIntro]}>
-            迷ったら、おすすめから選んでみませんか？
+            迷ったら、見本から選んでみませんか？
           </Text>
           <AppButton
-            label="🔍 おすすめを見る"
+            label="💡 見本から選ぶ"
             variant="secondary"
-            onPress={() => setSuggestionsVisible(true)}
+            onPress={() => setExamplesVisible(true)}
           />
         </>
       )}
 
-      <ChoreSuggestionsModal
-        visible={suggestionsVisible}
-        onClose={() => setSuggestionsVisible(false)}
-        onSelect={(s) => {
-          setSuggestionsVisible(false);
-          router.push({ pathname: "/parent/chore-edit", params: { recId: s.id } });
+      {/* [2026-09-20新設・主要画面ワイヤーフレーム.md 54章決定5〜8、54.11節2.]
+          ChoreSuggestionsModal（おすすめ18件）とSkillChoreTemplatesModal（おやくそく
+          10件）を統合した新モーダル。内部は🧹お手伝い区分→🌱おやくそく区分の順の
+          1本の縦スクロール（タブにはしない、決定5）。 */}
+      <ChoreExamplesModal
+        visible={examplesVisible}
+        onClose={() => setExamplesVisible(false)}
+        onSelect={(id) => {
+          setExamplesVisible(false);
+          router.push({ pathname: "/parent/chore-edit", params: { recId: id } });
         }}
       />
 

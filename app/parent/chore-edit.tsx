@@ -530,11 +530,16 @@ export default function ChoreEditScreen() {
       {/* [2026-09-02追加] クエストのおすすめ集からのプレフィル表示（要件定義書07-16章
           UIUX申し送り、主要画面ワイヤーフレーム.md 27.0節決定6・27.3節）。24.2節の
           登録・最終編集Cardと表示条件が排他（chore有無で分岐）のため、同じCard
-          コンポーネント・同じ位置を流用する。編集モードでは表示しない。 */}
-      {!chore && !copySource && recommendation && (
+          コンポーネント・同じ位置を流用する。編集モードでは表示しない。
+          [2026-09-20改訂・主要画面ワイヤーフレーム.md 54章決定9、開発部への申し送り
+          54.11節4.] 表示条件をrecommendation（お手伝い区分経由）・skillTemplate
+          （おやくそく区分経由）のどちらでも表示されるよう広げ、文言を入口統合後の
+          呼び名「見本」に統一した（旧「型」経由では説明が一切出ない抜けだった、
+          54.0節5.）。プレフィルされる内容自体は変えない。 */}
+      {!chore && !copySource && (recommendation || skillTemplate) && (
         <Card style={styles.metaCard} tone="parent">
           <Text style={theme.typography.parentBody}>
-            🍀 おすすめの「{recommendation.title}」をもとに入力しました。内容は自由に変えられます
+            🍀 見本の「{(recommendation ?? skillTemplate)?.title}」をもとに入力しました。内容は自由に変えられます
           </Text>
         </Card>
       )}

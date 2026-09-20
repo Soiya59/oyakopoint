@@ -267,6 +267,19 @@ export default function SupporterChoreEditScreen() {
         {chore ? `${chore.emoji ?? "🎯"} クエストを編集` : "クエストを新規登録"}
       </Text>
 
+      {/* [2026-09-20新設・主要画面ワイヤーフレーム.md 54章決定9、開発部への申し送り
+          54.11節5.] P11（app/parent/chore-edit.tsx）と同じ位置・同じ文言のプレフィル
+          通知Card。従来S6には「おやくそくの型」経由でプレフィルされても説明が一切
+          無かった（54.0節5.）。S6は`recommendation`を持たないため`skillTemplate`のみ
+          で判定する（決定10）。編集モードでは表示しない。 */}
+      {!chore && skillTemplate && (
+        <Card style={styles.metaCard} tone="supporter">
+          <Text style={theme.typography.supporterBody}>
+            🍀 見本の「{skillTemplate.title}」をもとに入力しました。内容は自由に変えられます
+          </Text>
+        </Card>
+      )}
+
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
       <TextInput value={title} onChangeText={setTitle} placeholder="例：ウォーキング30分" maxLength={100} style={styles.input} />
 
@@ -565,6 +578,9 @@ export default function SupporterChoreEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  // [2026-09-20追加・主要画面ワイヤーフレーム.md 54章決定9] P11の
+  // styles.metaCard（marginTop: s4のみ）と同じ値。
+  metaCard: { marginTop: theme.spacing.s4 },
   fieldLabel: { marginTop: theme.spacing.s4 },
   input: {
     marginTop: theme.spacing.s2,
