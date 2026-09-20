@@ -368,8 +368,14 @@ const styles = StyleSheet.create({
   // [2026-09-20追加・主要画面ワイヤーフレーム.md 9.1a節決定1〜3] 2行目をrow方向の
   // ただの入れ物にする。左＝★（dailyToggleWrap）・右＝報告用当たり判定（reportHitArea）
   // を兄弟として並べる（ネストしたPressableは作らない、37.2節決定1）。
-  // minHeightでタップターゲット最小サイズ（44dp）を確保する（決定3）。
-  rowSecondary: { flexDirection: "row", alignItems: "center", minHeight: theme.tapTarget.parent },
+  // [2026-09-20再修正・軽微変更ルート・統括判断] minHeight（44dp・決定3）を外した。
+  // ★の文字は11ptで本来の高さが約20pxのため、44dpを課すとカード1枚が約24px背が高くなり、
+  // 統括が実機で「クエストの縦の幅が広くなっている」と指摘した（クエストが増えるほど
+  // スクロールが伸びる。同じ理由で2026-09-20にchores.tsxの「1日◯回」も削っている）。
+  // 44dpの根拠は「操作できるものが押しやすい大きさか」であり、完了報告の当たり判定は
+  // 1行目（rowMain・約28px）と2行目が縦につながった1つの帯なので、2行目だけを単独で
+  // 44px確保する必要はない、と整理した。9.1a節決定3はUIUX部へ申し送り済み。
+  rowSecondary: { flexDirection: "row", alignItems: "center" },
   // [2026-09-20追加・実装メモ.md 260章] Card（src/components/Card.tsx）はalignItems未指定
   // （既定"stretch"）だったが、rowSecondary（row方向）の子は既定で内容幅になるため、
   // alignSelf:"flex-start"は不要になった（9.1a節開発部への実装メモ1）。
@@ -379,7 +385,9 @@ const styles = StyleSheet.create({
   dailyToggleWrap: { marginRight: theme.spacing.s3 },
   // [2026-09-20新設・9.1a節決定1・3] ★の右側の余白を完了報告の当たり判定にする、
   // 見た目を追加しない透明なPressable。hitSlopは付けない（決定2）。
-  reportHitArea: { flex: 1, minHeight: theme.tapTarget.parent },
+  // alignSelf:"stretch"で、★の文字が決めた行の高さいっぱいまで当たり判定を広げる
+  // （minHeightを外したため、指定が無いと高さ0に潰れる）。
+  reportHitArea: { flex: 1, alignSelf: "stretch" },
   dailyToggle: { marginTop: theme.spacing.s1, fontSize: 11, color: theme.colors.neutralTextSecondary },
   dailyToggleOn: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   doneLabel: { color: theme.colors.neutralTextSecondary },
