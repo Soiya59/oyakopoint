@@ -55,6 +55,7 @@ import type {
   MemberAvatarRow,
   MemberBadge,
   MemberBadgeProgress,
+  MemberBlock,
   MemberPoints,
   OrnamentStickerPurchase,
   ReactionKind,
@@ -655,6 +656,92 @@ export async function saveMemberAvatar(
  */
 export async function deleteMemberAvatar(client: SupabaseClient, memberId: string): Promise<ApiResult<null>> {
   const { error } = await client.from("member_avatars").delete().eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+// ============================================================
+// member_blocks（ブロック。要件定義書07-32章 決定11〜14、
+// 設計部/成果物/スキーマ設計.sql 69章、API仕様.md 26章、2026-09-20新設）
+//
+// [この回の範囲] 本部長指示により、判定ロジック・型・API・ストアまでを実装する。
+// 画面（ブロックの設定UI・止めたときの表示）はUIUXデザイン部の設計待ちのため
+// 今回は作らない（開発部/成果物/実装メモ.md参照）。
+//
+// [2026-09-20訂正・本部長からの当日指示] ブロックを「送る側」として使える
+// のは保護者・みまもりメンバーのみで、子どもは使えない（07-32-7と07-32-9の
+// 矛盾を本部長が07-32-7側で確定。子どもがブロックされる側に入ることは
+// 変わらない）。RLS（69章）はこの制限を持たない（3ロールとも書ける設計の
+// まま）ため、下の`blockMember`/`unblockMember`自体はロールを問わず呼べる
+// 薄いラッパーのまま。**呼び出し側の役割制限は`src/data/store.tsx`の同名
+// メソッド（`blockMember`/`unblockMember`）が行う**（子ども用画面を作らない
+// ため実質到達しない経路だが、多層防御として明示的にガードしてある）。
+// ============================================================
+
+/**
+ * API仕様.md 26.1章: 自分が非表示にしている相手の一覧を取得する。
+ * SELECT RLS（member_blocks_select_own）が`blocker_member_id =
+ * current_family_member_id()`のみを要求するため、familyIdを渡す必要が無い
+ * （自分の行しか返らない。69.3章）。
+ */
+export async function fetchMyMemberBlocks(client: SupabaseClient): Promise<ApiResult<MemberBlock[]>> {
+  const { data, error } = await client.from("member_blocks").select("*");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as MemberBlock[] };
+}
+
+/**
+ * API仕様.md 26.1章: 相手を非表示にする（画面に「ブロック」という語は出さない。決定11）。
+ * 同じ相手を2度指定した場合はべき等に扱う（`uq_member_blocks_pair`の
+ * unique_violation・23505を捕まえ、既存の行をそのまま返す）——66章`hide_content()`の
+ * 「2度実行しても同じ結果」という考え方と揃えた。
+ */
+export async function blockMember(
+  client: SupabaseClient,
+  familyId: string,
+  blockerMemberId: string,
+  blockedMemberId: string
+): Promise<ApiResult<MemberBlock>> {
+  const { data, error } = await client
+    .from("member_blocks")
+    .insert({ family_id: familyId, blocker_member_id: blockerMemberId, blocked_member_id: blockedMemberId })
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === PG_ERRCODE.uniqueViolation) {
+      const existing = await client
+        .from("member_blocks")
+        .select("*")
+        .eq("blocker_member_id", blockerMemberId)
+        .eq("blocked_member_id", blockedMemberId)
+        .maybeSingle();
+      if (!existing.error && existing.data) {
+        return { ok: true, data: existing.data as MemberBlock };
+      }
+    }
+    return { ok: false, error: fromPostgrestError(error) };
+  }
+  return { ok: true, data: data as MemberBlock };
+}
+
+/**
+ * API仕様.md 26.1章: 非表示を解除する（いつでも自分で解除できる。決定11）。
+ * ブロック行のidを画面側に持たせずに済むよう、対象の相手のmember_idで
+ * 指定する形にした（RLSの`member_blocks_delete_own`が
+ * `blocker_member_id = current_family_member_id()`を強制するため、
+ * 他人の行を誤って消すことはできない）。対象行が既に存在しない場合も
+ * エラーにはならない（削除0件のまま成功扱い、`deleteMemberAvatar`と同じ方針）。
+ */
+export async function unblockMember(
+  client: SupabaseClient,
+  blockerMemberId: string,
+  blockedMemberId: string
+): Promise<ApiResult<null>> {
+  const { error } = await client
+    .from("member_blocks")
+    .delete()
+    .eq("blocker_member_id", blockerMemberId)
+    .eq("blocked_member_id", blockedMemberId);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
 }

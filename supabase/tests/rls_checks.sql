@@ -469,6 +469,37 @@
 --   本番へは未適用（本部長の操作を待つ）。詳細は開発部/成果物/実装メモ.md
 --   参照。
 --
+-- [2026-09-20再更新・開発部] 本部長依頼「ブロックとNGワードフィルタを実装」に伴い、
+-- member_blocks（要件定義書07-32章 決定11〜14、設計部/成果物/スキーマ設計.sql
+-- 69章、`supabase/migrations/20260930050000_member_blocks.sql`）を追加した。
+-- S1（36→37）・S3（65→68、下記3本を追加）を更新した。**S4は変更なし**
+-- （member_blocksはSECURITY DEFINER関数を1本も新設しない設計。69.5章
+-- 「最低限でよい」という統括の条件に照らし、書き込みはPostgRESTの直接操作
+-- のみで完結させた）。NGワードフィルタ（決定15〜19、スキーマ設計.sql 70章）は
+-- DBに何も作らない確認メモのため、S1/S3/S4のいずれにも変更は無い（クライアント
+-- 側の定数ファイル・判定関数のみ、`src/lib/ngWordFilter.ts`）。
+--   - member_blocks_select_own（SELECT、`blocker_member_id =
+--     current_family_member_id()`）: 既存の多数のSELECTポリシー
+--     （categories_select_same_family等、条件式`family_id = current_family_id()`）
+--     とは条件式が異なる新しい形のため、承認済み一覧からの引き写しはできず、
+--     ローカルDockerで実測した。
+--   - member_blocks_insert_own（INSERT、`family_id = current_family_id() AND
+--     blocker_member_id = current_family_member_id() AND EXISTS(...)`）:
+--     新しい形のため実測した。
+--   - member_blocks_delete_own（DELETE、`blocker_member_id =
+--     current_family_member_id()`）: select_ownと条件式が文字通り同一のため
+--     同じハッシュになる（104章の教訓どおり）。
+--   [2026-09-20訂正・本部長からの当日指示についての記録] 07-32-7と07-32-9の
+--   矛盾（子どもの画面にブロックの導線を置くか）が見つかり、本部長の判断で
+--   「置かない」（07-32-7が正）に確定した。**この制限はDB・RLSでは持たせて
+--   いない**（RLSは3ロールとも読み書きできる設計のまま、69.3章・上記の
+--   member_blocks_*_own 3本を参照）。したがってこの訂正はS1/S3/S4のいずれの
+--   数値・ハッシュにも影響しない。制限はアプリ側
+--   （`src/data/store.tsx`の`blockMember`/`unblockMember`）が持つ。
+--   ハッシュ・件数はローカルDockerで`supabase db reset`後に実測して確認した
+--   （96.5章の遵守）。ローカルDocker環境に適用済み・実測済み。本番へは
+--   未適用（本部長の操作を待つ）。詳細は開発部/成果物/実装メモ.md参照。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -536,8 +567,10 @@ GRANT INSERT ON _r TO authenticated;
 -- [2026-09-20再更新] content_reports・hidden_contents（設計部/成果物/
 -- スキーマ設計.sql 65章・66章）の2テーブルを追加。34→36。familiesへの
 -- 列3つの追加（67章）は既存テーブルへのADD COLUMNのためS1には数えない。
+-- [2026-09-20再々更新] member_blocks（設計部/成果物/スキーマ設計.sql 69章）を
+-- 追加。36→37。NGワードフィルタ（70章）はDBに何も作らないためS1に影響しない。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '36', count(*)::text, count(*) = 36
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '37', count(*)::text, count(*) = 37
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -761,6 +794,18 @@ WITH expected(t, p, c, h) AS (VALUES
   ('member_avatars','member_avatars_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('member_avatars','member_avatars_write_self_or_parent','ALL','17f6d38cb67dc4f94ec44da5105695c5'),
   ('member_badges','member_badges_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-20追加] member_blocks（ブロック、設計部/成果物/スキーマ設計.sql
+  -- 69章）。member_blocks_select_ownの条件式`blocker_member_id =
+  -- current_family_member_id()`は既存の承認済み一覧に文字通り同一のものが
+  -- 無い新しい形のため、ローカルDockerで実測した。member_blocks_delete_ownは
+  -- select_ownと条件式が文字通り同一のため同じハッシュになる（104章の教訓）。
+  -- member_blocks_insert_ownは`family_id = current_family_id() AND
+  -- blocker_member_id = current_family_member_id() AND EXISTS(...)`という
+  -- 新しい形のため実測した。INSERT/SELECT/DELETEの3本のみ（UPDATEポリシーは
+  -- 意図的に無い。69.3章末尾）。
+  ('member_blocks','member_blocks_delete_own','DELETE','48c89e953875d0091250ab24758f818f'),
+  ('member_blocks','member_blocks_insert_own','INSERT','77a2bf4cc25584713ea6ee7de467366a'),
+  ('member_blocks','member_blocks_select_own','SELECT','48c89e953875d0091250ab24758f818f'),
   ('ornament_sticker_purchases','ornament_sticker_purchases_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('push_tokens','push_tokens_delete_self','DELETE','d2d83fd3535d0c4e22eba82950957a4e'),
   ('push_tokens','push_tokens_insert_self','INSERT','bf39c4ff3a8b4f2b96611ea9d852daae'),
@@ -810,7 +855,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー65本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー68本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);

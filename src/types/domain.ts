@@ -782,3 +782,23 @@ export interface HabitFigureGrantWithPlacement extends HabitFigureGrantWithCatal
     isCurrentSeason: boolean;
   } | null;
 }
+
+/**
+ * [新設・2026-09-20] member_blocks テーブルの1行（要件定義書07-32章 決定11〜14
+ * 「ブロック」、設計部/成果物/スキーマ設計.sql 69章）。「人を消す」のではなく
+ * 「その人が書いた言葉を自分の画面に出さない」設定（決定11）。画面に
+ * 「ブロック」という語は出さない（画面文言はUIUXデザイン部の設計待ち。
+ * 開発部/成果物/実装メモ.md参照）。
+ *
+ * SELECT RLS（member_blocks_select_own）は`blocker_member_id =
+ * current_family_member_id()`のみのため、クライアントが取得できるのは常に
+ * 「自分が設定した行」だけ（＝blocked_member_id側に入っている、自分が
+ * 誰かから非表示にされている行は見えない。決定11「相手には一切伝わらない」）。
+ */
+export interface MemberBlock {
+  id: string;
+  family_id: string;
+  blocker_member_id: string;
+  blocked_member_id: string;
+  created_at: string;
+}

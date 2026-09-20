@@ -32,12 +32,14 @@ import type {
   FamilyMember,
   GratitudePoint,
   LedgerEntry,
+  MemberBlock,
   MemberPoints,
   ReactionKind,
   Reward,
   RewardRedemption,
   StampKey,
 } from "@/types/domain";
+import { excludeBlockedChoreReactionComments, blankBlockedGratitudeNotes } from "@/lib/blockFilter";
 import {
   seedCategories,
   seedChores,
@@ -96,6 +98,20 @@ export interface State {
    * （個人設定のため、RLSも本人の行のみ返す設計）。
    */
   dailyFlaggedChoreIds: string[];
+  /**
+   * [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」、設計部/成果物/
+   * スキーマ設計.sql 69章] いまログイン中の本人が非表示にしている相手の
+   * `member_blocks`行。RLS（member_blocks_select_own）により常に
+   * `blocker_member_id = 自分`の行のみが返る（＝自分がブロックしている
+   * 相手だけ。自分が誰かにブロックされていることは分からない仕様、決定11）。
+   * `state.reactions`（完了報告へのコメント）・`state.gratitude`（感謝の
+   * ひとこと）は、load()の中でこの一覧をもとに既にフィルタ済みの状態で
+   * 入っている（src/lib/blockFilter.ts参照）。掲示板の投稿・公開済みの
+   * お絵かきはグローバルstateを経由しないため、この一覧はcontext値
+   * （blockedMemberIdsSet）としても公開し、画面実装時（UIUXデザイン部の
+   * 設計後）にそちらで使う。
+   */
+  memberBlocks: MemberBlock[];
 }
 
 export type Action =
@@ -192,6 +208,18 @@ export interface DataContextValue {
   setMemberAvatarLocal: (memberId: string, lineData: FamilyDrawingLineData) => void;
   /** 「色にもどす」（DELETE）成功後、ローカルキャッシュから当該メンバーの行を除く。 */
   clearMemberAvatarLocal: (memberId: string) => void;
+  /**
+   * [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] `state.memberBlocks`を
+   * `Set<blocked_member_id>`にしたもの（O(1)判定用）。掲示板の投稿・公開済みの
+   * お絵かき等、グローバルstateを経由しない一覧を画面側でフィルタする際に
+   * `src/lib/blockFilter.ts`の関数へそのまま渡す想定（画面実装はUIUXデザイン部の
+   * 設計待ち、開発部/成果物/実装メモ.md参照）。
+   */
+  blockedMemberIdsSet: Set<string>;
+  /** 相手を非表示にする（画面に「ブロック」という語は出さない。決定11）。成功後、`memberBlocks`を再取得する。 */
+  blockMember: (blockedMemberId: string) => Promise<DispatchResult>;
+  /** 非表示を解除する（いつでも自分で解除できる。決定11）。成功後、`memberBlocks`を再取得する。 */
+  unblockMember: (blockedMemberId: string) => Promise<DispatchResult>;
 }
 
 const AppDataContext = createContext<DataContextValue | null>(null);
@@ -418,6 +446,7 @@ const EMPTY_STATE: State = {
   activeChildMemberId: "",
   activeParentMemberId: "",
   dailyFlaggedChoreIds: [],
+  memberBlocks: [],
 };
 
 function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
@@ -566,6 +595,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       familyBoardReactionsRes,
       dailySummaryRes,
       dailyFlagsRes,
+      memberBlocksRes,
     ] = await Promise.all([
       api.fetchCompletions(client, familyId, background ? recentWindowStartIso : undefined),
       api.fetchReactions(client, familyId),
@@ -586,6 +616,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
         .gte("activity_date", windowStart)
         .lte("activity_date", today),
       api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
+      // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] 自分が
+      // 非表示にしている相手の一覧。RLSが自分の行のみ返すため familyId 不要
+      // （69.3章）。リアルタイム反映は不要（決定11・69.4章）のため、他の
+      // 家族データと同じ15秒背景更新サイクルに乗せてよい。
+      api.fetchMyMemberBlocks(client),
     ]);
     if (isStale()) return;
 
@@ -621,6 +656,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       fail(dailyFlagsRes.error.message);
       return;
     }
+    if (!memberBlocksRes.ok) {
+      fail(memberBlocksRes.error.message);
+      return;
+    }
 
     // [2026-09-18追加・やること.md 4-47原因①] background=trueのときだけ、直近窓の
     // 結果を既存の全履歴（completionsRef.current）と合体する。background=falseの
@@ -630,20 +669,31 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       ? mergeRecentCompletions(completionsRef.current, recentWindowStartMs, completionsRes.data)
       : completionsRes.data;
 
+    // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] 取得後フィルタ
+    // （src/lib/blockFilter.ts）。既存テーブルのRLSは一切変更しない設計
+    // （決定14）のため、ここで自分のブロック一覧をもとにクライアント側で
+    // 除く。完了報告へのコメント（kind='comment'）はカードごと除き、スタンプは
+    // 対象外のまま残す。感謝のひとことはnoteだけを空にし、ポイント・行自体は
+    // 変えない（決定11「相手の側は影響を受けない」）。
+    const blockedMemberIds = new Set(memberBlocksRes.data.map((b) => b.blocked_member_id));
+    const filteredReactions = excludeBlockedChoreReactionComments(reactionsRes.data, blockedMemberIds);
+    const filteredGratitude = blankBlockedGratitudeNotes(gratitudeRes.data, blockedMemberIds);
+
     setState({
       family: bundleRes.data.family,
       members: bundleRes.data.members,
       categories: bundleRes.data.categories,
       chores: bundleRes.data.chores,
       completions: mergedCompletions,
-      reactions: reactionsRes.data,
+      reactions: filteredReactions,
       rewards: bundleRes.data.rewards,
       redemptions: redemptionsRes.data,
-      gratitude: gratitudeRes.data,
+      gratitude: filteredGratitude,
       familyBoardReactions: familyBoardReactionsRes.data,
       activeChildMemberId,
       activeParentMemberId,
       dailyFlaggedChoreIds: dailyFlagsRes.data,
+      memberBlocks: memberBlocksRes.data,
     });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
@@ -782,7 +832,17 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       await load();
       return;
     }
-    setState((prev) => ({ ...prev, reactions: res.data }));
+    // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] load()と同じ
+    // 取得後フィルタを、既に持っている自分のブロック一覧（prev.memberBlocks）で
+    // かけ直す。ここで再取得しないのは、ブロックの一覧自体はリアルタイム反映が
+    // 不要（決定11・69.4章）なため、次のload()サイクルで揃えば足りるから。
+    setState((prev) => ({
+      ...prev,
+      reactions: excludeBlockedChoreReactionComments(
+        res.data,
+        new Set(prev.memberBlocks.map((b) => b.blocked_member_id))
+      ),
+    }));
   }, [familyId, session.client, load]);
 
   /**
@@ -854,7 +914,12 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     setState((prev) => ({
       ...prev,
       completions: mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data),
-      reactions: reactionsRes.data,
+      // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] refreshReactionsOnlyと
+      // 同じ理由・同じ手法（prev.memberBlocksでかけ直す）。
+      reactions: excludeBlockedChoreReactionComments(
+        reactionsRes.data,
+        new Set(prev.memberBlocks.map((b) => b.blocked_member_id))
+      ),
     }));
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
@@ -1106,6 +1171,72 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   // state.reactionsが変わったときだけ1回Setを作る（buildStampReactionIndex参照）。
   const stampReactionIndex = useMemo(() => buildStampReactionIndex(state.reactions), [state.reactions]);
 
+  // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] state.memberBlocksから
+  // Set<blocked_member_id>を作る（O(1)判定用）。
+  const blockedMemberIdsSet = useMemo(
+    () => new Set(state.memberBlocks.map((b) => b.blocked_member_id)),
+    [state.memberBlocks]
+  );
+
+  /**
+   * [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」]
+   * [2026-09-20訂正・本部長からの当日指示] 07-32-7と07-32-9が矛盾していた
+   * （07-32-7「子どもの画面には報告・ブロックの導線を置かない」／07-32-9
+   * 「子どもの画面にも隠す操作導線を出す」）。本部長の判断で07-32-7が正——
+   * **ブロックを「送る側」＝操作できるのは保護者とみまもりメンバーのみ。
+   * 子どもは操作できない**（ブロックされる側に子どもが含まれることは変わらない）。
+   * DBのテーブル・RLS（69章）は変更しない（3ロールとも書き込める設計のまま。
+   * 子ども用の画面自体を作らないため実質到達しない）。この制限はアプリ側の
+   * 判定ロジックとして、ここで明示的に持たせる（子ども用の画面が将来誤って
+   * このメソッドを呼んでも弾かれる、多層防御）。
+   *
+   * 相手を非表示にする。成功後、`memberBlocks`をローカルで更新する
+   * （画面実装はUIUXデザイン部の設計〈主要画面ワイヤーフレーム.md 57章〉待ち。
+   * 開発部/成果物/実装メモ.md参照）。
+   */
+  const blockMember = useCallback(
+    async (blockedMemberId: string): Promise<DispatchResult> => {
+      if (!familyId) return { ok: false, error: { code: "no_family", message: "家族の情報が取得できていません" } };
+      if (session.status !== "parent" && session.status !== "supporter") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この操作は保護者とみまもりメンバーのみ利用できます" } };
+      }
+      const blockerMemberId = activeParentMemberId;
+      if (!blockerMemberId) {
+        return { ok: false, error: { code: "no_member", message: "ログイン中のメンバーが特定できていません" } };
+      }
+      const res = await api.blockMember(session.client, familyId, blockerMemberId, blockedMemberId);
+      if (!res.ok) return { ok: false, error: res.error };
+      setState((prev) => ({ ...prev, memberBlocks: [...prev.memberBlocks, res.data] }));
+      return { ok: true };
+    },
+    [familyId, session.client, session.status, activeParentMemberId]
+  );
+
+  /**
+   * [2026-09-20追加] 非表示を解除する（いつでも自分で解除できる。決定11）。
+   * blockMemberと同じ理由で保護者・みまもりメンバーのみ（子どもはそもそも
+   * ブロックを作れないため、解除の対象も持ち得ない）。
+   */
+  const unblockMember = useCallback(
+    async (blockedMemberId: string): Promise<DispatchResult> => {
+      if (session.status !== "parent" && session.status !== "supporter") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この操作は保護者とみまもりメンバーのみ利用できます" } };
+      }
+      const blockerMemberId = activeParentMemberId;
+      if (!blockerMemberId) {
+        return { ok: false, error: { code: "no_member", message: "ログイン中のメンバーが特定できていません" } };
+      }
+      const res = await api.unblockMember(session.client, blockerMemberId, blockedMemberId);
+      if (!res.ok) return { ok: false, error: res.error };
+      setState((prev) => ({
+        ...prev,
+        memberBlocks: prev.memberBlocks.filter((b) => b.blocked_member_id !== blockedMemberId),
+      }));
+      return { ok: true };
+    },
+    [session.client, session.status, activeParentMemberId]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       state,
@@ -1128,6 +1259,9 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       refreshMemberAvatars: loadMemberAvatars,
       setMemberAvatarLocal,
       clearMemberAvatarLocal,
+      blockedMemberIdsSet,
+      blockMember,
+      unblockMember,
     }),
     [
       state,
@@ -1137,6 +1271,9 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dispatch,
       memberPoints,
       ledgers,
+      blockedMemberIdsSet,
+      blockMember,
+      unblockMember,
       findChoreByTag,
       stampReactionIndex,
       dailySummaryRows,
@@ -1195,6 +1332,9 @@ const initialState: State = {
   activeChildMemberId: "member-child-1",
   activeParentMemberId: "member-parent-1",
   dailyFlaggedChoreIds: [],
+  // [2026-09-20追加] モック実装ではmember_blocksの取得元が無いため、常に空配列
+  // から始める（gratitude・familyBoardReactionsと同じ簡略化方針）。
+  memberBlocks: [],
 };
 
 function reducer(state: State, action: Action): State {
@@ -1379,6 +1519,25 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] モック実装
+  // （Supabase未接続時）ではmember_blocksの取得元が無いため、memberAvatarsと
+  // 同じ簡略化方針で、このセッション内だけの簡易ローカル集合として持つ
+  // （DBへは書き込まない。`state.memberBlocks`自体はinitialStateどおり常に
+  // 空配列のまま）。
+  const [blockedMemberIdsSet, setBlockedMemberIdsSet] = useState<Set<string>>(new Set());
+  const blockMember = useCallback(async (blockedMemberId: string): Promise<DispatchResult> => {
+    setBlockedMemberIdsSet((prev) => new Set(prev).add(blockedMemberId));
+    return { ok: true };
+  }, []);
+  const unblockMember = useCallback(async (blockedMemberId: string): Promise<DispatchResult> => {
+    setBlockedMemberIdsSet((prev) => {
+      const next = new Set(prev);
+      next.delete(blockedMemberId);
+      return next;
+    });
+    return { ok: true };
+  }, []);
+
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
     // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
     // idを事前に採番してreducerへ渡し、そのまま呼び出し元へ返す（reducer内部で
@@ -1423,8 +1582,23 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       refreshMemberAvatars: async () => {},
       setMemberAvatarLocal,
       clearMemberAvatarLocal,
+      blockedMemberIdsSet,
+      blockMember,
+      unblockMember,
     }),
-    [state, dispatch, ledgers, findChoreByTag, stampReactionIndex, memberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal]
+    [
+      state,
+      dispatch,
+      ledgers,
+      findChoreByTag,
+      stampReactionIndex,
+      memberAvatars,
+      setMemberAvatarLocal,
+      clearMemberAvatarLocal,
+      blockedMemberIdsSet,
+      blockMember,
+      unblockMember,
+    ]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
