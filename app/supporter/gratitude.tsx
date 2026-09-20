@@ -154,7 +154,9 @@ export default function SupporterGratitudeHubScreen() {
                         {g.family_members?.display_name ?? "?"} さんへ {g.points}pt
                       </Text>
                     </View>
-                    <Text style={{ marginTop: theme.spacing.s1 }}>「{g.note}」</Text>
+                    {/* [2026-09-20修正・やること.md 4-71] noteがNULLの行はひとこと欄を
+                        描かない（主要画面ワイヤーフレーム.md 56.4節決定20a）。 */}
+                    {g.note && <Text style={{ marginTop: theme.spacing.s1 }}>「{g.note}」</Text>}
                     {g.revoked_at ? (
                       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
                         （取消済み）
@@ -182,7 +184,11 @@ export default function SupporterGratitudeHubScreen() {
                   {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
                   {g.family_members?.display_name ?? "?"}から {g.points}pt
                 </Text>
-                <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>「{g.note}」</Text>
+                {g.note && (
+                  <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
+                    「{g.note}」
+                  </Text>
+                )}
               </View>
             ))}
           </View>

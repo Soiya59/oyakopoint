@@ -395,7 +395,17 @@ function LoadingScreen() {
 // ============================================================
 
 const EMPTY_STATE: State = {
-  family: { id: "", name: "", invite_code: "", created_at: "", updated_at: "" },
+  family: {
+    id: "",
+    name: "",
+    invite_code: "",
+    created_at: "",
+    updated_at: "",
+    // [2026-09-20追加・設計部/成果物/スキーマ設計.sql 67章]
+    social_interactions_enabled: true,
+    social_settings_updated_by: null,
+    social_settings_updated_at: null,
+  },
   members: [],
   categories: [],
   chores: [],

@@ -141,6 +141,11 @@ export default function ParentGratitudeHubScreen() {
           {sent.length === 0 ? (
             <EmptyState emoji="💌" title="まだ贈った記録はありません。気づいたことがあれば贈ってみましょう" />
           ) : (
+            // [2026-09-20修正・やること.md 4-71] noteがNULL（保護者トグルが
+            // オフの間に贈られた、ひとこと無しの感謝）の行はひとこと欄を
+            // 描かない（「（ひとことなし）」等のプレースホルダも置かない。
+            // 主要画面ワイヤーフレーム.md 56.4節決定20a、07-14章と同じ
+            // 「不在を強調しない」文法）。
             <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
               {sent.map((g) => {
                 const canRevoke = !g.revoked_at && Date.now() - new Date(g.created_at).getTime() <= FIVE_MIN_MS;
@@ -156,7 +161,7 @@ export default function ParentGratitudeHubScreen() {
                         {g.family_members?.display_name ?? "?"} さんへ {g.points}pt
                       </Text>
                     </View>
-                    <Text style={{ marginTop: theme.spacing.s1 }}>「{g.note}」</Text>
+                    {g.note && <Text style={{ marginTop: theme.spacing.s1 }}>「{g.note}」</Text>}
                     {g.revoked_at ? (
                       <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
                         （取消済み）
@@ -192,7 +197,9 @@ export default function ParentGratitudeHubScreen() {
                   {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
                   {g.family_members?.display_name ?? "?"}から {g.points}pt
                 </Text>
-                <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>「{g.note}」</Text>
+                {g.note && (
+                  <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>「{g.note}」</Text>
+                )}
               </View>
             ))}
           </View>

@@ -34,6 +34,10 @@ export default function ChildGratitudeSendScreen() {
   const { state, memberAvatars } = useAppData();
   const { client } = useSession();
   const myId = state.activeChildMemberId;
+  // [2026-09-20追加・やること.md 4-71] 保護者トグル「家族のやりとりを使う」
+  // （設計部/成果物/スキーマ設計.sql 67章）。トグルの設定画面はまだ無いため
+  // 列の値を読むだけにしておく（次回、画面対応時にここへ配線する）。
+  const interactionsEnabled = state.family.social_interactions_enabled ?? true;
 
   const [balance, setBalance] = useState<number | null>(null);
   const [recipientId, setRecipientId] = useState<string | null>(null);
@@ -51,15 +55,19 @@ export default function ChildGratitudeSendScreen() {
 
   const candidates = state.members.filter((m) => m.is_active && m.id !== myId);
   const maxPoints = balance ?? 0;
+  const trimmedNote = note.trim();
+  // トグルがオンの間はこれまでどおり自由記述必須。オフのときはひとこと
+  // が空でも贈れる（67.3章。感謝ポイントを贈ること自体は止めない）。
+  const noteBlocksSend = interactionsEnabled && !trimmedNote;
 
   const send = async () => {
-    if (!myId || !recipientId || !note.trim() || points < 1) return;
+    if (!myId || !recipientId || points < 1 || noteBlocksSend) return;
     setScreenState("sending");
     const res = await sendGratitudePoints(client, {
       sender_id: myId,
       recipient_id: recipientId,
       points,
-      note: note.trim(),
+      note: trimmedNote ? trimmedNote : null,
     });
     if (!res.ok) {
       // [2026-09-07修正・実装メモ.md 141章] 従来はcheck_violation（日次原資超過）
@@ -177,7 +185,7 @@ export default function ChildGratitudeSendScreen() {
         tone="child"
         fullWidth
         loading={screenState === "sending"}
-        disabled={screenState === "sending" || !recipientId || !note.trim() || maxPoints < 1}
+        disabled={screenState === "sending" || !recipientId || noteBlocksSend || maxPoints < 1}
         style={{ marginTop: theme.spacing.s6 }}
         onPress={send}
       />

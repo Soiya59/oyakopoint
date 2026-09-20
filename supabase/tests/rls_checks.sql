@@ -415,6 +415,60 @@
 -- 遵守。詳細は開発部/成果物/実装メモ.md 256章）。ローカルDocker環境に
 -- 適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-20更新・開発部] 本部長依頼「5件のDBマイグレーションを1回にまとめる」
+-- （content_reports・hidden_contents・保護者トグル1つ・4-70の文言修正・4-58の
+-- DB側）に伴い、S1（34→36、content_reports・hidden_contentsを追加）・
+-- S3（63→65、下記2本を追加）・S4（→78、下記7件を追加）を更新した。
+--   - content_reports（設計部/成果物/スキーマ設計.sql 65章）:
+--     SELECTポリシー`content_reports_select_own`1本のみ
+--     （`reporter_member_id = current_family_member_id()`。family_idで絞る
+--     条件・is_current_user_parent()はいずれも意図的に置かない。65.3章の
+--     核心）。INSERT/UPDATE/DELETEポリシーは無い（書き込みは
+--     submit_content_report()のみ）。ハッシュはローカルDockerで実測した
+--     （新規の条件式のため既存ハッシュの引き写しはできない）。
+--   - hidden_contents（設計部/成果物/スキーマ設計.sql 66章）:
+--     SELECTポリシー`hidden_contents_select_same_family`1本のみ
+--     （`family_id = current_family_id()`）。既存の多数のSELECTポリシーと
+--     条件式が文字通り同一のため、承認済み一覧からハッシュを引き写せた
+--     （104章の教訓）。INSERT/UPDATE/DELETEポリシーは無い（運営が
+--     service_roleでhide_content()/unhide_content()を使う。アプリからは
+--     誰も書けない）。
+--   - 保護者トグル1つ（設計部/成果物/スキーマ設計.sql 67章）: familiesに
+--     列3つ（social_interactions_enabled・social_settings_updated_by・
+--     _at）を追加したが、familiesの既存ポリシーは1本も変更していないため
+--     S3には影響しない。新設した関数`set_family_social_settings`・
+--     `is_family_social_interactions_enabled`と、トリガー関数4本
+--     （family_board_posts_social_toggle_guard・
+--     family_board_reactions_social_toggle_guard・
+--     chore_reactions_social_toggle_guard・
+--     gratitude_points_social_toggle_guard）をS4に追加した（計6件）。
+--     いずれもauthenticatedへのEXECUTE権限を持つ（前者2つは明示GRANT、
+--     後者4つはトリガー関数につき既存の同種関数と同じ理由で自動付与。
+--     34.5章の既知の挙動）。
+--   - content_reportsの書き込み経路`submit_content_report`もS4に追加
+--     （明示的にauthenticatedへGRANT）。したがってS4の増分は7件
+--     （is_family_social_interactions_enabled・set_family_social_settings・
+--     submit_content_report・トリガー関数4本）。
+--   - `hide_content`・`unhide_content`（運営専用）はauthenticated・anon・
+--     PUBLICすべてからREVOKEしてあるため、S4には**含めない**（アプリの
+--     操作UIを持たない決定7のとおり）。
+--   - gratitude_points.noteのNULL許容化（67.3章）・chore_completionsへの
+--     activity_date列追加（58章）・chore_completions_before_insert()の
+--     改訂（58章・4-70）はいずれもRLSポリシー・S4対象関数の権限に影響
+--     しないため、S1/S3/S4のいずれにも別途の増減は無い
+--     （chore_completions_before_insert()はCREATE OR REPLACEだが
+--     トリガー本体は既存のものを再利用、シグネチャ不変のためS4の一覧
+--     自体には変化なし）。
+--   - [同時発見・ラベル文言のみのpre-existing gap] 本更新の実測時、
+--     S4のラベル文言が「70件」のままだったが、`expected` CTEの実際の
+--     要素数は71件だった（重複・過不足は無いことを確認済み。中身は
+--     正しいまま、説明文言の数字だけが1件古かった）。中身（判定ロジック）
+--     は書き換えず、ラベルの数字表記のみ実測どおりに直した。
+--   ハッシュ・件数はいずれもローカルDockerで`supabase db reset`後に実測
+--   して確認した（96.5章の遵守）。ローカルDocker環境に適用済み・実測済み。
+--   本番へは未適用（本部長の操作を待つ）。詳細は開発部/成果物/実装メモ.md
+--   参照。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -479,8 +533,11 @@ GRANT INSERT ON _r TO authenticated;
 -- （本ファイルにmember_avatarsの記載が1件も無いことで確認）。07-28章の担当外だが、
 -- 「既存の検査が全部通ること」を満たすため、このタスクの中であわせて反映した
 -- （開発部/成果物/実装メモ.md 237章に経緯を記録）。31+3=34。
+-- [2026-09-20再更新] content_reports・hidden_contents（設計部/成果物/
+-- スキーマ設計.sql 65章・66章）の2テーブルを追加。34→36。familiesへの
+-- 列3つの追加（67章）は既存テーブルへのADD COLUMNのためS1には数えない。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '34', count(*)::text, count(*) = 34
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '36', count(*)::text, count(*) = 36
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -597,6 +654,15 @@ WITH expected(t, p, c, h) AS (VALUES
   -- rewards側の同名パターンと条件式が文字通り同一のため、
   -- rewards_write_supporter_shared_by_creatorと同じハッシュになる（ローカルDockerで実測）。
   ('chores','chores_write_supporter_shared_by_creator','ALL','2a93eb3b57c53aa6ed099607a18ffa26'),
+  -- [2026-09-20追加] content_reports（アプリ内の報告／お問い合わせ、設計部/成果物/
+  -- スキーマ設計.sql 65章）。SELECTポリシーは「送信した本人の行だけ」
+  -- （`reporter_member_id = current_family_member_id()`）の1本のみ。
+  -- **family_idで絞る条件・is_current_user_parent()はいずれも意図的に
+  -- 置かない**（65.3章の核心。同じ家族の保護者にも送信内容を見せない
+  -- ため）。新規の条件式のため既存ハッシュの引き写しはできず、ローカル
+  -- Dockerで実測した。INSERT/UPDATE/DELETEポリシーは無い（書き込みは
+  -- submit_content_report()のみ、デフォルト拒否）。
+  ('content_reports','content_reports_select_own','SELECT','a49e8d1b8af90d450307f4b1574b8e99'),
   ('families','families_select_own','SELECT','722858ebf783bd99a2a4163f56dd1634'),
   ('families','families_update_by_parent','UPDATE','e5f50b299119f3b60ec261510beff957'),
   ('family_board_posts','family_board_posts_insert_self','INSERT','28574b1aee58588a3134af369c0c701a'),
@@ -657,6 +723,13 @@ WITH expected(t, p, c, h) AS (VALUES
   ('habit_cards','habit_cards_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('habit_figure_catalog','habit_figure_catalog_select_authenticated','SELECT','eb28d87532d6edd9b635727493ef89f7'),
   ('habit_figure_grants','habit_figure_grants_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-20追加] hidden_contents（運営による非表示＝決定7の段階3、設計部/
+  -- 成果物/スキーマ設計.sql 66章）。SELECTポリシーは`family_id =
+  -- current_family_id()`のみで、既存の多数のSELECTポリシーと文字通り同一の
+  -- ためハッシュを引き写せる（104章の教訓）。INSERT/UPDATE/DELETEポリシーは
+  -- 無い（運営がservice_roleでhide_content()/unhide_content()を使う。
+  -- 保護者が戻せないことを「戻すポリシーを書かない」ことで担保している）。
+  ('hidden_contents','hidden_contents_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   -- [2026-09-02追加] join_consents（招待受諾フローにおける可視範囲の説明と同意
   -- 取得、設計部/成果物/スキーマ設計.sql 40.4章、開発部/成果物/実装メモ.md
   -- 111章）。INSERT/UPDATE/DELETEポリシーは1本も定義しない設計（40.4章、書込みは
@@ -737,7 +810,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー63本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー65本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -764,6 +837,12 @@ WITH expected(f) AS (VALUES
   -- 新規関数作成時にauthenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動）。
   ('chore_nfc_tags_before_write'),
   ('chore_reactions_before_insert'),
+  -- [2026-09-20追加] chore_reactions_social_toggle_guard（保護者トグル
+  -- 「家族のやりとりを使う」、設計部/成果物/スキーマ設計.sql 67.4章）。
+  -- kind='comment'の行のみ止めるBEFORE INSERTトリガー関数。他の非SECURITY
+  -- DEFINER／明示REVOKEなしのトリガー関数と同じ理由でS4に含まれる
+  -- （34.5章の既知の挙動）。
+  ('chore_reactions_social_toggle_guard'),
   -- [2026-09-19追加・シール帳の全面作り替え] choose_habit_card_kind
   -- （進行中のシール帳の絵柄を選び直す、要件定義書07-28章決定29、設計部/成果物/
   -- スキーマ設計.sql 57.6章、開発部/成果物/実装メモ.md 256章）。
@@ -820,12 +899,21 @@ WITH expected(f) AS (VALUES
   ('family_board_posts_before_insert'),
   ('family_board_posts_before_update'),('family_board_posts_daily_limit'),
   ('family_board_posts_daily_used'),
+  -- [2026-09-20追加] family_board_posts_social_toggle_guard（保護者トグル
+  -- 「家族のやりとりを使う」、設計部/成果物/スキーマ設計.sql 67.4章）。
+  -- 他の非SECURITY DEFINER／明示REVOKEなしのトリガー関数と同じ理由でS4に
+  -- 含まれる（34.5章の既知の挙動）。
+  ('family_board_posts_social_toggle_guard'),
   -- [2026-09-01追加] family_board_reactions_before_insert（開発部/成果物/実装メモ.md
   -- 103章）。他のBEFORE INSERTトリガー関数（chore_reactions_before_insert等）と同じく
   -- SECURITY DEFINERではないため、本プロジェクトの既知の挙動（34.5章）により新規関数
   -- 作成時にauthenticatedへEXECUTE権限が自動付与される。明示的なREVOKEは行っていない
   -- （既存の同種トリガー関数と同じ扱い）ため、この一覧にも追加する。
   ('family_board_reactions_before_insert'),
+  -- [2026-09-20追加] family_board_reactions_social_toggle_guard（保護者
+  -- トグル「家族のやりとりを使う」、設計部/成果物/スキーマ設計.sql 67.4章）。
+  -- family_board_posts_social_toggle_guardと同じ理由でS4に含まれる。
+  ('family_board_reactions_social_toggle_guard'),
   ('family_drawings_before_insert'),('family_invite_lookup'),
   ('family_invites_before_insert'),('family_invites_before_update'),
   ('family_member_pins_before_write'),('family_members_before_update'),('family_tree_seasons_bump'),
@@ -839,6 +927,12 @@ WITH expected(f) AS (VALUES
   -- できる関数のこの一覧からはproname自体が消える。
   ('gratitude_daily_allowance'),('gratitude_points_before_insert'),
   ('gratitude_points_before_update'),('gratitude_points_daily_used'),
+  -- [2026-09-20追加] gratitude_points_social_toggle_guard（保護者トグル
+  -- 「家族のやりとりを使う」、設計部/成果物/スキーマ設計.sql 67.4章）。
+  -- noteが非NULLの行のみ止めるBEFORE INSERTトリガー関数。感謝ポイントを
+  -- 贈ること自体（note=NULL）は止めない。他の非SECURITY DEFINER／明示
+  -- REVOKEなしのトリガー関数と同じ理由でS4に含まれる。
+  ('gratitude_points_social_toggle_guard'),
   -- [2026-09-17追加] habit_card_progress_bump・habit_cards_before_write
   -- （習慣カードの累計カウント・自動付与、家族整合性検証・3枚上限の強制。
   -- 要件定義書07-28章、設計部/成果物/スキーマ設計.sql 55.5章・55.3a章、
@@ -847,6 +941,12 @@ WITH expected(f) AS (VALUES
   -- 自動付与される（34.5章の既知の挙動）。
   ('habit_card_progress_bump'),('habit_cards_before_write'),
   ('is_current_user_parent'),
+  -- [2026-09-20追加] is_family_social_interactions_enabled（保護者トグル
+  -- 「家族のやりとりを使う」の現在値を引く共通ヘルパー、設計部/成果物/
+  -- スキーマ設計.sql 67.4章）。SECURITY DEFINER・STABLEだが、下の4本の
+  -- トリガー関数（authenticatedロールで実行される）から呼ぶため明示的に
+  -- authenticatedへGRANTしている（34.3章の教訓）。
+  ('is_family_social_interactions_enabled'),
   -- [2026-09-17追加・pre-existing gap修正] is_valid_avatar_line_data
   -- （member_avatars、20260924010000_member_avatars.sql）。is_valid_drawing_
   -- line_data等と同じくLANGUAGE SQL・SECURITY DEFINERではないため、新規関数
@@ -932,7 +1032,19 @@ WITH expected(f) AS (VALUES
   -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。
   -- purchase_sticker(UUID)はシグネチャ無変更のCREATE OR REPLACEのため、この
   -- 一覧には変化を及ぼさない（増減±0、設計部53.12章の見込みどおり）。
-  ('set_family_sticker_prices')
+  ('set_family_sticker_prices'),
+  -- [2026-09-20追加] set_family_social_settings（保護者トグル「家族の
+  -- やりとりを使う」の書き込み経路、設計部/成果物/スキーマ設計.sql 67.5章）。
+  -- reset_sticker_tier()等と同じくSECURITY DEFINERであり、PUBLIC/anonから
+  -- 明示的にREVOKEしたうえでauthenticatedへ明示的にGRANTしている。保護者
+  -- のみ呼べる（関数内チェック。みまもり・子どもはinsufficient_privilege）。
+  ('set_family_social_settings'),
+  -- [2026-09-20追加] submit_content_report（アプリ内の報告／お問い合わせの
+  -- 書き込み経路、設計部/成果物/スキーマ設計.sql 65.4章）。draw_gacha()等と
+  -- 同じくSECURITY DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえで
+  -- authenticatedへ明示的にGRANTしている。保護者とみまもりメンバーのみ
+  -- 呼べる（子どものセッションからはinsufficient_privilege）。
+  ('submit_content_report')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -945,7 +1057,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数70件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数78件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

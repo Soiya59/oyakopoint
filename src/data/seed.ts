@@ -23,6 +23,11 @@ export const seedFamily: Family = {
   invite_code: "AB3CD9EF",
   created_at: "2026-07-01T00:00:00+09:00",
   updated_at: "2026-07-01T00:00:00+09:00",
+  // [2026-09-20追加・設計部/成果物/スキーマ設計.sql 67章] 保護者トグル
+  // 「家族のやりとりを使う」。モックは常にオン（既定値）。
+  social_interactions_enabled: true,
+  social_settings_updated_by: null,
+  social_settings_updated_at: null,
 };
 
 export const seedMembers: FamilyMember[] = [

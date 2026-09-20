@@ -26,7 +26,9 @@ import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
  * 連続記録・合計数のような競争的な数値は表示しない（10.3章決定）。
  */
 type LoadState = "loading" | "error" | "ready";
-type LogRow = { id: string; when: string; text: string; note: string };
+// [2026-09-20改訂・やること.md 4-71] noteはnull許容（設計部/成果物/
+// スキーマ設計.sql 67.3章）。
+type LogRow = { id: string; when: string; text: string; note: string | null };
 
 export default function ChildGratitudeHubScreen() {
   const { state } = useAppData();
@@ -145,7 +147,9 @@ export default function ChildGratitudeHubScreen() {
               {rows.map((r) => (
                 <View key={r.id}>
                   <Text style={theme.typography.childBody}>{r.text}</Text>
-                  <Text style={styles.noteLabel}>「{r.note}」</Text>
+                  {/* [2026-09-20修正・やること.md 4-71] noteがNULLの行はひとこと欄を
+                      描かない（主要画面ワイヤーフレーム.md 56.4節決定20a）。 */}
+                  {r.note && <Text style={styles.noteLabel}>「{r.note}」</Text>}
                   <Text style={styles.dateLabel}>{formatDateShort(toJstDateString(r.when))}</Text>
                 </View>
               ))}

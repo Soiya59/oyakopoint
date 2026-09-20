@@ -1516,7 +1516,10 @@ export async function fetchMyGratitudeGiveableBalance(client: SupabaseClient): P
  */
 export async function sendGratitudePoints(
   client: SupabaseClient,
-  input: { sender_id: string; recipient_id: string; points: number; note: string }
+  // [2026-09-20改訂・やること.md 4-71] noteはnull許容（保護者トグルがオフの
+  // 家族では、ひとことを書かずに贈れる。設計部/成果物/スキーマ設計.sql
+  // 67.3章）。呼び出し元でtrim()した空文字はnullに寄せてから渡すこと。
+  input: { sender_id: string; recipient_id: string; points: number; note: string | null }
 ): Promise<ApiResult<GratitudePoint>> {
   const { data, error } = await client
     .from("gratitude_points")

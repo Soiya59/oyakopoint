@@ -14,6 +14,15 @@ export interface Family {
   invite_code: string;
   created_at: string;
   updated_at: string;
+  // [2026-09-20追加・設計部/成果物/スキーマ設計.sql 67章] 保護者トグル
+  // 「家族のやりとりを使う」。falseのとき、掲示板・完了報告へのコメント・
+  // 感謝のひとことの自由記述を止める（感謝ポイントを贈ること自体は止めない）。
+  // トグルの設定画面そのものは未実装（次回）。既定はtrue。
+  social_interactions_enabled: boolean;
+  // 最後にソーシャル設定を確認・変更した保護者のfamily_members.id。
+  // NULL = まだ一度も保護者が確認していない。画面には出さない（決定10・24）。
+  social_settings_updated_by: string | null;
+  social_settings_updated_at: string | null;
 }
 
 export interface FamilyMember {
@@ -203,7 +212,13 @@ export interface GratitudePoint {
   sender_id: string; // family_members.id
   recipient_id: string; // family_members.id
   points: number;
-  note: string; // 自由記述必須（1〜200文字、DB側CHECK制約）
+  // [2026-09-20改訂・設計部/成果物/スキーマ設計.sql 67.3章] 保護者トグルが
+  // オフの家族では、ひとことを書かずに贈れるようにするためNULL許容化した
+  // （感謝ポイントを贈ること自体は止めない、という決定を満たすため）。
+  // トグルがオン（既定）の家族では、これまでどおり自由記述が必須のまま
+  // 変わらない（アプリ側の送信可否判定で担保）。NULL＝「ひとことを書かずに
+  // 贈った」。1〜200文字（DB側CHECK制約、NULLには適用されない）。
+  note: string | null;
   created_at: string;
   revoked_at: string | null; // 非NULL=誤操作取消済み（送信から5分以内・sender本人のみ）
 }
@@ -276,7 +291,10 @@ export interface LedgerEntry {
   // [新設・2026-08-16] kind='gratitude'（感謝ポイント受領分、gratitude_points由来）の
   // 自由記述メモ。通帳統合表示用（主要画面ワイヤーフレーム.md 4章「感謝ポイントの
   // 通帳への統合表示」）。kind='earn'/'spend'では未使用。
-  note?: string;
+  // [2026-09-20改訂・やること.md 4-71] gratitude_points.noteがNULL許容に
+  // なったため、nullも受け付ける（保護者トグルがオフの間に贈られた、
+  // ひとこと無しの感謝）。
+  note?: string | null;
 }
 
 // 実施履歴カレンダー（要件定義書07-3章、API仕様.md 6a章）の日別集計1行。
