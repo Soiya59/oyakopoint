@@ -9,7 +9,6 @@ import { useAppData } from "@/data/store";
 import { useCollectedPrizes, usePastTreeSeasonDots, usePastTreeSeasons } from "@/hooks/useCollectorShelf";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useFamilyStickerPurchases, useMyStickerPurchases } from "@/hooks/useStickers";
-import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useHabitCards";
 
 /**
@@ -41,7 +40,6 @@ export default function SupporterCollectorShelfScreen() {
   const effectiveMemberId = isViewingIndividual ? selectedMemberId : "";
 
   const { season } = useFamilyTreeDetail();
-  const { loadState: badgesLoadState, rows: badgeRows, reload: reloadBadges } = useMemberBadgeRows(effectiveMemberId);
   const { loadState: stickersLoadState, purchases: stickerPurchases, reload: reloadStickers } = useMyStickerPurchases(
     effectiveMemberId,
     season?.id ?? null
@@ -73,7 +71,7 @@ export default function SupporterCollectorShelfScreen() {
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
           保護者側（app/parent/collector-shelf.tsx）と同一文言を流用する。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ガチャの景品・お絵かき・メダル・バッジなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
+        ガチャの景品・お絵かき・メダル・フィギュアなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
       </Text>
 
       <CollectorShelfPanel
@@ -96,9 +94,6 @@ export default function SupporterCollectorShelfScreen() {
         myMemberId={myId}
         selectedMemberId={selectedMemberId}
         onSelectMember={setSelectedMemberId}
-        badgesLoadState={badgesLoadState}
-        badgeRows={badgeRows}
-        onRetryBadges={reloadBadges}
         stickersLoadState={stickersLoadState}
         stickerPurchases={stickerPurchases}
         onRetryStickers={reloadStickers}

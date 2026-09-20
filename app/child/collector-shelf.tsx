@@ -9,7 +9,6 @@ import { useAppData } from "@/data/store";
 import { useCollectedPrizes, usePastTreeSeasonDots, usePastTreeSeasons } from "@/hooks/useCollectorShelf";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
 import { useFamilyStickerPurchases, useMyStickerPurchases } from "@/hooks/useStickers";
-import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useHabitCards";
 
 /**
@@ -18,8 +17,10 @@ import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useH
  * 開発部/成果物/実装メモ.md 142章
  *
  * 07-13-3章「コレクター棚」に対応する。見出しを「あつめたもの」「まえの木」
- * 「だれの？」「バッジ」「つくった・あつめたもの」「シール」に置き換える（32.2a節）
- * 以外はP31/S19と同一構成で、CollectorShelfPanel（3ロール共通）にロジックを集約する。
+ * 「だれの？」「つくった・あつめたもの」「シール」に置き換える（32.2a節）以外は
+ * P31/S19と同一構成で、CollectorShelfPanel（3ロール共通）にロジックを集約する。
+ * [2026-09-21改訂・主要画面ワイヤーフレーム.md 58.5a節決定3] 「バッジ」区分は
+ * コレクター棚から削除した（絵が無く集めるものでもないため）。
  */
 export default function ChildCollectorShelfScreen() {
   const { state } = useAppData();
@@ -42,7 +43,6 @@ export default function ChildCollectorShelfScreen() {
   const effectiveMemberId = isViewingIndividual ? selectedMemberId : "";
 
   const { season } = useFamilyTreeDetail();
-  const { loadState: badgesLoadState, rows: badgeRows, reload: reloadBadges } = useMemberBadgeRows(effectiveMemberId);
   const { loadState: stickersLoadState, purchases: stickerPurchases, reload: reloadStickers } = useMyStickerPurchases(
     effectiveMemberId,
     season?.id ?? null
@@ -94,9 +94,6 @@ export default function ChildCollectorShelfScreen() {
         myMemberId={myId}
         selectedMemberId={selectedMemberId}
         onSelectMember={setSelectedMemberId}
-        badgesLoadState={badgesLoadState}
-        badgeRows={badgeRows}
-        onRetryBadges={reloadBadges}
         stickersLoadState={stickersLoadState}
         stickerPurchases={stickerPurchases}
         onRetryStickers={reloadStickers}

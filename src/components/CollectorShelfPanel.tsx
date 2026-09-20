@@ -11,9 +11,12 @@
  * 「区画3：自分のステッカー」という独立タブは廃止し、タブは「集めたもの」
  * 「過去の木」の2つに戻した（決定19）。「集めたもの」タブの中にメンバー選択
  * チップ（全員＋各メンバー、決定20・決定22「既定は全員」）を新設し、個別メンバーを
- * 選ぶと「バッジ」（決定24・達成済みのみ）「つくった・あつめたもの」（決定21・
- * このメンバーが獲得/描いたものへの絞り込み）「シール」（決定23・所有数0の行は
- * 表示しない）の3区分をまとめて見せる。
+ * 選ぶと「つくった・あつめたもの」（決定21・このメンバーが獲得/描いたものへの
+ * 絞り込み）「シール」（決定23・所有数0の行は表示しない）「フィギュア」の区分を
+ * まとめて見せる。
+ * [2026-09-21削除・主要画面ワイヤーフレーム.md 58.5a節決定3] 旧「バッジ」区分
+ * （決定24・達成済みのみ）はこの一覧から外した。絵が無く集めるものでもないため、
+ * コレクター棚には表示しない（通帳・S1「MyPointsCard」の表示はそのまま残す）。
  *
  * 決定6「木に飾る」「並べ替える」ボタンを一切配置しない、という原則は区画1
  * 「集めたもの」（全員選択時）・区画2「過去の木」には引き続きそのまま適用する。
@@ -29,7 +32,6 @@
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
-import BadgeList from "./BadgeList";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
@@ -44,7 +46,6 @@ import { computeHabitCardDurationDays, getHabitCardKindInfo, summarizeHabitCardB
 import { toJstDateString } from "@/lib/calendarDates";
 import theme from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
-import type { BadgeRow } from "@/hooks/useBadges";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 import type {
   FamilyMember,
@@ -138,11 +139,6 @@ export interface CollectorShelfPanelProps {
   // 「集めたもの」区画内のメンバー選択チップ。ALL_MEMBERS_IDが「全員」（既定）。
   selectedMemberId: string;
   onSelectMember: (memberId: string) => void;
-
-  /** 個別メンバー選択時の「バッジ」区分（決定24、達成済みのみ）。 */
-  badgesLoadState: LoadState;
-  badgeRows: BadgeRow[];
-  onRetryBadges: () => void;
 
   /** 個別メンバー選択時の「シール」区分（決定23）。 */
   stickersLoadState: LoadState;
@@ -666,9 +662,6 @@ export function CollectorShelfPanel({
   myMemberId,
   selectedMemberId,
   onSelectMember,
-  badgesLoadState,
-  badgeRows,
-  onRetryBadges,
   stickersLoadState,
   stickerPurchases,
   onRetryStickers,
@@ -827,23 +820,12 @@ export function CollectorShelfPanel({
               </View>
             </View>
           ) : (
-            // 個別メンバー選択時: バッジ・つくった/あつめたもの・シールの3区分（決定21・22）。
+            // 個別メンバー選択時: つくった/あつめたもの・シール・フィギュアの3区分（決定21・22）。
+            // [2026-09-21削除・主要画面ワイヤーフレーム.md 58.5a節決定3] 旧「バッジ」区分
+            // （決定24）は、絵が無く集めるものでもないため「集めたもの」区画から外した。
+            // 通帳（P16/C8）・S1「MyPointsCard」の表示（見出しは「これまでの回数」
+            // 「ここまでの かず」に改称、58.2節）は変更しない。
             <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s6 }}>
-              {/* --- バッジ区分（決定24。達成済みのみ、進捗は出さない） --- */}
-              <View>
-                <Text style={[captionStyle, styles.legendHeading]}>バッジ</Text>
-                {badgesLoadState === "loading" && <SkeletonList count={1} />}
-                {badgesLoadState === "error" && (
-                  <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetryBadges} />
-                )}
-                {badgesLoadState === "ready" && badgeRows.every((r) => r.achievedTier === null) && (
-                  <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>
-                )}
-                {badgesLoadState === "ready" && (
-                  <BadgeList isChild={isChild} loadState={badgesLoadState} rows={badgeRows} achievedOnly hideHeading />
-                )}
-              </View>
-
               {/* --- つくった・あつめたもの区分（決定21） --- */}
               <View>
                 <Text style={[captionStyle, styles.legendHeading]}>つくった・あつめたもの</Text>

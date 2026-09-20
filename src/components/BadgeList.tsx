@@ -1,18 +1,25 @@
 /**
- * 累計到達バッジのリスト表示（P16/C8/S1で共通利用）。
- * 参照: 主要画面ワイヤーフレーム.md 32.4節・32.5節、デザイントークン.md 1.12節。
+ * 累計到達回数のリスト表示（P16/C8/S1で共通利用）。
+ * 参照: 主要画面ワイヤーフレーム.md 32.4節・32.5節・58章、デザイントークン.md 1.12節。
  *
- * バッジは新しい絵を増やさず、既存の絵文字1種＋到達値の数字併記のみで表現する
- * （決定13・決定28）。未達成のバッジも「あと◯」という進捗として常に表示し、
+ * 新しい絵を増やさず、既存の絵文字1種＋到達値の数字併記のみで表現する
+ * （決定13・決定28）。未達成の行も「あと◯」という進捗として常に表示し、
  * 「未獲得」「ロック中」等の欠落・制限を示す表現は使わない（0.1節）。
  *
- * [2026-09-08追加・主要画面ワイヤーフレーム.md 32.2a節「バッジ」区分・決定24]
- * コレクター棚「集めたもの」区画（個別メンバー選択時）にも達成済みバッジのみを
- * 複製表示する（通帳・S1の表示は変更しない。「移すのではなく両方に出す」）。
- * `achievedOnly`を指定すると、未達成の行を表示せず・進捗（あと◯）も出さない
- * 簡略表示になる。全件が未達成（＝達成済み0件）のときは呼び出し側が空状態文言を
- * 出す想定のため、本コンポーネント自体は何も描画しない（`rows`は空配列を渡すか、
- * 呼び出し側で0件判定してから使う）。
+ * [2026-09-21改訂・主要画面ワイヤーフレーム.md 58章] 見出しは「バッジ」から
+ * 「これまでの回数」（保護者・みまもりメンバー向け）「ここまでの かず」（子ども向け）に
+ * 変更した（58.2節決定1）。統括の実機指摘「バッジといってもバッジのそれがない」
+ * （実物の絵が伴わない）に対応する。あわせて`lifetime_points_earned`
+ * （🌟 はじめの100pt）を廃止した（58.3節決定2。theme.badgeDefinitions側で対応）。
+ *
+ * [2026-09-08追加・2026-09-21削除・主要画面ワイヤーフレーム.md 58.5a節決定3]
+ * コレクター棚「集めたもの」区画（個別メンバー選択時）に達成済みのみを複製表示する
+ * 対応（`achievedOnly`/`hideHeading`props、CollectorShelfPanel.tsxからの呼び出し）は
+ * 統括判断で削除した（絵が無く集めるものでもないため、コレクター棚には表示しない）。
+ * 呼び出し元が本コンポーネントのみになった（通帳P16/C8・S1「MyPointsCard」の3箇所）ため、
+ * 呼び出し側が0件時の空状態文言を出す想定や進捗の省略に使っていた2つのprops
+ * （`achievedOnly`・`hideHeading`）は、他に使うところが無くなったため本コンポーネントからも
+ * 削除した（開発部・実装メモ272章、2026-09-21）。
  */
 import React from "react";
 import { StyleSheet, Text, TextStyle, View } from "react-native";
@@ -26,32 +33,21 @@ export interface BadgeListProps {
   rows: BadgeRow[];
   headingStyle?: TextStyle;
   rowStyle?: TextStyle;
-  /** [2026-09-08追加] trueなら達成済みのみを進捗なしで表示する（決定24、棚側の簡略表示）。 */
-  achievedOnly?: boolean;
-  /**
-   * [2026-09-08追加] trueなら見出し「バッジ」を描画しない。コレクター棚
-   * （主要画面ワイヤーフレーム.md 32.2a節）は3区分を通した共通レイアウトで見出しを
-   * 呼び出し側が独自に出すため、読み込み中・0件時も含めて常に同じ位置に見出しが
-   * 出るよう、本コンポーネント側の見出しは無効化できるようにした。
-   */
-  hideHeading?: boolean;
 }
 
-export function BadgeList({ isChild, loadState, rows, headingStyle, rowStyle, achievedOnly = false, hideHeading = false }: BadgeListProps) {
+export function BadgeList({ isChild, loadState, rows, headingStyle, rowStyle }: BadgeListProps) {
   if (loadState === "loading") return <SkeletonList count={2} />;
-  // [32.4節状態一覧] 通信エラー: バッジ区画専用のエラー状態は設けず、呼び出し側
-  // （通帳全体・S1カード全体・コレクター棚全体）のエラー表示に含める設計のため、
-  // ここでは何も描画しない。
+  // [32.4節状態一覧] 通信エラー: この区画専用のエラー状態は設けず、呼び出し側
+  // （通帳全体・S1カード全体）のエラー表示に含める設計のため、ここでは何も描画しない。
   if (loadState === "error") return null;
-
-  const visibleRows = achievedOnly ? rows.filter((r) => r.achievedTier !== null) : rows;
-  if (achievedOnly && visibleRows.length === 0) return null;
 
   return (
     <View>
-      {!hideHeading && <Text style={[theme.typography.parentBody, styles.heading, headingStyle]}>バッジ</Text>}
+      <Text style={[theme.typography.parentBody, styles.heading, headingStyle]}>
+        {isChild ? "ここまでの かず" : "これまでの回数"}
+      </Text>
       <View style={{ gap: theme.spacing.s1 }}>
-        {visibleRows.map((row) => {
+        {rows.map((row) => {
           const achieved = row.achievedTier !== null;
           const label = isChild ? row.nameChild : row.nameParent;
           const achievedLabel = isChild ? "たっせい！" : "達成";
@@ -60,8 +56,7 @@ export function BadgeList({ isChild, loadState, rows, headingStyle, rowStyle, ac
           // のように名前と単位が食い違っていた（統括の実機確認）。単位は
           // theme.badgeDefinitions の unit を使う。
           const unit = row.unit[isChild ? 1 : 0];
-          const progressLabel =
-            !achievedOnly && row.remaining !== null ? `あと${row.remaining}${unit}` : null;
+          const progressLabel = row.remaining !== null ? `あと${row.remaining}${unit}` : null;
           return (
             <Text key={row.key} style={[theme.typography.parentBody, rowStyle]}>
               {row.emoji} {label}
