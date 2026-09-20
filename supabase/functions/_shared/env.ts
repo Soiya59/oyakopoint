@@ -66,4 +66,26 @@ export const env = {
   get childJwtSigningSecret(): string {
     return requireEnv("CHILD_JWT_SIGNING_SECRET");
   },
+  /**
+   * [2026-09-21追加] notify-content-report専用。Resendの送信用APIキー
+   * （開発部/成果物/実装メモ.md 271章）。
+   *
+   * 他のアクセサと異なりrequireEnv()を使わず、未設定でも例外を投げない
+   * （nullを返す）。理由: この関数はローカル環境ではキーを設定せずに
+   * 動作確認する設計にしてあり（ドライラン。notify-content-report/
+   * index.ts参照）、未設定を異常系として扱わないため。本番運用時は
+   * 必ず設定されている前提（実装メモ271章に設定手順を記載）。
+   */
+  get resendApiKey(): string | null {
+    return Deno.env.get("RESEND_API_KEY") || null;
+  },
+  /**
+   * [2026-09-21追加] notify-content-report専用。運営への通知メールの
+   * 宛先を上書きしたいときだけ設定する任意項目。未設定時は
+   * notify-content-report/index.ts の DEFAULT_NOTIFY_TO
+   * （CONTACT_EMAILと同じ値）を使う。秘密情報ではない。
+   */
+  get contentReportNotifyTo(): string | null {
+    return Deno.env.get("CONTENT_REPORT_NOTIFY_TO") || null;
+  },
 };

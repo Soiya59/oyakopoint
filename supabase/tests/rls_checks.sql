@@ -1089,7 +1089,15 @@ WITH expected(f) AS (VALUES
   -- 同じくSECURITY DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえで
   -- authenticatedへ明示的にGRANTしている。保護者とみまもりメンバーのみ
   -- 呼べる（子どものセッションからはinsufficient_privilege）。
-  ('submit_content_report')
+  ('submit_content_report'),
+  -- [2026-09-21追加] content_reports_after_insert_notify（報告の通知メール
+  -- を送るEdge Functionを呼び出すAFTER INSERTトリガー関数、設計部/成果物/
+  -- スキーマ設計.sql 65.5章、開発部/成果物/実装メモ.md 271章）。
+  -- SECURITY DEFINERだがRETURNS TRIGGERであり、chore_reactions_social_
+  -- toggle_guard等の既存トリガー関数と同じ理由（34.5章の既知の挙動）で
+  -- 明示REVOKEしていないため、この一覧に含まれる。トリガー文脈の外で
+  -- 直接呼び出すとNEW参照でエラーになるだけで実害は無い。
+  ('content_reports_after_insert_notify')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1102,7 +1110,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数78件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数79件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
