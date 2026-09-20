@@ -767,10 +767,21 @@ export default function FamilyScreen() {
           家族みんなの画面に反映されます。これまでに書いたものは消えません。
         </Text>
         <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
-          家族の書き込み・コメント・ひとことを使う
+          {/* [2026-09-21訂正・主要画面ワイヤーフレーム.md 56章 決定17b] 旧文言
+              「家族の書き込み・コメント・ひとことを使う」は、3つの語がいずれも
+              画面の呼び名と一致せず、とくに「ひとこと」と「コメント」が重なって
+              いた（子どもの画面では完了報告に「＋ひとこと」と出る）。統括の指摘
+              「これって、対象はわかるのかな？」を受け、実際の表示名に置き換えた。 */}
+          家族の掲示板・完了報告への「＋コメント」・ありがとうのメッセージを使う
         </Text>
         <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          スタンプや、ありがとうのポイントは、そのまま使えます。
+          ・掲示板は、子どもの画面では「かぞくのけいじばん」といいます
+        </Text>
+        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+          ・「＋コメント」は、子どもの画面では「＋ひとこと」といいます
+        </Text>
+        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+          「いまは使わない」にすると、この3つを書く・送ることが止まります。スタンプを送ることと、ありがとうのポイントを贈ることは、そのまま使えます。とまるのはメッセージだけです。
         </Text>
         <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
           <Pressable
