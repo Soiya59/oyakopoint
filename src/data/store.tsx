@@ -31,6 +31,7 @@ import type {
   FamilyDrawingLineData,
   FamilyMember,
   GratitudePoint,
+  HiddenContent,
   LedgerEntry,
   MemberBlock,
   MemberPoints,
@@ -40,6 +41,11 @@ import type {
   StampKey,
 } from "@/types/domain";
 import { excludeBlockedChoreReactionComments, blankBlockedGratitudeNotes } from "@/lib/blockFilter";
+import {
+  hiddenContentKey,
+  excludeHiddenChoreReactionComments,
+  blankHiddenNoteById,
+} from "@/lib/hiddenContentFilter";
 import {
   seedCategories,
   seedChores,
@@ -112,6 +118,17 @@ export interface State {
    * 設計後）にそちらで使う。
    */
   memberBlocks: MemberBlock[];
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定7の段階3、設計部/成果物/スキーマ設計.sql
+   * 66章] 運営が`hide_content()`で非表示にした行（家族分）。誰が報告したか・
+   * 本文は入っていない（種別＋対象id＋日時のみ）。`state.completions`
+   * （note）・`state.reactions`（chore_reaction_comment）・`state.gratitude`
+   * （note）は、load()の中でこの一覧をもとに既にフィルタ済みの状態で入って
+   * いる（src/lib/hiddenContentFilter.ts参照）。掲示板の投稿・公開済みの
+   * お絵かきはグローバルstateを経由しないため、この一覧はcontext値
+   * （hiddenContentKeysSet）としても公開し、各画面のフックがそちらを使う。
+   */
+  hiddenContents: HiddenContent[];
 }
 
 export type Action =
@@ -145,7 +162,14 @@ export type Action =
   | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string }
   | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean }
   /** [2026-09-03追加] 完了報告の直後の取消（要件定義書07-17章、API仕様.md 4d節）。 */
-  | { type: "CANCEL_COMPLETION"; completionId: string };
+  | { type: "CANCEL_COMPLETION"; completionId: string }
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33] モック実装専用。
+   * 保護者トグル「家族のやりとりを使う」。実接続時はRPC（set_family_social_settings）
+   * 経由でDBを更新するため、このActionは使わない
+   * （RealDataProviderImplのsetFamilySocialInteractionsEnabled参照）。
+   */
+  | { type: "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED"; enabled: boolean };
 
 /**
  * [2026-09-03改訂] REPORT_COMPLETION成功時のみ、生成された完了報告id（completionId）を
@@ -220,6 +244,20 @@ export interface DataContextValue {
   blockMember: (blockedMemberId: string) => Promise<DispatchResult>;
   /** 非表示を解除する（いつでも自分で解除できる。決定11）。成功後、`memberBlocks`を再取得する。 */
   unblockMember: (blockedMemberId: string) => Promise<DispatchResult>;
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定7の段階3] `state.hiddenContents`を
+   * `${content_kind}:${content_id}`のキー集合にしたもの（O(1)判定用、
+   * `src/lib/hiddenContentFilter.ts`のkeyと同じ形）。掲示板の投稿・公開済みの
+   * お絵かき等、グローバルstateを経由しない一覧を画面側のフックでフィルタする
+   * 際に使う。
+   */
+  hiddenContentKeysSet: Set<string>;
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33] 保護者が「家族の
+   * やりとりを使う」トグルを設定する（保護者のみ。みまもり・子どもは
+   * insufficient_privilege）。成功後、家族データを再取得する。
+   */
+  setFamilySocialInteractionsEnabled: (enabled: boolean) => Promise<DispatchResult>;
 }
 
 const AppDataContext = createContext<DataContextValue | null>(null);
@@ -447,6 +485,7 @@ const EMPTY_STATE: State = {
   activeParentMemberId: "",
   dailyFlaggedChoreIds: [],
   memberBlocks: [],
+  hiddenContents: [],
 };
 
 function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
@@ -596,6 +635,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dailySummaryRes,
       dailyFlagsRes,
       memberBlocksRes,
+      hiddenContentsRes,
     ] = await Promise.all([
       api.fetchCompletions(client, familyId, background ? recentWindowStartIso : undefined),
       api.fetchReactions(client, familyId),
@@ -621,6 +661,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       // （69.3章）。リアルタイム反映は不要（決定11・69.4章）のため、他の
       // 家族データと同じ15秒背景更新サイクルに乗せてよい。
       api.fetchMyMemberBlocks(client),
+      // [2026-09-21追加・要件定義書07-32章 決定7の段階3] 運営が非表示にした
+      // 行の一覧（家族分）。リアルタイム反映は要らない（運営操作の反映まで
+      // 15秒〜次の画面遷移まで待たせてよい）ため、他の家族データと同じ
+      // 背景更新サイクルに乗せる。
+      api.fetchHiddenContents(client, familyId),
     ]);
     if (isStale()) return;
 
@@ -660,6 +705,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       fail(memberBlocksRes.error.message);
       return;
     }
+    if (!hiddenContentsRes.ok) {
+      fail(hiddenContentsRes.error.message);
+      return;
+    }
 
     // [2026-09-18追加・やること.md 4-47原因①] background=trueのときだけ、直近窓の
     // 結果を既存の全履歴（completionsRef.current）と合体する。background=falseの
@@ -676,15 +725,25 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // 対象外のまま残す。感謝のひとことはnoteだけを空にし、ポイント・行自体は
     // 変えない（決定11「相手の側は影響を受けない」）。
     const blockedMemberIds = new Set(memberBlocksRes.data.map((b) => b.blocked_member_id));
-    const filteredReactions = excludeBlockedChoreReactionComments(reactionsRes.data, blockedMemberIds);
-    const filteredGratitude = blankBlockedGratitudeNotes(gratitudeRes.data, blockedMemberIds);
+    const blockFilteredReactions = excludeBlockedChoreReactionComments(reactionsRes.data, blockedMemberIds);
+    const blockFilteredGratitude = blankBlockedGratitudeNotes(gratitudeRes.data, blockedMemberIds);
+
+    // [2026-09-21追加・要件定義書07-32章 決定7の段階3] 取得後フィルタ
+    // （src/lib/hiddenContentFilter.ts）。ブロックと同じ「取得後にクライアント側で
+    // 除く」形だが、ブロックは「自分だけ」・非表示は「家族全員から」という違いが
+    // ある（66章）。完了報告のひとこと（chore_completion_note）はブロックの対象に
+    // 無いため、この経路が唯一のnote除去手段になる。
+    const hiddenKeys = new Set(hiddenContentsRes.data.map((h) => hiddenContentKey(h.content_kind, h.content_id)));
+    const filteredCompletions = blankHiddenNoteById(mergedCompletions, "chore_completion_note", hiddenKeys);
+    const filteredReactions = excludeHiddenChoreReactionComments(blockFilteredReactions, hiddenKeys);
+    const filteredGratitude = blankHiddenNoteById(blockFilteredGratitude, "gratitude_note", hiddenKeys);
 
     setState({
       family: bundleRes.data.family,
       members: bundleRes.data.members,
       categories: bundleRes.data.categories,
       chores: bundleRes.data.chores,
-      completions: mergedCompletions,
+      completions: filteredCompletions,
       reactions: filteredReactions,
       rewards: bundleRes.data.rewards,
       redemptions: redemptionsRes.data,
@@ -694,6 +753,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       activeParentMemberId,
       dailyFlaggedChoreIds: dailyFlagsRes.data,
       memberBlocks: memberBlocksRes.data,
+      hiddenContents: hiddenContentsRes.data,
     });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
@@ -836,13 +896,16 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // 取得後フィルタを、既に持っている自分のブロック一覧（prev.memberBlocks）で
     // かけ直す。ここで再取得しないのは、ブロックの一覧自体はリアルタイム反映が
     // 不要（決定11・69.4章）なため、次のload()サイクルで揃えば足りるから。
-    setState((prev) => ({
-      ...prev,
-      reactions: excludeBlockedChoreReactionComments(
+    // [2026-09-21追加・要件定義書07-32章 決定7の段階3] 非表示（prev.hiddenContents）も
+    // 同じ理由で再取得せず、既に持っている一覧でかけ直す。
+    setState((prev) => {
+      const hiddenKeys = new Set(prev.hiddenContents.map((h) => hiddenContentKey(h.content_kind, h.content_id)));
+      const blockFiltered = excludeBlockedChoreReactionComments(
         res.data,
         new Set(prev.memberBlocks.map((b) => b.blocked_member_id))
-      ),
-    }));
+      );
+      return { ...prev, reactions: excludeHiddenChoreReactionComments(blockFiltered, hiddenKeys) };
+    });
   }, [familyId, session.client, load]);
 
   /**
@@ -911,16 +974,23 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setState((prev) => ({
-      ...prev,
-      completions: mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data),
+    setState((prev) => {
+      const hiddenKeys = new Set(prev.hiddenContents.map((h) => hiddenContentKey(h.content_kind, h.content_id)));
+      const mergedCompletions = mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data);
       // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] refreshReactionsOnlyと
       // 同じ理由・同じ手法（prev.memberBlocksでかけ直す）。
-      reactions: excludeBlockedChoreReactionComments(
+      const blockFilteredReactions = excludeBlockedChoreReactionComments(
         reactionsRes.data,
         new Set(prev.memberBlocks.map((b) => b.blocked_member_id))
-      ),
-    }));
+      );
+      return {
+        ...prev,
+        // [2026-09-21追加・要件定義書07-32章 決定7の段階3] 非表示（prev.hiddenContents）も
+        // 同じ理由でかけ直す。
+        completions: blankHiddenNoteById(mergedCompletions, "chore_completion_note", hiddenKeys),
+        reactions: excludeHiddenChoreReactionComments(blockFilteredReactions, hiddenKeys),
+      };
+    });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
   }, [familyId, session.client, load]);
@@ -1008,10 +1078,13 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setState((prev) => ({
-      ...prev,
-      completions: mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data),
-    }));
+    setState((prev) => {
+      const hiddenKeys = new Set(prev.hiddenContents.map((h) => hiddenContentKey(h.content_kind, h.content_id)));
+      const mergedCompletions = mergeRecentCompletions(prev.completions, recentWindowStartMs, completionsRes.data);
+      // [2026-09-21追加・要件定義書07-32章 決定7の段階3] refreshAfterCancelと
+      // 同じ理由・同じ手法（prev.hiddenContentsでかけ直す）。
+      return { ...prev, completions: blankHiddenNoteById(mergedCompletions, "chore_completion_note", hiddenKeys) };
+    });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
   }, [familyId, session.client, load]);
@@ -1178,6 +1251,13 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     [state.memberBlocks]
   );
 
+  // [2026-09-21追加・要件定義書07-32章 決定7の段階3] state.hiddenContentsから
+  // Set<`${content_kind}:${content_id}`>を作る（O(1)判定用）。
+  const hiddenContentKeysSet = useMemo(
+    () => new Set(state.hiddenContents.map((h) => hiddenContentKey(h.content_kind, h.content_id))),
+    [state.hiddenContents]
+  );
+
   /**
    * [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」]
    * [2026-09-20訂正・本部長からの当日指示] 07-32-7と07-32-9が矛盾していた
@@ -1237,6 +1317,29 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     [session.client, session.status, activeParentMemberId]
   );
 
+  /**
+   * [2026-09-21新設・要件定義書07-32章 決定20〜24・決定33] 保護者が「家族の
+   * やりとりを使う」トグルを設定する。`set_family_social_settings()`
+   * （SECURITY DEFINER）自体が保護者以外を`insufficient_privilege`で拒否する
+   * ため、ここでのロール判定はUXのための早期リターンに過ぎない（多層防御の
+   * 主体はDB側）。成功後は`refresh()`（load()）で`families`を含む家族データ
+   * 一式を取り直す（列3つが変わるだけでも、他の家族データと同じ再取得経路に
+   * 乗せたほうがコードが1本で済む。既存のupdateFamilyName後の`refresh()`と
+   * 同じ扱い）。
+   */
+  const setFamilySocialInteractionsEnabled = useCallback(
+    async (enabled: boolean): Promise<DispatchResult> => {
+      if (session.status !== "parent") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この設定は保護者のみ変更できます" } };
+      }
+      const res = await api.setFamilySocialSettings(session.client, enabled);
+      if (!res.ok) return { ok: false, error: res.error };
+      await load();
+      return { ok: true };
+    },
+    [session.client, session.status, load]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       state,
@@ -1262,6 +1365,8 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       blockedMemberIdsSet,
       blockMember,
       unblockMember,
+      hiddenContentKeysSet,
+      setFamilySocialInteractionsEnabled,
     }),
     [
       state,
@@ -1274,6 +1379,8 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       blockedMemberIdsSet,
       blockMember,
       unblockMember,
+      hiddenContentKeysSet,
+      setFamilySocialInteractionsEnabled,
       findChoreByTag,
       stampReactionIndex,
       dailySummaryRows,
@@ -1335,6 +1442,8 @@ const initialState: State = {
   // [2026-09-20追加] モック実装ではmember_blocksの取得元が無いため、常に空配列
   // から始める（gratitude・familyBoardReactionsと同じ簡略化方針）。
   memberBlocks: [],
+  // [2026-09-21追加] 同上の理由でhidden_contentsも常に空配列から始める。
+  hiddenContents: [],
 };
 
 function reducer(state: State, action: Action): State {
@@ -1368,6 +1477,10 @@ function reducer(state: State, action: Action): State {
     // 実接続でのみ実際の業務ルールが働く）。
     case "CANCEL_COMPLETION": {
       return { ...state, completions: state.completions.filter((c) => c.id !== action.completionId) };
+    }
+
+    case "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED": {
+      return { ...state, family: { ...state.family, social_interactions_enabled: action.enabled } };
     }
 
     case "ADD_REACTION": {
@@ -1538,6 +1651,21 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
     return { ok: true };
   }, []);
 
+  // [2026-09-21追加・要件定義書07-32章 決定7の段階3] モック実装では
+  // hidden_contentsの取得元が無いため、常に空集合（何も隠さない）。
+  const hiddenContentKeysSet = useMemo(() => new Set<string>(), []);
+
+  // [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33] モック実装では
+  // families.social_interactions_enabledをローカルで更新するだけ（DBへは
+  // 書き込まない。memberAvatarsと同じ簡略化方針）。
+  const setFamilySocialInteractionsEnabled = useCallback(
+    async (enabled: boolean): Promise<DispatchResult> => {
+      dispatchRaw({ type: "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED", enabled });
+      return { ok: true };
+    },
+    []
+  );
+
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
     // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
     // idを事前に採番してreducerへ渡し、そのまま呼び出し元へ返す（reducer内部で
@@ -1585,6 +1713,8 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       blockedMemberIdsSet,
       blockMember,
       unblockMember,
+      hiddenContentKeysSet,
+      setFamilySocialInteractionsEnabled,
     }),
     [
       state,
@@ -1598,6 +1728,8 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       blockedMemberIdsSet,
       blockMember,
       unblockMember,
+      hiddenContentKeysSet,
+      setFamilySocialInteractionsEnabled,
     ]
   );
 

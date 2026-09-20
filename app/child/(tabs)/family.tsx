@@ -142,25 +142,31 @@ export default function ChildFamilyTabScreen() {
         text="👋 かぞくの がんばりが みえるよ。"
       />
 
-      {/* [2026-09-10移設・実装メモ.md 188章] 旧C5「かぞくのけいじばん」カード。 */}
-      <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>
-        <Card tone="child" style={styles.familyBoardCard}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={theme.typography.childBody}>💬 かぞくのけいじばん</Text>
-            {cardLoadState !== "error" && <Text style={theme.typography.childBody}>›</Text>}
-          </View>
-          {cardMessage === null ? (
-            <View style={styles.digestSkeleton} />
-          ) : (
-            <>
-              {cardAuthorName !== null && (
-                <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
-              )}
-              <Text style={{ marginTop: theme.spacing.s1 }}>{cardMessage}</Text>
-            </>
-          )}
-        </Card>
-      </Pressable>
+      {/* [2026-09-10移設・実装メモ.md 188章] 旧C5「かぞくのけいじばん」カード。
+          [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+          56.4節 決定20] 保護者トグル「家族のやりとりを使う」がオフの間はカード
+          そのものを描かない（グレーアウト・理由の案内は出さない。下部タブは
+          4つのまま・かぞくタブ自体は空にならない＝下のがんばり一覧は残る）。 */}
+      {state.family.social_interactions_enabled && (
+        <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/child/family-board")}>
+          <Card tone="child" style={styles.familyBoardCard}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.childBody}>💬 かぞくのけいじばん</Text>
+              {cardLoadState !== "error" && <Text style={theme.typography.childBody}>›</Text>}
+            </View>
+            {cardMessage === null ? (
+              <View style={styles.digestSkeleton} />
+            ) : (
+              <>
+                {cardAuthorName !== null && (
+                  <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+                )}
+                <Text style={{ marginTop: theme.spacing.s1 }}>{cardMessage}</Text>
+              </>
+            )}
+          </Card>
+        </Pressable>
+      )}
 
       <View style={[styles.titleRow, { marginTop: theme.spacing.s6 }]}>
         <Text style={theme.typography.childHeadline}>👨‍👩‍👧‍👦 かぞくのがんばり</Text>
@@ -191,6 +197,7 @@ export default function ChildFamilyTabScreen() {
             onOpenDetail={openDetail}
             onSendStamp={sendStamp}
             hasReactedWithStamp={hasReactedWithStamp}
+            commentsEnabled={state.family.social_interactions_enabled}
           />
         );
       })}
@@ -219,6 +226,7 @@ export default function ChildFamilyTabScreen() {
         onChangeCommentDraft={setCommentDraft}
         sendingComment={sendingComment}
         reactionError={reactionError}
+        commentsEnabled={state.family.social_interactions_enabled}
         onSendStamp={sendStamp}
         onSendComment={sendComment}
         onClose={() => setDetailTarget(null)}

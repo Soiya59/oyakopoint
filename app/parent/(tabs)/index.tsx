@@ -161,29 +161,35 @@ export default function ParentFamilyTabScreen() {
         </Card>
       )}
 
-      <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
-        <Card style={{ marginTop: theme.spacing.s4 }}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={theme.typography.parentBodyMedium}>家族の掲示板</Text>
-            {cardLoadState !== "error" && <Text style={theme.typography.parentBodyMedium}>›</Text>}
-          </View>
-          {cardMessage === null ? (
-            <View style={styles.digestSkeleton} />
-          ) : (
-            <>
-              {cardAuthorName !== null && (
-                <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
-              )}
-              <Text style={{ marginTop: theme.spacing.s1 }}>{cardExcerpt}</Text>
-              {cardTime !== null && (
-                <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-                  {cardTime}
-                </Text>
-              )}
-            </>
-          )}
-        </Card>
-      </Pressable>
+      {/* [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+          56.4節決定21] 保護者トグル「家族のやりとりを使う」がオフの間はカードを
+          出さない（過去の投稿を読む道はP14「家族のやりとりの設定」の直下に
+          「これまでの書き込みを読む」の1行として残す）。 */}
+      {state.family.social_interactions_enabled && (
+        <Pressable disabled={cardLoadState === "error"} onPress={() => router.push("/parent/family-board")}>
+          <Card style={{ marginTop: theme.spacing.s4 }}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.parentBodyMedium}>家族の掲示板</Text>
+              {cardLoadState !== "error" && <Text style={theme.typography.parentBodyMedium}>›</Text>}
+            </View>
+            {cardMessage === null ? (
+              <View style={styles.digestSkeleton} />
+            ) : (
+              <>
+                {cardAuthorName !== null && (
+                  <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+                )}
+                <Text style={{ marginTop: theme.spacing.s1 }}>{cardExcerpt}</Text>
+                {cardTime !== null && (
+                  <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                    {cardTime}
+                  </Text>
+                )}
+              </>
+            )}
+          </Card>
+        </Pressable>
+      )}
 
       <Pressable onPress={() => router.push("/parent/approvals")}>
         <Card style={styles.pendingCard}>

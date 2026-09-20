@@ -150,6 +150,7 @@ export default function ChildFamilyActivityScreen() {
         onOpenDetail={openDetail}
         onSendStamp={sendStamp}
         hasReactedWithStamp={hasReactedWithStamp}
+        commentsEnabled={state.family.social_interactions_enabled}
       />
     );
   };
@@ -180,6 +181,7 @@ export default function ChildFamilyActivityScreen() {
         onSendStamp={sendStamp}
         onSendComment={sendComment}
         onClose={() => setDetailTarget(null)}
+        commentsEnabled={state.family.social_interactions_enabled}
       />
     </ListScreen>
   );

@@ -12,6 +12,8 @@ import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { playSound } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * P20 じぶんの完了報告（保護者、要件定義書07-4章「親の完了報告」）
@@ -45,6 +47,7 @@ export default function ParentMyChoreReportScreen() {
   // 確認する。新規画面へは遷移せず、この画面上に一時的に表示する。
   const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
   const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
+  const ngGuard = useNgWordGuard();
 
   if (!chore || !me) {
     return (
@@ -62,6 +65,7 @@ export default function ParentMyChoreReportScreen() {
       return;
     }
 
+    if (ngGuard.guard(note)) return;
 
     setScreenState("sending");
     const result = await dispatch({
@@ -211,7 +215,16 @@ export default function ParentMyChoreReportScreen() {
       </Text>
 
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>
-      <TextInput value={note} onChangeText={setNote} multiline style={styles.noteInput} />
+      <TextInput
+        value={note}
+        onChangeText={(t) => {
+          setNote(t);
+          ngGuard.clear();
+        }}
+        multiline
+        style={styles.noteInput}
+      />
+      {ngGuard.blocked && <NgWordWarningText tone="parent" />}
 
       <AppButton
         label={

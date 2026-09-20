@@ -14,6 +14,8 @@ import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from 
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * S2 完了報告一覧・リアクション（みまもりメンバービュー、全件）
@@ -169,6 +171,7 @@ export default function SupporterActivityScreen() {
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
+  const ngGuard = useNgWordGuard();
 
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.6節。みまもりメンバーは自分の報告のみ取り消せ、
@@ -236,8 +239,11 @@ export default function SupporterActivityScreen() {
   const openDetail = useCallback((c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
+    ngGuard.clear();
     setDetailTarget(c);
-  }, []);
+    // ngGuard.clear自体はuseCallback（空配列）で安定している（app/parent/approvals.tsxと同じ理由）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ngGuard.clear]);
 
   const runCancel = useCallback(
     async (completionId: string) => {
@@ -262,6 +268,7 @@ export default function SupporterActivityScreen() {
     if (!detailTarget) return;
     const body = commentDraft.trim();
     if (!body) return;
+    if (ngGuard.guard(body)) return;
     setReactionError(null);
     setSendingComment(true);
     const result = await dispatch({
@@ -415,25 +422,36 @@ export default function SupporterActivityScreen() {
                           })}
                         </View>
 
-                        <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
-                          ひとことおくる（にんい・200文字まで）
-                        </Text>
-                        <TextInput
-                          value={commentDraft}
-                          onChangeText={setCommentDraft}
-                          placeholder="よくがんばったね"
-                          multiline
-                          maxLength={200}
-                          style={styles.textArea}
-                        />
-                        <AppButton
-                          tone="supporter"
-                          label={sendingComment ? "送信中…" : "おくる"}
-                          loading={sendingComment}
-                          style={{ marginTop: theme.spacing.s2 }}
-                          onPress={sendComment}
-                          disabled={!commentDraft.trim() || sendingComment}
-                        />
+                        {/* [2026-09-21追加・要件定義書07-32章 決定20〜24] 保護者
+                            トグルがオフの間はこの欄・送信ボタンごと描かない
+                            （app/parent/approvals.tsxと同じ扱い）。 */}
+                        {state.family.social_interactions_enabled && (
+                          <>
+                            <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
+                              ひとことおくる（にんい・200文字まで）
+                            </Text>
+                            <TextInput
+                              value={commentDraft}
+                              onChangeText={(t) => {
+                                setCommentDraft(t);
+                                ngGuard.clear();
+                              }}
+                              placeholder="よくがんばったね"
+                              multiline
+                              maxLength={200}
+                              style={styles.textArea}
+                            />
+                            {ngGuard.blocked && <NgWordWarningText tone="supporter" />}
+                            <AppButton
+                              tone="supporter"
+                              label={sendingComment ? "送信中…" : "おくる"}
+                              loading={sendingComment}
+                              style={{ marginTop: theme.spacing.s2 }}
+                              onPress={sendComment}
+                              disabled={!commentDraft.trim() || sendingComment}
+                            />
+                          </>
+                        )}
                       </>
                     )}
 

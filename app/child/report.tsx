@@ -7,6 +7,8 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE } from "@/data/api";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * C6 完了報告（主要5画面のひとつ）
@@ -31,6 +33,7 @@ export default function ChildReportScreen() {
   const [screenState, setScreenState] = useState<ScreenState>(
     chore && isChoreLimitReached(chore, me.id) ? "limitReached" : "form"
   );
+  const ngGuard = useNgWordGuard();
 
   if (!chore) {
     return (
@@ -66,6 +69,7 @@ export default function ChildReportScreen() {
       return;
     }
 
+    if (ngGuard.guard(note)) return;
 
     setScreenState("sending");
     const result = await dispatch({
@@ -166,11 +170,15 @@ export default function ChildReportScreen() {
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>ひとことメモ（にんい）</Text>
       <TextInput
         value={note}
-        onChangeText={setNote}
+        onChangeText={(t) => {
+          setNote(t);
+          ngGuard.clear();
+        }}
         multiline
         style={styles.noteInput}
         placeholder=""
       />
+      {ngGuard.blocked && <NgWordWarningText tone="child" />}
 
       <AppButton
         label={

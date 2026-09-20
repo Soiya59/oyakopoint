@@ -33,6 +33,8 @@ import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import { fitDrawingLinesToCircle } from "@/lib/fitDrawingToCircle";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "./NgWordWarningText";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -150,6 +152,8 @@ export function DrawingBoard({
   // [2026-09-02追加] お絵かきの題名（21.5a節）。入力欄の生の文字列をそのまま保持し、
   // トリム・null化は送信直前（handleSave）でのみ行う（決定15）。
   const [title, setTitle] = useState<string>("");
+  // [2026-09-21追加・要件定義書07-32章決定15〜19] NGワードフィルタ（お絵かきの題名）。
+  const ngGuard = useNgWordGuard();
 
   /**
    * [2026-09-17追加・主要画面ワイヤーフレーム.md 48.3節決定11〜13、実装メモ.md 236章]
@@ -312,6 +316,7 @@ export function DrawingBoard({
     // フォールバックする。
     setStrokeWidth(lastLine?.w ?? theme.defaultDrawingStrokeWidth);
     setTitle(drawing.title ?? "");
+    ngGuard.clear();
   };
 
   /** 編集を保存せずにやめる。読み込んだ内容はキャンバスから消え、元の絵はDB上そのまま残る。 */
@@ -319,6 +324,7 @@ export function DrawingBoard({
     setEditingId(null);
     setLines([]);
     setTitle("");
+    ngGuard.clear();
   };
 
   const handleSave = async () => {
@@ -327,6 +333,9 @@ export function DrawingBoard({
     // 題名なし（null）として送る（3ロール共通、決定15）。
     const trimmedTitle = title.trim();
     const titleToSend = trimmedTitle.length > 0 ? trimmedTitle : null;
+    // [2026-09-21追加・要件定義書07-32章決定15〜19] 送信ボタンを押した瞬間にのみ
+    // 判定し、当たれば通信を発生させずここで止める（入力内容は変更しない）。
+    if (ngGuard.guard(trimmedTitle)) return;
     if (isEditing && editingId) {
       const ok = await onEditSave(editingId, { v: 1, lines }, titleToSend);
       if (ok) {
@@ -615,12 +624,16 @@ export function DrawingBoard({
           <Text style={bodyStyle}>{titleLabel}</Text>
           <TextInput
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(t) => {
+              setTitle(t);
+              ngGuard.clear();
+            }}
             placeholder={titlePlaceholder}
             maxLength={theme.drawingLimits.maxTitleLength}
             editable={!saving}
             style={styles.titleInput}
           />
+          {ngGuard.blocked && <NgWordWarningText tone={tone} />}
           {showTitleCounter && (
             <Text
               style={[

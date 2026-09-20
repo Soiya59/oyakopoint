@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   drawGacha,
@@ -19,6 +20,7 @@ import {
   type GachaPrizeDrawing,
 } from "@/data/api";
 import type { GachaDrawResult, GachaPresetOrnament, GachaPrizeKind } from "@/types/domain";
+import { hiddenContentKey } from "@/lib/hiddenContentFilter";
 
 export type GachaLoadState = "loading" | "error" | "ready";
 
@@ -122,6 +124,7 @@ export function useGachaPrizeDetail(
   prizeDrawingId: string | null
 ) {
   const { client } = useSession();
+  const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const [loadState, setLoadState] = useState<GachaLoadState>("loading");
   const [detail, setDetail] = useState<GachaPrizeDetail | null>(null);
 
@@ -147,13 +150,21 @@ export function useGachaPrizeDetail(
         setLoadState("error");
         return;
       }
-      setDetail({ kind: "family_drawing", ornament: null, drawing: res.data });
+      // [2026-09-21追加・本部長差し戻し「ガチャ結果画面にも絵が素通しで出ている」対応]
+      // 作者がブロック対象、または絵そのものが運営に非表示にされている場合は、
+      // 絵の中身を渡さない（drawing: null）。GachaResultView.tsxは
+      // `result.kind === "family_drawing" && result.drawing`の条件で分岐しており、
+      // drawingがnullなら既存の保険表示（「けっかを ひょうじできませんでした」、
+      // 新しい文言・演出は追加していない）に自然に落ちる。
+      const isBlocked = blockedMemberIdsSet.has(res.data.artist_member_id);
+      const isHidden = hiddenContentKeysSet.has(hiddenContentKey("family_drawing", res.data.id));
+      setDetail({ kind: "family_drawing", ornament: null, drawing: isBlocked || isHidden ? null : res.data });
       setLoadState("ready");
       return;
     }
     setLoadState("error");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, prizeKind, presetOrnamentId, prizeDrawingId]);
+  }, [client, prizeKind, presetOrnamentId, prizeDrawingId, blockedMemberIdsSet, hiddenContentKeysSet]);
 
   useEffect(() => {
     void load();

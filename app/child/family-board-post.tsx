@@ -7,6 +7,8 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createFamilyBoardPost, PG_ERRCODE } from "@/data/api";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * C28 かきこむ（子ども）
@@ -30,6 +32,16 @@ export default function ChildFamilyBoardPostScreen() {
   const [body, setBody] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
+  const ngGuard = useNgWordGuard();
+
+  // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+  // 56.4節決定20・決定24] Web版で直接URLで来た場合、保護者トグルがオフなら
+  // 理由も説明も出さず、かぞくタブへ静かに戻す。
+  useEffect(() => {
+    if (!state.family.social_interactions_enabled) {
+      router.replace("/child/family");
+    }
+  }, [state.family.social_interactions_enabled]);
 
   const remainingChars = MAX_LENGTH - body.length;
   const isNearLimit = remainingChars <= WARNING_THRESHOLD;
@@ -45,6 +57,7 @@ export default function ChildFamilyBoardPostScreen() {
   const submit = async () => {
     const trimmed = body.trim();
     if (!trimmed || screenState === "sending" || !myMemberId) return;
+    if (ngGuard.guard(trimmed)) return;
     setScreenState("sending");
     setLimitMessage(null);
     const res = await createFamilyBoardPost(client, trimmed, myMemberId);
@@ -59,6 +72,14 @@ export default function ChildFamilyBoardPostScreen() {
     }
     setScreenState("success");
   };
+
+  if (!state.family.social_interactions_enabled) {
+    return (
+      <Screen tone="child">
+        <View />
+      </Screen>
+    );
+  }
 
   if (screenState === "success") {
     return (
@@ -95,7 +116,10 @@ export default function ChildFamilyBoardPostScreen() {
 
       <TextInput
         value={body}
-        onChangeText={setBody}
+        onChangeText={(t) => {
+          setBody(t);
+          ngGuard.clear();
+        }}
         placeholder="れい：きょう こうえんに いったよ"
         multiline
         maxLength={MAX_LENGTH}
@@ -113,6 +137,7 @@ export default function ChildFamilyBoardPostScreen() {
       >
         {body.length}/{MAX_LENGTH}もじ
       </Text>
+      {ngGuard.blocked && <NgWordWarningText tone="child" />}
 
       {limitMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.brandPrimaryStrong }}>{limitMessage}</Text>

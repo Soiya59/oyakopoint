@@ -9,6 +9,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchMyGratitudeGiveableBalance, sendGratitudePoints, PG_ERRCODE } from "@/data/api";
 import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * C17 感謝ポイントを贈る（子どもビュー）
@@ -46,6 +48,7 @@ export default function ChildGratitudeSendScreen() {
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
   const [sentInfo, setSentInfo] = useState<{ name: string; points: number } | null>(null);
+  const ngGuard = useNgWordGuard();
 
   useEffect(() => {
     void fetchMyGratitudeGiveableBalance(client).then((res) => {
@@ -62,6 +65,7 @@ export default function ChildGratitudeSendScreen() {
 
   const send = async () => {
     if (!myId || !recipientId || points < 1 || noteBlocksSend) return;
+    if (ngGuard.guard(trimmedNote)) return;
     setScreenState("sending");
     const res = await sendGratitudePoints(client, {
       sender_id: myId,
@@ -147,15 +151,32 @@ export default function ChildGratitudeSendScreen() {
         ))}
       </View>
 
-      <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>なにをしてくれた？</Text>
-      <TextInput value={note} onChangeText={setNote} multiline maxLength={200} style={styles.noteInput} />
-      <View style={styles.exampleRow}>
-        {EXAMPLE_CHIPS.map((c) => (
-          <Pressable key={c} onPress={() => setNote(c)} style={styles.exampleChip}>
-            <Text style={theme.typography.parentCaption}>{c}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* [2026-09-21追加・要件定義書07-32章決定17、主要画面ワイヤーフレーム.md 56.4節
+          決定20] 保護者トグル「家族のやりとりを使う」がオフの間は、この欄・例文チップ
+          ごと描かない（グレーアウト・鍵アイコンは使わない。理由も出さない）。 */}
+      {interactionsEnabled && (
+        <>
+          <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>なにをしてくれた？</Text>
+          <TextInput
+            value={note}
+            onChangeText={(t) => {
+              setNote(t);
+              ngGuard.clear();
+            }}
+            multiline
+            maxLength={200}
+            style={styles.noteInput}
+          />
+          {ngGuard.blocked && <NgWordWarningText tone="child" />}
+          <View style={styles.exampleRow}>
+            {EXAMPLE_CHIPS.map((c) => (
+              <Pressable key={c} onPress={() => setNote(c)} style={styles.exampleChip}>
+                <Text style={theme.typography.parentCaption}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
 
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>なんpt？</Text>
       <View style={styles.stepperRow}>

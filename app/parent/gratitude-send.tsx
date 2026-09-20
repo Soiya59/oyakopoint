@@ -9,6 +9,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchMyGratitudeGiveableBalance, sendGratitudePoints } from "@/data/api";
 import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * P22 感謝ポイントを贈る（保護者）
@@ -44,6 +46,7 @@ export default function ParentGratitudeSendScreen() {
   const [points, setPoints] = useState(1);
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const ngGuard = useNgWordGuard();
 
   useEffect(() => {
     void fetchMyGratitudeGiveableBalance(client).then((res) => {
@@ -60,6 +63,7 @@ export default function ParentGratitudeSendScreen() {
 
   const send = async () => {
     if (!myId || !recipientId || points < 1 || noteBlocksSend) return;
+    if (ngGuard.guard(trimmedNote)) return;
     setScreenState("sending");
     setErrorMessage(null);
     const res = await sendGratitudePoints(client, {
@@ -103,17 +107,28 @@ export default function ParentGratitudeSendScreen() {
         ))}
       </View>
 
-      <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
-        なにをしてくれた？（必須）
-      </Text>
-      <TextInput
-        value={note}
-        onChangeText={setNote}
-        placeholder="例：帰り道に荷物を持ってくれた"
-        multiline
-        maxLength={200}
-        style={styles.noteInput}
-      />
+      {/* [2026-09-21追加・要件定義書07-32章決定17、主要画面ワイヤーフレーム.md 56.4節
+          決定20] 保護者トグル「家族のやりとりを使う」がオフの間は、この欄ごと描かない
+          （感謝ポイントを贈ること自体は止めない）。 */}
+      {interactionsEnabled && (
+        <>
+          <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>
+            なにをしてくれた？（必須）
+          </Text>
+          <TextInput
+            value={note}
+            onChangeText={(t) => {
+              setNote(t);
+              ngGuard.clear();
+            }}
+            placeholder="例：帰り道に荷物を持ってくれた"
+            multiline
+            maxLength={200}
+            style={styles.noteInput}
+          />
+          {ngGuard.blocked && <NgWordWarningText tone="parent" />}
+        </>
+      )}
 
       <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>なんpt贈る？</Text>
       <View style={styles.stepperRow}>

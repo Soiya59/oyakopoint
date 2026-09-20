@@ -36,6 +36,14 @@ export type ChildCompletionCardProps = {
   onOpenDetail: (c: ChoreCompletion) => void;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
   hasReactedWithStamp: (completionId: string, reactedBy: string, stampKey: StampKey) => boolean;
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+   * 56.4節決定20] 保護者トグル「家族のやりとりを使う」（`state.family.
+   * social_interactions_enabled`）。falseの間は「＋ひとこと」リンクを描かない
+   * （スタンプは対象外、そのまま残す）。既定はtrue（呼び出し側が省略しても
+   * 従来どおり動く）。
+   */
+  commentsEnabled?: boolean;
 };
 
 export const ChildCompletionCard = React.memo(function ChildCompletionCard({
@@ -46,6 +54,7 @@ export const ChildCompletionCard = React.memo(function ChildCompletionCard({
   onOpenDetail,
   onSendStamp,
   hasReactedWithStamp,
+  commentsEnabled = true,
 }: ChildCompletionCardProps) {
   // みまもりメンバーの完了報告は控えめな配色で区別する（P8と同じ判定）。
   const isSupporterCard = member?.role === "supporter";
@@ -86,9 +95,11 @@ export const ChildCompletionCard = React.memo(function ChildCompletionCard({
             );
           })}
           <Text style={{ flex: 1 }} />
-          <Pressable onPress={() => onOpenDetail(c)} hitSlop={8}>
-            <Text style={styles.commentLink}>＋ひとこと</Text>
-          </Pressable>
+          {commentsEnabled && (
+            <Pressable onPress={() => onOpenDetail(c)} hitSlop={8}>
+              <Text style={styles.commentLink}>＋ひとこと</Text>
+            </Pressable>
+          )}
         </View>
       </Card>
     </Pressable>

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
@@ -8,6 +8,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createFamilyBoardPost, PG_ERRCODE } from "@/data/api";
 import { BOARD_POST_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * P33 投稿する（保護者）
@@ -31,6 +33,16 @@ export default function ParentFamilyBoardPostScreen() {
   const [body, setBody] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const ngGuard = useNgWordGuard();
+
+  // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+  // 56.4節決定24] Web版でこの投稿画面へ直接URLで来た場合、保護者トグルが
+  // オフなら履歴一覧（投稿ボタンを出さない読み取り専用）へ戻す。
+  useEffect(() => {
+    if (!state.family.social_interactions_enabled) {
+      router.replace("/parent/family-board");
+    }
+  }, [state.family.social_interactions_enabled]);
 
   const remainingChars = MAX_LENGTH - body.length;
   const isNearLimit = remainingChars <= WARNING_THRESHOLD;
@@ -38,6 +50,9 @@ export default function ParentFamilyBoardPostScreen() {
   const submit = async () => {
     const trimmed = body.trim();
     if (!trimmed || screenState === "sending" || !myMemberId) return;
+    // NGワードフィルタ（要件定義書07-32章 決定15〜19）。送信ボタンを押した
+    // 瞬間にのみ判定し、当たれば通信を発生させずここで止める（入力内容は変更しない）。
+    if (ngGuard.guard(trimmed)) return;
     setScreenState("sending");
     setErrorMessage(null);
     const res = await createFamilyBoardPost(client, trimmed, myMemberId);
@@ -55,6 +70,14 @@ export default function ParentFamilyBoardPostScreen() {
     router.replace({ pathname: "/parent/family-board", params: { posted: "1" } });
   };
 
+  if (!state.family.social_interactions_enabled) {
+    return (
+      <Screen tone="parent">
+        <View />
+      </Screen>
+    );
+  }
+
   return (
     <Screen tone="parent">
       <Pressable onPress={() => router.back()}>
@@ -64,7 +87,10 @@ export default function ParentFamilyBoardPostScreen() {
 
       <TextInput
         value={body}
-        onChangeText={setBody}
+        onChangeText={(t) => {
+          setBody(t);
+          ngGuard.clear();
+        }}
         placeholder="例：今日は公園に行きました"
         multiline
         maxLength={MAX_LENGTH}
@@ -82,6 +108,7 @@ export default function ParentFamilyBoardPostScreen() {
       >
         {body.length}/{MAX_LENGTH}字
       </Text>
+      {ngGuard.blocked && <NgWordWarningText tone="parent" />}
 
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>

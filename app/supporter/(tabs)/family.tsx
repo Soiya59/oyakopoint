@@ -16,6 +16,8 @@ import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChor
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * S2 かぞく区画の入口（完了報告一覧・リアクション。旧S1みまもりホームの
@@ -67,6 +69,7 @@ export default function SupporterFamilyScreen() {
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
+  const ngGuard = useNgWordGuard();
 
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
@@ -128,6 +131,7 @@ export default function SupporterFamilyScreen() {
   const openDetail = (c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
+    ngGuard.clear();
     setDetailTarget(c);
   };
 
@@ -148,6 +152,7 @@ export default function SupporterFamilyScreen() {
     if (!detailTarget) return;
     const body = commentDraft.trim();
     if (!body) return;
+    if (ngGuard.guard(body)) return;
     setReactionError(null);
     setSendingComment(true);
     const result = await dispatch({
@@ -195,40 +200,44 @@ export default function SupporterFamilyScreen() {
           いちばん上へ」。表記も「かぞくのけいじばん」（ひらがな）→「家族の掲示板」
           （漢字、`app/parent/home.tsx`と同じ表記）に統一した。みまもり向け画面は
           子ども向けではないため、ひらがなにする理由がない。 */}
-      {cardLoadState === "error" ? (
-        <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={theme.typography.supporterBodyMedium}>家族の掲示板</Text>
-          <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
-        </Card>
-      ) : (
-        <Pressable onPress={() => router.push("/supporter/family-board")}>
+      {/* [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+          56.4節決定21] 保護者トグルがオフの間はカードを出さない（過去の投稿を
+          読む道はS13「使い方・お問い合わせ」見出しの直前に残す）。 */}
+      {state.family.social_interactions_enabled &&
+        (cardLoadState === "error" ? (
           <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={theme.typography.supporterBodyMedium}>📮 家族の掲示板</Text>
-              <Text style={theme.typography.supporterBodyMedium}>›</Text>
-            </View>
-            {cardLoadState === "loading" ? (
-              <View style={styles.digestSkeleton} />
-            ) : hasBoardPost ? (
-              <>
-                {cardAuthorName !== null && (
-                  <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
-                )}
-                <Text style={{ marginTop: theme.spacing.s1 }}>{card.message}</Text>
-                {cardTime !== null && (
-                  <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-                    {cardTime}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <Text style={{ marginTop: theme.spacing.s2 }}>
-                まだ書き込みはありません。家族のようすを、ひとことシェアしてみませんか
-              </Text>
-            )}
+            <Text style={theme.typography.supporterBodyMedium}>家族の掲示板</Text>
+            <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
           </Card>
-        </Pressable>
-      )}
+        ) : (
+          <Pressable onPress={() => router.push("/supporter/family-board")}>
+            <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={theme.typography.supporterBodyMedium}>📮 家族の掲示板</Text>
+                <Text style={theme.typography.supporterBodyMedium}>›</Text>
+              </View>
+              {cardLoadState === "loading" ? (
+                <View style={styles.digestSkeleton} />
+              ) : hasBoardPost ? (
+                <>
+                  {cardAuthorName !== null && (
+                    <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>{cardAuthorName}</Text>
+                  )}
+                  <Text style={{ marginTop: theme.spacing.s1 }}>{card.message}</Text>
+                  {cardTime !== null && (
+                    <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                      {cardTime}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text style={{ marginTop: theme.spacing.s2 }}>
+                  まだ書き込みはありません。家族のようすを、ひとことシェアしてみませんか
+                </Text>
+              )}
+            </Card>
+          </Pressable>
+        ))}
 
       {/* [2026-09-09削除・実装メモ.md 186章] 旧「家族の木・コレクション」ショートカット行
           （並び順2番目）は削除した。木は常設タブへ、コレクションは「じぶん」タブへ移設済み
@@ -407,25 +416,36 @@ export default function SupporterFamilyScreen() {
                           })}
                         </View>
 
-                        <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
-                          ひとことおくる（にんい・200文字まで）
-                        </Text>
-                        <TextInput
-                          value={commentDraft}
-                          onChangeText={setCommentDraft}
-                          placeholder="よくがんばったね"
-                          multiline
-                          maxLength={200}
-                          style={styles.textArea}
-                        />
-                        <AppButton
-                          tone="supporter"
-                          label={sendingComment ? "送信中…" : "おくる"}
-                          loading={sendingComment}
-                          style={{ marginTop: theme.spacing.s2 }}
-                          onPress={sendComment}
-                          disabled={!commentDraft.trim() || sendingComment}
-                        />
+                        {/* [2026-09-21追加・要件定義書07-32章 決定20〜24] 保護者
+                            トグルがオフの間はこの欄・送信ボタンごと描かない
+                            （app/parent/approvals.tsxと同じ扱い）。 */}
+                        {state.family.social_interactions_enabled && (
+                          <>
+                            <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
+                              ひとことおくる（にんい・200文字まで）
+                            </Text>
+                            <TextInput
+                              value={commentDraft}
+                              onChangeText={(t) => {
+                                setCommentDraft(t);
+                                ngGuard.clear();
+                              }}
+                              placeholder="よくがんばったね"
+                              multiline
+                              maxLength={200}
+                              style={styles.textArea}
+                            />
+                            {ngGuard.blocked && <NgWordWarningText tone="supporter" />}
+                            <AppButton
+                              tone="supporter"
+                              label={sendingComment ? "送信中…" : "おくる"}
+                              loading={sendingComment}
+                              style={{ marginTop: theme.spacing.s2 }}
+                              onPress={sendComment}
+                              disabled={!commentDraft.trim() || sendingComment}
+                            />
+                          </>
+                        )}
                       </>
                     )}
 

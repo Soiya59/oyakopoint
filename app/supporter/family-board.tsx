@@ -76,7 +76,9 @@ export default function SupporterFamilyBoardScreen() {
         onRetry={reload}
         myMemberId={myMemberId}
         remaining={remaining}
-        onCompose={() => router.push("/supporter/family-board-post")}
+        // [2026-09-21追加・要件定義書07-32章 決定20〜24] 保護者トグルがオフの間は
+        // 読み取り専用（app/parent/family-board.tsxと同じ扱い）。
+        onCompose={state.family.social_interactions_enabled ? () => router.push("/supporter/family-board-post") : undefined}
         removingPostId={removingPostId}
         actionError={actionError}
         onRemovePost={removePost}

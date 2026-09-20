@@ -1,5 +1,5 @@
-import React from "react";
-import { Pressable, Text } from "react-native";
+import React, { useEffect } from "react";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import FamilyBoardHistoryPanel from "@/components/FamilyBoardHistoryPanel";
@@ -44,6 +44,24 @@ export default function ChildFamilyBoardScreen() {
     viewReactorsForPost,
   } = useFamilyBoardHistory(familyId);
   const { remaining } = useFamilyBoardRemainingToday();
+
+  // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+  // 56.4節決定20・決定24] 子どもには「読む道」自体を残さない（大人と違い、
+  // 理由も代替案内も出さず、かぞくタブへ静かに戻す。Web版の直接URLアクセスも
+  // これでガードされる）。
+  useEffect(() => {
+    if (!state.family.social_interactions_enabled) {
+      router.replace("/child/family");
+    }
+  }, [state.family.social_interactions_enabled]);
+
+  if (!state.family.social_interactions_enabled) {
+    return (
+      <Screen tone="child">
+        <View />
+      </Screen>
+    );
+  }
 
   return (
     <Screen tone="child">

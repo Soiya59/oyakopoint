@@ -58,3 +58,15 @@ export const TIPS_URL = `${BASE_URL}/help/tips.html`;
  * 使い方ガイド（HELP_*）は公開済みなので、この定数の影響を受けない。
  */
 export const LEGAL_PAGES_PUBLISHED = true;
+
+/**
+ * [2026-09-21移設・要件定義書07-32章 決定31・主要画面ワイヤーフレーム.md 56.2節
+ * 決定7-b] 運営への連絡先メールアドレス。やること.md 2-23（サマリー表#5、
+ * Apple 1.2 "Published contact information"）。2026-09-09に統括が決定。
+ *
+ * 元は`app/parent/family.tsx`・`app/supporter/settings.tsx`にそれぞれ個別の
+ * 定数として置かれていたが、決定31（お問い合わせへの統合）によりP39/S27
+ * （`app/parent/contact.tsx`・`app/supporter/contact.tsx`）でも同じ値を使う
+ * 必要が生じたため、共通の置き場所へ移した（値は変えていない）。
+ */
+export const CONTACT_EMAIL = "soiyalab.contact@gmail.com";

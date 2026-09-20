@@ -52,6 +52,7 @@ import type {
   HabitFigureGrant,
   HabitFigureGrantWithCatalog,
   HabitFigureGrantWithPlacement,
+  HiddenContent,
   MemberAvatarRow,
   MemberBadge,
   MemberBadgeProgress,
@@ -742,6 +743,63 @@ export async function unblockMember(
     .delete()
     .eq("blocker_member_id", blockerMemberId)
     .eq("blocked_member_id", blockedMemberId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * [2026-09-21新設・要件定義書07-32章、設計部/成果物/スキーマ設計.sql 66章]
+ * 家族分の`hidden_contents`（運営が`hide_content()`で非表示にした行）を
+ * まとめて取得する。SELECT RLS（hidden_contents_select_same_family）は
+ * `family_id = current_family_id()`のみを要求する。この表は「種別＋対象id＋
+ * 日時」だけを持ち、誰が報告したかも本文も入っていない（66.5章）。
+ * クライアントはこの一覧をもとに、対象の行を一覧・表示から除く
+ * （66.4章の対応表、★クライアント必須要件）。
+ */
+export async function fetchHiddenContents(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<HiddenContent[]>> {
+  const { data, error } = await client.from("hidden_contents").select("*").eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as HiddenContent[] };
+}
+
+/**
+ * [2026-09-21新設・要件定義書07-32章 決定20〜24・決定33、設計部/成果物/
+ * スキーマ設計.sql 67.4章] 保護者が「家族のやりとりを使う」トグルを設定する。
+ * `set_family_social_settings()`（SECURITY DEFINER）は保護者のみ呼べる
+ * （みまもりメンバー・子どもは`insufficient_privilege`）。成功しても戻り値は
+ * 持たないため、呼び出し側は成功後に`refresh()`でfamiliesを取り直すこと。
+ */
+export async function setFamilySocialSettings(
+  client: SupabaseClient,
+  interactionsEnabled: boolean
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("set_family_social_settings", {
+    p_interactions_enabled: interactionsEnabled,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * [2026-09-21新設・要件定義書07-32章 決定4・6・8〜12・30〜32、設計部/成果物/
+ * スキーマ設計.sql 65.4章、主要画面ワイヤーフレーム.md 56.2節] お問い合わせ
+ * （アプリ内の報告と統合済み）を送信する。3項目とも自由記述・すべて任意
+ * （1つも渡さずに呼べる）。`submit_content_report()`（SECURITY DEFINER）は
+ * 保護者とみまもりメンバーのみ呼べる（子どもは`insufficient_privilege`）。
+ * 戻り値を持たない（履歴画面を作らないため、決定6）。
+ */
+export async function submitContentReport(
+  client: SupabaseClient,
+  params: { aboutText?: string | null; seenWhereText?: string | null; note?: string | null }
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("submit_content_report", {
+    p_about_text: params.aboutText ?? null,
+    p_seen_where_text: params.seenWhereText ?? null,
+    p_note: params.note ?? null,
+  });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
 }
@@ -1789,7 +1847,14 @@ export interface FamilyTreeDotPrize {
   /** family_tree_decorations.decorated_at（いつ木に飾ったか）。 */
   decoratedAt: string;
   presetOrnament: { display_name: string; emoji: string | null } | null;
-  drawing: { line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
+  /**
+   * [2026-09-21追加・要件定義書07-32章] `drawingId`はブロック・
+   * `hidden_contents`（content_kind='family_drawing'）の取得後フィルタで
+   * 対象の絵を特定するために追加した（`family_drawings.id`）。表示自体には
+   * 使わない（`src/lib/blockFilter.ts`の`stripBlockedTreeDotPrizes`・
+   * `src/lib/hiddenContentFilter.ts`の`stripHiddenTreeDotPrizes`参照）。
+   */
+  drawing: { drawingId: string; line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
 }
 
 /**
@@ -1884,7 +1949,7 @@ export async function fetchFamilyTreeCompletionDots(
       "id, reported_at, reported_by, family_members!reported_by(avatar_color), " +
         "family_tree_decorations(id, draw_id, decoration_source, decorated_at, gacha_draws(prize_kind, " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title,artist_member_id," +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(id,line_data,title,artist_member_id," +
         "artist:family_members!artist_member_id(display_name))))"
     )
     .eq("family_id", familyId)
@@ -1909,6 +1974,7 @@ export async function fetchFamilyTreeCompletionDots(
             prize_kind: GachaPrizeKind;
             preset_ornament: { display_name: string; emoji: string | null } | null;
             prize_drawing: {
+              id: string;
               line_data: FamilyDrawingLineData;
               title: string | null;
               artist_member_id: string;
@@ -1936,6 +2002,7 @@ export async function fetchFamilyTreeCompletionDots(
               presetOrnament: decoration.gacha_draws.preset_ornament,
               drawing: decoration.gacha_draws.prize_drawing
                 ? {
+                    drawingId: decoration.gacha_draws.prize_drawing.id,
                     line_data: decoration.gacha_draws.prize_drawing.line_data,
                     artistName: decoration.gacha_draws.prize_drawing.artist?.display_name ?? "だれか",
                     artistId: decoration.gacha_draws.prize_drawing.artist_member_id,
@@ -2407,7 +2474,12 @@ export interface CollectedGachaDraw {
    * 公開済みの絵のみを対象にした一覧のため（gacha_draws経由）表示してよい。
    * 無い場合はnull（UI側は表示欄自体を出さない。07-13-2a章）。
    */
-  drawing: { line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
+  /**
+   * [2026-09-21追加・要件定義書07-32章] `drawingId`はhidden_contents
+   * （content_kind='family_drawing'）・ブロックの取得後フィルタで対象の絵を
+   * 特定するために追加した（`family_drawings.id`）。表示自体には使わない。
+   */
+  drawing: { drawingId: string; line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
 }
 
 /**
@@ -2428,7 +2500,7 @@ export async function fetchFamilyCollectedGachaDraws(
       "id, drawn_at, prize_kind, member_id, " +
         "collector:family_members!member_id(display_name), " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(line_data,title,artist_member_id," +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(id,line_data,title,artist_member_id," +
         "artist:family_members!artist_member_id(display_name))"
     )
     .eq("family_id", familyId)
@@ -2442,6 +2514,7 @@ export async function fetchFamilyCollectedGachaDraws(
     collector: { display_name: string } | null;
     preset_ornament: { display_name: string; emoji: string | null } | null;
     prize_drawing: {
+      id: string;
       line_data: FamilyDrawingLineData;
       title: string | null;
       artist_member_id: string;
@@ -2459,6 +2532,7 @@ export async function fetchFamilyCollectedGachaDraws(
       presetOrnament: r.preset_ornament,
       drawing: r.prize_drawing
         ? {
+            drawingId: r.prize_drawing.id,
             line_data: r.prize_drawing.line_data,
             artistName: r.prize_drawing.artist?.display_name ?? "だれか",
             artistId: r.prize_drawing.artist_member_id,

@@ -1,20 +1,18 @@
 import React, { useState } from "react";
 import { router } from "expo-router";
-import { View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Screen from "@/components/Screen";
+import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
+import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { removeMember } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
 import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
-
-/** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
- *  2026-09-09に統括が決定。app/parent/family.tsxと同一アドレス。 */
-const CONTACT_EMAIL = "soiyalab.contact@gmail.com";
 
 /**
  * S13 設定（みまもりメンバー）
@@ -28,8 +26,14 @@ const CONTACT_EMAIL = "soiyalab.contact@gmail.com";
  */
 export default function SupporterSettingsScreen() {
   const { parentMember, logoutParent } = useSession();
+  const { state, blockedMemberIdsSet, blockMember, unblockMember } = useAppData();
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+  // ワイヤーフレーム.md 57.4節] 「表示する」/「非表示にする」チップの保存状態。
+  const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
+  const [blockSuccessId, setBlockSuccessId] = useState<string | null>(null);
+  const [blockErrorId, setBlockErrorId] = useState<string | null>(null);
   // [2026-09-01追加・本部長] 主要画面ワイヤーフレーム.md 16章は「家族から抜ける」に
   // 確認モーダルを挟むと定めていたが、実装は**ボタン押下で即座に退会処理が走る**
   // 状態だった（2026-09-01の文書照合で発見）。退会は取り返しがつかない操作なので、
@@ -59,10 +63,89 @@ export default function SupporterSettingsScreen() {
     router.replace("/");
   };
 
+  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+  // ワイヤーフレーム.md 57.4節 決定7] 自分以外の在籍中メンバー全員（保護者を
+  // 含む）が対象（決定12）。
+  const otherMembers = state.members.filter((m) => m.is_active && m.id !== me?.id);
+
+  const setMemberBlocked = async (memberId: string, blocked: boolean) => {
+    setSavingBlockId(memberId);
+    setBlockErrorId(null);
+    const res = blocked ? await blockMember(memberId) : await unblockMember(memberId);
+    setSavingBlockId(null);
+    if (!res.ok) {
+      setBlockErrorId(memberId);
+      return;
+    }
+    setBlockSuccessId(memberId);
+    setTimeout(() => setBlockSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
+  };
+
   return (
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>設定</Text>
+
+      {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+          ワイヤーフレーム.md 57.4節 決定6] 「使い方・お問い合わせ」区画とログアウト・
+          家族から抜けるボタンの間に置く。 */}
+      <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+        <Text style={theme.typography.supporterBodyMedium}>メンバーの書き込みについて</Text>
+        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          気になる書き込みがあるときは、その人の書き込み・コメント・{"\n"}
+          お絵かきだけを、自分の画面で見えないようにできます。{"\n"}
+          データは消えず、ほかの家族には今までどおり見えます。{"\n"}
+          いつでも「表示する」に戻せます。
+        </Text>
+        <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s3 }}>
+          {otherMembers.map((m) => (
+            <View key={m.id}>
+              <Text style={theme.typography.supporterBody}>
+                {m.display_name}（{m.role === "parent" ? "保護者" : m.role === "supporter" ? "みまもり" : "子ども"}）
+              </Text>
+              <View style={[styles.chipRow, { marginTop: theme.spacing.s1 }]}>
+                <Pressable
+                  onPress={() => setMemberBlocked(m.id, false)}
+                  disabled={savingBlockId !== null}
+                  style={[styles.chip, !blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
+                >
+                  <Text>表示する</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setMemberBlocked(m.id, true)}
+                  disabled={savingBlockId !== null}
+                  style={[styles.chip, blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
+                >
+                  <Text>非表示にする</Text>
+                </Pressable>
+              </View>
+              {savingBlockId === m.id && (
+                <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+                  変更しています…
+                </Text>
+              )}
+              {blockSuccessId === m.id && (
+                <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
+              )}
+              {blockErrorId === m.id && (
+                <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
+                  変更できませんでした。もう一度お試しください。
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] 掲示板が
+          「いまは使わない」設定のあいだだけ、「使い方・お問い合わせ」見出しの
+          直前に「これまでの書き込みを読む」の1行を出す（読み取り専用）。
+          理由は出さない（大人の画面にも子ども向けの文法をそのまま適用する）。 */}
+      {!state.family.social_interactions_enabled && (
+        <Pressable onPress={() => router.push("/supporter/family-board")} style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={[theme.typography.supporterBody, { textDecorationLine: "underline" }]}>これまでの書き込みを読む</Text>
+        </Pressable>
+      )}
 
       {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
           利用規約への外部リンクと、運営者への連絡先。app/parent/family.tsxと同じ
@@ -86,9 +169,12 @@ export default function SupporterSettingsScreen() {
           </>
         )}
       </View>
-      <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s3 }]}>
-        お問い合わせ: {CONTACT_EMAIL}
-      </Text>
+      {/* [2026-09-21改訂・要件定義書07-32章 決定30〜32、主要画面ワイヤーフレーム.md
+          56.1節 決定1] 既存の静的なテキスト表示を、タップすると開く行に置き換えた
+          （S27）。 */}
+      <Pressable onPress={() => router.push("/supporter/contact")} style={{ paddingVertical: theme.spacing.s2, marginTop: theme.spacing.s1 }}>
+        <Text style={[theme.typography.supporterBody, { textDecorationLine: "underline" }]}>お問い合わせ</Text>
+      </Pressable>
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
         <AppButton tone="supporter" label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
@@ -134,3 +220,20 @@ export default function SupporterSettingsScreen() {
     </Screen>
   );
 }
+
+// [2026-09-21追加・主要画面ワイヤーフレーム.md 57.2節決定2] ブロックの
+// 「表示する」/「非表示にする」チップ。`app/parent/chore-edit.tsx`と同じ値。
+const styles = StyleSheet.create({
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  chipSelected: { borderColor: theme.colors.supporterAccent, backgroundColor: theme.colors.supporterAccentSoft },
+});

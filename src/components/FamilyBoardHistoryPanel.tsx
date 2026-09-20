@@ -59,8 +59,14 @@ export interface FamilyBoardHistoryPanelProps {
   /** 今日まだ投稿できる残り件数（0〜5）。取得前・取得失敗時はnull（この場合はボタンを
    *  ブロックしない＝実装メモ.md「D」の教訓、フォールバックを安全側＝操作可能側に倒す）。 */
   remaining: number | null;
-  /** 「投稿する」ボタン押下時（P33/C28/S21への遷移は呼び出し側=画面が担当）。 */
-  onCompose: () => void;
+  /**
+   * 「投稿する」ボタン押下時（P33/C28/S21への遷移は呼び出し側=画面が担当）。
+   * [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+   * 56.4節決定21] undefinedを渡すと、この一覧を読み取り専用（投稿ボタンを
+   * 描かない）として表示する。保護者トグル「家族のやりとりを使う」がオフの
+   * 間、大人が「これまでの書き込みを読む」から開いたときに使う。
+   */
+  onCompose?: () => void;
   /** 現在削除/取消のRPCが処理中の投稿ID（1件ずつのみ処理を許可する）。 */
   removingPostId: string | null;
   /** 直近の削除/取消アクションでエラーになった場合の{postId, message}。 */
@@ -302,7 +308,7 @@ export function FamilyBoardHistoryPanel({
 
   return (
     <View style={{ marginTop: theme.spacing.s4 }}>
-      {loadState === "ready" && (
+      {loadState === "ready" && onCompose && (
         <View>
           <AppButton
             tone={tone}

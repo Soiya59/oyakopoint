@@ -12,6 +12,8 @@ import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { playSound } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * S7 クエストの完了報告（みまもりメンバー）
@@ -50,6 +52,7 @@ export default function SupporterChoreReportScreen() {
   // 確認する。
   const { check: checkNewGrant } = useCheckNewHabitFigureGrant();
   const [figureGrant, setFigureGrant] = useState<HabitFigureGrantWithCatalog | null>(null);
+  const ngGuard = useNgWordGuard();
 
   if (!chore || !me) {
     return (
@@ -67,6 +70,7 @@ export default function SupporterChoreReportScreen() {
       return;
     }
 
+    if (ngGuard.guard(note)) return;
 
     setScreenState("sending");
     const result = await dispatch({
@@ -207,7 +211,16 @@ export default function SupporterChoreReportScreen() {
       </Text>
 
       <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s6 }]}>メモ（任意）</Text>
-      <TextInput value={note} onChangeText={setNote} multiline style={styles.noteInput} />
+      <TextInput
+        value={note}
+        onChangeText={(t) => {
+          setNote(t);
+          ngGuard.clear();
+        }}
+        multiline
+        style={styles.noteInput}
+      />
+      {ngGuard.blocked && <NgWordWarningText tone="supporter" />}
 
       <AppButton
         tone="supporter"

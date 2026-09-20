@@ -14,6 +14,8 @@ import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from 
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * P8 完了報告一覧・リアクション ＋ P9 完了報告詳細・リアクション（モーダルに統合）
@@ -202,6 +204,7 @@ export default function ApprovalsScreen() {
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
+  const ngGuard = useNgWordGuard();
   // [2026-08-20修正・本部長] sendStamp/sendCommentがdispatch()の戻り値を確認せず、
   // 失敗時に何もフィードバックが無いままだった（ユーザーが「文字を入力しないと
   // リアクションおくれない？？」と誤解した一因と考えられる。実際はAPI直接検証で
@@ -287,8 +290,12 @@ export default function ApprovalsScreen() {
   const openDetail = useCallback((c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
+    ngGuard.clear();
     setDetailTarget(c);
-  }, []);
+    // ngGuard自体は毎レンダー新しいオブジェクトになる（src/hooks/useNgWordGuard.ts）が、
+    // ngGuard.clear自体はuseCallback（空配列）で安定しているため、これで十分。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ngGuard.clear]);
 
   // [2026-09-03追加] 28.4節「決定5」：自分の報告は確認なしで即取消、自分以外
   // （子ども・配偶者）の報告は確認ダイアログを挟む。
@@ -324,6 +331,7 @@ export default function ApprovalsScreen() {
     if (!detailTarget) return;
     const body = commentDraft.trim();
     if (!body) return;
+    if (ngGuard.guard(body)) return;
     setReactionError(null);
     setSendingComment(true);
     const result = await dispatch({
@@ -542,17 +550,27 @@ export default function ApprovalsScreen() {
                           })}
                         </View>
 
+                        {/* [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面
+                            ワイヤーフレーム.md 56.4節決定20] 保護者トグルがオフの
+                            間はこの欄・送信ボタンごと描かない（DB側のトリガーで
+                            拒否されるより、そもそも欄を出さないほうが分かりやすい）。 */}
+                        {state.family.social_interactions_enabled && (
+                          <>
                         <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>
                           ひとことおくる（にんい・200文字まで）
                         </Text>
                         <TextInput
                           value={commentDraft}
-                          onChangeText={setCommentDraft}
+                          onChangeText={(t) => {
+                            setCommentDraft(t);
+                            ngGuard.clear();
+                          }}
                           placeholder="あわ、上手にできてたよ"
                           multiline
                           maxLength={200}
                           style={styles.textArea}
                         />
+                        {ngGuard.blocked && <NgWordWarningText tone="parent" />}
                         <AppButton
                           label={sendingComment ? "送信中…" : "おくる"}
                           loading={sendingComment}
@@ -560,6 +578,8 @@ export default function ApprovalsScreen() {
                           onPress={sendComment}
                           disabled={!commentDraft.trim() || sendingComment}
                         />
+                      </>
+                    )}
                       </>
                     )}
 

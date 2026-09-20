@@ -802,3 +802,25 @@ export interface MemberBlock {
   blocked_member_id: string;
   created_at: string;
 }
+
+/**
+ * [新設・2026-09-21] hidden_contents テーブルの1行（要件定義書07-32章 決定7の
+ * 「段階3」、設計部/成果物/スキーマ設計.sql 66章）。運営が`hide_content()`で
+ * 入れる行で、アプリからは書けない（SELECTのみ）。クライアントは家族分を
+ * まとめて取得し、一覧・表示から該当行を除くために使う（66.4章の対応表）。
+ */
+export type HiddenContentKind =
+  | "family_board_post"
+  | "family_board_comment"
+  | "chore_completion_note"
+  | "chore_reaction_comment"
+  | "gratitude_note"
+  | "family_drawing";
+
+export interface HiddenContent {
+  id: string;
+  family_id: string;
+  content_kind: HiddenContentKind;
+  content_id: string;
+  hidden_at: string;
+}

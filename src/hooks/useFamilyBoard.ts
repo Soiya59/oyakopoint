@@ -43,6 +43,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
   deleteFamilyBoardPost,
@@ -54,6 +55,8 @@ import {
   toggleFamilyBoardReactionStamp,
 } from "@/data/api";
 import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, FamilyHomeCard, StampKey } from "@/types/domain";
+import { excludeBlockedByAuthor } from "@/lib/blockFilter";
+import { excludeHiddenById } from "@/lib/hiddenContentFilter";
 
 export type FamilyBoardLoadState = "loading" | "error" | "ready";
 
@@ -121,10 +124,27 @@ const PAGE_SIZE = 30;
  */
 export function useFamilyBoardHistory(familyId: string) {
   const { client } = useSession();
+  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」・決定7の段階3]
+  // ブロックした相手の投稿・運営が非表示にした投稿を、取得後にクライアント側で
+  // 除く（`src/lib/blockFilter.ts`・`src/lib/hiddenContentFilter.ts`）。
+  // `hasMore`の判定は除く前の生の件数で行う（ページングが崩れないよう、
+  // 「サーバから何件届いたか」と「画面に何件出すか」を分けて扱う）。
+  const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
+  const filterVisible = useCallback(
+    (rows: FamilyBoardPostWithAuthor[]) => {
+      const withoutBlocked = excludeBlockedByAuthor(rows, (p) => p.author_member_id, blockedMemberIdsSet);
+      return excludeHiddenById(withoutBlocked, "family_board_post", hiddenContentKeysSet);
+    },
+    [blockedMemberIdsSet, hiddenContentKeysSet]
+  );
   const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
   const [posts, setPosts] = useState<FamilyBoardPostWithAuthor[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // [2026-09-21追加] ページングのoffsetは「サーバから何件受け取ったか」で
+  // 進める必要がある（`posts`はブロック・非表示で間引かれた「画面に出す件数」
+  // のため、offsetに使うと除かれた分だけサーバ側の未取得行を読み飛ばしてしまう）。
+  const [rawCount, setRawCount] = useState(0);
 
   const load = useCallback(async () => {
     if (!familyId) {
@@ -138,10 +158,11 @@ export function useFamilyBoardHistory(familyId: string) {
       setLoadState("error");
       return;
     }
-    setPosts(res.data);
+    setPosts(filterVisible(res.data));
+    setRawCount(res.data.length);
     setHasMore(res.data.length === PAGE_SIZE);
     setLoadState("ready");
-  }, [client, familyId]);
+  }, [client, familyId, filterVisible]);
 
   useEffect(() => {
     void load();
@@ -151,8 +172,8 @@ export function useFamilyBoardHistory(familyId: string) {
     if (!familyId || loadingMore || !hasMore) return;
     setLoadingMore(true);
     const res = await fetchFamilyBoardPostsHistory(client, familyId, {
-      from: posts.length,
-      to: posts.length + PAGE_SIZE - 1,
+      from: rawCount,
+      to: rawCount + PAGE_SIZE - 1,
     });
     setLoadingMore(false);
     if (!res.ok) {
@@ -160,9 +181,10 @@ export function useFamilyBoardHistory(familyId: string) {
       // そのまま残す（「もっと見る」ボタンが再度表示され、そのまま再試行できる）。
       return;
     }
-    setPosts((prev) => [...prev, ...res.data]);
+    setPosts((prev) => [...prev, ...filterVisible(res.data)]);
+    setRawCount((prev) => prev + res.data.length);
     setHasMore(res.data.length === PAGE_SIZE);
-  }, [client, familyId, posts.length, loadingMore, hasMore]);
+  }, [client, familyId, rawCount, loadingMore, hasMore, filterVisible]);
 
   // [2026-08-29追加・第2段階] 削除（本人の5分以内取消・保護者の是正削除）。
   // API仕様.md 13.5章（2026-08-29改訂）のとおり、直接UPDATEではなく

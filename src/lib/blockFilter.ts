@@ -21,15 +21,14 @@
  * （`src/data/api.ts` の `fetchMyMemberBlocks`、`src/data/store.tsx` の
  * `blockedMemberIdsSet`）。
  *
- * [2026-09-20時点でこのファイルが呼ばれていない箇所について] 家族の書き込み
- * ボードの投稿一覧・公開済みお絵かきの一覧は、いずれもグローバルな
- * state（src/data/store.tsx の State）を経由せず、各画面（未実装。UIUX
- * デザイン部の設計待ち）が `src/data/api.ts` の取得関数を直接呼ぶ構造に
- * なっている。したがって `excludeBlockedByAuthor` はこの回では実際の
- * 呼び出し元を持たない（=デッドコードではなく「次回、画面実装時にそのまま
- * 使う関数」として用意してある）。一方、`chore_reactions`（完了報告への
- * コメント）と `gratitude_points`（感謝のひとこと）は既に
- * `src/data/store.tsx` のグローバルstateに載っているため、この回で
+ * [2026-09-21追記] `excludeBlockedByAuthor`は、家族の書き込みボードの投稿一覧
+ * （`src/hooks/useFamilyBoard.ts` の `useFamilyBoardHistory`）と、公開済みの
+ * お絵かき一覧（`src/hooks/useCollectorShelf.ts` の `useCollectedPrizes`。
+ * ガチャの景品として表示される絵が対象）に組み込み済み。いずれもグローバルな
+ * state（src/data/store.tsx の State）を経由しない一覧のため、各フックが
+ * `useAppData().blockedMemberIdsSet` を直接読んでフィルタする形にした。
+ * `chore_reactions`（完了報告へのコメント）と `gratitude_points`（感謝の
+ * ひとこと）は `src/data/store.tsx` のグローバルstateに載っているため、
  * `load()` に組み込み済み（開発部/成果物/実装メモ.md参照）。
  */
 
@@ -69,4 +68,28 @@ export function blankBlockedGratitudeNotes<T extends { sender_id: string; note: 
 ): T[] {
   if (blockedMemberIds.size === 0) return [...gratitude];
   return gratitude.map((g) => (blockedMemberIds.has(g.sender_id) ? { ...g, note: null } : g));
+}
+
+/**
+ * [2026-09-21追加・本部長差し戻し「家族の木の飾り・ガチャ結果画面にも絵が
+ * 素通しで出ている」対応] 家族の木の色丸（`FamilyTreeCompletionDot`）が
+ * 持つ「景品」（`prize`）のうち、絵（`prize.drawing`）の作者がブロック対象
+ * なら、**その飾り（`prize`）ごと**取り除く（`prize: null`にする）。
+ *
+ * 色丸そのもの（完了報告・表示名・アバター）は消さない——決定11の「隠れる5種」
+ * に「公開済みのお絵かきと題名」とあるとおり、隠れるのは絵と題名（＝飾り）だけで、
+ * 色丸という記録自体は隠れないもの（決定11「隠れないもの」の「家族の木の色丸」）
+ * だから。既製の飾り（`presetOrnament`のみ・`drawing`がnull）は対象外
+ * （絵ではないため）。
+ *
+ * `src/hooks/useFamilyTree.ts`（現在の木）・`src/hooks/useCollectorShelf.ts`
+ * （過去の木）の両方から呼ぶ。
+ */
+export function stripBlockedTreeDotPrizes<
+  T extends { prize: { drawing: { artistId: string } | null } | null }
+>(dots: readonly T[], blockedMemberIds: ReadonlySet<string>): T[] {
+  if (blockedMemberIds.size === 0) return [...dots];
+  return dots.map((dot) =>
+    dot.prize?.drawing && blockedMemberIds.has(dot.prize.drawing.artistId) ? { ...dot, prize: null } : dot
+  );
 }

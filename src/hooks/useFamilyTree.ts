@@ -23,6 +23,8 @@ import {
   type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeMemberBreakdown, FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
+import { stripBlockedTreeDotPrizes } from "@/lib/blockFilter";
+import { stripHiddenTreeDotPrizes } from "@/lib/hiddenContentFilter";
 
 export type FamilyTreeLoadState = "loading" | "error" | "ready";
 
@@ -74,7 +76,7 @@ export function useFamilyTreeSummary() {
 /** P26/C20/S14詳細画面用（現在シーズン・内訳・完了報告ドット・先月分の記録）。 */
 export function useFamilyTreeDetail() {
   const { client } = useSession();
-  const { state } = useAppData();
+  const { state, blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const familyId = state.family.id;
   const [loadState, setLoadState] = useState<FamilyTreeLoadState>("loading");
   const [season, setSeason] = useState<FamilyTreeSeason | null>(null);
@@ -126,7 +128,14 @@ export function useFamilyTreeDetail() {
         setLoadState("error");
         return;
       }
-      dotsResData = dotsRes.data;
+      // [2026-09-21追加・本部長差し戻し] ブロック・運営の非表示（hidden_contents）を
+      // 家族の木の飾り（絵）にも適用する。色丸そのもの（完了報告・アバター）は
+      // 消さず、絵の飾り（prize）だけを取り除く（src/lib/blockFilter.ts・
+      // src/lib/hiddenContentFilter.tsのコメント参照）。
+      dotsResData = stripHiddenTreeDotPrizes(
+        stripBlockedTreeDotPrizes(dotsRes.data, blockedMemberIdsSet),
+        hiddenContentKeysSet
+      );
       weeklyResData = weeklyRes.data;
       stickerPlacementsResData = stickerPlacementsRes.data;
       habitFigurePlacementsResData = habitFigurePlacementsRes.data;
@@ -145,7 +154,7 @@ export function useFamilyTreeDetail() {
     setHabitFigurePlacements(habitFigurePlacementsResData);
     setLastSeason(mostRecentClosed);
     setLoadState("ready");
-  }, [client, familyId]);
+  }, [client, familyId, blockedMemberIdsSet, hiddenContentKeysSet]);
 
   useEffect(() => {
     void load();

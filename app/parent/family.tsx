@@ -23,11 +23,15 @@ import type { FamilyInvite } from "@/types/domain";
 import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
-import { HELP_CHILD_URL, HELP_PARENT_URL, HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
-
-/** やること.md 2-23（サマリー表#5、Apple 1.2 "Published contact information"）。
- *  2026-09-09に統括が決定。宣伝部CLAUDE.md記載のPlay Console公開用アドレスと同一。 */
-const CONTACT_EMAIL = "soiyalab.contact@gmail.com";
+import {
+  HELP_CHILD_URL,
+  HELP_PARENT_URL,
+  HELP_SUPPORTER_URL,
+  LEGAL_PAGES_PUBLISHED,
+  PRIVACY_POLICY_URL,
+  TERMS_URL,
+  TIPS_URL,
+} from "@/lib/legalLinks";
 
 /** 表示名の最大文字数（MemberAvatarの頭文字表示・木の内訳表示が崩れない長さ）。 */
 const NAME_MAX_LENGTH = 12;
@@ -55,8 +59,28 @@ const NAME_MAX_LENGTH = 12;
  * マイグレーションは追加していない。
  */
 export default function FamilyScreen() {
-  const { state, refresh, memberAvatars } = useAppData();
+  const {
+    state,
+    refresh,
+    memberAvatars,
+    blockedMemberIdsSet,
+    blockMember,
+    unblockMember,
+    setFamilySocialInteractionsEnabled,
+  } = useAppData();
   const { client, parentMember, logoutParent } = useSession();
+  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+  // ワイヤーフレーム.md 57.3節] 「この人の書き込み」チップの保存中・保存成功・
+  // 保存失敗の状態。25.1節「色を変更」の保存状態パターン（savingColor/
+  // colorSuccessId/colorError）と同じ型で、対象をメンバー単位で持つ。
+  const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
+  const [blockSuccessId, setBlockSuccessId] = useState<string | null>(null);
+  const [blockErrorId, setBlockErrorId] = useState<string | null>(null);
+  // [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33、主要画面
+  // ワイヤーフレーム.md 56.3節] 「家族のやりとりの設定」トグル1つ。
+  const [savingSocial, setSavingSocial] = useState(false);
+  const [socialSuccess, setSocialSuccess] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
@@ -319,6 +343,37 @@ export default function FamilyScreen() {
 
   const pendingInvites = invites.filter((i) => i.status === "pending");
 
+  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+  // ワイヤーフレーム.md 57.3節 決定5・57.4.1節] 「表示する」/「非表示にする」
+  // チップを押した瞬間に保存する（保存ボタンは置かない、56.3節決定18と同じ考え方）。
+  const setMemberBlocked = async (memberId: string, blocked: boolean) => {
+    setSavingBlockId(memberId);
+    setBlockErrorId(null);
+    const res = blocked ? await blockMember(memberId) : await unblockMember(memberId);
+    setSavingBlockId(null);
+    if (!res.ok) {
+      setBlockErrorId(memberId);
+      return;
+    }
+    setBlockSuccessId(memberId);
+    setTimeout(() => setBlockSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
+  };
+
+  // [2026-09-21追加・要件定義書07-32章 決定18・56.3節決定18] 押した瞬間に保存する
+  // （「保存する」ボタンは置かない）。
+  const setSocialInteractionsEnabled = async (enabled: boolean) => {
+    setSavingSocial(true);
+    setSocialError(null);
+    const res = await setFamilySocialInteractionsEnabled(enabled);
+    setSavingSocial(false);
+    if (!res.ok) {
+      setSocialError("変更できませんでした。もう一度お試しください。");
+      return;
+    }
+    setSocialSuccess(true);
+    setTimeout(() => setSocialSuccess(false), 4000);
+  };
+
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
@@ -335,7 +390,17 @@ export default function FamilyScreen() {
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
 
-      <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
+      {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+          ワイヤーフレーム.md 57.2節 決定4] メンバー一覧の直前に1回だけ表示する
+          説明文。個々のメンバー行には繰り返さない（57.3節）。 */}
+      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>
+        気になる書き込みがあるときは、その人の書き込み・コメント・{"\n"}
+        お絵かきだけを、自分の画面で見えないようにできます。{"\n"}
+        データは消えず、ほかの家族には今までどおり見えます。{"\n"}
+        いつでも「表示する」に戻せます。
+      </Text>
+
+      <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
         {activeMembers.map((m) => {
           const isEditingColor = editingColorId === m.id;
           const anyEditOpen = editingId !== null || editingColorId !== null;
@@ -488,6 +553,45 @@ export default function FamilyScreen() {
                   }
                   disabled={processingId !== null || anyEditOpen}
                 />
+                {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
+                    ワイヤーフレーム.md 57.3節 決定5] 「PINを設定」（子どものみ）と
+                    「退会させる」の間に置く。自分自身のカードには表示しない（決定12）。 */}
+                {m.id !== me?.id && (
+                  <View>
+                    <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>
+                      この人の書き込み
+                    </Text>
+                    <View style={[styles.chipRow, { marginTop: theme.spacing.s1 }]}>
+                      <Pressable
+                        onPress={() => setMemberBlocked(m.id, false)}
+                        disabled={savingBlockId !== null}
+                        style={[styles.chip, !blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
+                      >
+                        <Text>表示する</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setMemberBlocked(m.id, true)}
+                        disabled={savingBlockId !== null}
+                        style={[styles.chip, blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
+                      >
+                        <Text>非表示にする</Text>
+                      </Pressable>
+                    </View>
+                    {savingBlockId === m.id && (
+                      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+                        変更しています…
+                      </Text>
+                    )}
+                    {blockSuccessId === m.id && (
+                      <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
+                    )}
+                    {blockErrorId === m.id && (
+                      <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
+                        変更できませんでした。もう一度お試しください。
+                      </Text>
+                    )}
+                  </View>
+                )}
                 {m.role === "child" && (
                   <>
                     {/* [2026-08-16追加・本部長] 既存の子どもにPINを設定・再発行する導線が
@@ -654,6 +758,55 @@ export default function FamilyScreen() {
             「P14『設定』の中に置く」という配置は、この移設により取り下げになっている。
             理由・経緯は移設先のファイル冒頭コメント、および実装メモ.md 参照。 */}
 
+      {/* [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33、主要画面
+          ワイヤーフレーム.md 56.3節 決定14] 家族名の保存ボタンの直後、「使い方・
+          お問い合わせ」見出しの直前に置く（誤タップ防止のためCardで囲む）。 */}
+      <Card style={{ marginTop: theme.spacing.s6 }}>
+        <Text style={theme.typography.parentBodyMedium}>家族のやりとりの設定</Text>
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          家族みんなの画面に反映されます。これまでに書いたものは消えません。
+        </Text>
+        <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
+          家族の書き込み・コメント・ひとことを使う
+        </Text>
+        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+          スタンプや、ありがとうのポイントは、そのまま使えます。
+        </Text>
+        <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
+          <Pressable
+            onPress={() => setSocialInteractionsEnabled(true)}
+            disabled={savingSocial}
+            style={[styles.chip, state.family.social_interactions_enabled && styles.chipSelected]}
+          >
+            <Text>使う</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setSocialInteractionsEnabled(false)}
+            disabled={savingSocial}
+            style={[styles.chip, !state.family.social_interactions_enabled && styles.chipSelected]}
+          >
+            <Text>いまは使わない</Text>
+          </Pressable>
+        </View>
+        {savingSocial && (
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            保存中…
+          </Text>
+        )}
+        {socialSuccess && (
+          <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
+        )}
+        {socialError && (
+          <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{socialError}</Text>
+        )}
+        {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] オフの間だけ、
+            過去の投稿を読む道を残す（読み取り専用。投稿ボタンは出さない）。 */}
+        {!state.family.social_interactions_enabled && (
+          <Pressable onPress={() => router.push("/parent/family-board")} style={{ marginTop: theme.spacing.s2 }}>
+            <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>これまでの書き込みを読む</Text>
+          </Pressable>
+        )}
+      </Card>
 
       {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
           利用規約への外部リンクと、運営者への連絡先（Apple 1.2 "Published contact
@@ -680,9 +833,14 @@ export default function FamilyScreen() {
           </>
         )}
       </View>
-      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
-        お問い合わせ: {CONTACT_EMAIL}
-      </Text>
+      {/* [2026-09-21改訂・要件定義書07-32章 決定30〜32、主要画面ワイヤーフレーム.md
+          56.1節 決定1] 既存の静的なテキスト表示を、タップすると開く行に置き換えた
+          （P39）。新しい行は増やしていない。文言・見た目（下線つきのテキスト行）は
+          ExternalLinkRowと同じ形だが、押した先はアプリ内の画面（ブラウザは開かない）
+          のため、その部品自体は使わない（56.1節決定2）。 */}
+      <Pressable onPress={() => router.push("/parent/contact")} style={{ paddingVertical: theme.spacing.s2, marginTop: theme.spacing.s1 }}>
+        <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>お問い合わせ</Text>
+      </Pressable>
 
       <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
         <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
@@ -759,4 +917,19 @@ const styles = StyleSheet.create({
   // 決定3・40.9節2.] `app/parent/chore-edit.tsx`の絵文字選択チップと同じ
   // `chip`/`chipSelected`のスタイル値（枠線色・背景色）を流用する。共通部品化は
   // されていないため値だけ揃える（新しい部品は作らない）。
+  // [2026-09-21追加・主要画面ワイヤーフレーム.md 57.2節決定2] ブロックの
+  // 「表示する」/「非表示にする」チップに、実際にこの値を使う
+  // （`app/parent/chore-edit.tsx` 1105〜1116行目と同じ値）。
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
 });

@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { useAppData } from "@/data/store";
 import {
   fetchFamilyCollectedGachaDraws,
   fetchFamilyTreeCompletionDots,
@@ -23,12 +24,24 @@ import {
   type FamilyTreeStickerPlacement,
 } from "@/data/api";
 import type { FamilyTreeSeason, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
+import { hiddenContentKey, stripHiddenTreeDotPrizes } from "@/lib/hiddenContentFilter";
+import { stripBlockedTreeDotPrizes } from "@/lib/blockFilter";
 
 export type CollectorShelfLoadState = "loading" | "error" | "ready";
 
-/** 「集めたもの」区画（API仕様.md 12.4章）。家族共有・永久保管の一覧。 */
+/**
+ * 「集めたもの」区画（API仕様.md 12.4章）。家族共有・永久保管の一覧。
+ *
+ * [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」・決定7の段階3]
+ * ここでいう「公開済みのお絵かき」は、ガチャの景品として実際に見える絵
+ * （`item.drawing`が非null）を指す。**描いた人（artistId）がブロック対象、
+ * または絵そのものが運営に非表示にされている場合、この行をカードごと除く**
+ * （獲得した記録自体は残るためprizeKind==='preset'の行には影響しない。
+ * 絵が無い＝景品が既製オーナメントのため、そもそもブロック・非表示の対象外）。
+ */
 export function useCollectedPrizes(familyId: string) {
   const { client } = useSession();
+  const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const [loadState, setLoadState] = useState<CollectorShelfLoadState>("loading");
   const [items, setItems] = useState<CollectedGachaDraw[]>([]);
 
@@ -40,10 +53,16 @@ export function useCollectedPrizes(familyId: string) {
       setLoadState("error");
       return;
     }
-    setItems(res.data);
+    const visible = res.data.filter((item) => {
+      if (!item.drawing) return true; // 既製オーナメントは対象外
+      if (blockedMemberIdsSet.has(item.drawing.artistId)) return false;
+      if (hiddenContentKeysSet.has(hiddenContentKey("family_drawing", item.drawing.drawingId))) return false;
+      return true;
+    });
+    setItems(visible);
     setLoadState("ready");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, familyId]);
+  }, [client, familyId, blockedMemberIdsSet, hiddenContentKeysSet]);
 
   useEffect(() => {
     void load();
@@ -100,6 +119,7 @@ export function usePastTreeSeasons(familyId: string) {
  */
 export function usePastTreeSeasonDots(familyId: string) {
   const { client } = useSession();
+  const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const [dotsBySeasonId, setDotsBySeasonId] = useState<Record<string, FamilyTreeCompletionDot[]>>({});
   // [2026-09-08追加・スキーマ設計.sql 49章] 自由配置ステッカーは色丸から独立した
   // 表示レイヤーのため、過去の木でも同じ「見る」展開のタイミングで別クエリとして
@@ -133,13 +153,19 @@ export function usePastTreeSeasonDots(familyId: string) {
         setErrorSeasonIds((prev) => ({ ...prev, [season.id]: true }));
         return;
       }
-      setDotsBySeasonId((prev) => ({ ...prev, [season.id]: dotsRes.data }));
+      // [2026-09-21追加・本部長差し戻し] 現在の木（useFamilyTree.ts）と同じ理由で、
+      // 過去の木の再現表示にもブロック・運営の非表示を適用する。
+      const filteredDots = stripHiddenTreeDotPrizes(
+        stripBlockedTreeDotPrizes(dotsRes.data, blockedMemberIdsSet),
+        hiddenContentKeysSet
+      );
+      setDotsBySeasonId((prev) => ({ ...prev, [season.id]: filteredDots }));
       setWeeklyBySeasonId((prev) => ({ ...prev, [season.id]: weeklyRes.data }));
       setStickerPlacementsBySeasonId((prev) => ({ ...prev, [season.id]: stickerPlacementsRes.data }));
       setHabitFigurePlacementsBySeasonId((prev) => ({ ...prev, [season.id]: habitFigurePlacementsRes.data }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, familyId, dotsBySeasonId, loadingSeasonIds]
+    [client, familyId, dotsBySeasonId, loadingSeasonIds, blockedMemberIdsSet, hiddenContentKeysSet]
   );
 
   return {

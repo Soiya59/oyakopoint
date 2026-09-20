@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import type { ChoreCompletion, ChoreReaction, FamilyMember, StampKey } from "@/types/domain";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import NgWordWarningText from "@/components/NgWordWarningText";
 
 /**
  * 子ども向け 完了報告の詳細モーダル（とどいたリアクション一覧・スタンプ・ひとこと）
@@ -37,6 +39,13 @@ export type ChildCompletionDetailModalProps = {
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
   onSendComment: () => void;
   onClose: () => void;
+  /**
+   * [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+   * 56.4節決定20] 保護者トグル「家族のやりとりを使う」。falseの間は
+   * 「ひとことおくる」欄・送信ボタンを描かない（スタンプ・過去のコメントは
+   * そのまま表示する）。既定はtrue。
+   */
+  commentsEnabled?: boolean;
 };
 
 export function ChildCompletionDetailModal({
@@ -52,7 +61,22 @@ export function ChildCompletionDetailModal({
   onSendStamp,
   onSendComment,
   onClose,
+  commentsEnabled = true,
 }: ChildCompletionDetailModalProps) {
+  // [2026-09-21追加・要件定義書07-32章決定15〜19] NGワードフィルタ。「ひとことおくる」
+  // 欄はcommentDraft自体を呼び出し側が持つため、判定フラグだけをこの部品で持つ
+  // （送信ボタンを押した瞬間だけ判定し、当たれば呼び出し側のonSendComment自体を呼ばない）。
+  const ngGuard = useNgWordGuard();
+  // Modalはvisible切替のみで内部はマウントされ続けるため、対象（target）が
+  // 変わる＝モーダルを開き直すたびに前回の表示を持ち越さないようにする。
+  useEffect(() => {
+    ngGuard.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.id]);
+  const handleSend = () => {
+    if (ngGuard.guard(commentDraft)) return;
+    onSendComment();
+  };
   return (
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
@@ -109,23 +133,35 @@ export function ChildCompletionDetailModal({
                     })}
                   </View>
 
-                  <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>ひとことおくる（にんい）</Text>
-                  <TextInput
-                    value={commentDraft}
-                    onChangeText={onChangeCommentDraft}
-                    placeholder="がんばったね！"
-                    multiline
-                    maxLength={200}
-                    style={styles.textArea}
-                  />
-                  <AppButton
-                    label={sendingComment ? "おくっています…" : "おくる"}
-                    tone="child"
-                    loading={sendingComment}
-                    style={{ marginTop: theme.spacing.s2 }}
-                    onPress={onSendComment}
-                    disabled={!commentDraft.trim() || sendingComment}
-                  />
+                  {/* [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面
+                      ワイヤーフレーム.md 56.4節決定20] 保護者トグルがオフの間は
+                      この欄・送信ボタンごと描かない（スタンプ・過去のコメントは
+                      そのまま残る）。 */}
+                  {commentsEnabled && (
+                    <>
+                      <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>ひとことおくる（にんい）</Text>
+                      <TextInput
+                        value={commentDraft}
+                        onChangeText={(t) => {
+                          onChangeCommentDraft(t);
+                          ngGuard.clear();
+                        }}
+                        placeholder="がんばったね！"
+                        multiline
+                        maxLength={200}
+                        style={styles.textArea}
+                      />
+                      {ngGuard.blocked && <NgWordWarningText tone="child" />}
+                      <AppButton
+                        label={sendingComment ? "おくっています…" : "おくる"}
+                        tone="child"
+                        loading={sendingComment}
+                        style={{ marginTop: theme.spacing.s2 }}
+                        onPress={handleSend}
+                        disabled={!commentDraft.trim() || sendingComment}
+                      />
+                    </>
+                  )}
 
                   {reactionError && (
                     <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>

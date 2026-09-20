@@ -82,7 +82,10 @@ export default function ParentFamilyBoardScreen() {
         onRetry={reload}
         myMemberId={myMemberId}
         remaining={remaining}
-        onCompose={() => router.push("/parent/family-board-post")}
+        // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
+        // 56.4節決定21・決定24] 保護者トグルがオフの間は読み取り専用（投稿ボタンを
+        // 出さない）。P14の「これまでの書き込みを読む」からここへ来る想定。
+        onCompose={state.family.social_interactions_enabled ? () => router.push("/parent/family-board-post") : undefined}
         removingPostId={removingPostId}
         actionError={actionError}
         onRemovePost={removePost}

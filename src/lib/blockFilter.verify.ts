@@ -5,7 +5,12 @@
  *
  *   node src/lib/blockFilter.verify.ts
  */
-import { excludeBlockedByAuthor, excludeBlockedChoreReactionComments, blankBlockedGratitudeNotes } from "./blockFilter.ts";
+import {
+  excludeBlockedByAuthor,
+  excludeBlockedChoreReactionComments,
+  blankBlockedGratitudeNotes,
+  stripBlockedTreeDotPrizes,
+} from "./blockFilter.ts";
 
 let failed = 0;
 
@@ -65,6 +70,32 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
   assertEqual("blankBlockedGratitudeNotes: ブロック対象でも行自体は残る（消えない）", result.length, 2);
   assertEqual("blankBlockedGratitudeNotes: ブロック対象でもpointsは変わらない（相手は損をしない）", result[0].points, 10);
   assertEqual("blankBlockedGratitudeNotes: ブロック対象でない相手のnoteはそのまま", result[1].note, "ありがとう");
+}
+
+// ---- stripBlockedTreeDotPrizes（家族の木の飾り。絵の作者がブロック対象ならprizeごと除く） ----
+{
+  const dots = [
+    { id: "1", prize: { drawing: { artistId: "grandma" } } },
+    { id: "2", prize: { drawing: { artistId: "child-a" } } },
+    { id: "3", prize: { drawing: null } }, // 既製の飾り（絵ではない）
+    { id: "4", prize: null }, // 未飾りの色丸
+  ];
+  const blocked = new Set(["grandma"]);
+  const result = stripBlockedTreeDotPrizes(dots, blocked);
+  assertEqual(
+    "stripBlockedTreeDotPrizes: ブロック対象の絵はprizeごとnullになる。色丸自体は残る",
+    result.map((d) => ({ id: d.id, prize: d.prize })),
+    [
+      { id: "1", prize: null },
+      { id: "2", prize: { drawing: { artistId: "child-a" } } },
+      { id: "3", prize: { drawing: null } },
+      { id: "4", prize: null },
+    ]
+  );
+  assertEqual("stripBlockedTreeDotPrizes: 色丸の件数自体は変わらない（消えない）", result.length, 4);
+
+  const noneBlocked = stripBlockedTreeDotPrizes(dots, new Set());
+  assertEqual("stripBlockedTreeDotPrizes: ブロックが0件なら全件そのまま返す", noneBlocked[0].prize !== null, true);
 }
 
 console.log("");
