@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
-import MemberAvatar from "@/components/MemberAvatar";
+import ChildCompletionCard from "@/components/ChildCompletionCard";
+import ChildCompletionDetailModal from "@/components/ChildCompletionDetailModal";
 import { EmptyState } from "@/components/StatusViews";
 import ChildTabHeader from "@/components/ChildTabHeader";
 import TabIntroBubble from "@/components/TabIntroBubble";
@@ -14,13 +15,12 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
-import { formatDateTimeShort } from "@/lib/calendarDates";
 
 /**
  * かぞく区画の入口（子ども。旧C18「かぞくのがんばり」に、旧C5が持っていた
  * かぞくのけいじばんカードを吸収）
- * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 36章（36.5.2節）、
- * 開発部/成果物/実装メモ.md 188章
+ * 参照: UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 36章（36.5.2節）・55章、
+ * 開発部/成果物/実装メモ.md 188章・265章
  *
  * [2026-09-10新規追加・実装メモ.md 188章] 子ども下部タブ4区画化に伴う新設タブ。
  * 「新しい画面は作らない。既存の`app/child/family-activity.tsx`（C18）を
@@ -37,9 +37,19 @@ import { formatDateTimeShort } from "@/lib/calendarDates";
  * 不要になった（保護者・みまもりメンバーの「かぞく」タブ入口にも同種のボタンは無い、
  * `app/parent/(tabs)/index.tsx`・`app/supporter/(tabs)/family.tsx`参照）。
  *
- * URLは`/child/family`（新設）。旧URL`/child/family-activity`は
- * `app/child/family-activity.tsx`に残したリダイレクトスタブで引き続き到達できる
- * （外部・アプリ内の古いリンクを生かすため。実装メモ187章の`/parent/home`と同じ扱い）。
+ * URLは`/child/family`（新設）。
+ *
+ * [2026-09-20改訂・主要画面ワイヤーフレーム.md 55章、実装メモ.md 265章、やること.md 4-64]
+ * 完了報告の一覧を**新着5件のプレビュー**に絞った（36.12節決定3「かぞくタブは5件に
+ * 絞る。…3ロールで同じ形にする」の子ども側への反映。保護者`app/parent/(tabs)/index.tsx`・
+ * みまもりメンバー`app/supporter/(tabs)/family.tsx`と同じ形になった）。6件目以降は、
+ * 一覧の直後に出る「もっと みる →」からC18全件一覧へ行く。
+ * **旧URL`/child/family-activity`は、2026-09-20にC18全件一覧として復活した**
+ * （55.3節決定6。以前はこのタブへ送るリダイレクトスタブだった）。この
+ * 「もっと みる →」の行き先である。
+ *
+ * カードと詳細モーダルは全件一覧と共通の部品（`@/components/ChildCompletionCard`・
+ * `@/components/ChildCompletionDetailModal`）へ切り出した。見た目・中身は変えていない。
  */
 export default function ChildFamilyTabScreen() {
   const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, memberAvatars } = useAppData();
@@ -49,7 +59,7 @@ export default function ChildFamilyTabScreen() {
   const [reactionError, setReactionError] = useState<string | null>(null);
 
   const myId = state.activeChildMemberId;
-  const memberOf = (id: string) => state.members.find((m) => m.id === id);
+  const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
 
   const inboxSince = useUnreadSince("inbox", myId);
   const inboxCount = countRecentInbox(state, myId, inboxSince);
@@ -78,19 +88,31 @@ export default function ChildFamilyTabScreen() {
     .filter((c) => c.reported_by !== myId)
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
+  // [2026-09-20追加・主要画面ワイヤーフレーム.md 55.1節決定2] `filter`（自分を除く）
+  // →`sort`（新しい順）→`slice(0, 5)`の順で5件を取る。自分の報告を含めたまま5件を
+  // 取ってから除外すると、表示が5件に満たない日が出るため。変数名はS1・P7と同じ
+  // `recentCompletions`に揃えた。`reactableCompletions`（全件）は「もっと みる →」を
+  // 出すかどうかの判定に使うので消さないこと。
+  const recentCompletions = reactableCompletions.slice(0, 5);
+
   // [2026-09-10改訂・実装メモ.md 157章] おくったスタンプをもういちど押すと取消、
   // ちがうスタンプを押すと切替になる（統括指示）。
-  const sendStamp = async (completionId: string, stampKey: StampKey) => {
-    setReactionError(null);
-    const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
-    if (!result.ok) setReactionError("おくれなかったよ。もういちどためしてね");
-  };
+  // [2026-09-20・265章] 共通部品`ChildCompletionCard`（React.memo）へ安定した関数
+  // 参照として渡すため`useCallback`化した（挙動は変えていない）。
+  const sendStamp = useCallback(
+    async (completionId: string, stampKey: StampKey) => {
+      setReactionError(null);
+      const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
+      if (!result.ok) setReactionError("おくれなかったよ。もういちどためしてね");
+    },
+    [dispatch, myId]
+  );
 
-  const openDetail = (c: ChoreCompletion) => {
+  const openDetail = useCallback((c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
     setDetailTarget(c);
-  };
+  }, []);
 
   const sendComment = async () => {
     if (!detailTarget) return;
@@ -154,141 +176,53 @@ export default function ChildFamilyTabScreen() {
         <EmptyState tone="child" emoji="🌱" title="まだきろくがないよ" />
       )}
 
-      {reactableCompletions.map((c) => {
+      {/* [2026-09-20改訂・55.1節決定1] 描く対象を全件から新着5件に絞っただけで、
+          カードの見た目・中身は1つも変えていない。5件は仮想化する意味が無いため、
+          タブ側は`ScrollView`＋`.map()`のままにしてある（55.8節）。 */}
+      {recentCompletions.map((c) => {
         const member = memberOf(c.reported_by);
-        const isSupporterCard = member?.role === "supporter";
         return (
-          <Pressable key={c.id} onPress={() => openDetail(c)}>
-            <Card tone="child" style={isSupporterCard ? { ...styles.card, ...styles.cardSupporterTint } : styles.card}>
-              <View style={styles.cardTop}>
-                <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
-                <Text style={theme.typography.childBody}>{member?.display_name}</Text>
-                <Text style={{ flex: 1 }} />
-                <Text style={theme.typography.childBody}>
-                  {c.chore_emoji} {c.chore_title}
-                </Text>
-              </View>
-              <Text style={styles.dateLabel}>
-                {formatDateTimeShort(c.reported_at)}
-              </Text>
-              <View style={styles.stampRow}>
-                {theme.stampDefinitions.map((s) => {
-                  const sent = hasReactedWithStamp(c.id, myId, s.key as StampKey);
-                  return (
-                    <Pressable
-                      key={s.key}
-                      onPress={() => sendStamp(c.id, s.key as StampKey)}
-                      style={[styles.stampBtn, sent && styles.stampBtnSent]}
-                    >
-                      <Text style={styles.stampEmoji}>
-                        {s.emoji}
-                        {sent ? "✓" : ""}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-                <Text style={{ flex: 1 }} />
-                <Pressable onPress={() => openDetail(c)} hitSlop={8}>
-                  <Text style={styles.commentLink}>＋ひとこと</Text>
-                </Pressable>
-              </View>
-            </Card>
-          </Pressable>
+          <ChildCompletionCard
+            key={c.id}
+            completion={c}
+            member={member}
+            memberAvatarLineData={member ? memberAvatars[member.id] : undefined}
+            myChildId={myId}
+            onOpenDetail={openDetail}
+            onSendStamp={sendStamp}
+            hasReactedWithStamp={hasReactedWithStamp}
+          />
         );
       })}
 
-      <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
-        <View style={styles.modalBackdrop}>
-          <Card tone="child" style={styles.modalCard}>
-            {detailTarget &&
-              (() => {
-                const member = memberOf(detailTarget.reported_by);
-                const reactions = reactionsForCompletion(detailTarget.id);
-                return (
-                  <>
-                    <Text style={theme.typography.childHeadline}>
-                      {detailTarget.chore_emoji} {detailTarget.chore_title}
-                    </Text>
-                    <Text style={{ marginTop: theme.spacing.s2 }}>{member?.display_name}が きろくしたよ</Text>
-                    <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {formatDateTimeShort(detailTarget.reported_at)}
-                    </Text>
+      {/* [2026-09-20追加・55.2節決定3〜5] 一覧の直後（下）に置く。報告が6件以上
+          あるときだけ出し、件数・新着バッジは添えない。5件以下ではボタン自体を
+          描画しない（案内文もグレーアウトのボタンも置かない）。 */}
+      {reactableCompletions.length > 5 && (
+        <AppButton
+          tone="child"
+          variant="secondary"
+          fullWidth
+          label="もっと みる →"
+          style={{ marginTop: theme.spacing.s3 }}
+          onPress={() => router.push("/child/family-activity")}
+        />
+      )}
 
-                    <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>とどいたリアクション</Text>
-                    {reactions.length === 0 ? (
-                      <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                        まだだれもリアクションしてないよ
-                      </Text>
-                    ) : (
-                      <View style={{ marginTop: theme.spacing.s1, gap: theme.spacing.s1 }}>
-                        {reactions.map((r) => {
-                          const reactor = memberOf(r.reacted_by);
-                          const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
-                          return (
-                            <Text key={r.id} style={theme.typography.childBody}>
-                              {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                              {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    )}
-
-                    <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>スタンプをおくる</Text>
-                    <View style={styles.stampGrid}>
-                      {theme.stampDefinitions.map((s) => {
-                        const sent = hasReactedWithStamp(detailTarget.id, myId, s.key as StampKey);
-                        return (
-                          <Pressable
-                            key={s.key}
-                            onPress={() => sendStamp(detailTarget.id, s.key as StampKey)}
-                            style={[styles.stampChip, sent && styles.stampChipSent]}
-                          >
-                            <Text>
-                              {s.emoji} {s.label}
-                              {sent ? " ✓" : ""}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>ひとことおくる（にんい）</Text>
-                    <TextInput
-                      value={commentDraft}
-                      onChangeText={setCommentDraft}
-                      placeholder="がんばったね！"
-                      multiline
-                      maxLength={200}
-                      style={styles.textArea}
-                    />
-                    <AppButton
-                      label={sendingComment ? "おくっています…" : "おくる"}
-                      tone="child"
-                      loading={sendingComment}
-                      style={{ marginTop: theme.spacing.s2 }}
-                      onPress={sendComment}
-                      disabled={!commentDraft.trim() || sendingComment}
-                    />
-
-                    {reactionError && (
-                      <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>
-                        {reactionError}
-                      </Text>
-                    )}
-
-                    <AppButton
-                      label="もどる"
-                      variant="ghost"
-                      style={{ marginTop: theme.spacing.s3 }}
-                      onPress={() => setDetailTarget(null)}
-                    />
-                  </>
-                );
-              })()}
-          </Card>
-        </View>
-      </Modal>
+      <ChildCompletionDetailModal
+        target={detailTarget}
+        myChildId={myId}
+        memberOf={memberOf}
+        reactions={detailTarget ? reactionsForCompletion(detailTarget.id) : []}
+        hasReactedWithStamp={hasReactedWithStamp}
+        commentDraft={commentDraft}
+        onChangeCommentDraft={setCommentDraft}
+        sendingComment={sendingComment}
+        reactionError={reactionError}
+        onSendStamp={sendStamp}
+        onSendComment={sendComment}
+        onClose={() => setDetailTarget(null)}
+      />
     </Screen>
   );
 }
@@ -303,52 +237,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralBorder,
     opacity: 0.6,
   },
-  card: { marginTop: theme.spacing.s3 },
-  cardSupporterTint: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2 },
   titleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: theme.spacing.s2 },
   gratitudeLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  commentLink: { color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
-  dateLabel: { marginTop: theme.spacing.s1, fontSize: 12, color: theme.colors.neutralTextSecondary },
-  stampRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s3 },
-  stampBtn: {
-    width: theme.tapTarget.child,
-    height: theme.tapTarget.child,
-    borderRadius: theme.radius.childXl,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.neutralBg,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-  },
-  stampBtnSent: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
-  stampEmoji: { fontSize: 18 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: theme.spacing.s4,
-  },
-  modalCard: { width: "100%", maxWidth: 420 },
-  stampGrid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
-  stampChip: {
-    paddingHorizontal: theme.spacing.s3,
-    paddingVertical: theme.spacing.s2,
-    borderRadius: theme.radius.childXl,
-    backgroundColor: theme.colors.neutralBg,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-  },
-  stampChipSent: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
-  textArea: {
-    marginTop: theme.spacing.s2,
-    borderWidth: 1,
-    borderColor: theme.colors.neutralBorder,
-    borderRadius: theme.radius.childXl,
-    padding: theme.spacing.s3,
-    minHeight: 72,
-    textAlignVertical: "top",
-    backgroundColor: theme.colors.neutralBg,
-  },
 });
