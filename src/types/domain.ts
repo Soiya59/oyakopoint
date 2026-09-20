@@ -824,3 +824,18 @@ export interface HiddenContent {
   content_id: string;
   hidden_at: string;
 }
+
+/**
+ * [新設・2026-09-21] `account_deletion_preview()`（要件定義書07-33章
+ * 決定4・5・10・17、設計部/成果物/スキーマ設計.sql 68.7章、API仕様.md 24.1章）
+ * の戻り値。「アカウントを削除する」（P42/S28）・「家族から抜ける」（P41の
+ * ケース分岐）の確認画面に何を出すかを、この1つのオブジェクトだけで
+ * 判定する（クライアント側で複数のクエリから組み立てない）。
+ */
+export interface AccountDeletionPreview {
+  has_family: boolean;
+  is_owner: boolean;
+  will_delete_family: boolean;
+  family_name: string | null;
+  next_owner_display_name: string | null;
+}

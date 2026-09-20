@@ -500,6 +500,35 @@
 --   （96.5章の遵守）。ローカルDocker環境に適用済み・実測済み。本番へは
 --   未適用（本部長の操作を待つ）。詳細は開発部/成果物/実装メモ.md参照。
 --
+-- [2026-09-21追加・開発部] 退会・アカウント削除・家族削除（要件定義書07-33章、
+-- 設計部/成果物/スキーマ設計.sql 68章、開発部/成果物/実装メモ.md 273章）に
+-- 伴い、S4（79→80、`account_deletion_preview`を追加）を更新した。
+-- S1（37のまま。新しいテーブルを追加していない。68章は新しいテーブルを
+-- 1つも作らない）はいずれも±0。
+-- `transfer_family_ownership`はservice_roleにのみGRANTしており
+-- （authenticated/anonは明示REVOKE）、S4には含めない。
+-- `family_members_before_update()`はCREATE OR REPLACEで改訂した
+-- （バイパス条件にsupabase_auth_adminを追加・is_ownerの変更を保護者かどうか
+-- 問わず禁止）が、トリガー関数の名前・シグネチャ自体は変わっていないため、
+-- S4の集計（`DISTINCT proname`）には現れない。
+--
+-- **S3は68本のまま（±0）だが、`family_members_update_scoped`（UPDATE）
+-- 1本のハッシュが変わった。**設計部の68.4章には無い、開発部が動作確認中に
+-- 発見した3つ目の必須修正である。`supabase functions serve`＋実際のGoTrue
+-- 管理APIで`delete-account`を通しで実行したところ、
+-- `ERROR: function is_current_user_parent() does not exist (SQLSTATE 42883)`
+-- という500エラーが実際に発生した。原因はトリガーではなくRLSポリシー
+-- 自身——`supabase_auth_admin`ロールはBYPASSRLSを持たず、かつ
+-- `search_path=auth`が既定設定されているため（`pg_roles.rolconfig`で確認）、
+-- `family_members_update_scoped`のスキーマ修飾の無い関数呼び出し
+-- （`current_family_id()`等）を解決できなかった。ポリシーに
+-- `current_user IN ('service_role','supabase_auth_admin')`のバイパスを足し、
+-- 既存3関数呼び出しを`public.`で完全修飾する形に改めた（条件の意味は
+-- 変えていない）。詳細はマイグレーション
+-- `20260930070000_account_and_family_deletion.sql`4節、実装メモ.md 273章。
+-- いずれもローカルDocker環境で`supabase db reset`後に実測した値（96.5章の
+-- 遵守。手計算していない）。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -726,7 +755,7 @@ WITH expected(t, p, c, h) AS (VALUES
   ('family_invites','family_invites_update_revoke_by_parent','UPDATE','a9c21f23a1a0b9627d69fdb5a4d29425'),
   ('family_members','family_members_insert_by_parent','INSERT','ee67a7d134e4edcb37570a091be74c85'),
   ('family_members','family_members_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
-  ('family_members','family_members_update_scoped','UPDATE','7b019048dc03cf0c2a1674a9664b4b3c'),
+  ('family_members','family_members_update_scoped','UPDATE','0fbb7ad8a2fef05dc6e61c965d0d70b0'),
   -- [2026-09-11追加] メダルの値段を家族ごとに編集できるようにする（要件定義書
   -- 07-25-1章決定10〜18、設計部/成果物/スキーマ設計.sql 53.3章、開発部/成果物/
   -- 実装メモ.md 201章）。SELECT条件式`family_id = current_family_id()`は
@@ -1097,7 +1126,17 @@ WITH expected(f) AS (VALUES
   -- toggle_guard等の既存トリガー関数と同じ理由（34.5章の既知の挙動）で
   -- 明示REVOKEしていないため、この一覧に含まれる。トリガー文脈の外で
   -- 直接呼び出すとNEW参照でエラーになるだけで実害は無い。
-  ('content_reports_after_insert_notify')
+  ('content_reports_after_insert_notify'),
+  -- [2026-09-21追加] account_deletion_preview（要件定義書07-33章 決定4・5・
+  -- 10・17、設計部/成果物/スキーマ設計.sql 68.7章、開発部/成果物/実装メモ.md
+  -- 273章）。「アカウントを削除する」「家族から抜ける」の確認画面に何を
+  -- 出すかを1本で返す。SECURITY DEFINERであり、PUBLIC/anonから明示的に
+  -- REVOKEしたうえでauthenticatedへ明示的にGRANTしている。子どものセッション
+  -- からも呼べてしまうが、子どもの画面には削除の導線を1つも置かない
+  -- （決定7）ため到達しない。transfer_family_ownership()は
+  -- service_roleにのみGRANTしており、authenticatedからは呼べないため
+  -- この一覧には含めない（PostgREST越しに呼ぶ経路が無いことを別途確認済み）。
+  ('account_deletion_preview')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1110,7 +1149,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数79件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数80件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

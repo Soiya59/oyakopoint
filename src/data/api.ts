@@ -20,6 +20,7 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type {
+  AccountDeletionPreview,
   Category,
   Chore,
   ChoreCompletion,
@@ -389,12 +390,56 @@ export async function setChildPin(memberId: string, newPin: string): Promise<Api
   return invokeEdgeFunction<{ ok: true }>("set-child-pin", { member_id: memberId, new_pin: newPin });
 }
 
-/** 認証・データ管理設計書.md 3.4章: Edge Function `remove-member` */
+/**
+ * 認証・データ管理設計書.md 3.4章: Edge Function `remove-member`
+ *
+ * [2026-09-21変更・後方非互換・要件定義書07-33章 決定17、API仕様.md 24.5章]
+ * mode:"delete_family" は confirmFamilyName（家族の名前。前後の空白を
+ * 落とした完全一致でサーバ側が照合する）を新たに必須で渡す。一致しなければ
+ * 400 family_name_mismatch が返る。mode:"soft_remove" では使わない
+ * （省略可）。
+ */
 export async function removeMember(
   memberId: string,
-  mode: "soft_remove" | "delete_family"
+  mode: "soft_remove" | "delete_family",
+  confirmFamilyName?: string
 ): Promise<ApiResult<{ ok: true }>> {
-  return invokeEdgeFunction<{ ok: true }>("remove-member", { member_id: memberId, mode });
+  return invokeEdgeFunction<{ ok: true }>("remove-member", {
+    member_id: memberId,
+    mode,
+    ...(mode === "delete_family" ? { confirm_family_name: confirmFamilyName ?? "" } : {}),
+  });
+}
+
+/**
+ * [新設・2026-09-21・要件定義書07-33章、スキーマ設計.sql 68.7章、API仕様.md 24.1章]
+ * 「アカウントを削除する」「家族から抜ける」の確認画面に何を出すかを1本で
+ * 引く。RPC `account_deletion_preview()`（SECURITY DEFINER）。家族に属して
+ * いない人（parentNoFamily）が呼んでも必ずオブジェクトを返す（決定10）。
+ */
+export async function fetchAccountDeletionPreview(
+  client: SupabaseClient
+): Promise<ApiResult<AccountDeletionPreview>> {
+  const { data, error } = await client.rpc("account_deletion_preview");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as AccountDeletionPreview };
+}
+
+/**
+ * [新設・2026-09-21・要件定義書07-33章 決定1・3・9〜12、スキーマ設計.sql
+ * 68.5章(A)、API仕様.md 24.4章] Edge Function `delete-account`。
+ * 保護者・みまもりメンバーが、アプリの中から自分のログイン用アカウント
+ * （auth.users）を削除する。家族に属していなくても呼べる（決定10）。
+ * confirmFamilyName は「唯一の在籍保護者としてアカウントを削除する＝家族
+ * ごと削除に合流する」場合のみ必須（account_deletion_preview()の
+ * will_delete_family が true のとき）。
+ */
+export async function deleteAccount(
+  confirmFamilyName?: string
+): Promise<ApiResult<{ ok: true; family_deleted: boolean }>> {
+  return invokeEdgeFunction<{ ok: true; family_deleted: boolean }>("delete-account", {
+    ...(confirmFamilyName !== undefined ? { confirm_family_name: confirmFamilyName } : {}),
+  });
 }
 
 // ============================================================

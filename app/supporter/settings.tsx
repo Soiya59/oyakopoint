@@ -206,6 +206,16 @@ export default function SupporterSettingsScreen() {
             disabled={processing}
           />
         )}
+        {/* [2026-09-21追加・要件定義書07-33章 決定1・3、主要画面ワイヤーフレーム.md
+            59.5節決定14] S28（新設）へ遷移する。中身は展開せず別画面にする理由は
+            59.3.3節決定8と同じ（P42/S28の内容を3箇所で使い回すため）。 */}
+        <AppButton
+          tone="supporter"
+          label="アカウントを削除する"
+          variant="danger"
+          onPress={() => router.push("/supporter/account-delete")}
+          disabled={processing || confirmingLeave}
+        />
       </View>
 
       {errorMessage && (

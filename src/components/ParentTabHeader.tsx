@@ -38,10 +38,19 @@ export function ParentTabHeader({ inboxCount }: { inboxCount: number }) {
       },
     });
 
+  // [2026-09-21追加・主要画面ワイヤーフレーム.md 59.8節 決定19〜21]
+  // P14の「👦こどもモードにする」ボタンを削除し、この左上アバターを唯一の
+  // 切替入口にしたことに伴い、「押せることの分かりやすさ」の最小限の手当てを
+  // 加える。childProfiles.length > 0（＝実際に押せる）のときだけ「→」を
+  // 1文字足す。新しい部品・新しいアイコン・新しいトークンは作らない
+  // （既存の`parentTitle`のテキストに文字を1つ足すだけ）。
   const nameBlock = me ? (
     <>
       <MemberAvatar name={me.display_name} color={me.avatar_color} size={36} lineData={memberAvatars[me.id]} />
-      <Text style={theme.typography.parentTitle}>{me.display_name}</Text>
+      <Text style={theme.typography.parentTitle}>
+        {me.display_name}
+        {childProfiles.length > 0 ? " →" : ""}
+      </Text>
     </>
   ) : null;
 

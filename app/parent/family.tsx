@@ -15,7 +15,6 @@ import {
   fetchFamilyInvites,
   removeMember,
   revokeFamilyInvite,
-  updateFamilyName,
   updateMemberAvatarColor,
   updateMemberDisplayName,
 } from "@/data/api";
@@ -57,17 +56,22 @@ const NAME_MAX_LENGTH = 12;
  * 形に絞った（みまもりメンバーの自己変更はS13に1枚足せば後から拡張できる）。
  * 権限はDB側の既存RLS`family_members_update_scoped`がそのまま担保するため、
  * マイグレーションは追加していない。
+ *
+ * [2026-09-21改訂・本部長依頼／UIUXデザイン部・主要画面ワイヤーフレーム.md 59章]
+ * 「つけ足しつけ足しで整理されていない」という統括の指摘に対応し、次の3点を
+ * この画面から動かした・畳んだ（決定1〜3・16〜19）。
+ * - 家族名の変更・「家族のやりとりの設定」トグル → P40「家族の設定」
+ *   （app/parent/family-settings.tsx）へ移設（59.2節）。
+ * - ログアウト・家族から抜ける・アカウントを削除する（新設）・家族を削除する
+ *   → P41「アカウントについて」（app/parent/account.tsx）へ移設（59.3節）。
+ * - 「👦 こどもモードにする」ボタンは削除した。`ParentTabHeader`（左上の
+ *   アバター＋名前）と遷移先が完全に重複していたため（59.8節決定19〜21）。
+ * - メンバーカードは「常時見える行」（名前・役割・この人の書き込みチップ）と
+ *   「▸/▾ くわしく操作する」で開閉する低頻度の操作（名前変更・色変更・絵を
+ *   描く・PIN設定・退会させる）に分けた（59.7節決定16〜18）。
  */
 export default function FamilyScreen() {
-  const {
-    state,
-    refresh,
-    memberAvatars,
-    blockedMemberIdsSet,
-    blockMember,
-    unblockMember,
-    setFamilySocialInteractionsEnabled,
-  } = useAppData();
+  const { state, refresh, memberAvatars, blockedMemberIdsSet, blockMember, unblockMember } = useAppData();
   const { client, parentMember, logoutParent } = useSession();
   // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
   // ワイヤーフレーム.md 57.3節] 「この人の書き込み」チップの保存中・保存成功・
@@ -76,11 +80,6 @@ export default function FamilyScreen() {
   const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
   const [blockSuccessId, setBlockSuccessId] = useState<string | null>(null);
   const [blockErrorId, setBlockErrorId] = useState<string | null>(null);
-  // [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33、主要画面
-  // ワイヤーフレーム.md 56.3節] 「家族のやりとりの設定」トグル1つ。
-  const [savingSocial, setSavingSocial] = useState(false);
-  const [socialSuccess, setSocialSuccess] = useState(false);
-  const [socialError, setSocialError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
@@ -103,14 +102,16 @@ export default function FamilyScreen() {
   // 保存成功後、カードを閉じたあとも数秒だけ「色を変更しました」を表示する
   // （25.1節「保存成功」状態。全画面演出はしない控えめなインライン表示）。
   const [colorSuccessId, setColorSuccessId] = useState<string | null>(null);
+  // [2026-09-21追加・主要画面ワイヤーフレーム.md 59.7節決定16〜17] メンバー
+  // カードの「▸/▾ くわしく操作する」開閉状態。カードごとに独立し、既定は
+  // 全カード閉じた状態。名前・色の同時編集を防ぐanyEditOpen（既存）とは
+  // 別物で、複数枚を同時に開いてよい。
+  const [expandedMemberIds, setExpandedMemberIds] = useState<Record<string, boolean>>({});
+  const toggleMemberExpanded = (memberId: string) =>
+    setExpandedMemberIds((prev) => ({ ...prev, [memberId]: !prev[memberId] }));
 
   const activeMembers = state.members.filter((m) => m.is_active);
-  // 「こどもモードにする」で profile-select へ渡す子ども一覧。
-  // invite-lookup Edge Function が返す InviteLookupChild と同じ形に揃える
-  // （member_id / display_name / avatar_color）。
-  const childProfiles = activeMembers
-    .filter((m) => m.role === "child")
-    .map((m) => ({ member_id: m.id, display_name: m.display_name, avatar_color: m.avatar_color }));
+  const me = parentMember;
 
   // supporterはfamily_members一覧（activeMembers）にすでに含まれる（accept_family_invite後）ため
   // 別枠での表示は不要。ここでは「まだ参加していない招待」（pending/revoked）のみ一覧する。
@@ -253,85 +254,6 @@ export default function FamilyScreen() {
     setTimeout(() => setColorSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
   };
 
-  // ============================================================
-  // [2026-08-29統合・本部長／軽微変更ルート] 旧P17「設定」の中身をこの画面へ移した。
-  //
-  // ユーザーの「設定に家族をいれてもよいかも」という提案に対し、本部長から
-  // **向きが逆**であると指摘した。設定には「家族を削除する」という不可逆な操作が
-  // あり、家族管理には招待コード・PIN設定という日常的に開く操作がある。
-  // よく使うものを、めったに使わない危険な画面の下に埋めることになるため、
-  // 設定を家族へ入れる形にした（ユーザー同意済み）。
-  // ホームのメニュータイルは「⚙️ 設定」1つに統合し、「家族」タイルは廃止した。
-  // ============================================================
-  const me = parentMember;
-  const [processing, setProcessing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [familyName, setFamilyName] = useState(state.family.name);
-  // 既存のsavingName（メンバー表示名の保存中フラグ）と衝突するため別名にしている。
-  const [savingFamilyName, setSavingFamilyName] = useState(false);
-  const [nameSaved, setNameSaved] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
-
-  const saveFamilyName = async () => {
-    const trimmed = familyName.trim();
-    if (!trimmed || trimmed === state.family.name) return;
-    setSavingFamilyName(true);
-    setNameError(null);
-    setNameSaved(false);
-    const res = await updateFamilyName(client, state.family.id, trimmed);
-    setSavingFamilyName(false);
-    if (!res.ok) {
-      setNameError(res.error.message);
-      return;
-    }
-    await refresh();
-    setNameSaved(true);
-  };
-
-  const doLogout = async () => {
-    await logoutParent();
-    router.replace("/");
-  };
-
-  const doLeaveFamily = async () => {
-    if (!me) return;
-    setProcessing(true);
-    setErrorMessage(null);
-    const res = await removeMember(me.id, "soft_remove");
-    setProcessing(false);
-    if (!res.ok) {
-      setErrorMessage(
-        res.error.code === "owner_cannot_soft_remove"
-          ? "オーナーは先にオーナー権限を委譲するか、家族を削除してください"
-          : res.error.message
-      );
-      return;
-    }
-    await logoutParent();
-    router.replace("/");
-  };
-
-  /**
-   * [破壊的操作についての事前記録] remove-member の mode:"delete_family" を呼ぶ。
-   * families行のDELETE（ON DELETE CASCADEで家族の全データが連動削除される）という
-   * 不可逆な操作であり、実際に呼び出すと元に戻せない。
-   * 画面側は2段階の確認（ボタン押下→確認表示→確定）を必須にする。
-   * （旧app/parent/settings.tsxから移設。開発部CLAUDE.md「破壊的なDB操作は実行前に記録する」）
-   */
-  const doDeleteFamily = async () => {
-    if (!me) return;
-    setProcessing(true);
-    setErrorMessage(null);
-    const res = await removeMember(me.id, "delete_family");
-    setProcessing(false);
-    if (!res.ok) {
-      setErrorMessage(res.error.message);
-      return;
-    }
-    await logoutParent();
-    router.replace("/");
-  };
-
   const revokeInvite = async (inviteId: string) => {
     setRevokingId(inviteId);
     const res = await revokeFamilyInvite(client, inviteId);
@@ -357,21 +279,6 @@ export default function FamilyScreen() {
     }
     setBlockSuccessId(memberId);
     setTimeout(() => setBlockSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
-  };
-
-  // [2026-09-21追加・要件定義書07-32章 決定18・56.3節決定18] 押した瞬間に保存する
-  // （「保存する」ボタンは置かない）。
-  const setSocialInteractionsEnabled = async (enabled: boolean) => {
-    setSavingSocial(true);
-    setSocialError(null);
-    const res = await setFamilySocialInteractionsEnabled(enabled);
-    setSavingSocial(false);
-    if (!res.ok) {
-      setSocialError("変更できませんでした。もう一度お試しください。");
-      return;
-    }
-    setSocialSuccess(true);
-    setTimeout(() => setSocialSuccess(false), 4000);
   };
 
   return (
@@ -404,6 +311,7 @@ export default function FamilyScreen() {
         {activeMembers.map((m) => {
           const isEditingColor = editingColorId === m.id;
           const anyEditOpen = editingId !== null || editingColorId !== null;
+          const isExpanded = !!expandedMemberIds[m.id];
           const colorOptions = isEditingColor
             ? resolveAvatarColorOptions(theme.memberColorPalette, state.members, m.id)
             : [];
@@ -413,11 +321,10 @@ export default function FamilyScreen() {
             {colorSuccessId === m.id && (
               <Text style={{ color: theme.colors.brandPrimaryStrong }}>色を変更しました</Text>
             )}
-            <View style={{ flexDirection: "row", alignItems: isEditingColor ? "flex-start" : "center", gap: theme.spacing.s3 }}>
-            <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} expandOnTap />
-            <View style={{ flex: 1 }}>
-              {editingId === m.id ? (
-                <>
+            {editingId === m.id ? (
+              <View style={{ flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.s3 }}>
+                <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} expandOnTap />
+                <View style={{ flex: 1 }}>
                   <TextInput
                     value={draftName}
                     onChangeText={setDraftName}
@@ -435,9 +342,12 @@ export default function FamilyScreen() {
                     />
                     <AppButton label="やめる" variant="ghost" onPress={cancelEditName} disabled={savingName} />
                   </View>
-                </>
-              ) : isEditingColor ? (
-                <>
+                </View>
+              </View>
+            ) : isEditingColor ? (
+              <View style={{ flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.s3 }}>
+                <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} expandOnTap />
+                <View style={{ flex: 1 }}>
                   <Text style={theme.typography.parentBodyMedium}>新しい色を選んでください</Text>
                   {/* [2026-09-11追加] デザイントークン.md 1.3節 決定12〜14。
                       12色化で似た色が隣接するようになったための注意書き。パレット直前に
@@ -504,63 +414,38 @@ export default function FamilyScreen() {
                       <AppButton label="やめる" variant="ghost" onPress={cancelEditColor} />
                     </View>
                   )}
-                </>
-              ) : (
-                <>
-                  <Text style={theme.typography.parentBodyMedium}>{m.display_name}</Text>
-                  <Text style={theme.typography.parentCaption}>
-                    {m.role === "parent"
-                      ? m.is_owner
-                        ? "保護者（オーナー）"
-                        : "保護者"
-                      : m.role === "supporter"
-                      ? "🤝 みまもりメンバー"
-                      : "子ども"}
-                  </Text>
-                </>
-              )}
-            </View>
-            {editingId !== m.id && !isEditingColor && (
-              <View style={{ gap: theme.spacing.s2 }}>
-                {/* 名前変更は役割を問わず保護者が全員に対して行える（RLS側も同条件）。 */}
-                <AppButton
-                  label="名前を変更"
-                  variant="secondary"
-                  onPress={() => startEditName(m.id, m.display_name)}
-                  disabled={processingId !== null || anyEditOpen}
-                />
-                {/* [2026-09-01追加] 色の変更（主要画面ワイヤーフレーム.md 25.1節）。
-                    名前変更と同じく役割を問わず保護者が全員に対して行える。 */}
-                <AppButton
-                  label="色を変更"
-                  variant="secondary"
-                  onPress={() => startEditColor(m.id, m.avatar_color)}
-                  disabled={processingId !== null || anyEditOpen}
-                />
-                {/* [2026-09-11追加・要件定義書07-27章 決定10] アバターを自分で描いた絵に
-                    できるようにする機能。名前変更・色変更と同じく役割を問わず保護者が
-                    全員に対して行える（決定12）。「絵を描く」ボタンは名前・色編集の
-                    インライン展開とは異なり、別画面（P38）へ遷移する
-                    （主要画面ワイヤーフレーム.md 43.2節 決定10）。 */}
-                <AppButton
-                  label={memberAvatars[m.id] ? "絵をなおす" : "絵を描く"}
-                  variant="secondary"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/parent/member-avatar",
-                      params: { memberId: m.id, displayName: m.display_name },
-                    })
-                  }
-                  disabled={processingId !== null || anyEditOpen}
-                />
+                </View>
+              </View>
+            ) : (
+              <>
+                {/* [2026-09-21改訂・主要画面ワイヤーフレーム.md 59.7節決定16〜18]
+                    常時表示: 名前・役割（アバター付き）と「この人の書き込み」チップ。
+                    低頻度の操作（名前変更・色変更・絵を描く・PIN設定・退会させる）は
+                    「▸/▾ くわしく操作する」の下へ畳む。 */}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 }}>
+                  <MemberAvatar name={m.display_name} color={m.avatar_color} lineData={memberAvatars[m.id]} expandOnTap />
+                  <View style={{ flex: 1 }}>
+                    <Text style={theme.typography.parentBodyMedium}>{m.display_name}</Text>
+                    <Text style={theme.typography.parentCaption}>
+                      {m.role === "parent"
+                        ? m.is_owner
+                          ? "保護者（オーナー）"
+                          : "保護者"
+                        : m.role === "supporter"
+                        ? "🤝 みまもりメンバー"
+                        : "子ども"}
+                    </Text>
+                  </View>
+                </View>
+
                 {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
-                    ワイヤーフレーム.md 57.3節 決定5] 「PINを設定」（子どものみ）と
-                    「退会させる」の間に置く。自分自身のカードには表示しない（決定12）。 */}
+                    ワイヤーフレーム.md 59.7節決定18] 折りたたみの対象から明確に除外する
+                    （57章決定3「チップの現在状態そのものを一覧兼解除ボタンとして扱う」を
+                    畳みの奥に隠すと、非表示にしている相手を確認するために全カードを
+                    1枚ずつ開く必要が生まれるため）。自分自身のカードには出さない。 */}
                 {m.id !== me?.id && (
                   <View>
-                    <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>
-                      この人の書き込み
-                    </Text>
+                    <Text style={theme.typography.parentBody}>この人の書き込み</Text>
                     <View style={[styles.chipRow, { marginTop: theme.spacing.s1 }]}>
                       <Pressable
                         onPress={() => setMemberBlocked(m.id, false)}
@@ -592,44 +477,89 @@ export default function FamilyScreen() {
                     )}
                   </View>
                 )}
-                {m.role === "child" && (
-                  <>
-                    {/* [2026-08-16追加・本部長] 既存の子どもにPINを設定・再発行する導線が
-                        無かった（P15は新規作成専用のため）。要件定義書10章未決事項「子ども用
-                        PINの再発行フロー」への対応。 */}
+
+                {/* [2026-09-21新設・主要画面ワイヤーフレーム.md 59.7節決定17]
+                    38・39章で確立済みの折りたたみ記号（▸＝閉／▾＝開）を流用する。
+                    新しい記号・新しいトークンは作らない。既定は全カード閉じた状態。
+                    開閉はカードごとに独立（複数枚を同時に開いてよい）。 */}
+                <Pressable onPress={() => toggleMemberExpanded(m.id)} style={styles.expandToggleHit}>
+                  <Text style={[theme.typography.parentBody, styles.expandToggleText]}>
+                    {isExpanded ? "▾" : "▸"} くわしく操作する
+                  </Text>
+                </Pressable>
+
+                {isExpanded && (
+                  <View style={{ gap: theme.spacing.s2 }}>
+                    {/* 名前変更は役割を問わず保護者が全員に対して行える（RLS側も同条件）。 */}
                     <AppButton
-                      label="PINを設定"
+                      label="名前を変更"
+                      variant="secondary"
+                      onPress={() => startEditName(m.id, m.display_name)}
+                      disabled={processingId !== null || anyEditOpen}
+                    />
+                    {/* [2026-09-01追加] 色の変更（主要画面ワイヤーフレーム.md 25.1節）。
+                        名前変更と同じく役割を問わず保護者が全員に対して行える。 */}
+                    <AppButton
+                      label="色を変更"
+                      variant="secondary"
+                      onPress={() => startEditColor(m.id, m.avatar_color)}
+                      disabled={processingId !== null || anyEditOpen}
+                    />
+                    {/* [2026-09-11追加・要件定義書07-27章 決定10] アバターを自分で描いた絵に
+                        できるようにする機能。名前変更・色変更と同じく役割を問わず保護者が
+                        全員に対して行える（決定12）。「絵を描く」ボタンは名前・色編集の
+                        インライン展開とは異なり、別画面（P38）へ遷移する
+                        （主要画面ワイヤーフレーム.md 43.2節 決定10）。 */}
+                    <AppButton
+                      label={memberAvatars[m.id] ? "絵をなおす" : "絵を描く"}
                       variant="secondary"
                       onPress={() =>
                         router.push({
-                          pathname: "/parent/child-pin-reset",
+                          pathname: "/parent/member-avatar",
                           params: { memberId: m.id, displayName: m.display_name },
                         })
                       }
                       disabled={processingId !== null || anyEditOpen}
                     />
-                    <AppButton
-                      label={processingId === m.id ? "処理中…" : "退会させる"}
-                      variant="secondary"
-                      onPress={() => removeChild(m.id)}
-                      disabled={processingId !== null || anyEditOpen}
-                    />
-                  </>
+                    {m.role === "child" && (
+                      <>
+                        {/* [2026-08-16追加・本部長] 既存の子どもにPINを設定・再発行する導線が
+                            無かった（P15は新規作成専用のため）。要件定義書10章未決事項「子ども用
+                            PINの再発行フロー」への対応。 */}
+                        <AppButton
+                          label="PINを設定"
+                          variant="secondary"
+                          onPress={() =>
+                            router.push({
+                              pathname: "/parent/child-pin-reset",
+                              params: { memberId: m.id, displayName: m.display_name },
+                            })
+                          }
+                          disabled={processingId !== null || anyEditOpen}
+                        />
+                        <AppButton
+                          label={processingId === m.id ? "処理中…" : "退会させる"}
+                          variant="secondary"
+                          onPress={() => removeChild(m.id)}
+                          disabled={processingId !== null || anyEditOpen}
+                        />
+                      </>
+                    )}
+                    {/* [2026-08-22追加] みまもりメンバーの退会（07-7章「家族メンバーの招待発行・
+                        削除・役割変更などの家族管理操作」は保護者専権。みまもりメンバー自身は
+                        S13から自分自身のみ退会できるが、保護者はここから誰でも退会させられる）。 */}
+                    {m.role === "supporter" && (
+                      <AppButton
+                        label={processingId === m.id ? "処理中…" : "退会させる"}
+                        variant="secondary"
+                        onPress={() => removeSupporter(m.id)}
+                        disabled={processingId !== null || anyEditOpen}
+                      />
+                    )}
+                  </View>
                 )}
-                {/* [2026-08-22追加] みまもりメンバーの退会（07-7章「家族メンバーの招待発行・
-                    削除・役割変更などの家族管理操作」は保護者専権。みまもりメンバー自身は
-                    S13から自分自身のみ退会できるが、保護者はここから誰でも退会させられる）。 */}
-                {m.role === "supporter" && (
-                  <AppButton
-                    label={processingId === m.id ? "処理中…" : "退会させる"}
-                    variant="secondary"
-                    onPress={() => removeSupporter(m.id)}
-                    disabled={processingId !== null || anyEditOpen}
-                  />
-                )}
-              </View>
+              </>
             )}
-            </View>
           </Card>
           );
         })}
@@ -666,8 +596,7 @@ export default function FamilyScreen() {
         onPress={() => router.push("/parent/invite-supporter")}
       />
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.5節、実装メモ.md 227章]
-          招待ボタンの直下（本部長承認済み、45.11節2.）。既存の「👦 こどもモードにする」
-          ボタン直下のキャプション（613〜617行目）と同じ配置パターン。 */}
+          招待ボタンの直下（本部長承認済み、45.11節2.）。 */}
       <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
         はなれて暮らす祖父母など、見て・讃える立場です。家族共有のクエスト・ごほうび・家族の管理には関わりません。
       </Text>
@@ -678,151 +607,23 @@ export default function FamilyScreen() {
       />
 
       {/* ============================================================
-          [2026-08-29統合] 旧P17「設定」の内容。上のコメント参照。
-          家族の日常運用（招待コード・メンバー・PIN）を上に、家族名の変更と
-          不可逆な操作（家族から抜ける・家族を削除する）を下に置く。
+          [2026-09-21改訂・主要画面ワイヤーフレーム.md 59.1〜59.3節] 低頻度・
+          不可逆に近い操作は、ここから先の2つの入口（P40「家族の設定」・
+          P41「アカウントについて」）の奥へ移した。日常操作（招待コード・
+          メンバー・PIN）はここまでの第1階層に残る（決定1）。
           ============================================================ */}
       <View style={styles.settingsDivider} />
 
-      {/* [2026-08-29追加・本部長／軽微変更ルート] 子どもモードへの切り替え。
-          ユーザーの指摘「保護者を一回ログアウトするってことかな」への対応。
-
-          直前に「子ども→保護者はログアウトせず戻れる」ようにしたが（実装メモ92章）、
-          **その逆向きの導線が存在しなかった**。ログイン済みの保護者がトップ画面へ行くと
-          `app/index.tsx` が即座に保護者ホームへ`replace`するため「こどもモードで使う」
-          ボタンには到達できず、保護者が子どもモードに入るには設定からログアウトする
-          しか手が無かった。そしてログアウトは`supabase.auth.signOut()`を呼ぶため
-          **保護者セッションが消え、92章の「戻る」機能が効かなくなる**。片道しか
-          直っていなかった。
-
-          ここから入れば`signOut()`を通らないので保護者セッションが端末に残り、
-          子ども画面の「おうちの人にもどる」で往復できる。
-
-          配置は「家族の設定」見出しより上＝不可逆な操作（家族から抜ける・削除する）
-          から離した位置にしている。日常的に使う切り替えを、危険な操作の隣に置かない。 */}
-      {/* [2026-08-29修正・本部長] 招待コードの入力画面を飛ばす。
-          ユーザーの指摘「子供モードにするのあとにコードを入力する画面ある、いらないと思う」。
-          そのとおりで、**保護者は既に家族に所属しており、アプリが招待コードも子ども一覧も
-          手元に持っている**（state.family.invite_code / state.members）。トップ画面から
-          入る場合（未ログイン）はコード入力が要るが、この導線では不要だった。
-          invite-lookup の呼び出しごと省けるので、通信も1本減る。 */}
-      <View style={styles.switchBox}>
-        <AppButton
-          label="👦 こどもモードにする"
-          variant="secondary"
-          disabled={childProfiles.length === 0}
-          onPress={() =>
-            router.push({
-              pathname: "/child-auth/profile-select",
-              params: {
-                inviteCode: state.family.invite_code,
-                childrenJson: JSON.stringify(childProfiles),
-              },
-            })
-          }
-        />
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          {childProfiles.length === 0
-            ? "先に「子どもプロフィールを追加」から登録してください。"
-            : "ログアウトはされません。子どもの画面から「おうちの人にもどる」で戻れます。"}
-        </Text>
-      </View>
-
-      <Text style={[theme.typography.parentBodyMedium, styles.settingsHeading]}>家族の設定</Text>
-
-      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>家族名</Text>
-      <TextInput
-        value={familyName}
-        onChangeText={(t) => {
-          setFamilyName(t);
-          setNameSaved(false);
-        }}
-        maxLength={100}
-        style={[theme.typography.parentBody, styles.nameInput, { marginTop: theme.spacing.s2 }]}
-      />
-      {nameError && <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{nameError}</Text>}
-      {nameSaved && !nameError && (
-        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }}>変更しました</Text>
-      )}
       <AppButton
-        label={savingFamilyName ? "保存中…" : "家族名を保存する"}
+        label="家族の設定 →"
         variant="secondary"
-        style={{ marginTop: theme.spacing.s3 }}
-        onPress={saveFamilyName}
-        disabled={savingFamilyName || !familyName.trim() || familyName.trim() === state.family.name}
+        style={{ marginTop: theme.spacing.s6 }}
+        onPress={() => router.push("/parent/family-settings")}
       />
-        {/* [2026-09-11移設・統括指示「メダル管理はメダル管理として、ごほうび管理の下に
-            追加してほしい」／本部長・軽微変更ルート] ここにあった「メダルの設定」Card
-            （メダルの段階リセット）は `app/parent/sticker-settings.tsx`（メダル管理）へ移した。
-            UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 40章 決定1・41章 決定1 が定めた
-            「P14『設定』の中に置く」という配置は、この移設により取り下げになっている。
-            理由・経緯は移設先のファイル冒頭コメント、および実装メモ.md 参照。 */}
-
-      {/* [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33、主要画面
-          ワイヤーフレーム.md 56.3節 決定14] 家族名の保存ボタンの直後、「使い方・
-          お問い合わせ」見出しの直前に置く（誤タップ防止のためCardで囲む）。 */}
-      <Card style={{ marginTop: theme.spacing.s6 }}>
-        <Text style={theme.typography.parentBodyMedium}>家族のやりとりの設定</Text>
-        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-          家族みんなの画面に反映されます。これまでに書いたものは消えません。
-        </Text>
-        <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
-          {/* [2026-09-21訂正・主要画面ワイヤーフレーム.md 56章 決定17b] 旧文言
-              「家族の書き込み・コメント・ひとことを使う」は、3つの語がいずれも
-              画面の呼び名と一致せず、とくに「ひとこと」と「コメント」が重なって
-              いた（子どもの画面では完了報告に「＋ひとこと」と出る）。統括の指摘
-              「これって、対象はわかるのかな？」を受け、実際の表示名に置き換えた。 */}
-          家族の掲示板・完了報告への「＋コメント」・ありがとうのメッセージを使う
-        </Text>
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          ・掲示板は、子どもの画面では「かぞくのけいじばん」といいます
-        </Text>
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          ・「＋コメント」は、子どもの画面では「＋ひとこと」といいます
-        </Text>
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          「いまは使わない」にすると、この3つを書く・送ることが止まります。スタンプを送ることと、ありがとうのポイントを贈ることは、そのまま使えます。とまるのはメッセージだけです。
-        </Text>
-        <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
-          <Pressable
-            onPress={() => setSocialInteractionsEnabled(true)}
-            disabled={savingSocial}
-            style={[styles.chip, state.family.social_interactions_enabled && styles.chipSelected]}
-          >
-            <Text>使う</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setSocialInteractionsEnabled(false)}
-            disabled={savingSocial}
-            style={[styles.chip, !state.family.social_interactions_enabled && styles.chipSelected]}
-          >
-            <Text>いまは使わない</Text>
-          </Pressable>
-        </View>
-        {savingSocial && (
-          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-            保存中…
-          </Text>
-        )}
-        {socialSuccess && (
-          <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
-        )}
-        {socialError && (
-          <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{socialError}</Text>
-        )}
-        {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] オフの間だけ、
-            過去の投稿を読む道を残す（読み取り専用。投稿ボタンは出さない）。 */}
-        {!state.family.social_interactions_enabled && (
-          <Pressable onPress={() => router.push("/parent/family-board")} style={{ marginTop: theme.spacing.s2 }}>
-            <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>これまでの書き込みを読む</Text>
-          </Pressable>
-        )}
-      </Card>
 
       {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
           利用規約への外部リンクと、運営者への連絡先（Apple 1.2 "Published contact
-          information"）。ログアウト・家族の削除の直前に置く（宣伝部の要望どおり）。
-          実装メモ.md 181章参照。利用規約（TERMS_URL）は本部長の指示により、
+          information"）。実装メモ.md 181章参照。利用規約（TERMS_URL）は本部長の指示により、
           宣伝部が原稿を完成させ次第公開される予定のURLへ先にリンクを張ってある
           （2026-09-09時点ではまだ404）。 */}
       <Text style={[theme.typography.parentBodyMedium, styles.settingsHeading]}>使い方・お問い合わせ</Text>
@@ -846,46 +647,19 @@ export default function FamilyScreen() {
       </View>
       {/* [2026-09-21改訂・要件定義書07-32章 決定30〜32、主要画面ワイヤーフレーム.md
           56.1節 決定1] 既存の静的なテキスト表示を、タップすると開く行に置き換えた
-          （P39）。新しい行は増やしていない。文言・見た目（下線つきのテキスト行）は
-          ExternalLinkRowと同じ形だが、押した先はアプリ内の画面（ブラウザは開かない）
-          のため、その部品自体は使わない（56.1節決定2）。 */}
+          （P39）。文言・見た目は変更していない（本部長依頼2026-09-21の範囲外事項）。 */}
       <Pressable onPress={() => router.push("/parent/contact")} style={{ paddingVertical: theme.spacing.s2, marginTop: theme.spacing.s1 }}>
         <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>お問い合わせ</Text>
       </Pressable>
 
-      <View style={{ marginTop: theme.spacing.s6, gap: theme.spacing.s3 }}>
-        <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing} />
-        <AppButton
-          label={processing ? "処理中…" : "家族から抜ける"}
-          variant="secondary"
-          onPress={doLeaveFamily}
-          disabled={processing}
-        />
-        {me?.is_owner ? (
-          confirmingDelete ? (
-            <View style={{ gap: theme.spacing.s2 }}>
-              <Text style={{ color: theme.colors.statusBlocking }}>
-                本当に「{state.family.name}」を削除しますか？この操作は取り消せません（すべてのクエスト・完了報告・ごほうび履歴が削除されます）。
-              </Text>
-              <AppButton
-                label={processing ? "削除中…" : "本当に削除する"}
-                variant="danger"
-                onPress={doDeleteFamily}
-                disabled={processing}
-              />
-              <AppButton label="キャンセル" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={processing} />
-            </View>
-          ) : (
-            <AppButton label="家族を削除する" variant="danger" onPress={() => setConfirmingDelete(true)} disabled={processing} />
-          )
-        ) : null}
-      </View>
+      <AppButton
+        label="アカウントについて →"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s6 }}
+        onPress={() => router.push("/parent/account")}
+      />
 
-      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
-        「家族を削除する」はオーナーにのみ表示されます。
-      </Text>
-
-      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.replace("/parent")} />
+      <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
 
       {/* [2026-09-17追加・本部長／軽微変更ルート・実装メモ241章] いま動いているバージョンの
           表示。OTA（expo-updates）を使い始めたことで、配布した中身がストアの表示に
@@ -902,7 +676,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.neutralBorder,
   },
-  switchBox: { marginTop: theme.spacing.s6, gap: theme.spacing.s2 },
   settingsHeading: {
     marginTop: theme.spacing.s6,
     color: theme.colors.brandPrimaryStrong,
@@ -943,4 +716,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
   },
   chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
+  // [2026-09-21新設・主要画面ワイヤーフレーム.md 59.7節決定17] 「▸/▾
+  // くわしく操作する」の折りたたみトグル。38・39章の既存トークンのみを使う
+  // （新しいトークンは作らない）。
+  expandToggleHit: { minHeight: theme.tapTarget.parent, justifyContent: "center", alignItems: "flex-end" },
+  expandToggleText: { color: theme.colors.brandPrimaryStrong },
 });

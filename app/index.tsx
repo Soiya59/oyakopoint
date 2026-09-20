@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
@@ -131,6 +131,16 @@ export default function WelcomeScreen() {
               onPress={() => router.push("/onboarding/join-family")}
             />
           </View>
+          {/* [2026-09-21追加・要件定義書07-33章 決定10、主要画面ワイヤーフレーム.md
+              59.6節決定15] 家族を削除された側・家族から抜けた側が、自分の
+              アカウントを永久に消せなくなることを防ぐ。控えめな下線つきテキスト
+              （ExternalLinkRowと同じ見た目）とし、danger色は使わない
+              （この行自体は削除を実行するボタンではなく確認画面への入口のため）。 */}
+          <Pressable onPress={() => router.push("/account-delete")} style={{ marginTop: theme.spacing.s3 }}>
+            <Text style={[theme.typography.parentBody, { textDecorationLine: "underline", color: theme.colors.neutralTextSecondary }]}>
+              アカウントを削除する
+            </Text>
+          </Pressable>
         </View>
       )}
 

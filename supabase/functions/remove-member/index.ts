@@ -2,6 +2,10 @@
  * remove-member
  *
  * 参照: 設計部/成果物/認証・データ管理設計書.md 3.4章
+ *       設計部/成果物/スキーマ設計.sql 68.5章(B)(C)(D)
+ *       設計部/成果物/API仕様.md 24.3・24.5章
+ *       要件定義書.md 07-33章 決定2・4・5・9
+ *       開発部/成果物/実装メモ.md 273章
  *
  * 読み書き対象テーブル・ストレージ:
  *   - family_members: 呼び出し元が保護者本人であることの解決（SELECT、
@@ -17,10 +21,14 @@
  *   - families: delete_familyモードでDELETE。ON DELETE CASCADEにより
  *     family_members / chores / chore_completions / rewards /
  *     reward_redemptions / categories / family_member_pins / push_tokens
- *     が連動削除される（スキーマ設計.sql 各テーブルのFK定義を参照。
- *     family_member_pins.member_id・push_tokens.member_id は
- *     family_members(id) への CASCADE のため、families削除→
- *     family_members削除の連鎖でさらに連動する）。
+ *     ほか（07-33-3章の28テーブル）が連動削除される。
+ *   - RPC transfer_family_ownership: [2026-09-21追加・要件定義書07-33章
+ *     決定5] soft_removeモードの対象がオーナーで、他に在籍保護者がいる
+ *     場合に呼ぶ。
+ *   - auth.users: [2026-09-21追加・決定9] delete_familyモードで
+ *     families削除が成功したあと、実行したオーナー本人のぶんだけを
+ *     admin.auth.admin.deleteUser()でハード削除する。他のメンバーの
+ *     auth.usersには一切触れない（決定9でいちばん大事な線引き）。
  *   [2026-09-09削除] Supabase Storage バケット chore-photos の削除処理は撤去した。
  *   証拠写真機能の残骸撤去（やること.md 5-4、開発部/成果物/実装メモ.md 180章）で
  *   chore-photosバケット自体をDBから削除した（マイグレーション
@@ -37,11 +45,19 @@
  *
  * ---- 破壊的操作についての注記 ----
  * delete_familyモードは families 行のDELETE（CASCADEで家族の全データが
- * 連動削除される）という不可逆な破壊的操作を実行する。設計はすでに
- * 認証・データ管理設計書.md 3.4章で確定しているためコード実装そのものは
- * 予定どおりだが、実際にデプロイ後この関数を呼び出す行為自体は破壊的操作
+ * 連動削除される）という不可逆な破壊的操作を実行する。[2026-09-21追加]
+ * 加えて、実行したオーナー本人のauth.usersのハード削除（決定9）も行う
+ * ようになった。設計はすでに 認証・データ管理設計書.md 3.4章・
+ * スキーマ設計.sql 68.5章で確定しているためコード実装そのものは予定
+ * どおりだが、実際にデプロイ後この関数を呼び出す行為自体は破壊的操作
  * であることを、開発部/成果物/実装メモ.mdに明記する
  * （開発部CLAUDE.md「破壊的なDB操作は、実行前に成果物に記録する」に対応）。
+ *
+ * ---- [2026-09-21変更・後方非互換] ----
+ * delete_familyモードは confirm_family_name（家族の名前。前後の空白を
+ * 落とした完全一致）を新たに必須で受け取る。一致しなければ
+ * 400 family_name_mismatch を返し、何も実行しない（決定17の3段目の
+ * サーバ側照合。API仕様.md 24.5章）。
  */
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/http.ts";
@@ -112,17 +128,43 @@ Deno.serve(async (req: Request) => {
   }
 
   if (mode === "soft_remove") {
-    // バリデーション: is_owner=trueの保護者をsoft_removeしようとした場合は
-    // 409 owner_cannot_soft_remove を返す（3.4章「バリデーション」の
-    // 記載どおり。オーナー不在状態を防ぐ）。
+    // [2026-09-21変更・要件定義書07-33章 決定4・5] 以前はis_owner=trueの
+    // 保護者をsoft_removeしようとすると常に409 owner_cannot_soft_remove
+    // （「先にオーナー権限を委譲するか」という、委譲する手段が存在しない
+    // 案内文言）を返していた。決定5により、他に在籍保護者がいれば
+    // transfer_family_ownership()でオーナー権限を自動的に移してから
+    // 抜けさせる。決定4により、他に在籍保護者がいなければ「家族ごと削除に
+    // 合流」させる必要があるが、それは家族名の入力を伴う別の重さの操作
+    // （delete_familyモード）であり、このEdge Function内で無言のまま
+    // families行を消すことはしない。クライアントはaccount_deletion_preview()
+    // の will_delete_family で事前に分岐し、合流するケースでは
+    // soft_removeではなくdelete_familyモードを呼ぶ設計になっている
+    // （API仕様.md 24.1・24.3章、主要画面ワイヤーフレーム.md 59.3.1節）。
+    // そのため、ここでNULLが返るのは「クライアントの判定が古い（レース）」
+    // という想定外の場合のみであり、409で止めてdelete_familyへの案内を返す
+    // （「委譲」という存在しない機能はもう案内しない）。
     if (target.is_owner) {
-      return jsonResponse(
-        {
-          error: "owner_cannot_soft_remove",
-          hint: "先にオーナー権限を委譲するか delete_family を使ってください",
-        },
-        409
+      const { data: newOwnerId, error: transferError } = await admin.rpc(
+        "transfer_family_ownership",
+        { p_family_id: caller.familyId, p_from_member_id: target.id }
       );
+      if (transferError) {
+        console.error("remove-member: transfer_family_ownership failed", {
+          family_id: caller.familyId,
+        });
+        return jsonResponse({ error: "internal_error" }, 500);
+      }
+      if (!newOwnerId) {
+        return jsonResponse(
+          {
+            error: "owner_must_delete_family",
+            hint: "他に在籍している保護者がいないため、抜けるには家族を削除してください",
+          },
+          409
+        );
+      }
+      // 委譲成功。このまま下のsoft_remove処理へ進み、対象（元オーナー）を
+      // is_active=falseにする。
     }
 
     // [2026-08-22追加] みまもりメンバー（07-7章）は家族管理操作（他者の退会）を
@@ -186,6 +228,27 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "forbidden" }, 403);
   }
 
+  // [2026-09-21追加・要件定義書07-33章 決定17、API仕様.md 24.5章]
+  // confirm_family_name（家族の名前）の照合。正しさの検査のためではなく
+  // 一拍置かせるためだが、画面だけの検査だとAPIを直接叩く経路（開発中の
+  // クライアント・再送・リトライ）で素通りするため、サーバ側でも1回照合
+  // する。比較は前後の空白を落とした完全一致（大文字小文字の正規化は
+  // しない。家族名は日本語であり、正規化が別の取り違えを生む）。
+  const confirmFamilyName = typeof b?.confirm_family_name === "string" ? b.confirm_family_name : null;
+  const { data: family, error: familyLookupError } = await admin
+    .from("families")
+    .select("name")
+    .eq("id", caller.familyId)
+    .maybeSingle();
+  if (familyLookupError) {
+    console.error("remove-member: family lookup failed", { family_id: caller.familyId });
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+  const actualName = family?.name?.trim() ?? "";
+  if ((confirmFamilyName ?? "").trim() !== actualName) {
+    return jsonResponse({ error: "family_name_mismatch" }, 400);
+  }
+
   // [2026-09-09削除] Supabase Storageの証拠写真削除処理は撤去した。証拠写真機能の
   // 残骸撤去（やること.md 5-4、開発部/成果物/実装メモ.md 180章）でchore-photos
   // バケット自体を削除した（マイグレーション20260917020000_drop_chore_photos.sql）
@@ -200,6 +263,25 @@ Deno.serve(async (req: Request) => {
 
   if (deleteFamilyError) {
     console.error("remove-member: family delete failed", deleteFamilyError);
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+
+  // [2026-09-21追加・要件定義書07-33章 決定9] families削除が成功した
+  // あとに、実行したオーナー本人のauth.usersだけをハード削除する。
+  // 他のメンバーのauth.usersには絶対に触れない（決定9でいちばん
+  // 大事な線引き。別世帯の大人〈みまもりメンバー〉やもう一方の保護者の
+  // ログイン手段は、その人自身のものであって家族の持ち物ではない）。
+  // shouldSoftDelete（第2引数）はtrueにしない——ソフト削除だと
+  // auth.usersの行もメールアドレスも残り、「データの完全削除」に
+  // ならない。
+  const { error: deleteUserError } = await admin.auth.admin.deleteUser(caller.authUserId, false);
+  if (deleteUserError) {
+    console.error("remove-member: auth.admin.deleteUser failed", { family_id: caller.familyId });
+    // families行は既に削除済みで元に戻せない。auth.usersの削除だけが
+    // 失敗した状態であり、この人は「家族は無いがログインアカウントは残る」
+    // 状態になる（68.2章と同じ考え方）。もう一度「アカウントを削除する」
+    // （delete-account）を押せば、家族に属していない人として手順5だけが
+    // 走り完了する。
     return jsonResponse({ error: "internal_error" }, 500);
   }
 
