@@ -132,7 +132,7 @@ export default function ChildFamilyActivityScreen() {
 
       {/* 空状態の文言はかぞくタブと同一（`app/child/(tabs)/family.tsx`のEmptyState）。 */}
       {loadState === "ready" && completions.length === 0 && (
-        <EmptyState tone="child" emoji="🌱" title="まだきろくがないよ" />
+        <EmptyState tone="child" emoji="🌱" title="まだ きろくが ないよ" />
       )}
     </>
   );

@@ -173,7 +173,7 @@ export default function ChildFamilyTabScreen() {
       </Text>
 
       {reactableCompletions.length === 0 && (
-        <EmptyState tone="child" emoji="🌱" title="まだきろくがないよ" />
+        <EmptyState tone="child" emoji="🌱" title="まだ きろくが ないよ" />
       )}
 
       {/* [2026-09-20改訂・55.1節決定1] 描く対象を全件から新着5件に絞っただけで、
