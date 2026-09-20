@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, ListRenderItemInfo, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ListRenderItemInfo, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import Screen from "@/components/Screen";
+import ListScreen from "@/components/ListScreen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
@@ -39,6 +38,13 @@ import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } f
  * 原因が、通信ではなくこの画面の描画（1,000件で約1.3秒のDOMコミット＋ペイント）だったと
  * 実測で確認できたための変更。**見た目・操作・データの取得範囲は変えていない**
  * （表示件数を絞る・ページ分けする等の変更は含まない。255章参照）。
+ *
+ * ⚠️ **この画面はS2（`app/supporter/activity.tsx`）と写しの関係にある。片方だけ直さないこと。**
+ * 見た目のトーン（parent/supporter）と取消の権限だけが違い、画面の骨組み・状態の持ち方・
+ * 一覧の描き方は同じに保つ。実際に255章（2026-09-19）でこの画面だけを`FlatList`化し、
+ * S2が全件描画のまま取り残されて遅いままだった（2026-09-20・実装メモ266章、やること4-66で解消）。
+ * 速さに効く骨組みは`@/components/ListScreen`に集約してあるので、**一覧の描き方を変えるときは
+ * その部品を直す**こと（P8・S2・C18の3画面に同時に効く）。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -336,17 +342,6 @@ export default function ApprovalsScreen() {
     setDetailTarget(null);
   };
 
-  // [2026-09-19追加・255章] `Screen`の`scroll`（既定true・ScrollView）はネイティブの
-  // 仮想化と相性が悪い（`FlatList`をScrollViewへ入れ子にすると仮想化が効かず、
-  // 「VirtualizedLists should never be nested」警告も出る）ため、この画面だけ
-  // `scroll={false}`にし、`FlatList`自身を唯一のスクロールコンテナにする。
-  // `contentStyle={{ padding: 0 }}`で`Screen`側のpadding適用をやめ、`Screen.tsx`の
-  // `styles.content`・`BASE_BOTTOM_PADDING`と同じ値をFlatList自身の
-  // `contentContainerStyle`に持たせることで、スクロール領域にpaddingが含まれる
-  // 見た目・挙動を変えていない（`insets`は`Screen.tsx`と同じ`useSafeAreaInsets()`を
-  // ここでも呼んで揃えている）。
-  const insets = useSafeAreaInsets();
-
   const listHeader = (
     <>
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
@@ -398,28 +393,18 @@ export default function ApprovalsScreen() {
   };
 
   return (
-    <Screen tone="parent" scroll={false} contentStyle={{ padding: 0 }}>
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={{
-          paddingHorizontal: theme.spacing.s4,
-          paddingTop: theme.spacing.s4 + insets.top,
-          // Screen.tsxのBASE_BOTTOM_PADDING（theme.spacing.s8 * 2）と同じ値。
-          // Screen.tsx側の定数が変わった場合はここも合わせて直すこと（255章）。
-          paddingBottom: theme.spacing.s8 * 2 + insets.bottom,
-        }}
-        data={loadState === "ready" ? completions : []}
-        keyExtractor={(c) => c.id}
-        renderItem={renderItem}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
-        // [2026-09-19・255章] 見た目・並び順は変えていない。初期描画件数だけを絞り、
-        // スクロールに応じて追加描画する（仮想化）。
-        initialNumToRender={12}
-        windowSize={7}
-        removeClippedSubviews
-      />
-
+    // [2026-09-20改訂・266章] 一覧の骨組み（`Screen`を`scroll={false}`にして`FlatList`自身を
+    // 唯一のスクロールコンテナにする・`Screen`と同じpaddingを`contentContainerStyle`へ
+    // 移す・仮想化の設定）は255章でこのファイルに直接書いていたが、S2・C18にも同じものが
+    // 要るため`@/components/ListScreen`へ移した（見た目・設定値は255章のまま）。
+    <ListScreen
+      tone="parent"
+      data={loadState === "ready" ? completions : []}
+      keyExtractor={(c) => c.id}
+      renderItem={renderItem}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
+    >
       {/* [2026-09-03追加] 28.4節「確認モーダル（自分以外の報告を取り消す場合）」。
           22.4節の削除確認モーダルと同じ構成・トーン。 */}
       <Modal
@@ -596,12 +581,11 @@ export default function ApprovalsScreen() {
           </Card>
         </View>
       </Modal>
-    </Screen>
+    </ListScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, width: "100%" },
   header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   card: { marginTop: theme.spacing.s3 },
   // [2026-08-16追加] 3.1章「子どものカード：…背景色は淡い彩色／保護者自身のカード：

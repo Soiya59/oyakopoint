@@ -103,7 +103,10 @@ export function Screen({
           style={[
             styles.content,
             !scroll && styles.flex,
-            { paddingTop: theme.spacing.s4 + insets.top, paddingBottom: BASE_BOTTOM_PADDING + insets.bottom },
+            {
+              paddingTop: SCREEN_CONTENT_TOP_PADDING + insets.top,
+              paddingBottom: SCREEN_CONTENT_BOTTOM_PADDING + insets.bottom,
+            },
             contentStyle,
           ]}
         >
@@ -117,6 +120,18 @@ export function Screen({
 /** 画面下端の基本余白。端末の下端インセットをこれに足して使う（上のコメント参照）。 */
 const BASE_BOTTOM_PADDING = theme.spacing.s8 * 2;
 
+/**
+ * [2026-09-20追加・実装メモ.md 266章] `Screen`が中身に当てている余白の値。
+ * `FlatList`を唯一のスクロールコンテナにする画面（`components/ListScreen.tsx`）は、
+ * この余白を`contentContainerStyle`へ移し替えて見た目を揃える必要がある。
+ * 以前は各画面に同じ数値（`theme.spacing.s4` / `theme.spacing.s8 * 2`）を書き写し、
+ * 「`Screen.tsx`側が変わったらここも直すこと」というコメントで運用していた（255章）。
+ * 定数をexportして、書き写しそのものを無くす。
+ */
+export const SCREEN_CONTENT_HORIZONTAL_PADDING = theme.spacing.s4;
+export const SCREEN_CONTENT_TOP_PADDING = theme.spacing.s4;
+export const SCREEN_CONTENT_BOTTOM_PADDING = BASE_BOTTOM_PADDING;
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
@@ -126,7 +141,7 @@ const styles = StyleSheet.create({
   content: {
     width: "100%",
     maxWidth: 480,
-    padding: theme.spacing.s4,
+    padding: SCREEN_CONTENT_HORIZONTAL_PADDING,
     // paddingTop・paddingBottom は描画時に「s4 + 上端インセット」
     // 「BASE_BOTTOM_PADDING + 下端インセット」でそれぞれ上書きする
   },

@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, ListRenderItemInfo, Pressable, StyleSheet, Text } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ListRenderItemInfo, Pressable, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
-import Screen from "@/components/Screen";
+import ListScreen from "@/components/ListScreen";
 import AppButton from "@/components/AppButton";
 import ChildCompletionCard from "@/components/ChildCompletionCard";
 import ChildCompletionDetailModal from "@/components/ChildCompletionDetailModal";
@@ -105,14 +104,6 @@ export default function ChildFamilyActivityScreen() {
     setDetailTarget(null);
   };
 
-  // [2026-09-20・55.8節／255章と同じ形] `Screen`の既定（ScrollView）に`FlatList`を
-  // 入れ子にすると仮想化が効かず「VirtualizedLists should never be nested」警告も出るため、
-  // `scroll={false}` ＋ `contentStyle={{ padding: 0 }}`にして`FlatList`自身を唯一の
-  // スクロールコンテナにする。`Screen.tsx`の`styles.content`・`BASE_BOTTOM_PADDING`と
-  // 同じ値を`contentContainerStyle`に持たせ、見た目・挙動を変えない（`insets`も
-  // `Screen.tsx`と同じ`useSafeAreaInsets()`を呼んで揃える）。
-  const insets = useSafeAreaInsets();
-
   const listHeader = (
     <>
       {/* 戻るリンク（55.3節決定8）。行き先は`router.back()`ではなくかぞくタブに固定する
@@ -164,26 +155,17 @@ export default function ChildFamilyActivityScreen() {
   };
 
   return (
-    <Screen tone="child" scroll={false} contentStyle={{ padding: 0 }}>
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={{
-          paddingHorizontal: theme.spacing.s4,
-          paddingTop: theme.spacing.s4 + insets.top,
-          // Screen.tsxのBASE_BOTTOM_PADDING（theme.spacing.s8 * 2）と同じ値。
-          // Screen.tsx側の定数が変わった場合はここも合わせて直すこと（255章）。
-          paddingBottom: theme.spacing.s8 * 2 + insets.bottom,
-        }}
-        data={loadState === "ready" ? completions : []}
-        keyExtractor={(c) => c.id}
-        renderItem={renderItem}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
-        // [55.8節] 初期描画件数を絞り、スクロールに応じて追加描画する（仮想化）。
-        initialNumToRender={12}
-        windowSize={7}
-        removeClippedSubviews
-      />
+    // [2026-09-20改訂・266章] 一覧の骨組み（`Screen`を`scroll={false}`にして`FlatList`自身を
+    // 唯一のスクロールコンテナにする・`Screen`と同じpaddingを`contentContainerStyle`へ移す・
+    // 仮想化の設定〈55.8節〉）は`@/components/ListScreen`へ集約した。P8・S2も同じ部品を使う。
+    <ListScreen
+      tone="child"
+      data={loadState === "ready" ? completions : []}
+      keyExtractor={(c) => c.id}
+      renderItem={renderItem}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
+    >
 
       <ChildCompletionDetailModal
         target={detailTarget}
@@ -199,12 +181,11 @@ export default function ChildFamilyActivityScreen() {
         onSendComment={sendComment}
         onClose={() => setDetailTarget(null)}
       />
-    </Screen>
+    </ListScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, width: "100%" },
   back: { minHeight: theme.tapTarget.child, justifyContent: "center", alignSelf: "flex-start" },
   title: { marginTop: theme.spacing.s3, textAlign: "center" },
   subtitle: { marginTop: theme.spacing.s2, textAlign: "center", color: theme.colors.neutralTextSecondary },
