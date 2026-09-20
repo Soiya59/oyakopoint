@@ -103,7 +103,10 @@ export default function ChoresListScreen() {
   // 追記する。まとめられていない単独の行にも常に表示する（indentはfalseのまま）。
   // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
   const renderRow = (c: Chore, dimmed: boolean, indent = false) => {
-    const assigneeLabel = resolveAssigneeLabel(c.assigned_to, state.members, "誰でも実行可");
+    // [2026-09-20改訂・統括指示／実装メモ264章] 管理一覧は行を押せば編集画面
+    // （全設定を確認できる）が開くため、回数上限（「1日◯回」）は一覧側では
+    // 省略する。「誰でも実行可」は「誰でも」に短縮する（意味は変わらない）。
+    const assigneeLabel = resolveAssigneeLabel(c.assigned_to, state.members, "誰でも");
     // [2026-09-20改訂・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.1節
     // 決定8・53.11.9節3] 担当が特定の1人に決まっている行はその人の回数のまま
     // （旧53.1節決定2）。担当「誰でも実行可」（assigned_to===null）の行も、
@@ -121,18 +124,36 @@ export default function ChoresListScreen() {
           style={{
             marginTop: theme.spacing.s3,
             flexDirection: "row",
+            // [2026-09-20改訂・実装メモ264.9章／統括差し戻し] flex:1（basis:0）で
+            // 題名側を常に「残り幅ぶんだけ」に切り詰めていたため、短い題名の行まで
+            // 巻き添えで7文字ほどに削られていた。flexWrapを足し、題名側からは
+            // flex指定を外す（後述）ことで、「1行に収まるときはそのまま横並び、
+            // 収まらないときだけ右側を2行目に落とす」という段組みに変える。
+            flexWrap: "wrap",
             justifyContent: "space-between",
+            alignItems: "center",
+            // 題名とポイント以降の間の余白（横）、2行になったときの行間（縦）を
+            // 兼ねる。割合(%)ではなく固定トークンで確保する（幅が変わっても
+            // 崩れないため、実装メモ261.10章の教訓）。
+            gap: theme.spacing.s2,
             ...(indent ? { marginLeft: theme.spacing.s3 } : null),
             ...(dimmed ? { opacity: 0.6 } : null),
           }}
         >
-          <Text>
+          {/* [2026-09-20改訂・実装メモ264.9章] 題名側にはflexGrow・flexBasisを
+              与えない（=既定の内容幅）。1行に収まる短い題名はそのままの幅で
+              左寄せに描画され、収まらない長い題名だけが1行を単独で占有し
+              （右側は自動的に2行目へ回る）、その占有幅の中で
+              numberOfLines={1}+ellipsizeModeにより省略記号に切り替わる。
+              flexShrink:1は保険（通常は発火しない。行の折り返し判定自体が
+              「収まるかどうか」を先に決めるため）。 */}
+          <Text style={{ flexShrink: 1 }} numberOfLines={1} ellipsizeMode="tail">
             {c.emoji} {c.title}
             {resolveRegistrantSuffix(c)}
           </Text>
-          <Text style={{ color: theme.colors.neutralTextSecondary }}>
+          <Text style={{ color: theme.colors.neutralTextSecondary, flexShrink: 0 }}>
             {c.points}pt{" "}
-            {c.is_repeatable ? `・1日${c.daily_limit ?? "∞"}回` : dimmed ? "・単発（済）" : "・単発"}
+            {c.is_repeatable ? "" : dimmed ? "・単発（済）" : "・単発"}
             {assigneeLabel ? `・${assigneeLabel}` : ""}
             {completionTotalSuffix}
           </Text>
