@@ -3555,58 +3555,63 @@ export async function recordTermsConsent(client: SupabaseClient, consentVersion:
 // ============================================================
 
 /**
- * API仕様.md 29.1章・項目1「先週の家族全体の完了報告数」。41章の既存View
- * `family_tree_weekly_completion_counts`をfamily_id・week_startで1行だけ
- * 絞る（0件の週は行が無いため`maybeSingle`）。
+ * 【2026-09-22削除】旧・API仕様.md 29.1章「先週の家族全体の完了報告数」
+ * （`fetchFamilyTreeWeeklyCompletionCountForWeek`）は、07-9章「週ごとの
+ * 記録」（`fetchFamilyTreeWeeklyCompletionCounts`、下記41章）と数字が二重
+ * だったため振り返りから削除された（統括判断・API仕様.md 29.1章）。この
+ * Viewを振り返り画面から呼ぶ処理を削除し、関数自体も撤去した（開発部/成果物/
+ * 実装メモ.md 278章）。`family_tree_weekly_completion_counts`View自体・
+ * `fetchFamilyTreeWeeklyCompletionCounts`（下記41章、木の段階の算出に使う）
+ * は無改訂。
  */
-export async function fetchFamilyTreeWeeklyCompletionCountForWeek(
-  client: SupabaseClient,
-  familyId: string,
-  weekStart: string
-): Promise<ApiResult<Pick<FamilyTreeWeeklyCompletionCount, "week_start" | "completion_count"> | null>> {
-  const { data, error } = await client
-    .from("family_tree_weekly_completion_counts")
-    .select("week_start, completion_count")
-    .eq("family_id", familyId)
-    .eq("week_start", weekStart)
-    .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: (data as Pick<FamilyTreeWeeklyCompletionCount, "week_start" | "completion_count"> | null) ?? null };
-}
 
 /**
- * API仕様.md 29.2章・項目3「その週によく行われたクエストの上位」。72章の
- * 新設View`chore_weekly_completion_counts`をfamily_id・week_startで絞って
- * 家族ぶんをまとめて1回で取る。並び替え・上位5件＋「ほか◯件」への要約は
- * 呼び出し側（src/lib/weeklyReviewDisplay.ts）の仕事（Viewは意図的に
- * ORDER BYを持たない、72章コメント）。
+ * API仕様.md 29.2章・項目2「あなたがよく行ったクエスト」（2026-09-22改訂・
+ * 主語を家族全体から自分自身に変更）。72章の新設View
+ * `chore_weekly_completion_counts`をfamily_id・member_id・week_startで
+ * 絞り、**自分の先週分だけ**を1回で取る（72.4章）。`.limit()`は付けない
+ * （「あなたは先週◯回」の合計を同じ結果から算出するため全行を保持する。
+ * 上位5件への要約は呼び出し側 src/lib/weeklyReviewDisplay.ts の仕事）。
  */
 export async function fetchChoreWeeklyCompletionCounts(
   client: SupabaseClient,
   familyId: string,
+  memberId: string,
   weekStart: string
 ): Promise<ApiResult<ChoreWeeklyCompletionCount[]>> {
   const { data, error } = await client
     .from("chore_weekly_completion_counts")
-    .select("family_id, chore_id, week_start, completion_count")
+    .select("family_id, chore_id, member_id, week_start, completion_count")
     .eq("family_id", familyId)
+    .eq("member_id", memberId)
     .eq("week_start", weekStart);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as ChoreWeeklyCompletionCount[] };
 }
 
 /**
- * API仕様.md 29.3章・項目4「その週にシール帳が1冊完成した場合」。
- * `habit_cards`をfamily_id・status='completed'・completed_atが先週の範囲に
- * 収まるもので絞る（2026-09-19のシール帳作り替え〈07-28章決定27〉以降、
- * `archive_reason`列は撤去済みのため、設計部/成果物/API仕様.md 29.3章の
+ * API仕様.md 29.3章・項目3「その週にシール帳が1冊完成した場合」。
+ * `habit_cards`をmember_id（閲覧者自身）・status='completed'・completed_atが
+ * 先週の範囲に収まるもので絞る（2026-09-19のシール帳作り替え〈07-28章決定27〉
+ * 以降、`archive_reason`列は撤去済みのため、設計部/成果物/API仕様.md 29.3章の
  * `archive_reason='crystal_completed'`という例示は現行スキーマと食い違う。
  * 本関数は実装済みの現行スキーマ〈status='completed'〉に合わせている。
- * 実装メモ参照）。家族の誰かが完成させれば対象になる（本人に絞らない）。
+ * 実装メモ参照）。
+ *
+ * [2026-09-22改訂・本部長差し戻し対応] 旧名`fetchFamilyCompletedHabitCardsInRange`
+ * は「家族の誰かが完成させれば対象になる（本人に絞らない）」設計だったが、
+ * 要件定義書07-35章4節の表（項目3「自分（1人1冊）」）・主要画面ワイヤー
+ * フレーム.md 60.4節の2026-09-22追記（「対象のhabit_card.member_idを閲覧者
+ * 自身に限定した表示である」）のいずれも自分の分に限定する設計を指しており、
+ * 実装だけが家族全体を返していた食い違いだった（実装メモ278.3章で報告済み、
+ * 279章で修正）。呼び出し元（src/hooks/useWeeklyReview.ts）が1箇所のみである
+ * ことを確認したうえで、関数自体をmember_id引数を取る形に変え、関数名も
+ * 実態（本人単位）に合わせて`fetchMemberCompletedHabitCardsInRange`へ改名した。
  */
-export async function fetchFamilyCompletedHabitCardsInRange(
+export async function fetchMemberCompletedHabitCardsInRange(
   client: SupabaseClient,
   familyId: string,
+  memberId: string,
   fromIsoInclusive: string,
   toIsoExclusive: string
 ): Promise<ApiResult<HabitCard[]>> {
@@ -3614,6 +3619,7 @@ export async function fetchFamilyCompletedHabitCardsInRange(
     .from("habit_cards")
     .select("*")
     .eq("family_id", familyId)
+    .eq("member_id", memberId)
     .eq("status", "completed")
     .gte("completed_at", fromIsoInclusive)
     .lt("completed_at", toIsoExclusive);

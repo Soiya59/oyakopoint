@@ -102,6 +102,14 @@ export default function ChoresListScreen() {
   // 担当者名を、既存の右側テキスト（「・単発」「・1日◯回」等）の末尾に「・」区切りで
   // 追記する。まとめられていない単独の行にも常に表示する（indentはfalseのまま）。
   // indent=trueは(c)を開いたときの内訳行専用（38.5節決定6、marginLeft: s3で一段字下げ）。
+  // [2026-09-22追加・要件定義書07-24章決定11／主要画面ワイヤーフレーム.md 38.15節
+  // 決定9] 折りたたみ見出し「1pt・計◯回（件数）」の合計実施回数を、renderRow
+  // （行単位の「・計◯回」「・家族で計◯回」）と同じ数値の出どころから算出するための
+  // 共通ヘルパー。新しい問い合わせは発生しない（38.15.2節「クライアント側で単純に
+  // 合計するだけ」）。
+  const completionCountFor = (c: Chore): number =>
+    c.assigned_to !== null ? totalsLookup[keyChoreCompletionTotal(c.id, c.assigned_to)] ?? 0 : familyTotalsLookup[c.id] ?? 0;
+
   const renderRow = (c: Chore, dimmed: boolean, indent = false) => {
     // [2026-09-20改訂・統括指示／実装メモ264章] 管理一覧は行を押せば編集画面
     // （全設定を確認できる）が開くため、回数上限（「1日◯回」）は一覧側では
@@ -113,11 +121,7 @@ export default function ChoresListScreen() {
     // 旧53.1節決定2の除外を撤回し、家族合計「・家族で計◯回」を追記する（0回でも
     // 表示、決定11）。取得に失敗したときは回数の部分だけ出さない（53.7節）。
     const completionTotalSuffix =
-      totalsLoadState === "error"
-        ? ""
-        : c.assigned_to !== null
-        ? `・計${totalsLookup[keyChoreCompletionTotal(c.id, c.assigned_to)] ?? 0}回`
-        : `・家族で計${familyTotalsLookup[c.id] ?? 0}回`;
+      totalsLoadState === "error" ? "" : c.assigned_to !== null ? `・計${completionCountFor(c)}回` : `・家族で計${completionCountFor(c)}回`;
     return (
       <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
         <Card
@@ -176,6 +180,13 @@ export default function ChoresListScreen() {
       const groupKey = `${sectionKey}:${g.key}`;
       const isOpen = !!openGroups[groupKey];
       const head = g.items[0];
+      // [2026-09-22追加・要件定義書07-24章決定11／主要画面ワイヤーフレーム.md
+      // 38.15節決定9] 見出しに「・計◯回」（中に入っている行の合計実施回数）を
+      // 追加する。「誰でも実行可」の行を含め、各行が既に持つ回数をここで合算
+      // するだけであり、新しい問い合わせは発生しない（38.15.2節）。取得に
+      // 失敗したときは既存行と同じく回数の部分自体を出さない（53.7節と同じ扱い）。
+      const groupCompletionTotalSuffix =
+        totalsLoadState === "error" ? "" : `・計${g.items.reduce((sum, c) => sum + completionCountFor(c), 0)}回`;
       return (
         <View key={groupKey}>
           <Pressable onPress={() => toggleGroup(groupKey)}>
@@ -191,7 +202,7 @@ export default function ChoresListScreen() {
                 {isOpen ? "▾" : "▸"} {head.emoji} {head.title}
               </Text>
               <Text style={{ color: theme.colors.neutralTextSecondary }}>
-                {head.points}pt（{g.items.length}）
+                {head.points}pt{groupCompletionTotalSuffix}（{g.items.length}）
               </Text>
             </Card>
           </Pressable>

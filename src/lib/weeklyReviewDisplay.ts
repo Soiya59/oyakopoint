@@ -8,11 +8,26 @@
  * 一切importしない（Node で直接 `node src/lib/weeklyReviewDisplay.verify.ts`
  * を実行できるようにするため）。日付文字列はすべて呼び出し側
  * （src/lib/calendarDates.ts）が計算したJST基準の "YYYY-MM-DD" を渡す。
+ *
+ * [2026-09-22改訂] 統括判断により、項目1「家族全体の完了報告数」は廃止し
+ * （07-9章「週ごとの記録」と数字が二重だったため）、代わりに「あなたは先週
+ * ◯回」（自分自身の週間完了報告数）を新設した。項目「よく行われたクエスト」
+ * も家族全体から自分自身に変わった。いずれも呼び出し元
+ * （src/data/api.ts fetchChoreWeeklyCompletionCounts）が`member_id`で
+ * 自分の行だけに絞って取得する前提に変わったため、本ファイルの関数群は
+ * 「渡された行の集合を集計する」という中身自体は変えず、コメント・型名の
+ * 位置づけを「自分の行に絞られたもの」へ書き直した（実装メモ278章）。
  */
 
-// ---- 項目3「その週によく行われたクエストの上位」（決定7: 上位5件＋ほか◯件） ----
+// ---- 項目「あなたは先週◯回」・「あなたがよく行ったクエスト」（決定7: 上位5件＋ほか◯件） ----
 
-/** chore_weekly_completion_counts View（スキーマ設計.sql 72章）の1行が最低限持つ形。 */
+/**
+ * chore_weekly_completion_counts View（スキーマ設計.sql 72章、2026-09-22
+ * 改訂でmember_id列を追加）の1行が最低限持つ形。呼び出し元
+ * （src/data/api.ts fetchChoreWeeklyCompletionCounts）が`.eq('member_id',
+ * 自分のmemberId)`で絞って取得する前提のため、本ファイルの関数はいずれも
+ * 「自分の先週分」の行を受け取る想定で書く（家族全体を混在させないこと）。
+ */
 export interface WeeklyChoreCountRow {
   chore_id: string;
   completion_count: number;
@@ -27,7 +42,11 @@ export interface WeeklyChoreSummaryEntry {
  * 決定7「上位5件＋『ほか◯件』」。49-B.5節決定46
  * （src/lib/habitCardDisplay.ts summarizeHabitCardBreakdown）と同じ考え方。
  * 並び替え・件数制限はクライアント側の仕事（Viewは意図的にORDER BYを
- * 持たない、72章コメント）。
+ * 持たない、72章コメント）。**2026-09-22改訂**: 呼び出し元が渡す`rows`は
+ * 自分（member_id=自分）の先週分に絞り済みのため、本関数は「あなたがよく
+ * 行ったクエスト」（60.4a節決定12）を返す。呼び出し元が家族全体の行を渡す
+ * 使い方は現在は無い（72.7章「家族全体の合計を本Viewから引き続き取れる
+ * ようにするかの判断」→しない、と対応）。
  */
 export function summarizeWeeklyChoreCounts(
   rows: WeeklyChoreCountRow[],
@@ -45,7 +64,21 @@ export function summarizeWeeklyChoreCounts(
   };
 }
 
-// ---- 項目2「先週時点の家族の木の段階」 ----
+/**
+ * [2026-09-22新設] 項目「あなたは先週◯回」（60.4a節決定11）。自分（member_id
+ * =自分）の先週分`chore_weekly_completion_counts`の行（summarizeWeeklyChoreCounts
+ * に渡すのと同じ`rows`）から、クエストを問わない合計を求めるだけの単純な
+ * 集計。72.4章のサンプルコード`data.reduce((sum, row) => sum +
+ * row.completion_count, 0)`をそのまま純粋関数に切り出したもの。0件（先週
+ * まったく完了報告が無かった）の場合は0を返す——呼び出し側はこの値が0のとき
+ * 項目自体を出さない（決定11、既存の「シール帳が完成しなかった週は本項目
+ * 自体を出さない」と同じ扱い）。
+ */
+export function sumWeeklyChoreCounts(rows: WeeklyChoreCountRow[]): number {
+  return rows.reduce((sum, r) => sum + r.completion_count, 0);
+}
+
+// ---- 項目「家族の木の段階」（60.4a節決定13により並び順は最後の項目に変更、中身は無改訂） ----
 
 /**
  * `family_tree_stage_for_count()`（DB側）・`src/theme/theme.ts`の
@@ -68,7 +101,7 @@ export interface WeeklyCountRow {
 }
 
 /**
- * 「先週時点の家族の木の段階」（07-35章4節項目2、スキーマ設計.sql 72.1章
+ * 「先週時点の家族の木の段階」（07-35章4節・2026-09-22改訂後は項目4、スキーマ設計.sql 72.1章
  * 「completion_countからfamily_tree_seasonsの閾値ロジックへ渡す」への
  * 実装上の回答）。72.1章の文言は「completion_count」とのみ書かれており
  * 週次delta・シーズン累積のどちらを指すか一読して確定できなかったため、

@@ -16,6 +16,7 @@ import {
   hasAtLeastOneConfirmedPastWeek,
   stageIndexForCount,
   sumCompletionCountsThroughWeek,
+  sumWeeklyChoreCounts,
   summarizeWeeklyChoreCounts,
 } from "./weeklyReviewDisplay.ts";
 
@@ -35,6 +36,10 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
 }
 
 // ---- summarizeWeeklyChoreCounts ----
+// [2026-09-22改訂] 呼び出し元（src/data/api.ts fetchChoreWeeklyCompletionCounts）が
+// member_idで自分の行だけに絞って取得する前提に変わったため、以下のrowsは
+// 「自分（member_id=自分）の先週分」を模したデータとして扱う（本関数自体の
+// 集計ロジックは無改訂のため、テストデータの意味づけだけを更新した）。
 {
   const rows = [
     { chore_id: "hamigaki", completion_count: 12 },
@@ -46,15 +51,32 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
     { chore_id: "osoji", completion_count: 1 },
   ];
   const { top, otherCount, otherTotal } = summarizeWeeklyChoreCounts(rows);
-  assertEqual("上位5件が多い順に並ぶ", top.map((e) => e.choreId), ["hamigaki", "okataduke", "yomikikase", "asagohan", "sanpo"]);
+  assertEqual(
+    "自分の先週分の上位5件が多い順に並ぶ（あなたがよく行ったクエスト）",
+    top.map((e) => e.choreId),
+    ["hamigaki", "okataduke", "yomikikase", "asagohan", "sanpo"]
+  );
   assertEqual("6件目以降はほか2件", otherCount, 2);
   assertEqual("ほかの合計は2+1=3", otherTotal, 3);
 }
 {
   const { top, otherCount, otherTotal } = summarizeWeeklyChoreCounts([]);
-  assertEqual("0件のときtopは空配列", top, []);
+  assertEqual("0件（自分が先週1件も完了報告していない）のときtopは空配列", top, []);
   assertEqual("0件のときotherCountは0", otherCount, 0);
   assertEqual("0件のときotherTotalは0", otherTotal, 0);
+}
+
+// ---- sumWeeklyChoreCounts（2026-09-22新設・項目「あなたは先週◯回」） ----
+{
+  const rows = [
+    { chore_id: "hamigaki", completion_count: 12 },
+    { chore_id: "okataduke", completion_count: 9 },
+    { chore_id: "sanpo", completion_count: 3 },
+  ];
+  assertEqual("自分の先週分の合計は12+9+3=24", sumWeeklyChoreCounts(rows), 24);
+}
+{
+  assertEqual("0件のときは0（項目自体を出さない判定に使う値）", sumWeeklyChoreCounts([]), 0);
 }
 
 // ---- stageIndexForCount（DB family_tree_stage_for_count()・theme.tsの複製が一致すること） ----

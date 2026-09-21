@@ -841,16 +841,21 @@ export interface AccountDeletionPreview {
 }
 
 /**
- * [新設・2026-09-21] chore_weekly_completion_counts View（要件定義書07-35章
- * 「振り返る機会」項目3、設計部/成果物/スキーマ設計.sql 72章）の1行。
- * クエスト（chore_id）×jst_week_start_date()の週単位の完了報告件数
- * （家族全体、メンバーを問わず合算）。56章chore_completion_totals（起点を
- * 持たない生涯累計）とは別物であり混同しないこと（72.3章）。
+ * [2026-09-21新設／2026-09-22改訂] chore_weekly_completion_counts View
+ * （要件定義書07-35章「振り返る機会」項目2「あなたがよく行ったクエスト」、
+ * 設計部/成果物/スキーマ設計.sql 72章）の1行。
+ * クエスト（chore_id）×実施した本人（member_id=reported_by、56章
+ * chore_completion_totalsと同じ命名）×jst_week_start_date()の週単位の完了
+ * 報告件数。**2026-09-22改訂によりmember_id列が追加され、家族全体合算だった
+ * 旧版（実装済みViewをDROP→CREATEで作り直し、72.8章）から本人単位の集計に
+ * 変わった。**56章chore_completion_totals（起点を持たない生涯累計）とは
+ * 別物であり混同しないこと（72.3章）。
  * chore_id IS NULLの行はView側のWHEREで除外済みのため、ここではnon-nullとして扱う。
  */
 export interface ChoreWeeklyCompletionCount {
   family_id: string;
   chore_id: string;
+  member_id: string;
   week_start: string; // "YYYY-MM-DD"（JST月曜0:00始まりの暦週の開始日）
   completion_count: number;
 }
