@@ -71,15 +71,8 @@ const NAME_MAX_LENGTH = 12;
  *   描く・PIN設定・退会させる）に分けた（59.7節決定16〜18）。
  */
 export default function FamilyScreen() {
-  const { state, refresh, memberAvatars, blockedMemberIdsSet, blockMember, unblockMember } = useAppData();
+  const { state, refresh, memberAvatars } = useAppData();
   const { client, parentMember, logoutParent } = useSession();
-  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
-  // ワイヤーフレーム.md 57.3節] 「この人の書き込み」チップの保存中・保存成功・
-  // 保存失敗の状態。25.1節「色を変更」の保存状態パターン（savingColor/
-  // colorSuccessId/colorError）と同じ型で、対象をメンバー単位で持つ。
-  const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
-  const [blockSuccessId, setBlockSuccessId] = useState<string | null>(null);
-  const [blockErrorId, setBlockErrorId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
@@ -265,22 +258,6 @@ export default function FamilyScreen() {
 
   const pendingInvites = invites.filter((i) => i.status === "pending");
 
-  // [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
-  // ワイヤーフレーム.md 57.3節 決定5・57.4.1節] 「表示する」/「非表示にする」
-  // チップを押した瞬間に保存する（保存ボタンは置かない、56.3節決定18と同じ考え方）。
-  const setMemberBlocked = async (memberId: string, blocked: boolean) => {
-    setSavingBlockId(memberId);
-    setBlockErrorId(null);
-    const res = blocked ? await blockMember(memberId) : await unblockMember(memberId);
-    setSavingBlockId(null);
-    if (!res.ok) {
-      setBlockErrorId(memberId);
-      return;
-    }
-    setBlockSuccessId(memberId);
-    setTimeout(() => setBlockSuccessId((prev) => (prev === memberId ? null : prev)), 4000);
-  };
-
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
@@ -297,17 +274,7 @@ export default function FamilyScreen() {
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
 
-      {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
-          ワイヤーフレーム.md 57.2節 決定4] メンバー一覧の直前に1回だけ表示する
-          説明文。個々のメンバー行には繰り返さない（57.3節）。 */}
-      <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>
-        気になる書き込みがあるときは、その人の書き込み・コメント・{"\n"}
-        お絵かきだけを、自分の画面で見えないようにできます。{"\n"}
-        データは消えず、ほかの家族には今までどおり見えます。{"\n"}
-        いつでも「表示する」に戻せます。
-      </Text>
-
-      <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
+      <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
         {activeMembers.map((m) => {
           const isEditingColor = editingColorId === m.id;
           const anyEditOpen = editingId !== null || editingColorId !== null;
@@ -436,57 +403,16 @@ export default function FamilyScreen() {
                         : "子ども"}
                     </Text>
                   </View>
+                  {/* [2026-09-21新設・主要画面ワイヤーフレーム.md 59.7節決定17／
+                      2026-09-21統括指示で位置を変更] 折りたたみ記号（▸＝閉／▾＝開）は
+                      38・39章で確立済みのものを流用する。カードの下に単独で置くと
+                      名前の右側に無駄な余白が残るため、名前・役割と同じ行の右端に置く。 */}
+                  <Pressable onPress={() => toggleMemberExpanded(m.id)} style={styles.expandToggleHit}>
+                    <Text style={[theme.typography.parentCaption, styles.expandToggleText]} numberOfLines={1}>
+                      {isExpanded ? "▾" : "▸"} くわしく操作する
+                    </Text>
+                  </Pressable>
                 </View>
-
-                {/* [2026-09-21追加・要件定義書07-32章 決定11〜14「ブロック」、主要画面
-                    ワイヤーフレーム.md 59.7節決定18] 折りたたみの対象から明確に除外する
-                    （57章決定3「チップの現在状態そのものを一覧兼解除ボタンとして扱う」を
-                    畳みの奥に隠すと、非表示にしている相手を確認するために全カードを
-                    1枚ずつ開く必要が生まれるため）。自分自身のカードには出さない。 */}
-                {m.id !== me?.id && (
-                  <View>
-                    <Text style={theme.typography.parentBody}>この人の書き込み</Text>
-                    <View style={[styles.chipRow, { marginTop: theme.spacing.s1 }]}>
-                      <Pressable
-                        onPress={() => setMemberBlocked(m.id, false)}
-                        disabled={savingBlockId !== null}
-                        style={[styles.chip, !blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
-                      >
-                        <Text>表示する</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => setMemberBlocked(m.id, true)}
-                        disabled={savingBlockId !== null}
-                        style={[styles.chip, blockedMemberIdsSet.has(m.id) && styles.chipSelected]}
-                      >
-                        <Text>非表示にする</Text>
-                      </Pressable>
-                    </View>
-                    {savingBlockId === m.id && (
-                      <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-                        変更しています…
-                      </Text>
-                    )}
-                    {blockSuccessId === m.id && (
-                      <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
-                    )}
-                    {blockErrorId === m.id && (
-                      <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                        変更できませんでした。もう一度お試しください。
-                      </Text>
-                    )}
-                  </View>
-                )}
-
-                {/* [2026-09-21新設・主要画面ワイヤーフレーム.md 59.7節決定17]
-                    38・39章で確立済みの折りたたみ記号（▸＝閉／▾＝開）を流用する。
-                    新しい記号・新しいトークンは作らない。既定は全カード閉じた状態。
-                    開閉はカードごとに独立（複数枚を同時に開いてよい）。 */}
-                <Pressable onPress={() => toggleMemberExpanded(m.id)} style={styles.expandToggleHit}>
-                  <Text style={[theme.typography.parentBody, styles.expandToggleText]}>
-                    {isExpanded ? "▾" : "▸"} くわしく操作する
-                  </Text>
-                </Pressable>
 
                 {isExpanded && (
                   <View style={{ gap: theme.spacing.s2 }}>
@@ -621,6 +547,15 @@ export default function FamilyScreen() {
         onPress={() => router.push("/parent/family-settings")}
       />
 
+      {/* [2026-09-21・統括指示] 「家族の設定 →」と対になる入口なので、間を詰めて
+          2つで1組に見えるようにする（同じvariant・同じ幅・狭い間隔）。 */}
+      <AppButton
+        label="アカウントについて →"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s3 }}
+        onPress={() => router.push("/parent/account")}
+      />
+
       {/* [2026-09-09追加・やること.md 2-28・2-23] 使い方ガイド・プライバシーポリシー・
           利用規約への外部リンクと、運営者への連絡先（Apple 1.2 "Published contact
           information"）。実装メモ.md 181章参照。利用規約（TERMS_URL）は本部長の指示により、
@@ -651,13 +586,6 @@ export default function FamilyScreen() {
       <Pressable onPress={() => router.push("/parent/contact")} style={{ paddingVertical: theme.spacing.s2, marginTop: theme.spacing.s1 }}>
         <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>お問い合わせ</Text>
       </Pressable>
-
-      <AppButton
-        label="アカウントについて →"
-        variant="secondary"
-        style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.push("/parent/account")}
-      />
 
       <AppButton label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/parent")} />
 
@@ -701,9 +629,6 @@ const styles = StyleSheet.create({
   // 決定3・40.9節2.] `app/parent/chore-edit.tsx`の絵文字選択チップと同じ
   // `chip`/`chipSelected`のスタイル値（枠線色・背景色）を流用する。共通部品化は
   // されていないため値だけ揃える（新しい部品は作らない）。
-  // [2026-09-21追加・主要画面ワイヤーフレーム.md 57.2節決定2] ブロックの
-  // 「表示する」/「非表示にする」チップに、実際にこの値を使う
-  // （`app/parent/chore-edit.tsx` 1105〜1116行目と同じ値）。
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2 },
   chip: {
     flexDirection: "row",
@@ -719,6 +644,6 @@ const styles = StyleSheet.create({
   // [2026-09-21新設・主要画面ワイヤーフレーム.md 59.7節決定17] 「▸/▾
   // くわしく操作する」の折りたたみトグル。38・39章の既存トークンのみを使う
   // （新しいトークンは作らない）。
-  expandToggleHit: { minHeight: theme.tapTarget.parent, justifyContent: "center", alignItems: "flex-end" },
+  expandToggleHit: { minHeight: theme.tapTarget.parent, justifyContent: "center", alignItems: "flex-end", flexShrink: 0 },
   expandToggleText: { color: theme.colors.brandPrimaryStrong },
 });
