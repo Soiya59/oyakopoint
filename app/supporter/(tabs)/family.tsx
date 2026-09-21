@@ -15,6 +15,7 @@ import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from 
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
+import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
@@ -92,6 +93,10 @@ export default function SupporterFamilyScreen() {
   // [2026-09-11変更・実装メモ.md 190章] 保護者ホームと同じ2本立て（inbox／completions）。
   const inboxSince = useUnreadSince("inbox", myId);
   const inboxCount = countRecentInbox(state, myId, inboxSince);
+
+  // [2026-09-21追加・要件定義書07-35章「振り返る機会」] 家族作成から最初の暦週が
+  // まだ終わっていない間はカード自体を出さない（主要画面ワイヤーフレーム.md 60.3節決定5）。
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
 
   const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
   const hasBoardPost = card?.source === "board_post";
@@ -242,6 +247,20 @@ export default function SupporterFamilyScreen() {
       {/* [2026-09-09削除・実装メモ.md 186章] 旧「家族の木・コレクション」ショートカット行
           （並び順2番目）は削除した。木は常設タブへ、コレクションは「じぶん」タブへ移設済み
           （経緯はファイル冒頭のコメント参照）。 */}
+
+      {/* [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
+          60.1節決定1・60.2節決定3] 📮家族の掲示板カードの直後に隣接配置。表側には
+          数字を一切出さない。 */}
+      {weeklyReviewCardVisible && (
+        <Pressable onPress={() => router.push("/supporter/weekly-review")}>
+          <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.supporterBodyMedium}>先週のふりかえり</Text>
+              <Text style={theme.typography.supporterBodyMedium}>›</Text>
+            </View>
+          </Card>
+        </Pressable>
+      )}
 
       {/* [2026-09-09追加・実装メモ.md 183章] 並び順3番目「完了報告（新着◯件）」。
           `app/parent/home.tsx`のpendingCardと同一の見た目・数え方（直近24時間）。

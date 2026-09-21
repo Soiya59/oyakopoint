@@ -507,6 +507,28 @@
 -- 1つも作らない）はいずれも±0。
 -- `transfer_family_ownership`はservice_roleにのみGRANTしており
 -- （authenticated/anonは明示REVOKE）、S4には含めない。
+--
+-- [2026-09-21再追加・開発部] 「自分で目標を決める」（要件定義書07-36章、
+-- 設計部/成果物/スキーマ設計.sql 71章、開発部/成果物/実装メモ.md参照）に伴い、
+-- member_goalsテーブルを新設。S1（37→38）。S3（68→70、member_goalsの
+-- SELECT（`family_id = current_family_id()`のみのため既存の多数のSELECT
+-- ポリシーと同一ハッシュ`ba5f17c68a4ed3412761e44aff4d2f47`）・UPDATE
+-- （`is_current_user_parent() AND retired_at IS NULL`を含む新しい条件式の
+-- ため新規ハッシュ）の2本を追加。S4（80→82、トリガー関数
+-- `member_goals_before_write`・SECURITY DEFINER関数`set_member_goal`を
+-- 追加）。**設計部/成果物/スキーマ設計.sql 71.7章は「S4+1」の見込みを示して
+-- いたが、実測は+2だった**（トリガー関数はEXECUTEを明示GRANTしていなくても
+-- デフォルトでPUBLIC実行可のためS4に数えられる。既存のhabit_cards_before_
+-- write・chore_nfc_tags_before_write等のトリガー関数も同じ理由でS4に含まれて
+-- おり、本件も同じ扱いが正しい。本部長に報告済み）。ハッシュ・件数はローカル
+-- Dockerで`supabase db reset`後に実測して確認した（96.5章の遵守）。ローカル
+-- Docker環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
+--
+-- あわせて「振り返る機会」（要件定義書07-35章、スキーマ設計.sql 72章）で
+-- 新設した`chore_weekly_completion_counts`はViewであり、既存の
+-- `chore_completions_select_scoped`（security_invoker=true）がそのまま
+-- 適用されるため、S1/S3/S4のいずれにも変化は無い（72.5章の見込みどおり。
+-- ローカルDockerで実測し、差分が出ないことを確認した）。
 -- `family_members_before_update()`はCREATE OR REPLACEで改訂した
 -- （バイパス条件にsupabase_auth_adminを追加・is_ownerの変更を保護者かどうか
 -- 問わず禁止）が、トリガー関数の名前・シグネチャ自体は変わっていないため、
@@ -599,7 +621,7 @@ GRANT INSERT ON _r TO authenticated;
 -- [2026-09-20再々更新] member_blocks（設計部/成果物/スキーマ設計.sql 69章）を
 -- 追加。36→37。NGワードフィルタ（70章）はDBに何も作らないためS1に影響しない。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '37', count(*)::text, count(*) = 37
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '38', count(*)::text, count(*) = 38
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -823,6 +845,17 @@ WITH expected(t, p, c, h) AS (VALUES
   ('member_avatars','member_avatars_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('member_avatars','member_avatars_write_self_or_parent','ALL','17f6d38cb67dc4f94ec44da5105695c5'),
   ('member_badges','member_badges_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-21追加] member_goals（自分で目標を決める、要件定義書07-36章、
+  -- 設計部/成果物/スキーマ設計.sql 71章）。SELECTの条件式
+  -- `family_id = current_family_id()`のみであり、既存の多数のSELECTポリシーと
+  -- 文字通り同一のためハッシュを引き写せる（104章の教訓）。UPDATEの条件式
+  -- `family_id = current_family_id() AND is_current_user_parent() AND
+  -- retired_at IS NULL`（USING）／`family_id = current_family_id() AND
+  -- is_current_user_parent()`（WITH CHECK）は承認済み一覧に文字通り同一のものが
+  -- 無い新しい形のため、ローカルDockerで実測した。INSERT/DELETEポリシーは
+  -- 無い（71.4章。新規登録はset_member_goal()のみ、過去の目標は削除しない）。
+  ('member_goals','member_goals_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  ('member_goals','member_goals_update_active_by_parent','UPDATE','f0557167a29a0a996784264f99470e17'),
   -- [2026-09-20追加] member_blocks（ブロック、設計部/成果物/スキーマ設計.sql
   -- 69章）。member_blocks_select_ownの条件式`blocker_member_id =
   -- current_family_member_id()`は既存の承認済み一覧に文字通り同一のものが
@@ -884,7 +917,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー68本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー70本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -1136,7 +1169,22 @@ WITH expected(f) AS (VALUES
   -- （決定7）ため到達しない。transfer_family_ownership()は
   -- service_roleにのみGRANTしており、authenticatedからは呼べないため
   -- この一覧には含めない（PostgREST越しに呼ぶ経路が無いことを別途確認済み）。
-  ('account_deletion_preview')
+  ('account_deletion_preview'),
+  -- [2026-09-21追加] member_goals_before_write（自分で目標を決める、要件定義書
+  -- 07-36章、設計部/成果物/スキーマ設計.sql 71.3章）。RETURNS TRIGGERの
+  -- トリガー関数で、PUBLICからのEXECUTEを明示REVOKEしていないため（他の
+  -- トリガー関数と同じ34.5章の既知の挙動）、デフォルトのままauthenticatedが
+  -- 実行可能と判定されこの一覧に含まれる。トリガー文脈の外で直接呼び出すと
+  -- TG_OP参照等でエラーになるだけで実害は無い。**設計部/成果物/スキーマ
+  -- 設計.sql 71.7章は「トリガー関数はデフォルトのままでよい（S4に数えない）」
+  -- としていたが、実測するとhabit_cards_before_write・chore_nfc_tags_
+  -- before_write等の既存トリガー関数と同様にS4へ含まれることが判明した
+  -- （本部長に報告済み）。
+  ('member_goals_before_write'),
+  -- [2026-09-21追加] set_member_goal（同上、71.5章）。SECURITY DEFINERで
+  -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的に
+  -- GRANTしている（新規登録の唯一の書き込み経路、71.4章）。
+  ('set_member_goal')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1149,7 +1197,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数80件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数82件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

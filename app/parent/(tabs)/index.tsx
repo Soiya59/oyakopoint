@@ -12,6 +12,8 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
+import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
+import MemberGoalsCard from "@/components/MemberGoalsCard";
 
 /**
  * かぞく区画の入口（保護者。旧P7ホームの「まとめ」要素のうち家族向けの部分を吸収）
@@ -53,6 +55,11 @@ import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
  */
 export default function ParentFamilyTabScreen() {
   const { state, memberAvatars } = useAppData();
+
+  // [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
+  // 60.1節決定1] 家族作成から最初の暦週がまだ終わっていない間はカード自体を出さない
+  // （60.3節決定5）。
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
 
   const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
   const cardMessage =
@@ -190,6 +197,26 @@ export default function ParentFamilyTabScreen() {
           </Card>
         </Pressable>
       )}
+
+      {/* [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
+          60.1節決定1・60.2節決定3] 📮かぞくのけいじばんカードの直後に隣接配置。
+          表側には数字を一切出さない（決定3、タップ先の専用画面にのみ数字が現れる）。 */}
+      {weeklyReviewCardVisible && (
+        <Pressable onPress={() => router.push("/parent/weekly-review")}>
+          <Card style={{ marginTop: theme.spacing.s4 }}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.parentBodyMedium}>先週のふりかえり</Text>
+              <Text style={theme.typography.parentBodyMedium}>›</Text>
+            </View>
+          </Card>
+        </Pressable>
+      )}
+
+      {/* [2026-09-21追加・要件定義書07-36章「自分で目標を決める」、主要画面
+          ワイヤーフレーム.md 61.1節決定1] 60章「先週のふりかえり」カードの直後・
+          完了報告一覧の直前に配置。子どもが1人もいない場合はカード自体を出さない
+          （MemberGoalsCard内部で判定）。 */}
+      <MemberGoalsCard />
 
       <Pressable onPress={() => router.push("/parent/approvals")}>
         <Card style={styles.pendingCard}>

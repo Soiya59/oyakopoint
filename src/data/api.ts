@@ -28,6 +28,7 @@ import type {
   ChoreNfcTag,
   ChoreNfcTagWithMember,
   ChoreReaction,
+  ChoreWeeklyCompletionCount,
   Family,
   FamilyBoardPost,
   FamilyBoardPostWithAuthor,
@@ -58,6 +59,7 @@ import type {
   MemberBadge,
   MemberBadgeProgress,
   MemberBlock,
+  MemberGoal,
   MemberPoints,
   OrnamentStickerPurchase,
   ReactionKind,
@@ -3543,4 +3545,133 @@ export async function recordTermsConsent(client: SupabaseClient, consentVersion:
   const { error } = await client.rpc("record_terms_consent", { p_consent_version: consentVersion });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
+}
+
+// ============================================================
+// 振り返る機会（要件定義書07-35章、設計部/成果物/API仕様.md 29章、
+// スキーマ設計.sql 72章）。先週分（jst_week_start_date()区切り）が確定した
+// 状態でのみ提示する。当日進行中の週のweek_startでは絶対に問い合わせない
+// こと（29.4章）。
+// ============================================================
+
+/**
+ * API仕様.md 29.1章・項目1「先週の家族全体の完了報告数」。41章の既存View
+ * `family_tree_weekly_completion_counts`をfamily_id・week_startで1行だけ
+ * 絞る（0件の週は行が無いため`maybeSingle`）。
+ */
+export async function fetchFamilyTreeWeeklyCompletionCountForWeek(
+  client: SupabaseClient,
+  familyId: string,
+  weekStart: string
+): Promise<ApiResult<Pick<FamilyTreeWeeklyCompletionCount, "week_start" | "completion_count"> | null>> {
+  const { data, error } = await client
+    .from("family_tree_weekly_completion_counts")
+    .select("week_start, completion_count")
+    .eq("family_id", familyId)
+    .eq("week_start", weekStart)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as Pick<FamilyTreeWeeklyCompletionCount, "week_start" | "completion_count"> | null) ?? null };
+}
+
+/**
+ * API仕様.md 29.2章・項目3「その週によく行われたクエストの上位」。72章の
+ * 新設View`chore_weekly_completion_counts`をfamily_id・week_startで絞って
+ * 家族ぶんをまとめて1回で取る。並び替え・上位5件＋「ほか◯件」への要約は
+ * 呼び出し側（src/lib/weeklyReviewDisplay.ts）の仕事（Viewは意図的に
+ * ORDER BYを持たない、72章コメント）。
+ */
+export async function fetchChoreWeeklyCompletionCounts(
+  client: SupabaseClient,
+  familyId: string,
+  weekStart: string
+): Promise<ApiResult<ChoreWeeklyCompletionCount[]>> {
+  const { data, error } = await client
+    .from("chore_weekly_completion_counts")
+    .select("family_id, chore_id, week_start, completion_count")
+    .eq("family_id", familyId)
+    .eq("week_start", weekStart);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as ChoreWeeklyCompletionCount[] };
+}
+
+/**
+ * API仕様.md 29.3章・項目4「その週にシール帳が1冊完成した場合」。
+ * `habit_cards`をfamily_id・status='completed'・completed_atが先週の範囲に
+ * 収まるもので絞る（2026-09-19のシール帳作り替え〈07-28章決定27〉以降、
+ * `archive_reason`列は撤去済みのため、設計部/成果物/API仕様.md 29.3章の
+ * `archive_reason='crystal_completed'`という例示は現行スキーマと食い違う。
+ * 本関数は実装済みの現行スキーマ〈status='completed'〉に合わせている。
+ * 実装メモ参照）。家族の誰かが完成させれば対象になる（本人に絞らない）。
+ */
+export async function fetchFamilyCompletedHabitCardsInRange(
+  client: SupabaseClient,
+  familyId: string,
+  fromIsoInclusive: string,
+  toIsoExclusive: string
+): Promise<ApiResult<HabitCard[]>> {
+  const { data, error } = await client
+    .from("habit_cards")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("status", "completed")
+    .gte("completed_at", fromIsoInclusive)
+    .lt("completed_at", toIsoExclusive);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as HabitCard[] };
+}
+
+// ============================================================
+// 自分で目標を決める（要件定義書07-36章、設計部/成果物/API仕様.md 28章、
+// スキーマ設計.sql 71章）。
+// ============================================================
+
+/**
+ * API仕様.md 28.3章「いまの目標を取得する」（3ロール共通）。
+ * `retired_at IS NULL`の行は1人につき高々1件（71.1章の部分UNIQUEインデックス）。
+ */
+export async function fetchActiveMemberGoal(client: SupabaseClient, memberId: string): Promise<ApiResult<MemberGoal | null>> {
+  const { data, error } = await client
+    .from("member_goals")
+    .select("*")
+    .eq("member_id", memberId)
+    .is("retired_at", null)
+    .maybeSingle();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data as MemberGoal | null) ?? null };
+}
+
+/**
+ * API仕様.md 28.3章の家族版。保護者向けカード（61.3節決定7）は子ども全員分を
+ * 1枚のカードにまとめて表示するため、family_idだけで一括取得する
+ * （子どもの人数ぶん個別に問い合わせない＝N+1にしない）。
+ */
+export async function fetchActiveMemberGoalsForFamily(client: SupabaseClient, familyId: string): Promise<ApiResult<MemberGoal[]>> {
+  const { data, error } = await client
+    .from("member_goals")
+    .select("*")
+    .eq("family_id", familyId)
+    .is("retired_at", null);
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as MemberGoal[] };
+}
+
+/**
+ * API仕様.md 28.1章「新しい目標を登録する・差し替える」（保護者操作）。
+ * `set_member_goal()`（SECURITY DEFINER）経由のみ。直接`.insert(...)`は
+ * RLSに拒否される（71.4章・意図的）。
+ */
+export async function setMemberGoal(
+  client: SupabaseClient,
+  memberId: string,
+  goalText: string,
+  linkedChoreId: string | null
+): Promise<ApiResult<string>> {
+  const { data, error } = await client.rpc("set_member_goal", {
+    p_member_id: memberId,
+    p_goal_text: goalText,
+    p_linked_chore_id: linkedChoreId,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as string };
 }

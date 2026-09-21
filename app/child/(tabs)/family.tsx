@@ -14,6 +14,8 @@ import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
+import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
+import ChildWeeklyReviewModal from "@/components/ChildWeeklyReviewModal";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
 
 /**
@@ -57,6 +59,11 @@ export default function ChildFamilyTabScreen() {
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
+  // 60.4節] 子どもは画面遷移せず軽量モーダルで同じ内容を見る（ChildHabitCardModalと
+  // 同じ慣行）。
+  const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
 
   const myId = state.activeChildMemberId;
   const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
@@ -168,6 +175,20 @@ export default function ChildFamilyTabScreen() {
         </Pressable>
       )}
 
+      {/* [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
+          60.1節決定1・60.2節決定3] 💬かぞくのけいじばんカードの直後に隣接配置。表側には
+          数字を一切出さない。子どもは画面遷移せず軽量モーダルを開く（60.4節）。 */}
+      {weeklyReviewCardVisible && (
+        <Pressable onPress={() => setWeeklyReviewVisible(true)}>
+          <Card tone="child" style={styles.familyBoardCard}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={theme.typography.childBody}>📅 せんしゅうの ふりかえり</Text>
+              <Text style={theme.typography.childBody}>›</Text>
+            </View>
+          </Card>
+        </Pressable>
+      )}
+
       <View style={[styles.titleRow, { marginTop: theme.spacing.s6 }]}>
         <Text style={theme.typography.childHeadline}>👨‍👩‍👧‍👦 かぞくのがんばり</Text>
         <Pressable onPress={() => router.push("/child/gratitude")} hitSlop={8}>
@@ -231,6 +252,8 @@ export default function ChildFamilyTabScreen() {
         onSendComment={sendComment}
         onClose={() => setDetailTarget(null)}
       />
+
+      <ChildWeeklyReviewModal visible={weeklyReviewVisible} onClose={() => setWeeklyReviewVisible(false)} />
     </Screen>
   );
 }

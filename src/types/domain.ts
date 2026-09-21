@@ -839,3 +839,38 @@ export interface AccountDeletionPreview {
   family_name: string | null;
   next_owner_display_name: string | null;
 }
+
+/**
+ * [新設・2026-09-21] chore_weekly_completion_counts View（要件定義書07-35章
+ * 「振り返る機会」項目3、設計部/成果物/スキーマ設計.sql 72章）の1行。
+ * クエスト（chore_id）×jst_week_start_date()の週単位の完了報告件数
+ * （家族全体、メンバーを問わず合算）。56章chore_completion_totals（起点を
+ * 持たない生涯累計）とは別物であり混同しないこと（72.3章）。
+ * chore_id IS NULLの行はView側のWHEREで除外済みのため、ここではnon-nullとして扱う。
+ */
+export interface ChoreWeeklyCompletionCount {
+  family_id: string;
+  chore_id: string;
+  week_start: string; // "YYYY-MM-DD"（JST月曜0:00始まりの暦週の開始日）
+  completion_count: number;
+}
+
+/**
+ * [新設・2026-09-21] member_goals テーブルの1行（要件定義書07-36章
+ * 「自分で目標を決める」、設計部/成果物/スキーマ設計.sql 71章）。
+ * 達成・未達成を表す列・期限の列はいずれも存在しない（Finch型、3節の
+ * 必須要件）。1人につきretired_at IS NULLの行は常に高々1件（71.1章の
+ * 部分UNIQUEインデックスで保証）。
+ */
+export interface MemberGoal {
+  id: string;
+  family_id: string;
+  member_id: string;
+  goal_text: string;
+  linked_chore_id: string | null;
+  created_by: string | null;
+  started_at: string;
+  retired_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
