@@ -13,7 +13,6 @@ import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
-import MemberGoalsCard from "@/components/MemberGoalsCard";
 
 /**
  * かぞく区画の入口（保護者。旧P7ホームの「まとめ」要素のうち家族向けの部分を吸収）
@@ -212,11 +211,11 @@ export default function ParentFamilyTabScreen() {
         </Pressable>
       )}
 
-      {/* [2026-09-21追加・要件定義書07-36章「自分で目標を決める」、主要画面
-          ワイヤーフレーム.md 61.1節決定1] 60章「先週のふりかえり」カードの直後・
-          完了報告一覧の直前に配置。子どもが1人もいない場合はカード自体を出さない
-          （MemberGoalsCard内部で判定）。 */}
-      <MemberGoalsCard />
+      {/* [2026-09-22廃止・統括判断] 「いまの目標」カード（07-36章）はここにあったが、
+          統括の判断により画面の導線を外した。理由は要件定義書07-36章の廃止の記録を
+          参照（目標は縛りつける／支持する研究が40〜50年前に偏っている／「目標」という
+          語が気構えさせる）。member_goalsテーブル・API・型は残してあるので、
+          戻すときはこの1行とimportを書き直すだけでよい。 */}
 
       <Pressable onPress={() => router.push("/parent/approvals")}>
         <Card style={styles.pendingCard}>

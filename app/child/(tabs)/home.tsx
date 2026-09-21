@@ -20,7 +20,6 @@ import {
   keyChoreCompletionTotal,
   useChoreCompletionTotals,
 } from "@/hooks/useChoreCompletionTotals";
-import { useActiveMemberGoal } from "@/hooks/useMemberGoals";
 
 /**
  * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
@@ -78,14 +77,9 @@ export default function ChildHomeScreen() {
   // 家族ぶん取得）をクライアント側で合算するだけで、新しい問い合わせは発生しない。
   const familyTotalsLookup = buildChoreCompletionFamilyTotalsLookup(totalsEntries);
 
-  // [2026-09-21追加・要件定義書07-36章「自分で目標を決める」、主要画面
-  // ワイヤーフレーム.md 61.1節決定2] 「いまの もくひょう」カード（読むだけ、
-  // 編集は保護者向け画面のみ・61.5節決定13）。
-  const { goal: myGoal } = useActiveMemberGoal(state.activeChildMemberId);
-  const myGoalLinkedChore = myGoal?.linked_chore_id ? state.chores.find((c) => c.id === myGoal.linked_chore_id) : undefined;
-  const myGoalCount = myGoal?.linked_chore_id
-    ? totalsLookup[keyChoreCompletionTotal(myGoal.linked_chore_id, state.activeChildMemberId)] ?? 0
-    : null;
+  // [2026-09-22廃止・統括判断] 「いまの もくひょう」カード（07-36章）はここで
+  // 目標を読んでいたが、統括の判断により画面の導線を外した。理由は要件定義書
+  // 07-36章の廃止の記録を参照。member_goalsテーブル・API・型は残してある。
 
   useEffect(() => {
     const t = setTimeout(() => setLoadState("ready"), 500);
@@ -244,16 +238,6 @@ export default function ChildHomeScreen() {
           直後に、落ち着いた1行として添える。目標が無い（保護者がまだ入力していない）
           間はカード自体を表示しない（欠落を強調しない、60章決定5と同じ考え方）。
           分母・達成率・期限は一切表示しない（決定3・4）。 */}
-      {myGoal && (
-        <Card tone="child" style={styles.goalCard}>
-          <Text style={theme.typography.childBody} numberOfLines={2}>
-            🎯 いまの もくひょう{"\n"}
-            {myGoal.goal_text}
-            {myGoalLinkedChore && myGoalCount !== null ? `（${myGoalLinkedChore.emoji} ${myGoalLinkedChore.title} ${myGoalCount}かい）` : ""}
-          </Text>
-        </Card>
-      )}
-
       {/* [2026-09-10追加・実装メモ.md 188章] ごほうびウィジェット（36.3節決定2の
           一次導線）。件数計算はせず固定文言のみ（本部長回答2「まず固定文言で出して、
           物足りなければ足す」）。正式な所属先（じぶんタブのタイル先頭、`self.tsx`）も
@@ -435,9 +419,6 @@ export default function ChildHomeScreen() {
 
 const styles = StyleSheet.create({
   pointsRow: { alignItems: "center", marginTop: theme.spacing.s4 },
-  // [2026-09-21追加・要件定義書07-36章「自分で目標を決める」] 「いまの もくひょう」
-  // カード。rewardsWidgetCardと同じ、既存のCardのbaseスタイルに上マージンだけ足す形。
-  goalCard: { marginTop: theme.spacing.s3 },
   // [2026-09-03追加] 28.5a節「さっき とどけた ほうこく」。達成演出（紙吹雪等）は
   // 持たせず、既存のカードと同系色にとどめる控えめなブロック（トーン設計メモ）。
   recentBlock: {
