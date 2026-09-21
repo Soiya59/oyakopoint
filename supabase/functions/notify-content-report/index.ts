@@ -114,11 +114,35 @@ Deno.serve(async (req: Request) => {
   const subject = "おやこポイント お問い合わせ（報告）が届きました";
   // [載せてよい内容はreport_idまでという制約] スキーマ設計.sql 65.5章(2)。
   // 自由記述の本文・表示名・家族名・family_idは一切含めない。
+  //
+  // [2026-09-21追加・統括指示（案A）] 本文に「読むためのSQL」を同梱する。
+  // 統括の指摘「届いたけど、内容がわからない」への対応。**SQL文そのものには
+  // 個人情報が1文字も含まれない**（列名と固定の条件だけ）ため、65.5章(2)の
+  // 制約に抵触しない。運営が1人であり、メールを見てからSupabaseを開くまでに
+  // 「何を叩けば読めるか」を思い出す手間があった。将来この対応を引き継ぐ
+  // 部署ができたとき、最初に使う道具にもなる。
   const text =
     `お問い合わせ（アプリ内の報告）が1件届きました。\n\n` +
     `報告ID: ${reportId}\n\n` +
-    `内容はSupabaseのTable EditorまたはSQL Editorで確認してください` +
-    `（スキーマ設計.sql 65.7章）。`;
+    `本文はこのメールに載せていません（お子さまの名前や書かれた内容を外に出さないため。` +
+    `スキーマ設計.sql 65.5章）。\n` +
+    `SupabaseのSQL Editorに次をそのまま貼ると、未対応のお問い合わせが読めます。\n\n` +
+    `select\n` +
+    `  to_char(cr.created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as 日時,\n` +
+    `  f.name as 家族,\n` +
+    `  fm.display_name as 送った人,\n` +
+    `  cr.about_text as だれについて,\n` +
+    `  cr.seen_where_text as どこで見た,\n` +
+    `  cr.note as 内容,\n` +
+    `  cr.id as 報告ID\n` +
+    `from content_reports cr\n` +
+    `join families f on f.id = cr.family_id\n` +
+    `join family_members fm on fm.id = cr.reporter_member_id\n` +
+    `where cr.status = 'open'\n` +
+    `order by cr.created_at desc;\n\n` +
+    `対応が終わったら、次の1行で閉じられます` +
+    `（'no_action' = 対応不要 ／ 'hidden' = 対応した）。\n\n` +
+    `update content_reports set status = 'no_action' where id = '${reportId}';\n`;
 
   const resendApiKey = env.resendApiKey;
   if (!resendApiKey) {
