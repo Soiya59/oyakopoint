@@ -54,7 +54,9 @@ export default function ParentManageTabScreen() {
     // 41章 決定1（設定の中に置く）を取り下げ、`app/parent/sticker-settings.tsx` を
     // 新設してここへ並べる。2026-09-11に「みまもり（参考）」を設定から出して
     // ここへ集約した（実装メモ191章）のと同じ整理。
-    { emoji: "🪙", label: "メダル管理", path: "/parent/sticker-settings" },
+    // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
+    // 「フィギュア管理」に入れ替えた。遷移先URL（/parent/sticker-settings）は変更していない。
+    { emoji: "🪙", label: "フィギュア管理", path: "/parent/sticker-settings" },
     // みまもりメンバーがいない家族では出さない（従来のリンク2つと同じ条件）。
     ...(hasAnySupporter
       ? [{ emoji: "👀", label: "みまもり（参考）", path: "/parent/supporter-chores" }]

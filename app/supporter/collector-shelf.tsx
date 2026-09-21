@@ -71,7 +71,9 @@ export default function SupporterCollectorShelfScreen() {
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
           保護者側（app/parent/collector-shelf.tsx）と同一文言を流用する。 */}
       <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ガチャの景品・お絵かき・メダル・フィギュアなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
+        {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 保護者側
+            （app/parent/collector-shelf.tsx）で3段階置換により動作確認した文言と同一。 */}
+        ガチャの景品・お絵かき・フィギュア・メダルなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
       </Text>
 
       <CollectorShelfPanel

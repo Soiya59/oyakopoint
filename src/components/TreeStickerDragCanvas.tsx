@@ -35,9 +35,10 @@ import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
 import { CANVAS_HEIGHT, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
-import { StickerIcon } from "./StickerIcon";
+import FigureFrame from "./FigureFrame";
+import FigureIcon from "./FigureIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
-import theme from "@/theme/theme";
+import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
 
@@ -166,20 +167,21 @@ export function TreeStickerDragCanvas({
           onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
           {...panResponder.panHandlers}
         >
+          {/* [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
+              sticker_catalog（入れ替え後「フィギュア」）はFigureFrame（五角形の枠）＋
+              FigureIconで表示する。TreeHabitFigureDragCanvas.tsxが元々使っていた
+              構成に合わせ、円形のdragMarkerRingは使わない。 */}
           <View
             pointerEvents="none"
-            style={[
-              styles.dragMarkerRing,
-              {
-                left: (pos.x / 1000) * canvasWidth - (STICKER_DOT_SIZE + 6) / 2,
-                top: (pos.y / 1000) * CANVAS_HEIGHT - (STICKER_DOT_SIZE + 6) / 2,
-                width: STICKER_DOT_SIZE + 6,
-                height: STICKER_DOT_SIZE + 6,
-                borderRadius: (STICKER_DOT_SIZE + 6) / 2,
-              },
-            ]}
+            style={{
+              position: "absolute",
+              left: (pos.x / 1000) * canvasWidth - (STICKER_DOT_SIZE + 6) / 2,
+              top: (pos.y / 1000) * CANVAS_HEIGHT - (STICKER_DOT_SIZE + 6) / 2,
+            }}
           >
-            <StickerIcon shape={shape} rarity={rarity} size={STICKER_DOT_SIZE} />
+            <FigureFrame size={STICKER_DOT_SIZE + 6} ringColor={theme.gachaColors.accent}>
+              <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={(STICKER_DOT_SIZE + 6) * 0.5} />
+            </FigureFrame>
           </View>
         </View>
       </View>
@@ -210,14 +212,8 @@ const styles = StyleSheet.create({
     right: 0,
     height: CANVAS_HEIGHT,
   },
-  dragMarkerRing: {
-    position: "absolute",
-    borderWidth: 2,
-    borderColor: theme.gachaColors.accent,
-    backgroundColor: theme.colors.neutralSurface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  // [2026-09-21削除・要件定義書07-34章] `dragMarkerRing`（円形のドラッグ中マーカー）は
+  // FigureFrame（五角形の枠）へ差し替えたため未使用になった。62.5節「結線の入れ替え」。
   errorText: { color: theme.colors.statusBlocking, textAlign: "center", marginTop: theme.spacing.s3 },
   confirmButton: { marginTop: theme.spacing.s6 },
 });

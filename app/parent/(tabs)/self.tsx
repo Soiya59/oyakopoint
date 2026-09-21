@@ -68,7 +68,11 @@ export default function ParentSelfTabScreen() {
     // 画面（/parent/sticker-shop）は2026-09-07から3ロールとも存在するが、タイルが
     // 無く、コレクション画面かごほうび画面の奥からしか行けなかった。通帳（下の行）と
     // 同じ取りこぼし。子どもの「じぶん」タブと同じ🪙・同じ呼び名にそろえる。
-    { emoji: "🪙", label: "メダル", path: "/parent/sticker-shop" },
+    // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
+    // 「フィギュア」に入れ替えた。文字数（3字→5字）の折り返しは実機確認が必要
+    // （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 62.4節1、開発部/成果物/
+    // 実装メモ.md参照。本部長への確認事項）。
+    { emoji: "🪙", label: "フィギュア", path: "/parent/sticker-shop" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す
     // （旧`app/parent/home.tsx`と同じ理由でこのタイルだけ12pxに縮める）。
@@ -97,7 +101,7 @@ export default function ParentSelfTabScreen() {
         tabKey="parent.self"
         tone="parent"
         memberId={state.activeParentMemberId}
-        text="👋 ご自身のクエストやごほうび、感謝ポイント、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとフィギュアがもらえる貯め方です。"
+        text="👋 ご自身のクエストやごほうび、感謝ポイント、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとメダルがもらえる貯め方です。"
       />
 
       {/* [2026-09-19改訂・やること.md 4-57、主要画面ワイヤーフレーム.md 49-B.8章決定54

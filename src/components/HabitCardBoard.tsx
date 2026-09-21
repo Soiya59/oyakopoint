@@ -273,7 +273,7 @@ export function HabitCardBoard({
                 <Text style={[captionStyle, { marginTop: theme.spacing.s2 }]}>
                   {isChild
                     ? "まだ 1こも もらってないから、えを かえられるよ（かえなくても いいよ）"
-                    : "まだフィギュアを1体も獲得していないため、絵柄を変えられます（変えなくても大丈夫です）"}
+                    : "まだメダルを1枚も獲得していないため、絵柄を変えられます（変えなくても大丈夫です）"}
                 </Text>
                 <Pressable onPress={() => setKindPickerOpen(true)}>
                   <Text style={[captionStyle, styles.link]}>えらびなおす →</Text>

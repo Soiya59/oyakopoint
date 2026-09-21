@@ -10,16 +10,17 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import theme from "@/theme/theme";
+import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 import type { FamilyMember, FamilyTreeMemberBreakdown, FamilyTreeWeeklyCompletionCount } from "@/types/domain";
 import MemberAvatar from "./MemberAvatar";
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from "react-native-svg";
 import { DrawingThumbnail } from "./DrawingCanvas";
-import { StickerIcon } from "./StickerIcon";
+import { HabitFigureCircleIcon } from "./StickerIcon";
 import FigureIcon from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
+import CircleFrame from "./CircleFrame";
 import { useAppData } from "@/data/store";
 import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
 import { pickNearestTreeTapTarget } from "@/lib/treeTapTargets";
@@ -796,6 +797,15 @@ function PrizeDotView({
  * （`renderStickerPlacements`）が`pos_x`/`pos_y`（0〜1000）から
  * キャンバスの実ピクセル座標へ変換した値を渡す。
  */
+/**
+ * [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」、主要画面
+ * ワイヤーフレーム.md 62.5節] `sticker_catalog`（入れ替え後の呼び名
+ * 「フィギュア」）の木への自由配置表示。呼び名の入れ替えに合わせ、内側の絵柄
+ * 表示を円形の枠＋`StickerIcon`から、五角形の枠`FigureFrame`＋`FigureIcon`へ
+ * 差し替えた（コンポーネント名・DBの`sticker_key`・関数名`FreeStickerView`
+ * 自体は変更しない、07-34章5節の原則）。渡すデータ（`FamilyTreeStickerPlacement`、
+ * `sticker_catalog`由来）自体は変わらない。
+ */
 function FreeStickerView({
   placement,
   x,
@@ -808,33 +818,29 @@ function FreeStickerView({
   size: number;
 }) {
   const ringColor = placement.avatarColor ?? theme.colors.neutralBorder;
-  const innerSize = prizeInnerSize(size);
   return (
-    <View
-      style={[
-        styles.prizeDot,
-        {
-          left: x - size / 2,
-          top: y - size / 2,
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderColor: ringColor,
-        },
-      ]}
-    >
-      <StickerIcon shape={placement.shape} rarity={placement.rarity} size={innerSize} />
+    <View style={{ position: "absolute", left: x - size / 2, top: y - size / 2, width: size, height: size }}>
+      <FigureFrame size={size} ringColor={ringColor}>
+        <FigureIcon
+          figureKey={figureKeyOfSticker(placement.shape, placement.rarity)}
+          kindEmoji={stickerShapeFallbackEmoji[placement.shape]}
+          size={size * 0.5}
+        />
+      </FigureFrame>
     </View>
   );
 }
 
 /**
  * [2026-09-17新設・要件定義書07-28章決定21、設計部/成果物/スキーマ設計.sql
- * 55.9章決定55-18] 習慣カード（台紙）の段階報酬フィギュアの木への自由配置表示。
- * `FreeStickerView`と全く同じ「自由配置レイヤー」に乗るが、メダルと混同されない
- * よう五角形の枠（`FigureFrame`）を使う（主要画面ワイヤーフレーム.md 49.2章決定3。
- * 既存のメダル関連コンポーネント〈StickerIcon・FreeStickerView〉は一切変更せず、
- * 新しい独立したコンポーネントとして実装する、49.14章開発部への申し送り(3)）。
+ * 55.9章決定55-18。2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの
+ * 入れ替え」、主要画面ワイヤーフレーム.md 62.5節] 習慣カード（台紙）の段階報酬
+ * （`habit_figure_catalog`、入れ替え後の呼び名「メダル」）の木への自由配置表示。
+ * `FreeStickerView`と全く同じ「自由配置レイヤー」に乗る。入れ替え前は五角形の
+ * 枠（`FigureFrame`）を使っていたが、呼び名の入れ替えに合わせ、円形の枠
+ * （`CircleFrame`）＋`HabitFigureCircleIcon`（`StickerIcon.tsx`）へ差し替えた
+ * （関数名`FreeHabitFigureView`自体は変更しない、07-34章5節の原則）。渡すデータ
+ * （`FamilyTreeHabitFigurePlacement`、`habit_figure_catalog`由来）自体は変わらない。
  */
 function FreeHabitFigureView({
   placement,
@@ -849,9 +855,9 @@ function FreeHabitFigureView({
 }) {
   return (
     <View style={{ position: "absolute", left: x - size / 2, top: y - size / 2, width: size, height: size }}>
-      <FigureFrame size={size} ringColor={placement.avatarColor}>
-        <FigureIcon figureKey={placement.figureKey} kindEmoji={placement.kindEmoji} size={size * 0.5} />
-      </FigureFrame>
+      <CircleFrame size={size} ringColor={placement.avatarColor}>
+        <HabitFigureCircleIcon figureKey={placement.figureKey} kindEmoji={placement.kindEmoji} size={size * 0.5} />
+      </CircleFrame>
     </View>
   );
 }
@@ -1100,7 +1106,13 @@ function TreeDecorationExpandModal({
             {target.kind === "sticker" && (
               <Pressable style={styles.expandContentWrap} onPress={onClose}>
                 <Pressable onPress={() => {}}>
-                  <StickerIcon shape={target.placement.shape} rarity={target.placement.rarity} size={expandedImageSize} highRes />
+                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog（入れ替え後
+                      「フィギュア」）はFigureIconで表示する。FreeStickerViewと同じ結線。 */}
+                  <FigureIcon
+                    figureKey={figureKeyOfSticker(target.placement.shape, target.placement.rarity)}
+                    kindEmoji={stickerShapeFallbackEmoji[target.placement.shape]}
+                    size={expandedImageSize}
+                  />
                 </Pressable>
                 <View style={styles.expandTextWrap}>
                   <Text style={[bodyMediumStyle, styles.expandCenterText]}>

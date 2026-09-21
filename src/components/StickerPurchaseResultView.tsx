@@ -18,8 +18,9 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
-import { StickerIcon } from "./StickerIcon";
-import theme from "@/theme/theme";
+import FigureFrame from "./FigureFrame";
+import FigureIcon from "./FigureIcon";
+import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerCatalogItem } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -47,7 +48,11 @@ export function StickerPurchaseResultView({ tone, item, onDecorate, onGoToShelf 
 
   return (
     <View style={styles.container}>
-      <StickerIcon shape={item.shape} rarity={item.rarity} size={180} highRes />
+      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog（入れ替え後
+          「フィギュア」）はFigureFrame＋FigureIconで表示する。62.2節#8。 */}
+      <FigureFrame size={180}>
+        <FigureIcon figureKey={figureKeyOfSticker(item.shape, item.rarity)} kindEmoji={stickerShapeFallbackEmoji[item.shape]} size={112} />
+      </FigureFrame>
       <Text style={headlineStyle}>{isChild ? "⭐ かったよ！" : "購入しました"}</Text>
       <Text style={[bodyStyle, styles.itemName]}>「{item.display_name}」</Text>
       <Text style={[bodyStyle, styles.shelfNote]}>

@@ -42,9 +42,10 @@ import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
-import { StickerIcon } from "./StickerIcon";
+import FigureFrame from "./FigureFrame";
+import FigureIcon, { hasFigureImage } from "./FigureIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
-import theme from "@/theme/theme";
+import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerShape, StickerRarity } from "@/theme/theme";
 import type { StickerCatalogItem } from "@/types/domain";
 import { formatDateChildJp, formatDateJp, toJstDateString } from "@/lib/calendarDates";
@@ -217,12 +218,20 @@ export function StickerShopPanel({
     );
   }
 
-  const byShape = theme.stickerShapes.map((shape) => ({
-    shape,
-    items: theme.stickerRarities
-      .map((rarity) => catalog.find((c) => c.shape === shape && c.rarity === rarity))
-      .filter((c): c is StickerCatalogItem => !!c),
-  }));
+  // [2026-09-21追加・本部長判断（要件定義書07-34章対応）] ちょうちょ・おはなは
+  // 入れ替え後の絵（フィギュア調）がまだ無い（07-34章3節）。絵が空欄のまま
+  // 購入させる事故を避けるため、フィギュア調の絵が1枚も無い形はショップの購入
+  // 一覧そのものから外す（DBのis_active・catalogの行数は一切変更しない。
+  // クライアント側だけで絞り込む、設計部/成果物/スキーマ設計.sql 73章の方針）。
+  // 絵が入り次第、`hasFigureImage()`がtrueを返すようになり自動的に一覧へ戻る。
+  const byShape = theme.stickerShapes
+    .filter((shape) => hasFigureImage(figureKeyOfSticker(shape, "bronze")))
+    .map((shape) => ({
+      shape,
+      items: theme.stickerRarities
+        .map((rarity) => catalog.find((c) => c.shape === shape && c.rarity === rarity))
+        .filter((c): c is StickerCatalogItem => !!c),
+    }));
 
   // [2026-09-09変更・本部長／軽微変更ルート] 購入の成否を待って、成功したら確認モーダルを
   // 閉じる。従来は結果を待たずに投げっぱなしだったため、購入後も同じ「◯ptで購入します。
@@ -247,8 +256,12 @@ export function StickerShopPanel({
       <View style={styles.headerRow}>
         {/* [2026-09-08追加・本部長／軽微変更ルート] 統括の実機確認「上のメダルという
             文字の左側にメダルの絵文字欲しい」。ごほうび画面からの導線（166章で🪙に
-            統一）と同じ絵文字にして、着く前と着いた後で同じ印が見えるようにする。 */}
-        <Text style={bodyMediumStyle}>🪙 {isChild ? "メダルを かう" : "メダルを買う"}</Text>
+            統一）と同じ絵文字にして、着く前と着いた後で同じ印が見えるようにする。
+            [2026-09-21改訂・要件定義書07-34章] 呼び名を「フィギュア」に入れ替えた。
+            🪙は「ポイントを使って手に入れる」という行為の記号として据え置く
+            （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 62.4節4、62.9節2で
+            本部長へ差し替えの要否を確認中。開発部/成果物/実装メモ.md参照）。 */}
+        <Text style={bodyMediumStyle}>🪙 {isChild ? "フィギュアを かう" : "フィギュアを買う"}</Text>
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 
@@ -295,7 +308,16 @@ export function StickerShopPanel({
                       style={[styles.cell, tone === "child" && styles.cellChild, disabled && styles.cellDisabled]}
                       accessibilityRole="button"
                     >
-                      <StickerIcon shape={item.shape} rarity={item.rarity} size={32} />
+                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
+                          sticker_catalog（入れ替え後「フィギュア」）はFigureFrame＋
+                          FigureIconで表示する。StickerIcon・円形の枠は使わない。 */}
+                      <FigureFrame size={32}>
+                        <FigureIcon
+                          figureKey={figureKeyOfSticker(item.shape, item.rarity)}
+                          kindEmoji={stickerShapeFallbackEmoji[item.shape]}
+                          size={16}
+                        />
+                      </FigureFrame>
                       <Text style={[captionStyle, styles.cellRarity]}>
                         {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                       </Text>
@@ -337,8 +359,15 @@ export function StickerShopPanel({
               <>
                 <View style={{ alignItems: "center" }}>
                   {/* [149章] 購入確認モーダルはこのコンポーネントの中で唯一ステッカーを
-                      拡大表示する箇所のため、`highRes`で512px画像を強制する。 */}
-                  <StickerIcon shape={selected.shape} rarity={selected.rarity} size={180} highRes />
+                      拡大表示する箇所。[2026-09-21改訂・要件定義書07-34章] FigureIconは
+                      画像を1枚しか持たないため`highRes`は無い（FigureIcon.tsx参照）。 */}
+                  <FigureFrame size={180}>
+                    <FigureIcon
+                      figureKey={figureKeyOfSticker(selected.shape, selected.rarity)}
+                      kindEmoji={stickerShapeFallbackEmoji[selected.shape]}
+                      size={112}
+                    />
+                  </FigureFrame>
                 </View>
                 <Text style={[bodyMediumStyle, styles.modalTitle]}>{selected.display_name}</Text>
                 {/* [2026-09-08追加・本部長／軽微変更ルート] ポイントが足りないメダルも

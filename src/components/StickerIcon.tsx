@@ -30,7 +30,7 @@
  * 無くなり不要になった。呼び出し側からも`uid`の指定を取り除いた（149章）。
  */
 import React from "react";
-import { Image, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 
 // ---- 12種×2解像度の静的import ----
@@ -76,6 +76,21 @@ import dragonGoldSm from "../../assets/stickers/dragon_gold@sm.png";
 import dragonCrystalFull from "../../assets/stickers/dragon_crystal.png";
 import dragonCrystalSm from "../../assets/stickers/dragon_crystal@sm.png";
 
+// [2026-09-21追加・要件定義書07-34章「メダルとフィギュアの入れ替え」、主要画面
+// ワイヤーフレーム.md 62.5節] `habit_figure_catalog`（入れ替え後の呼び名
+// 「メダル」）を円形の枠で表示するための絵。統括作成・本部長が既存と同じ形式に
+// 整えて配置済み。dragonぶんは`sticker_catalog`側の既存画像（上）をそのまま
+// 再利用し（07-34章3節「ドラゴンは既に両方向の絵がある」）、rabbitぶんのみ
+// 新規に追加する。
+import rabbitBronzeFull from "../../assets/stickers/rabbit_bronze.png";
+import rabbitBronzeSm from "../../assets/stickers/rabbit_bronze@sm.png";
+import rabbitSilverFull from "../../assets/stickers/rabbit_silver.png";
+import rabbitSilverSm from "../../assets/stickers/rabbit_silver@sm.png";
+import rabbitGoldFull from "../../assets/stickers/rabbit_gold.png";
+import rabbitGoldSm from "../../assets/stickers/rabbit_gold@sm.png";
+import rabbitCrystalFull from "../../assets/stickers/rabbit_crystal.png";
+import rabbitCrystalSm from "../../assets/stickers/rabbit_crystal@sm.png";
+
 const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof beetleBronzeFull; sm: typeof beetleBronzeSm }>> = {
   beetle: {
     bronze: { full: beetleBronzeFull, sm: beetleBronzeSm },
@@ -119,6 +134,56 @@ export interface StickerIconProps {
    * ステッカーを拡大表示する箇所向け（149章）。
    */
   highRes?: boolean;
+}
+
+/**
+ * [2026-09-21新設・要件定義書07-34章「メダルとフィギュアの入れ替え」、主要画面
+ * ワイヤーフレーム.md 62.5節「結線の入れ替え」対応]
+ * `habit_figure_catalog`（入れ替え後の呼び名「メダル」）の絵を、円形の枠で表示
+ * するための画像対応表。キーは`habit_figure_catalog.figure_key`と完全一致させる
+ * （`FigureIcon.tsx`のFIGURE_IMAGESと同じキー文字列を、別の画像に対応付ける形）。
+ * dragonは`sticker_catalog`側の既存画像を再利用、rabbitは今回追加した新規画像。
+ * DBの`figure_key`列は一切変更しない。
+ */
+const ORNAMENT_CIRCLE_IMAGES: Record<string, { full: typeof beetleBronzeFull; sm: typeof beetleBronzeSm }> = {
+  figure_dragon_bronze: { full: dragonBronzeFull, sm: dragonBronzeSm },
+  figure_dragon_silver: { full: dragonSilverFull, sm: dragonSilverSm },
+  figure_dragon_gold: { full: dragonGoldFull, sm: dragonGoldSm },
+  figure_dragon_crystal: { full: dragonCrystalFull, sm: dragonCrystalSm },
+  figure_rabbit_bronze: { full: rabbitBronzeFull, sm: rabbitBronzeSm },
+  figure_rabbit_silver: { full: rabbitSilverFull, sm: rabbitSilverSm },
+  figure_rabbit_gold: { full: rabbitGoldFull, sm: rabbitGoldSm },
+  figure_rabbit_crystal: { full: rabbitCrystalFull, sm: rabbitCrystalSm },
+};
+
+export interface HabitFigureCircleIconProps {
+  /** habit_figure_catalog.figure_key（例: "figure_rabbit_bronze"）。 */
+  figureKey: string;
+  /** 画像が無いときのプレースホルダに使う絵文字（habit_figure_catalog.kind_emoji）。 */
+  kindEmoji?: string | null;
+  size: number;
+  /** trueなら`size`によらず512px（`full`）画像を強制する（`StickerIcon`と同じ考え方）。 */
+  highRes?: boolean;
+}
+
+/**
+ * `habit_figure_catalog`（入れ替え後の呼び名「メダル」）の絵柄を円形の枠向けに
+ * 表示する。`StickerIcon`と兄弟の関係にある新設コンポーネント（`StickerIcon`
+ * 自体は改変しない、07-34章5節「内部名は変更しない」の原則を保つため、既存の
+ * `shape`/`rarity`型〈beetle/butterfly/flower/dragon〉を汚さず独立させた）。
+ * 画像が無い場合は`FigureIcon.tsx`と同じ考え方で絵文字にフォールバックする。
+ */
+export function HabitFigureCircleIcon({ figureKey, kindEmoji, size, highRes = false }: HabitFigureCircleIconProps) {
+  const images = ORNAMENT_CIRCLE_IMAGES[figureKey];
+  if (!images) {
+    return (
+      <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ fontSize: size * 0.6 }}>{kindEmoji ?? "❔"}</Text>
+      </View>
+    );
+  }
+  const source = highRes || size > SM_THRESHOLD ? images.full : images.sm;
+  return <Image source={source} resizeMode="contain" style={{ width: size, height: size }} />;
 }
 
 export function StickerIcon({ shape, rarity, size, highRes = false }: StickerIconProps) {

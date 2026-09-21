@@ -187,15 +187,18 @@ export default function ChildTreeDecorateScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
+      {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 見出しの語を
+          入れ替えた。isHabitFigureMode（habit_figure_catalog由来）は「メダル」、
+          sticker由来は「フィギュア」になる。 */}
       <Text style={[theme.typography.childHeadline, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
         {isHabitFigureMode
           ? moveHabitFigureDecorationId
-            ? "フィギュアを うごかす"
-            : "フィギュアを きに かざる"
+            ? "メダルを うごかす"
+            : "メダルを きに かざる"
           : moveDecorationId
-          ? "メダルを うごかす"
+          ? "フィギュアを うごかす"
           : purchaseId
-          ? "メダルを かざる"
+          ? "フィギュアを かざる"
           : "きに かざる"}
       </Text>
 

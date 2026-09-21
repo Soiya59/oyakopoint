@@ -62,7 +62,7 @@ export default function ParentFamilyTreeScreen() {
         tabKey="parent.tree"
         tone="parent"
         memberId={state.activeParentMemberId}
-        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやメダルは、タップすると大きく見られます。"
+        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやフィギュアは、タップすると大きく見られます。"
       />
 
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.2節、実装メモ.md 227章]

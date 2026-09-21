@@ -1,21 +1,26 @@
 /**
- * 木の上でフィギュアを自由にドラッグして配置・移動する画面（要件定義書07-28章
- * 決定21、スキーマ設計.sql 55.9章）本体の3ロール共通コンポーネント。
+ * 木の上でhabit_figure_catalog（入れ替え後の呼び名「メダル」、要件定義書07-28章
+ * 決定21、スキーマ設計.sql 55.9章）を自由にドラッグして配置・移動する画面本体の
+ * 3ロール共通コンポーネント。関数名`TreeHabitFigureDragCanvas`自体は07-34章5節の
+ * 原則により変更していない（呼び名の入れ替え後も指しているデータは変わらない）。
  *
- * `TreeStickerDragCanvas.tsx`（メダルの自由配置）と全く同じ操作方式（座標を
- * 0〜1000に正規化してドラッグ、PanResponder）を流用するが、メダルのコード
- * （`TreeStickerDragCanvas.tsx`自体・`StickerIcon`）は一切変更せず、独立した
- * 新規コンポーネントとして実装する（主要画面ワイヤーフレーム.md 49.14章
- * 開発部への申し送り(3)「既存のメダル関連コンポーネントを複製せず新しい
- * コンポーネントとして実装すること」）。ドラッグ中のマーカーは五角形の枠
- * （`FigureFrame`）で表示し、メダルの円形マーカーと混同しない。
+ * `TreeStickerDragCanvas.tsx`（sticker_catalog、入れ替え後の呼び名「フィギュア」の
+ * 自由配置）と全く同じ操作方式（座標を0〜1000に正規化してドラッグ、
+ * PanResponder）を流用するが、独立した別コンポーネントとして実装している
+ * （主要画面ワイヤーフレーム.md 49.14章開発部への申し送り(3)）。
+ *
+ * [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」] ドラッグ中の
+ * マーカーは、入れ替え前は五角形の枠（`FigureFrame`）だったが、呼び名の入れ替えに
+ * 合わせて円形の枠（`CircleFrame`）＋`HabitFigureCircleIcon`（`StickerIcon.tsx`）に
+ * 差し替えた。`TreeStickerDragCanvas.tsx`側が逆に五角形へ差し替わっており、
+ * 混同しないための「形を分ける」という考え方自体は変えていない。
  */
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
 import { CANVAS_HEIGHT, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
-import FigureIcon from "./FigureIcon";
-import FigureFrame from "./FigureFrame";
+import { HabitFigureCircleIcon } from "./StickerIcon";
+import CircleFrame from "./CircleFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement } from "@/data/api";
@@ -144,9 +149,12 @@ export function TreeHabitFigureDragCanvas({
               top: (pos.y / 1000) * CANVAS_HEIGHT - (STICKER_DOT_SIZE + 6) / 2,
             }}
           >
-            <FigureFrame size={STICKER_DOT_SIZE + 6} ringColor={theme.gachaColors.accent}>
-              <FigureIcon figureKey={figureKey} kindEmoji={kindEmoji} size={(STICKER_DOT_SIZE + 6) * 0.5} />
-            </FigureFrame>
+            {/* [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
+                habit_figure_catalog（入れ替え後「メダル」）はCircleFrame（円形の枠）＋
+                HabitFigureCircleIconで表示する。FigureFrameは使わない。 */}
+            <CircleFrame size={STICKER_DOT_SIZE + 6} ringColor={theme.gachaColors.accent}>
+              <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={(STICKER_DOT_SIZE + 6) * 0.5} />
+            </CircleFrame>
           </View>
         </View>
       </View>

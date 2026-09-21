@@ -40,12 +40,26 @@ import figureSpiritBronze from "../../assets/figures/figure_spirit_bronze.png";
 import figureSpiritSilver from "../../assets/figures/figure_spirit_silver.png";
 import figureSpiritGold from "../../assets/figures/figure_spirit_gold.png";
 import figureSpiritCrystal from "../../assets/figures/figure_spirit_crystal.png";
+// [2026-09-21追加・要件定義書07-34章「メダルとフィギュアの入れ替え」] 木を飾る
+// ステッカー（`sticker_catalog`、入れ替え後の呼び名「フィギュア」）のうち、
+// カブトムシ（beetle）の絵。統括作成・本部長が既存と同じ形式（512px・RGBA）に
+// 整えて配置済み。キーは`figureKeyOfSticker()`（theme.ts）が生成する
+// `figure_beetle_*`と一致させる。ちょうちょ（butterfly）・おはな（flower）は
+// まだ絵が無く、下のフォールバック（絵文字）に自然に落ちる（本部長判断
+// 「絵が無いものは空欄でよい」。実施理由は開発部/成果物/実装メモ.md参照）。
+import figureBeetleBronze from "../../assets/figures/figure_beetle_bronze.png";
+import figureBeetleSilver from "../../assets/figures/figure_beetle_silver.png";
+import figureBeetleGold from "../../assets/figures/figure_beetle_gold.png";
+import figureBeetleCrystal from "../../assets/figures/figure_beetle_crystal.png";
 
 /**
  * `habit_figure_catalog.figure_key`をキーにした画像の対応表。
  * キーはDBの`figure_key`と完全一致させること。
  * [2026-09-18] 8枚とも配置済み。プレースホルダ（絵文字）の分岐は、
  * 将来「種類を足したが画像がまだ」という状態のために残してある。
+ * [2026-09-21追加] `sticker_catalog`側（入れ替え後「フィギュア」）のbeetleぶんを
+ * 追加した。butterfly/flowerのキーはまだこの表に無く、下のフォールバックに
+ * 自然に落ちる。
  */
 const FIGURE_IMAGES: Record<string, unknown> = {
   figure_dragon_bronze: figureDragonBronze,
@@ -60,7 +74,21 @@ const FIGURE_IMAGES: Record<string, unknown> = {
   figure_spirit_silver: figureSpiritSilver,
   figure_spirit_gold: figureSpiritGold,
   figure_spirit_crystal: figureSpiritCrystal,
+  figure_beetle_bronze: figureBeetleBronze,
+  figure_beetle_silver: figureBeetleSilver,
+  figure_beetle_gold: figureBeetleGold,
+  figure_beetle_crystal: figureBeetleCrystal,
 };
+
+/**
+ * [2026-09-21新設] 指定した`figureKey`に画像が用意されているかどうか。
+ * ショップの購入一覧から「絵が無いものを出さない」判定（開発部/成果物/
+ * 実装メモ.md参照、本部長判断）に使う。`is_active`（DB）は変更しない
+ * （設計部の方針どおり、クライアント側だけで絞り込む）。
+ */
+export function hasFigureImage(figureKey: string): boolean {
+  return figureKey in FIGURE_IMAGES;
+}
 
 export interface FigureIconProps {
   /** habit_figure_catalog.figure_key（例: "figure_dragon_bronze"）。 */

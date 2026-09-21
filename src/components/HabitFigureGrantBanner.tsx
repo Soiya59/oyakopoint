@@ -48,8 +48,11 @@ export function HabitFigureGrantBanner({ tone, grant, onPlaceOnTree, onLater }: 
       <Text style={[headlineStyle, styles.centerText]}>
         {isChild ? `🎉 ${kindEmoji} ${kindName}が${tierLabel}に なったよ！` : `${kindEmoji} ${kindName}が${tierLabel}の段階になりました`}
       </Text>
+      {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 呼び名を
+          「メダル」に入れ替えた（表62.2 #1）。本コンポーネントは元々アイコン画像を
+          表示していない（絵文字headlineのみ）ため、枠の結線変更は無い。 */}
       <Text style={[bodyStyle, styles.centerText, { marginTop: theme.spacing.s1 }]}>
-        {isChild ? "フィギュアを もらったよ" : "フィギュアを獲得しました"}
+        {isChild ? "メダルを もらったよ" : "メダルを獲得しました"}
       </Text>
       <View style={styles.buttonRow}>
         <AppButton tone={tone} label={isChild ? "きに かざる →" : "木に飾る →"} onPress={onPlaceOnTree} style={{ flex: 1, marginRight: theme.spacing.s2 }} />

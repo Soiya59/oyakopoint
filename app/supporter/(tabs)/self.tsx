@@ -64,7 +64,9 @@ export default function SupporterSelfScreen() {
     { emoji: "🎁", label: "ごほうび", path: "/supporter/rewards" },
     // [2026-09-11追加・統括指示「保護者やみまもりでもメダルを追加してほしい」]
     // 保護者の「じぶん」タブと同じ理由・同じ🪙（app/parent/(tabs)/self.tsx参照）。
-    { emoji: "🪙", label: "メダル", path: "/supporter/sticker-shop" },
+    // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
+    // 「フィギュア」に入れ替えた（保護者側と同じ、app/parent/(tabs)/self.tsx参照）。
+    { emoji: "🪙", label: "フィギュア", path: "/supporter/sticker-shop" },
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     // [2026-09-09追加・実装メモ.md 186章] 「かぞく」タブから移設したコレクション。
     { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },
@@ -94,7 +96,7 @@ export default function SupporterSelfScreen() {
         tabKey="supporter.self"
         tone="supporter"
         memberId={state.activeParentMemberId}
-        text="👋 ご自身のクエストやごほうび、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとフィギュアがもらえる貯め方です。"
+        text="👋 ご自身のクエストやごほうび、お絵かき、シール帳をまとめて見るタブです。シール帳は、クエストを続けるとメダルがもらえる貯め方です。"
       />
 
       {/* [2026-09-19改訂・やること.md 4-57、主要画面ワイヤーフレーム.md 49-B.8章決定54

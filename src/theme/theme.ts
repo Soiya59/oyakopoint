@@ -400,6 +400,38 @@ export function stickerKeyOf(shape: StickerShape, rarity: StickerRarity): string
   return `${shape}_${rarity}`;
 }
 
+/**
+ * [2026-09-21新設・要件定義書07-34章、主要画面ワイヤーフレーム.md 62.5節「結線の
+ * 入れ替え」対応] 木を飾るステッカー（`sticker_catalog`、旧呼び名「メダル」・
+ * 新呼び名「フィギュア」）の1件を、`habit_figure_catalog.figure_key`と同じ命名
+ * 慣行（`figure_{kind}_{tier}`）のキー文字列に変換する。DBの`sticker_key`・
+ * `figure_key`列はいずれも一切変更しない（設計部/成果物/スキーマ設計.sql 73.3章
+ * 「DMLはゼロ件」の判断どおり）。このキーは`FigureIcon`（`src/components/
+ * FigureIcon.tsx`）の`figureKey`props に渡す用途専用で、クライアント側の
+ * 画像対応表を掛け替えるためだけに使う。dragonは`habit_figure_catalog`が
+ * 既に持つ実在のキー（`figure_dragon_*`）と一致するため画像を共用できる
+ * （07-34章3節）。beetleは2026-09-21時点で`assets/figures/figure_beetle_*.png`が
+ * 追加済み。butterfly・flowerは絵がまだ無く、`FigureIcon`側のフォールバック
+ * （絵文字）に自然に落ちる（本部長判断「絵が無いものは空欄でよい」）。
+ */
+export function figureKeyOfSticker(shape: StickerShape, rarity: StickerRarity): string {
+  return `figure_${shape}_${rarity}`;
+}
+
+/**
+ * [2026-09-21新設・同上] `figureKeyOfSticker()`が指す画像がまだ無い形
+ * （butterfly・flower、07-34章3節）のときに`FigureIcon`へ渡す絵文字
+ * フォールバック。絵が入り次第、対応するキーが`FigureIcon.tsx`の
+ * `FIGURE_IMAGES`に追加されればこの絵文字は使われなくなる（`hasFigureImage()`
+ * が画像優先で判定するため）。
+ */
+export const stickerShapeFallbackEmoji: Record<StickerShape, string> = {
+  beetle: "🪲",
+  butterfly: "🦋",
+  flower: "🌸",
+  dragon: "🐉",
+};
+
 // ---- 1.12 累計到達バッジ（`badge-*`、2026-09-07追加、07-19-9b章対応） ----
 // バッジは新しい絵を増やさず、既存の絵文字1種＋到達値の数字併記で表現する
 // （決定28「絵は増やさない、同じ印に到達値を添える」）。
@@ -449,7 +481,9 @@ export const badgeDefinitions: readonly {
   // [2026-09-21改訂・主要画面ワイヤーフレーム.md 58.4節] 「ひみつはっけん」はアプリの
   // どの画面にも出てこない語だったため、画面上の実際の呼び名「ガチャ」（🎰）に揃えた。
   { key: "lifetime_gacha_draws", emoji: "🎰", nameParent: "ガチャ10かい", nameChild: "ガチャ10かい", unit: ["かい", "かい"] },
-  { key: "lifetime_sticker_purchases", emoji: "🪙", nameParent: "メダル5こ", nameChild: "メダル5こ", unit: ["こ", "こ"] },
+  // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 表示名を
+  // 「フィギュア」に入れ替えた。🪙は据え置き（62.4節4、本部長へ確認中）。
+  { key: "lifetime_sticker_purchases", emoji: "🪙", nameParent: "フィギュア5こ", nameChild: "フィギュア5こ", unit: ["こ", "こ"] },
 ] as const;
 
 /**

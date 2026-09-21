@@ -213,12 +213,14 @@ export default function SupporterRewardsScreen() {
           （要件定義書07-19章、みまもりを除外する記述は無い）。既存のコレクター棚経由の導線
           （自分のステッカータブのみ表示）はそのまま残す（判断の理由は実装メモ参照）。 */}
       <Pressable onPress={() => router.push("/supporter/sticker-shop")} style={{ marginTop: theme.spacing.s6 }} hitSlop={8}>
+        {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 呼び名を
+            「フィギュア」に入れ替えた。 */}
         <Card tone="supporter">
           <Text style={theme.typography.supporterBodyMedium}>
-            <Text style={{ fontSize: 22 }}>🪙</Text> メダルを買いに行く →
+            <Text style={{ fontSize: 22 }}>🪙</Text> フィギュアを買いに行く →
           </Text>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
-            貯めたポイントで、木を飾るメダルを買えます。
+            貯めたポイントで、木を飾るフィギュアを買えます。
           </Text>
         </Card>
       </Pressable>

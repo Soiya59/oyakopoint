@@ -50,7 +50,7 @@ export default function SupporterFamilyTreeScreen() {
         tabKey="supporter.tree"
         tone="supporter"
         memberId={state.activeParentMemberId}
-        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやメダルは、タップすると大きく見られます。"
+        text="👋 クエストをがんばるたびに育つ、家族みんなの木です。ガチャで当たった飾りやフィギュアは、タップすると大きく見られます。"
       />
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6a節、実装メモ.md 227章]
           保護者側（app/parent/family-tree.tsx）と同一文言を流用する。 */}

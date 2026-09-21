@@ -98,7 +98,7 @@ export default function ParentStickerShopScreen() {
       shape: "beetle" as const,
       rarity: "bronze" as const,
       sticker_key: "",
-      display_name: "メダル",
+      display_name: "フィギュア",
       points_cost: 0,
       is_active: true,
       created_at: "",

@@ -22,8 +22,9 @@ import type { StickerCatalogItem } from "@/types/domain";
  * 参照: 画面一覧・遷移図.md C30、主要画面ワイヤーフレーム.md 32.1節・34章
  *
  * コレクションだなの「じぶんのシール」（app/child/collector-shelf.tsx）から遷移する
- * 入口に加え、「じぶん」タブの「メダル」タイル（app/child/(tabs)/self.tsx、
- * 2026-09-10・実装メモ188章で移設）からも遷移できる。木を飾るシール（12種）を
+ * 入口に加え、「じぶん」タブの「フィギュア」タイル（app/child/(tabs)/self.tsx、
+ * 2026-09-10・実装メモ188章で移設。2026-09-21・要件定義書07-34章によりラベルを
+ * 「メダル」から入れ替え）からも遷移できる。木を飾るシール（12種）を
  * ポイントで買う。買う前の確認はStickerShopPanel内のインライン確認モーダルで行う
  * （決定10）。
  *
@@ -95,7 +96,7 @@ export default function ChildStickerShopScreen() {
       shape: "beetle" as const,
       rarity: "bronze" as const,
       sticker_key: "",
-      display_name: "メダル",
+      display_name: "フィギュア",
       points_cost: 0,
       is_active: true,
       created_at: "",

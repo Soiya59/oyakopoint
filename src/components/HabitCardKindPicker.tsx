@@ -21,8 +21,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
-import FigureFrame from "./FigureFrame";
-import FigureIcon from "./FigureIcon";
+import CircleFrame from "./CircleFrame";
+import { HabitFigureCircleIcon } from "./StickerIcon";
 import theme from "@/theme/theme";
 import { resolveChildFriendlyKindDisplayName } from "@/lib/habitCardDisplay";
 import type { HabitKindGroup } from "@/hooks/useHabitCards";
@@ -71,19 +71,22 @@ export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, ch
                       選択の可否そのものをDB側で強制していない（暫定）。 */}
                   {!g.isFree && <Text style={[captionStyle, { color: theme.colors.neutralTextSecondary }]}> ・有料</Text>}
                 </Text>
-                {/* [決定62・63] 銅の1体だけ絵で見せ、銀・金・クリスタルは空の
-                    五角形の枠（FigureFrame）のまま見せる。「まだ手に入っていない」
-                    ことを責める見え方（グレーアウト・ラベル等）は付けない。 */}
+                {/* [決定62・63] 銅の1体だけ絵で見せ、銀・金・クリスタルは空の枠のまま
+                    見せる。「まだ手に入っていない」ことを責める見え方（グレーアウト・
+                    ラベル等）は付けない。
+                    [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
+                    habit_figure_catalog（入れ替え後「メダル」）はCircleFrame（円形の
+                    枠）＋HabitFigureCircleIconで表示する。FigureFrameは使わない。 */}
                 <View style={styles.figureRow}>
                   {bronze && (
-                    <FigureFrame size={FIGURE_FRAME_SIZE} ringColor={null}>
-                      <FigureIcon figureKey={bronze.figure_key} kindEmoji={g.kindEmoji} size={FIGURE_ICON_SIZE} />
-                    </FigureFrame>
+                    <CircleFrame size={FIGURE_FRAME_SIZE} ringColor={null}>
+                      <HabitFigureCircleIcon figureKey={bronze.figure_key} kindEmoji={g.kindEmoji} size={FIGURE_ICON_SIZE} />
+                    </CircleFrame>
                   )}
                   {otherTiers.map((t) => (
-                    <FigureFrame key={t.id} size={FIGURE_FRAME_SIZE} ringColor={null}>
+                    <CircleFrame key={t.id} size={FIGURE_FRAME_SIZE} ringColor={null}>
                       {null}
-                    </FigureFrame>
+                    </CircleFrame>
                   ))}
                 </View>
               </Card>

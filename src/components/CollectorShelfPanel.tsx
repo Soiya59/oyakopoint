@@ -36,7 +36,8 @@ import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
 import { MemberAvatar } from "./MemberAvatar";
-import { StickerIcon } from "./StickerIcon";
+import { HabitFigureCircleIcon } from "./StickerIcon";
+import CircleFrame from "./CircleFrame";
 import FigureIcon from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -44,7 +45,7 @@ import { useAppData } from "@/data/store";
 import { useCompletedHabitCards, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import { computeHabitCardDurationDays, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
 import { toJstDateString } from "@/lib/calendarDates";
-import theme from "@/theme/theme";
+import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 import type {
@@ -794,9 +795,13 @@ export function CollectorShelfPanel({
               {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} />}
 
               {/* --- メダル区分（「全員」選択時。実装メモ158章・統括の実機確認「あつめたものに
-                  メダルも入れてほしい」対応） --- */}
+                  メダルも入れてほしい」対応）
+                  [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」]
+                  見出しの語を入れ替えた（コンポーネント名`FamilyMedalSection`は
+                  07-34章5節の原則により変更していない。渡すデータ〈sticker_catalog由来〉も
+                  変わらない）。 --- */}
               <View style={{ marginTop: theme.spacing.s6 }}>
-                <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
+                <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
                 <FamilyMedalSection
                   tone={tone}
                   members={members}
@@ -807,9 +812,12 @@ export function CollectorShelfPanel({
               </View>
 
               {/* --- フィギュア区分（「全員」選択時。要件定義書07-28章決定27、
-                  メダルとは別の区分見出し・区画に分ける、開発部/成果物/実装メモ.md 237章） --- */}
+                  メダルとは別の区分見出し・区画に分ける、開発部/成果物/実装メモ.md 237章）
+                  [2026-09-21改訂・要件定義書07-34章] 見出しの語を入れ替えた
+                  （コンポーネント名`FamilyHabitFigureSection`は変更していない。渡すデータ
+                  〈habit_figure_catalog由来〉も変わらない）。 --- */}
               <View style={{ marginTop: theme.spacing.s6 }}>
-                <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+                <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
                 <FamilyHabitFigureSection
                   tone={tone}
                   members={members}
@@ -1163,8 +1171,10 @@ function StickerShelfSection({
   return (
     <View>
       {/* [2026-09-07改訂・本部長／実装メモ152章] 呼び名を「メダル」に統一（統括判断）。
-          DBの`sticker_key`・コンポーネント名・コメント中の「シール」「ステッカー」は変更しない。 */}
-      <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
+          DBの`sticker_key`・コンポーネント名・コメント中の「シール」「ステッカー」は変更しない。
+          [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 見出しの語を
+          「フィギュア」へ入れ替えた（関数名`StickerShelfSection`は変更していない）。 */}
+      <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
@@ -1175,9 +1185,9 @@ function StickerShelfSection({
         <>
           {isViewingSelf ? (
             <>
-              <Text style={bodyStyle}>{isChild ? "まだ メダルを もっていないよ。かってみよう→" : "まだメダルを購入していません。購入する→"}</Text>
+              <Text style={bodyStyle}>{isChild ? "まだ フィギュアを もっていないよ。かってみよう→" : "まだフィギュアを購入していません。購入する→"}</Text>
               <AppButton
-                label={isChild ? "メダルを かいに いく →" : "購入する →"}
+                label={isChild ? "フィギュアを かいに いく →" : "購入する →"}
                 tone={tone}
                 onPress={onGoToShop}
                 style={{ marginTop: theme.spacing.s3 }}
@@ -1202,7 +1212,11 @@ function StickerShelfSection({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  <StickerIcon shape={entry.shape} rarity={entry.rarity} size={48} />
+                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+                      （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+                  <FigureFrame size={48}>
+                    <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
+                  </FigureFrame>
                   <Text style={[captionStyle, styles.gridCaption]}>
                     {stickerEntryLabel(tone, entry.shape, entry.rarity)}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
@@ -1219,7 +1233,7 @@ function StickerShelfSection({
           {isViewingSelf && (
             <Pressable onPress={onGoToShop} style={{ marginTop: theme.spacing.s3 }}>
               <Text style={[bodyStyle, { color: theme.colors.brandPrimaryStrong }]}>
-                {isChild ? "→ メダルを かいに いく" : "→ メダルを買いに行く"}
+                {isChild ? "→ フィギュアを かいに いく" : "→ フィギュアを買いに行く"}
               </Text>
             </Pressable>
           )}
@@ -1271,7 +1285,11 @@ function StickerDetailCard({
   return (
     <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
       <View style={styles.detailDrawingWrap}>
-        <StickerIcon shape={shape} rarity={rarity} size={220} highRes />
+        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+            （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+        <FigureFrame size={220}>
+          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={136} />
+        </FigureFrame>
         <View style={styles.detailDrawingTextWrap}>
           <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
           {pointsCost != null && (
@@ -1380,7 +1398,11 @@ function FamilyMedalSection({
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              <StickerIcon shape={entry.shape} rarity={entry.rarity} size={48} />
+              {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+                  （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+              <FigureFrame size={48}>
+                <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
+              </FigureFrame>
               <Text style={[captionStyle, styles.gridCaption]}>
                 {stickerEntryLabel(tone, entry.shape, entry.rarity)}
                 {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
@@ -1428,7 +1450,11 @@ function FamilyStickerDetailCard({
   return (
     <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
       <View style={styles.detailDrawingWrap}>
-        <StickerIcon shape={shape} rarity={rarity} size={220} highRes />
+        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+            （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+        <FigureFrame size={220}>
+          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={136} />
+        </FigureFrame>
         <View style={styles.detailDrawingTextWrap}>
           <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
           <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
@@ -1474,7 +1500,8 @@ function buildHabitFigureShelfEntries(
       key,
       figureKey: catalog?.figure_key ?? "",
       kindEmoji: catalog?.kind_emoji ?? null,
-      label: catalog?.display_name ?? "フィギュア",
+      // [2026-09-21改訂・要件定義書07-34章] フォールバック文言を「メダル」に入れ替えた。
+      label: catalog?.display_name ?? "メダル",
       owned,
     };
   });
@@ -1510,7 +1537,9 @@ function HabitFigureShelfSection({
 
   return (
     <View>
-      <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+      {/* [2026-09-21改訂・要件定義書07-34章] 見出しの語を「メダル」へ入れ替えた
+          （関数名`HabitFigureShelfSection`は変更していない）。 */}
+      <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
@@ -1521,8 +1550,8 @@ function HabitFigureShelfSection({
         <Text style={bodyStyle}>
           {isViewingSelf
             ? isChild
-              ? "まだ フィギュアを もっていないよ。シールちょうを ためて もらおう"
-              : "まだフィギュアを獲得していません。シール帳をためると獲得できます"
+              ? "まだ メダルを もっていないよ。シールちょうを ためて もらおう"
+              : "まだメダルを獲得していません。シール帳をためると獲得できます"
             : isChild
             ? `${selectedMemberName}さんは まだ もっていないよ`
             : `${selectedMemberName}さんはまだ持っていません`}
@@ -1531,7 +1560,9 @@ function HabitFigureShelfSection({
 
       {loadState === "ready" && totalOwned > 0 && (
         <>
-          {/* [決定3-②] メダルの円形枠と混同しないよう、五角形の枠（FigureFrame）で表示する。 */}
+          {/* [決定3-②] フィギュアの五角形枠と混同しないよう、円形の枠（CircleFrame）で
+              表示する。[2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
+              入れ替え前はFigureFrame（五角形）だったが、円形へ差し替えた。 */}
           <View style={styles.grid}>
             {entries.map((entry) => {
               const selected = entry.key === selectedKey;
@@ -1543,9 +1574,11 @@ function HabitFigureShelfSection({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  <FigureFrame size={48} ringColor={null}>
-                    <FigureIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-                  </FigureFrame>
+                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+                      （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+                  <CircleFrame size={48} ringColor={null}>
+                    <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+                  </CircleFrame>
                   <Text style={[captionStyle, styles.gridCaption]}>
                     {entry.label}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
@@ -1588,9 +1621,11 @@ function HabitFigureDetailCard({
   return (
     <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
       <View style={styles.detailDrawingWrap}>
-        <FigureFrame size={160} ringColor={null}>
-          <FigureIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
-        </FigureFrame>
+        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+            （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+        <CircleFrame size={160} ringColor={null}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+        </CircleFrame>
         <View style={styles.detailDrawingTextWrap}>
           <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
           <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
@@ -1688,9 +1723,11 @@ function FamilyHabitFigureSection({
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              <FigureFrame size={48} ringColor={null}>
-                <FigureIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-              </FigureFrame>
+              {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+                  （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+              <CircleFrame size={48} ringColor={null}>
+                <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+              </CircleFrame>
               <Text style={[captionStyle, styles.gridCaption]}>
                 {entry.label}
                 {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
@@ -1728,9 +1765,11 @@ function FamilyHabitFigureDetailCard({
   return (
     <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
       <View style={styles.detailDrawingWrap}>
-        <FigureFrame size={160} ringColor={null}>
-          <FigureIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
-        </FigureFrame>
+        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+            （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+        <CircleFrame size={160} ringColor={null}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+        </CircleFrame>
         <View style={styles.detailDrawingTextWrap}>
           <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
           <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>

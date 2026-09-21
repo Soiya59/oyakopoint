@@ -78,7 +78,11 @@ export default function ParentCollectorShelfScreen() {
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.6節、実装メモ.md 227章]
           常時表示の一文。 */}
       <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-        ガチャの景品・お絵かき・メダル・フィギュアなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
+        {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」、UIUXデザイン部/
+            成果物/主要画面ワイヤーフレーム.md 62.6節] 1文の中に両語が共存する箇所。3段階
+            置換（「メダル」→一時語→「フィギュア」を「メダル」に→一時語を「フィギュア」に）で
+            動作確認した最初の箇所。 */}
+        ガチャの景品・お絵かき・フィギュア・メダルなど、これまで集めたものを振り返れる棚です。過去の木もここで見られます。
       </Text>
 
       <CollectorShelfPanel

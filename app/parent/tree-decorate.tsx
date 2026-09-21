@@ -155,15 +155,17 @@ export default function ParentTreeDecorateScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
+      {/* [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 見出しの語を
+          入れ替えた。 */}
       <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
         {isHabitFigureMode
           ? moveHabitFigureDecorationId
-            ? "フィギュアを動かす"
-            : "フィギュアを飾る"
+            ? "メダルを動かす"
+            : "メダルを飾る"
           : moveDecorationId
-          ? "メダルを動かす"
+          ? "フィギュアを動かす"
           : purchaseId
-          ? "メダルを飾る"
+          ? "フィギュアを飾る"
           : "木に飾る"}
       </Text>
 

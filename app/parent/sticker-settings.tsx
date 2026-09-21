@@ -30,7 +30,10 @@ const DEFAULT_STICKER_PRICES: Record<"bronze" | "silver" | "gold" | "crystal", n
 const RARITY_ORDER: ("bronze" | "silver" | "gold" | "crystal")[] = ["bronze", "silver", "gold", "crystal"];
 
 /**
- * メダル管理（保護者のみ）。
+ * メダル管理（保護者のみ）。[2026-09-21改訂・要件定義書07-34章「メダルと
+ * フィギュアの入れ替え」] 画面に出す見出しは「フィギュア管理」に入れ替えた
+ * （下記の経緯コメント中の「メダル」は、入れ替え前の意思決定の記録として
+ * そのまま残す。07-34章5節・00-2章の原則。ファイル名・関数名は変更しない）。
  *
  * [2026-09-11新設・統括指示「メダル管理はメダル管理として、ごほうび管理の下に
  * 追加してほしい」／本部長・軽微変更ルート] もともと UIUXデザイン部/成果物/
@@ -170,7 +173,7 @@ export default function ParentStickerSettingsScreen() {
 
   // ============================================================
   // [2026-09-11新設・要件定義書07-25-1章決定20〜27、UIUXデザイン部/成果物/
-  // 主要画面ワイヤーフレーム.md 40.1節] メダルの段階リセット「メダルの設定」。
+  // 主要画面ワイヤーフレーム.md 40.1節] メダルの段階リセット「フィギュアの設定」。
   // 決定4・決定5の状態表示・非活性化判定には、家族の形ごとの生の購入実績
   // （reset_atを問わない）が必要（設計部/成果物/スキーマ設計.sql 52.6章）。
   // 既存の`useFamilyStickerPurchasesForLock`（買う画面の段階購入制と同じ
@@ -263,7 +266,7 @@ export default function ParentStickerSettingsScreen() {
     return (
       <Screen tone="parent">
         <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/manage")} />
-        <Text style={theme.typography.parentTitle}>🪙 メダル管理</Text>
+        <Text style={theme.typography.parentTitle}>🪙 フィギュア管理</Text>
       </Screen>
     );
   }
@@ -271,17 +274,17 @@ export default function ParentStickerSettingsScreen() {
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/manage")} />
-      <Text style={theme.typography.parentTitle}>🪙 メダル管理</Text>
+      <Text style={theme.typography.parentTitle}>🪙 フィギュア管理</Text>
 
 
     {/* [2026-09-11新設・要件定義書07-25-1章決定20〜27、UIUXデザイン部/成果物/
         主要画面ワイヤーフレーム.md 40.1節決定1〜8] メダルの段階リセット
-        「メダルの設定」。危険度の異なる操作（家族から抜ける・家族を削除する）
+        「フィギュアの設定」。危険度の異なる操作（家族から抜ける・家族を削除する）
         とは列を分け、独立したCardとして家族名の直後に置く（決定1）。
         決定22・27のとおり購入履歴・木の配置・バッジは一切消えないため、
         ボタンは`secondary`のまま（`danger`にしない、決定6）。 */}
     <Card style={{ marginTop: theme.spacing.s6 }}>
-      <Text style={theme.typography.parentBodyMedium}>メダルの設定</Text>
+      <Text style={theme.typography.parentBodyMedium}>フィギュアの設定</Text>
 
       {/* [2026-09-11新設・要件定義書07-25-1章決定10〜18、UIUXデザイン部/成果物/
           主要画面ワイヤーフレーム.md 41.1〜41.6節] 「ねだんの設定」区画。
@@ -290,7 +293,7 @@ export default function ParentStickerSettingsScreen() {
           押した時点で一括検証する（41.3節決定4、41.4節決定6）。 */}
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>ねだんの設定</Text>
       <Text style={[theme.typography.parentBody, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-        レアリティごとに、メダルの値段を決められます。何も変えなければ、もとの値段のままです。
+        レアリティごとに、フィギュアの値段を決められます。何も変えなければ、もとの値段のままです。
       </Text>
 
       {priceLoadState === "loading" && (
@@ -399,7 +402,7 @@ export default function ParentStickerSettingsScreen() {
       {selectedTierShape && confirmingTierReset && (
         <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
           <Text style={theme.typography.parentBody}>{tierConfirmTitle()}</Text>
-          <Text style={theme.typography.parentBody}>・今持っているメダルは減りません</Text>
+          <Text style={theme.typography.parentBody}>・今持っているフィギュアは減りません</Text>
           <Text style={theme.typography.parentBody}>・もう一度、銅から集め直すことになります</Text>
           <Text style={theme.typography.parentBody}>・あとから元に戻すことはできません</Text>
           {tierResetError && <Text style={{ color: theme.colors.statusBlocking }}>{tierResetError}</Text>}
