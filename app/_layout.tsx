@@ -7,6 +7,7 @@ import * as Linking from "expo-linking";
 import { AppDataProvider } from "@/data/store";
 import { SessionProvider } from "@/lib/session";
 import { PendingNfcLinkProvider } from "@/lib/pendingNfcLink";
+import { PushSoftAskProvider } from "@/components/NotificationSoftAsk";
 import { completeEmailSignIn } from "@/data/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import theme from "@/theme/theme";
@@ -67,13 +68,20 @@ export default function RootLayout() {
       <PendingNfcLinkProvider>
         <SessionProvider>
           <AppDataProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: theme.colors.neutralBg },
-              }}
-            />
+            {/* [2026-09-22追加・要件定義書07-37章6章、UIUXデザイン部/成果物/
+                主要画面ワイヤーフレーム.md 63.9節3] ソフトアスクの表示条件は
+                特定の画面に紐づけず、ルートの共通レイヤーで判定する。
+                useSession()・useAppData()の両方を使うため、この2つの
+                Providerの内側に置く。 */}
+            <PushSoftAskProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: theme.colors.neutralBg },
+                }}
+              />
+            </PushSoftAskProvider>
           </AppDataProvider>
         </SessionProvider>
       </PendingNfcLinkProvider>

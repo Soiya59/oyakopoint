@@ -10,6 +10,7 @@ import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { updateFamilyName } from "@/data/api";
+import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
 
 /**
  * P40 家族の設定（保護者、2026-09-21新設）
@@ -21,7 +22,7 @@ import { updateFamilyName } from "@/data/api";
  * 一切変えていない（そのままコピー。59.2節決定2）。
  */
 export default function FamilySettingsScreen() {
-  const { state, refresh, setFamilySocialInteractionsEnabled } = useAppData();
+  const { state, refresh, setFamilySocialInteractionsEnabled, setFamilyPushNotificationsEnabled } = useAppData();
   const { client } = useSession();
 
   const [familyName, setFamilyName] = useState(state.family.name);
@@ -32,6 +33,13 @@ export default function FamilySettingsScreen() {
   const [savingSocial, setSavingSocial] = useState(false);
   const [socialSuccess, setSocialSuccess] = useState(false);
   const [socialError, setSocialError] = useState<string | null>(null);
+
+  // [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 63.1節] 通知トグル（やりとりトグルの直下に
+  // 1段インデントして従属配置）。
+  const [savingNotify, setSavingNotify] = useState(false);
+  const [notifySuccess, setNotifySuccess] = useState(false);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
 
   const saveFamilyName = async () => {
     const trimmed = familyName.trim();
@@ -62,6 +70,23 @@ export default function FamilySettingsScreen() {
     }
     setSocialSuccess(true);
     setTimeout(() => setSocialSuccess(false), 4000);
+  };
+
+  // [2026-09-22追加・主要画面ワイヤーフレーム.md 63.1.1節] 押した瞬間に保存する。
+  // 「お知らせする」への保存が成功したときだけ、ソフトアスクモーダルが
+  // 自動的に表示される（PushSoftAskProviderがfamily.push_notifications_enabled
+  // の変化を見て判定するため、ここで明示的に開く必要はない）。
+  const setNotificationsEnabled = async (enabled: boolean) => {
+    setSavingNotify(true);
+    setNotifyError(null);
+    const res = await setFamilyPushNotificationsEnabled(enabled);
+    setSavingNotify(false);
+    if (!res.ok) {
+      setNotifyError("変更できませんでした。もう一度お試しください。");
+      return;
+    }
+    setNotifySuccess(true);
+    setTimeout(() => setNotifySuccess(false), 4000);
   };
 
   return (
@@ -142,6 +167,74 @@ export default function FamilySettingsScreen() {
             <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>これまでの書き込みを読む</Text>
           </Pressable>
         )}
+
+        {/* [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
+            主要画面ワイヤーフレーム.md 63.1節] 通知トグル。やりとりトグルと
+            同じCardの中に、区切り線＋1段インデントで従属配置する
+            （決定1。新しいCardは作らない・横並びの独立トグルとして置かない）。
+            やりとりトグルが「いまは使わない」のときはグレーアウト（非表示に
+            しない。決定4）。保存済みの値は保持する。 */}
+        <View style={styles.notifyDivider} />
+        <View style={{ paddingLeft: theme.spacing.s4 }}>
+          <Text style={[theme.typography.parentBody, !state.family.social_interactions_enabled && styles.disabledText]}>
+            書き込みがあったら、お知らせする
+          </Text>
+          <Text
+            style={[
+              theme.typography.parentCaption,
+              { color: theme.colors.neutralTextSecondary },
+              !state.family.social_interactions_enabled && styles.disabledText,
+            ]}
+          >
+            「いまは使わない」にすると、書き込み自体が止まるため、お知らせも届きません。
+          </Text>
+          <View style={[styles.chipRow, { marginTop: theme.spacing.s2, paddingLeft: theme.spacing.s4 }]}>
+            <Pressable
+              onPress={() => setNotificationsEnabled(true)}
+              disabled={savingNotify || !state.family.social_interactions_enabled}
+              style={[
+                styles.chip,
+                state.family.push_notifications_enabled && styles.chipSelected,
+                !state.family.social_interactions_enabled && styles.chipDisabled,
+              ]}
+            >
+              <Text>お知らせする</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setNotificationsEnabled(false)}
+              disabled={savingNotify || !state.family.social_interactions_enabled}
+              style={[
+                styles.chip,
+                !state.family.push_notifications_enabled && styles.chipSelected,
+                !state.family.social_interactions_enabled && styles.chipDisabled,
+              ]}
+            >
+              <Text>いまはお知らせしない</Text>
+            </Pressable>
+          </View>
+          {savingNotify && (
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              保存中…
+            </Text>
+          )}
+          {notifySuccess && (
+            <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
+          )}
+          {notifyError && (
+            <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{notifyError}</Text>
+          )}
+          {/* [主要画面ワイヤーフレーム.md 63.5.1節] 通知トグルが「お知らせする」で、
+              かつこの端末の状態が「行動が必要」なときだけ、再挑戦の導線を出す。
+              [2026-09-22本部長の画面確認で追加] やりとりトグルがオフのときも
+              条件に入れる。オフの間は投稿自体が止まり通知は一切発生しないため、
+              チップだけグレーアウトしてこの行が押せるままだと、押しても何も
+              起きない導線が残ってしまう（決定4「やりとりがオフならグレー
+              アウト」の趣旨と食い違う）。 */}
+          <NotificationDeviceStatusRow
+            visible={state.family.push_notifications_enabled && state.family.social_interactions_enabled}
+            tone="parent"
+          />
+        </View>
       </Card>
     </Screen>
   );
@@ -168,4 +261,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
   },
   chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
+  // [2026-09-22追加・主要画面ワイヤーフレーム.md 63.1.0節決定1] やりとりトグルの
+  // チップ列と通知トグルの間に挟む区切り線（既存のsettingsDivider流用、
+  // app/parent/family.tsxと同じ値）。
+  notifyDivider: {
+    marginTop: theme.spacing.s4,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+    paddingTop: theme.spacing.s4,
+  },
+  // [決定4] グレーアウト時の淡色表示。新しい色トークンは作らず、既存の
+  // neutralTextSecondaryを流用する。
+  disabledText: { color: theme.colors.neutralTextSecondary },
+  chipDisabled: { opacity: 0.5 },
 });

@@ -524,6 +524,22 @@
 -- Dockerで`supabase db reset`後に実測して確認した（96.5章の遵守）。ローカル
 -- Docker環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-22追加・開発部] プッシュ通知（要件定義書07-37章、設計部/成果物/
+-- スキーマ設計.sql 74章、API仕様.md 31章）に伴い、S1（38のまま。新しい
+-- テーブルを追加していない。families・push_tokensの2表へのALTERのみ）・
+-- S3（70のまま。RLSポリシーを1本も追加・変更していない）はいずれも±0。
+-- S4（82→84、トリガー関数`family_board_posts_after_insert_notify`・
+-- SECURITY DEFINER関数`set_family_push_notifications_enabled`の2本を
+-- 追加）。**設計部/成果物/スキーマ設計.sql 74.11章は「トリガー関数は
+-- S4に数えない（271.2.1節の既存分類にならい対象外）」としていたが、実測は
+-- +2だった**（member_goals_before_writeのときと同じ食い違いパターン——
+-- トリガー関数はEXECUTEを明示GRANTしていなくてもデフォルトでPUBLIC実行可
+-- のためS4に数えられる。content_reports_after_insert_notify自身も同じ
+-- 理由でS4に含まれており、本件も同じ扱いが正しい）。ハッシュ・件数は
+-- ローカルDockerで`supabase db reset`後に実測して確認した（96.5章の
+-- 遵守）。ローカルDocker環境に適用済み・実測済み。本番へは未適用（本部長の
+-- 操作を待つ）。詳細は開発部/成果物/実装メモ.md参照。
+--
 -- あわせて「振り返る機会」（要件定義書07-35章、スキーマ設計.sql 72章）で
 -- 新設した`chore_weekly_completion_counts`はViewであり、既存の
 -- `chore_completions_select_scoped`（security_invoker=true）がそのまま
@@ -1184,7 +1200,24 @@ WITH expected(f) AS (VALUES
   -- [2026-09-21追加] set_member_goal（同上、71.5章）。SECURITY DEFINERで
   -- あり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticatedへ明示的に
   -- GRANTしている（新規登録の唯一の書き込み経路、71.4章）。
-  ('set_member_goal')
+  ('set_member_goal'),
+  -- [2026-09-22追加] プッシュ通知（要件定義書07-37章、設計部/成果物/
+  -- スキーマ設計.sql 74章、開発部/成果物/実装メモ.md）。
+  -- family_board_posts_after_insert_notify（掲示板の投稿通知トリガー）。
+  -- SECURITY DEFINERだがRETURNS TRIGGERであり、content_reports_after_
+  -- insert_notify・member_goals_before_write等の既存トリガー関数と同じ
+  -- 理由（34.5章の既知の挙動）で明示REVOKEしていないため、この一覧に
+  -- 含まれる。トリガー文脈の外で直接呼び出すとNEW参照でエラーになるだけで
+  -- 実害は無い。**設計部/成果物/スキーマ設計.sql 74.11章は「トリガー関数の
+  -- ため対象外」としていたが、実測するとcontent_reports_after_insert_
+  -- notify等と同様にS4へ含まれることが判明した（member_goals_before_write
+  -- のときと同じ食い違いパターン。開発部の実装メモに記載・本部長へ報告）。
+  ('family_board_posts_after_insert_notify'),
+  -- [2026-09-22追加] set_family_push_notifications_enabled（保護者が
+  -- 掲示板の通知トグルを設定する、スキーマ設計.sql 74.5章）。SECURITY
+  -- DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticated
+  -- へ明示的にGRANTしている（設計部の見込みどおり）。
+  ('set_family_push_notifications_enabled')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1197,7 +1230,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数82件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数84件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

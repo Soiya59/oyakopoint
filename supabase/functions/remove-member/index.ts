@@ -210,6 +210,23 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "internal_error" }, 500);
     }
 
+    // [2026-09-22追加・設計部/成果物/スキーマ設計.sql 74.12章「★申し送り」]
+    // soft_removeはfamily_membersの行を物理削除しないため、push_tokensの
+    // ON DELETE CASCADEが発火せず、退会後も端末識別子（Expoプッシュ
+    // トークン）が残り続ける不具合があった。family_member_pinsと同じ
+    // タイミングで明示的にDELETEし、退会したメンバーの端末識別子を
+    // ここで消す。DB側の変更は不要（本関数はservice_role権限で動くため、
+    // push_tokensのRLS〈本人限定〉を迂回してこのDELETEを実行できる）。
+    const { error: pushTokenDeleteError } = await admin
+      .from("push_tokens")
+      .delete()
+      .eq("member_id", memberId);
+
+    if (pushTokenDeleteError) {
+      console.error("remove-member: push token delete failed", pushTokenDeleteError);
+      return jsonResponse({ error: "internal_error" }, 500);
+    }
+
     // 3.4章「レスポンス: 200 { "ok": true }」
     return jsonResponse({ ok: true });
   }

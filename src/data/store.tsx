@@ -169,7 +169,14 @@ export type Action =
    * 経由でDBを更新するため、このActionは使わない
    * （RealDataProviderImplのsetFamilySocialInteractionsEnabled参照）。
    */
-  | { type: "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED"; enabled: boolean };
+  | { type: "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED"; enabled: boolean }
+  /**
+   * [2026-09-22追加・要件定義書07-37章3章] モック実装専用。家族の掲示板
+   * 投稿のプッシュ通知トグル。実接続時はRPC（set_family_push_notifications_
+   * enabled）経由でDBを更新するため、このActionは使わない
+   * （RealDataProviderImplのsetFamilyPushNotificationsEnabled参照）。
+   */
+  | { type: "SET_FAMILY_PUSH_NOTIFICATIONS_ENABLED"; enabled: boolean };
 
 /**
  * [2026-09-03改訂] REPORT_COMPLETION成功時のみ、生成された完了報告id（completionId）を
@@ -258,6 +265,12 @@ export interface DataContextValue {
    * insufficient_privilege）。成功後、家族データを再取得する。
    */
   setFamilySocialInteractionsEnabled: (enabled: boolean) => Promise<DispatchResult>;
+  /**
+   * [2026-09-22追加・要件定義書07-37章3章] 保護者が「家族の掲示板の投稿が
+   * あったらお知らせする」トグルを設定する（保護者のみ。みまもり・子どもは
+   * insufficient_privilege）。成功後、家族データを再取得する。
+   */
+  setFamilyPushNotificationsEnabled: (enabled: boolean) => Promise<DispatchResult>;
 }
 
 const AppDataContext = createContext<DataContextValue | null>(null);
@@ -471,6 +484,10 @@ const EMPTY_STATE: State = {
     social_interactions_enabled: true,
     social_settings_updated_by: null,
     social_settings_updated_at: null,
+    // [2026-09-22追加・設計部/成果物/スキーマ設計.sql 74.3章]
+    push_notifications_enabled: false,
+    push_notifications_updated_by: null,
+    push_notifications_updated_at: null,
   },
   members: [],
   categories: [],
@@ -1340,6 +1357,26 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     [session.client, session.status, load]
   );
 
+  /**
+   * [2026-09-22新設・要件定義書07-37章3章] 保護者が「家族の掲示板の投稿が
+   * あったらお知らせする」トグルを設定する。setFamilySocialInteractionsEnabled
+   * と同じ形（DB側のset_family_push_notifications_enabled自体が保護者以外を
+   * insufficient_privilegeで拒否するため、ここでのロール判定はUXのための
+   * 早期リターンに過ぎない）。
+   */
+  const setFamilyPushNotificationsEnabled = useCallback(
+    async (enabled: boolean): Promise<DispatchResult> => {
+      if (session.status !== "parent") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この設定は保護者のみ変更できます" } };
+      }
+      const res = await api.setFamilyPushNotificationsEnabled(session.client, enabled);
+      if (!res.ok) return { ok: false, error: res.error };
+      await load();
+      return { ok: true };
+    },
+    [session.client, session.status, load]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       state,
@@ -1367,6 +1404,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       unblockMember,
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
+      setFamilyPushNotificationsEnabled,
     }),
     [
       state,
@@ -1381,6 +1419,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       unblockMember,
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
+      setFamilyPushNotificationsEnabled,
       findChoreByTag,
       stampReactionIndex,
       dailySummaryRows,
@@ -1481,6 +1520,10 @@ function reducer(state: State, action: Action): State {
 
     case "SET_FAMILY_SOCIAL_INTERACTIONS_ENABLED": {
       return { ...state, family: { ...state.family, social_interactions_enabled: action.enabled } };
+    }
+
+    case "SET_FAMILY_PUSH_NOTIFICATIONS_ENABLED": {
+      return { ...state, family: { ...state.family, push_notifications_enabled: action.enabled } };
     }
 
     case "ADD_REACTION": {
@@ -1666,6 +1709,17 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // [2026-09-22追加・要件定義書07-37章3章] モック実装では
+  // families.push_notifications_enabledをローカルで更新するだけ（DBへは
+  // 書き込まない。setFamilySocialInteractionsEnabledと同じ簡略化方針）。
+  const setFamilyPushNotificationsEnabled = useCallback(
+    async (enabled: boolean): Promise<DispatchResult> => {
+      dispatchRaw({ type: "SET_FAMILY_PUSH_NOTIFICATIONS_ENABLED", enabled });
+      return { ok: true };
+    },
+    []
+  );
+
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
     // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
     // idを事前に採番してreducerへ渡し、そのまま呼び出し元へ返す（reducer内部で
@@ -1715,6 +1769,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       unblockMember,
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
+      setFamilyPushNotificationsEnabled,
     }),
     [
       state,
@@ -1730,6 +1785,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       unblockMember,
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
+      setFamilyPushNotificationsEnabled,
     ]
   );
 

@@ -831,6 +831,25 @@ export async function setFamilySocialSettings(
 }
 
 /**
+ * [2026-09-22新設・要件定義書07-37章3章、設計部/成果物/スキーマ設計.sql
+ * 74.5章] 保護者が「家族の掲示板の投稿があったらお知らせする」トグルを
+ * 設定する。`set_family_push_notifications_enabled()`（SECURITY DEFINER）は
+ * 保護者のみ呼べる（みまもりメンバー・子どもはinsufficient_privilege）。
+ * 成功しても戻り値は持たないため、呼び出し側は成功後に`refresh()`で
+ * familiesを取り直すこと（setFamilySocialSettingsと同じ形）。
+ */
+export async function setFamilyPushNotificationsEnabled(
+  client: SupabaseClient,
+  enabled: boolean
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("set_family_push_notifications_enabled", {
+    p_enabled: enabled,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
  * [2026-09-21新設・要件定義書07-32章 決定4・6・8〜12・30〜32、設計部/成果物/
  * スキーマ設計.sql 65.4章、主要画面ワイヤーフレーム.md 56.2節] お問い合わせ
  * （アプリ内の報告と統合済み）を送信する。3項目とも自由記述・すべて任意

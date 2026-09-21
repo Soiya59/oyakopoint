@@ -13,6 +13,7 @@ import { removeMember } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
 import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
+import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
 
 /**
  * S13 設定（みまもりメンバー）
@@ -63,6 +64,18 @@ export default function SupporterSettingsScreen() {
     <Screen tone="supporter">
       <ScreenBackLink tone="supporter" onPress={() => router.replace("/supporter/self")} />
       <Text style={theme.typography.supporterTitle}>設定</Text>
+
+      {/* [2026-09-22追加・要件定義書07-37章、主要画面ワイヤーフレーム.md
+          63.5.2節] 家族単位の通知トグルはS13に表示しない（切り替えられるのは
+          保護者のみ。07-37章3章）。「この端末の状態」1行のみ、既存の
+          ログアウト・家族から抜けるの並びより前（画面の上部）に置く。
+          家族の通知トグルがオフのときは何も表示しない。 */}
+      {/* [2026-09-22本部長の画面確認で追加] P40と同じ理由で、やりとりトグルが
+          オフのときも表示しない（オフの間は投稿が止まり通知は発生しない）。 */}
+      <NotificationDeviceStatusRow
+        visible={state.family.push_notifications_enabled && state.family.social_interactions_enabled}
+        tone="supporter"
+      />
 
       {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] 掲示板が
           「いまは使わない」設定のあいだだけ、「使い方・お問い合わせ」見出しの

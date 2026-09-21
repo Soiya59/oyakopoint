@@ -88,4 +88,34 @@ export const env = {
   get contentReportNotifyTo(): string | null {
     return Deno.env.get("CONTENT_REPORT_NOTIFY_TO") || null;
   },
+  /**
+   * [2026-09-22追加・2026-09-22本部長差し戻しで役割を訂正]
+   * notify-family-board-post専用。Expoの「Enhanced Security」を有効に
+   * した場合に備えたAuthorizationヘッダー値（任意）。
+   *
+   * **未設定でも送信は止めない。** あれば`Authorization: Bearer <token>`を
+   * 付けて送り、無ければ付けずにそのまま送る——Expo Push APIはRESEND_API_KEY
+   * と異なり秘密鍵を必須としない公開APIであるため（271章のResendとは前提が
+   * 違う）。旧稿はこの値の有無を「送信可否のスイッチ」に流用していたが、
+   * それは事実の反映ではなく開発部が作った制約であり、**シークレットの
+   * 設定忘れが「通知機能が黙って何もしない」という気づけない失敗を
+   * 静かに再生産する**（今朝pg_netが本番未設定で報告メールが1通も届いて
+   * いなかった件〈やること4-74〉と同じ形）と本部長差し戻しで指摘された。
+   * 送信可否のスイッチは`pushDryRun`（下記）に分離した。
+   */
+  get expoAccessToken(): string | null {
+    return Deno.env.get("EXPO_ACCESS_TOKEN") || null;
+  },
+  /**
+   * [2026-09-22追加・本部長差し戻し対応] notify-family-board-post専用。
+   * **これが真のときだけ**Expoへの実送信をスキップし、送る予定だった内容を
+   * ログに出すだけに留める（ドライラン）。**何も設定しなければ実際に送る**
+   * （既定は「送る」側。設定を忘れたときに起きるのは「動くこと」であって
+   * 「静かに止まること」ではない、という方向に既定値を倒す）。
+   * ローカルでの動作確認時だけ`true`/`1`を設定して使う想定。
+   */
+  get pushDryRun(): boolean {
+    const v = Deno.env.get("PUSH_DRY_RUN");
+    return v === "true" || v === "1";
+  },
 };

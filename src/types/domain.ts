@@ -23,6 +23,14 @@ export interface Family {
   // NULL = まだ一度も保護者が確認していない。画面には出さない（決定10・24）。
   social_settings_updated_by: string | null;
   social_settings_updated_at: string | null;
+  // [2026-09-22追加・要件定義書07-37章3章、設計部/成果物/スキーマ設計.sql
+  // 74.3章] 家族の掲示板投稿のプッシュ通知トグル。既定はfalse
+  // （social_interactions_enabledとは既定値を揃えない。74.3章参照）。
+  // 保護者・副管理者のみが変更できる（set_family_push_notifications_enabled
+  // RPC経由）。
+  push_notifications_enabled: boolean;
+  push_notifications_updated_by: string | null;
+  push_notifications_updated_at: string | null;
 }
 
 export interface FamilyMember {

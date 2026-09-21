@@ -28,6 +28,11 @@ export const seedFamily: Family = {
   social_interactions_enabled: true,
   social_settings_updated_by: null,
   social_settings_updated_at: null,
+  // [2026-09-22追加・設計部/成果物/スキーマ設計.sql 74.3章] プッシュ通知
+  // トグル。モックは既定どおりオフから始める（本番の既定値と揃える）。
+  push_notifications_enabled: false,
+  push_notifications_updated_by: null,
+  push_notifications_updated_at: null,
 };
 
 export const seedMembers: FamilyMember[] = [
