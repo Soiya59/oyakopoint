@@ -891,7 +891,12 @@ function rotatePointAroundCenter(
  */
 type TapExpandCandidate =
   | { kind: "prize"; targetId: string; dot: FamilyTreeCompletionDot; x: number; y: number; catchRadius: number }
-  | { kind: "sticker"; targetId: string; placement: FamilyTreeStickerPlacement; x: number; y: number; catchRadius: number };
+  | { kind: "sticker"; targetId: string; placement: FamilyTreeStickerPlacement; x: number; y: number; catchRadius: number }
+  // [2026-09-23追加・統括の実機報告「飾ったメダルだけど、拡大できなかった」] メダル
+  // （habit_figure、07-28章決定21で2026-09-17に木へ飾れるようになった）は、景品・
+  // フィギュアと同じ自由配置レイヤーに描かれているのに、タップ拡大の対象に
+  // 足されていなかった。
+  | { kind: "habitFigure"; targetId: string; placement: FamilyTreeHabitFigurePlacement; x: number; y: number; catchRadius: number };
 
 type TreeTone = "parent" | "child" | "supporter";
 
@@ -1118,6 +1123,27 @@ function TreeDecorationExpandModal({
                   <Text style={[bodyMediumStyle, styles.expandCenterText]}>
                     {treeStickerEntryLabel(tone, target.placement.shape, target.placement.rarity)}
                   </Text>
+                  <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
+                    {treeDecoratedAtLine(tone, memberName, dateStr, false)}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {target.kind === "habitFigure" && (
+              <Pressable style={styles.expandContentWrap} onPress={onClose}>
+                <Pressable onPress={() => {}}>
+                  {/* [2026-09-23追加] メダル（habit_figure_catalog）。フィギュアの拡大と同じく
+                      枠を付けず、拡大の大きさいっぱいに描く（統括「メダルは丸いから、
+                      ほとんど白い空白はいらない」）。FreeHabitFigureViewと同じ結線。 */}
+                  <HabitFigureCircleIcon
+                    figureKey={target.placement.figureKey}
+                    kindEmoji={target.placement.kindEmoji}
+                    size={expandedImageSize}
+                  />
+                </Pressable>
+                <View style={styles.expandTextWrap}>
+                  <Text style={[bodyMediumStyle, styles.expandCenterText]}>{target.placement.displayName}</Text>
                   <Text style={[captionStyle, styles.expandCenterText, { marginTop: theme.spacing.s1 }]}>
                     {treeDecoratedAtLine(tone, memberName, dateStr, false)}
                   </Text>
@@ -1554,9 +1580,25 @@ export function TreeStageVisual({
       }
     }
 
+    // [2026-09-23追加] メダル（habit_figure）もフィギュアと同じ自由配置レイヤー
+    // （キャンバス絶対座標）に描かれているので、同じ変換で対象に足す。
+    if (habitFigurePlacements) {
+      for (const p of habitFigurePlacements) {
+        if (p.decorationId === hiddenHabitFigureDecorationId) continue;
+        targets.push({
+          kind: "habitFigure",
+          targetId: `habitFigure:${p.decorationId}`,
+          placement: p,
+          x: (p.posX / 1000) * canvasWidth,
+          y: (p.posY / 1000) * CANVAS_HEIGHT,
+          catchRadius,
+        });
+      }
+    }
+
     return targets;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enableTapExpand, tone, byRegion, shape, canvasWidth, slots, stickerPlacements, hiddenStickerDecorationId]);
+  }, [enableTapExpand, tone, byRegion, shape, canvasWidth, slots, stickerPlacements, hiddenStickerDecorationId, habitFigurePlacements, hiddenHabitFigureDecorationId]);
 
   const expandedMemberName = useMemo(() => {
     if (!expandedTarget) return "";

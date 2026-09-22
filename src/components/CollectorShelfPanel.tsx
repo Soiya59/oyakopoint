@@ -279,7 +279,15 @@ function computeExpandedImageSize(windowWidth: number, windowHeight: number): nu
  * 一覧のサムネイル・木の飾りは変わらない。
  */
 const DETAIL_INNER_RATIO = 0.75;
-const detailIconSizeFor = (frameSize: number) => Math.round(frameSize * DETAIL_INNER_RATIO);
+/**
+ * [2026-09-23追記・統括「メダルは丸いから、ほとんど白い空白はいらないと思う。
+ * メダルの中にいるので、ウサギはさらに小さく見える」] メダルは丸い枠の中に丸い
+ * コインが入る形なので、フィギュア（五角形の枠。上に向かって細くなるため余白が要る）
+ * と同じ比率では余白が大きすぎた。しかも絵柄（うさぎ）はコインの内側にさらに
+ * 小さく描かれているため、コインを枠いっぱいまで大きくする。細い縁だけ残す。
+ */
+const MEDAL_DETAIL_INNER_RATIO = 0.94;
+const detailIconSizeFor = (frameSize: number, ratio: number = DETAIL_INNER_RATIO) => Math.round(frameSize * ratio);
 
 /**
  * [2026-09-23切り出し・統括の実機要望「メダルとフィギュアも下に表示じゃなくて、
@@ -1732,8 +1740,8 @@ function HabitFigureDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
           （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null} innerRatio={DETAIL_INNER_RATIO}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
+        <CircleFrame size={imageSize} ringColor={null} innerRatio={MEDAL_DETAIL_INNER_RATIO}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize, MEDAL_DETAIL_INNER_RATIO)} />
         </CircleFrame>
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
@@ -1892,8 +1900,8 @@ function FamilyHabitFigureDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
           （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null} innerRatio={DETAIL_INNER_RATIO}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
+        <CircleFrame size={imageSize} ringColor={null} innerRatio={MEDAL_DETAIL_INNER_RATIO}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize, MEDAL_DETAIL_INNER_RATIO)} />
         </CircleFrame>
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
