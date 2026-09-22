@@ -81,16 +81,19 @@ export const stampDefinitions = [
   { key: "ganbatta", emoji: "💪", label: "がんばったね" },
   { key: "arigato", emoji: "🙏", label: "ありがとう" },
   { key: "sugoi", emoji: "👏", label: "すごい！" },
-  // [2026-09-06] 掲示板だけは「たすかったよ」ではなく「いいね」と呼ぶ（統括指示。
-  // 掲示板の書き込みは「手伝ってもらったこと」とは限らないため）。絵文字は同じ。
-  // boardLabelが無いスタンプは、掲示板でもlabelをそのまま使う。
-  { key: "tasukatta", emoji: "😊", label: "たすかったよ", boardLabel: "いいね" },
+  // [2026-09-23改訂・統括決定] 4つ目を😊「たすかったよ」から👍「いいね！」に変え、
+  // 完了報告・掲示板・お絵かきの**すべてのリアクションをこの4つで統一**した。
+  // 統括「一番右はサムズアップ👍がいいと思う。いいね！」「ありがとう🙏がすでに
+  // あるよね？重複する？」。🙏ありがとうと😊たすかったよは、子どもから見て
+  // ほとんど同じ言葉として届くため、4つが別々の気持ち（がんばりを認める／感謝／
+  // 感心／いいと思った）になるよう揃えた。
+  // 2026-09-06に「掲示板だけは『いいね』と呼ぶ」（boardLabel）として場所で名前を
+  // 分けていたが、全体が「いいね！」になったので、その仕組みは外した。
+  // **keyの`tasukatta`はDBに保存されている値なので変えていない**（名前は経緯の
+  // まま残る）。これまでに押された😊「たすかったよ」も、👍「いいね！」として
+  // 表示される（統括承認済み）。
+  { key: "tasukatta", emoji: "👍", label: "いいね！" },
 ] as const;
-
-/** 掲示板で表示する呼び名。boardLabelがあればそれを、無ければlabelを返す。 */
-export function boardStampLabel(def: { label: string; boardLabel?: string }): string {
-  return def.boardLabel ?? def.label;
-}
 
 // ---- 2. タイポグラフィ ----
 // sp/dpはRN上ではおおよそptに対応するものとして扱う。
@@ -529,7 +532,6 @@ export const theme = {
   colors,
   memberColorPalette,
   stampDefinitions,
-  boardStampLabel,
   typography,
   spacing,
   radius,
