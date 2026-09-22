@@ -103,9 +103,19 @@ export function formatHabitCardProgressText(count: number, tierLabelForNext: (ti
  * この頁を埋め終えると到達する段階（`computeHabitCardTierInfo(count).nextThreshold`が
  * 指す段階）の名前を返す純関数。クリスタル到達済み（`nextThreshold === null`）の
  * ときは`nextThreshold`ではなく`currentTier`（＝"crystal"のはず）をそのまま返す。
+ *
+ * [2026-09-23修正・統括が実機で発見] 累計がちょうど10の倍数のとき
+ * （`computeCurrentPageFilledCells`が10＝頁が埋まりきった状態を返すとき）は、
+ * 表示している頁は「いま埋め終えた頁」であり「これから向かう頁」ではない。
+ * 旧実装は`count`そのままで判定していたため、10件目ちょうどで
+ * `nextThreshold`が既に30へ進んでおり、銅の頁が銀色で塗られていた
+ * （30・50・100件目でも同じく1段階先の色になっていた）。
+ * 決定66「1〜10件目＝銅色の頁、11〜30件目＝銀色の頁」に合わせ、
+ * 頁が埋まりきっているときは1件手前（その頁の中）で判定する。
  */
 export function computeHabitCardPageTier(count: number): "bronze" | "silver" | "gold" | "crystal" {
-  const { currentTier, nextThreshold } = computeHabitCardTierInfo(count);
+  const pageIsFull = count > 0 && count % 10 === 0;
+  const { currentTier, nextThreshold } = computeHabitCardTierInfo(pageIsFull ? count - 1 : count);
   if (nextThreshold == null) return currentTier ?? "crystal";
   if (nextThreshold === 10) return "bronze";
   if (nextThreshold === 30) return "silver";

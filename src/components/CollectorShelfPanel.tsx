@@ -264,6 +264,117 @@ function computeExpandedImageSize(windowWidth: number, windowHeight: number): nu
   return Math.max(160, Math.min(320, available));
 }
 
+/**
+ * [2026-09-23追加・統括の実機指摘「銅のメダルの拡大表示が小さい」] 拡大表示で、
+ * 枠（`FigureFrame`／`CircleFrame`）の中に置く絵の一辺。どちらの枠も中の絵を
+ * 枠の約62%で描く設計だが、2026-09-23までは渡す数値そのものがずれていた
+ * （フィギュア＝枠220・絵136、メダル＝枠160・絵90）。07-34章でメダルとフィギュアの
+ * 枠の形を入れ替えた際に大きさを揃えないまま残ったもの。枠の大きさは
+ * `ExpandedItemModal`が渡す`imageSize`（絵と同じ160〜320pt）に統一し、
+ * 中の絵はこの関数で決める。
+ */
+const detailIconSizeFor = (frameSize: number) => Math.round(frameSize * 0.62);
+
+/**
+ * [2026-09-23切り出し・統括の実機要望「メダルとフィギュアも下に表示じゃなくて、
+ * 絵と同じにしてほしい」] 拡大表示モーダルの外枠（暗い背景・閉じるボタン・
+ * 内側スクロール）。もとは`ShelfItemsGrid`（家族の絵・既製の飾り）の中に
+ * 直書きされていたものを、中身を変えずにそのまま切り出した。
+ *
+ * 2026-09-14（実装メモ225章）に絵だけがこのモーダル方式へ作り替えられ、メダル・
+ * フィギュアは151章時点の「グリッドの下に詳細カードが伸びる」方式のまま
+ * 取り残されていた。メダル・フィギュアもこの部品を使うことで、見せ方・閉じ方・
+ * 画像の大きさ（`computeExpandedImageSize`）が絵と完全に揃う。
+ *
+ * **外枠の構造は、閉じるタップの当たり判定を何度も実機で直してきた結果である
+ * （実装メモ238章・246章・250章）。安易に書き換えないこと。**経緯は下のJSXの
+ * コメントに残してある。
+ *
+ * `children`には、画面サイズから計算した絵の一辺の長さ（160〜320pt）が渡る。
+ */
+function ExpandedItemModal({
+  tone,
+  onClose,
+  children,
+}: {
+  tone: Tone;
+  onClose: () => void;
+  children: (imageSize: number) => React.ReactNode;
+}) {
+  const { width, height } = useWindowDimensions();
+  const closeLabel = tone === "child" ? "とじる" : "閉じる";
+  const closeSize = closeTapSizeFor(tone);
+  const expandedCardPaddingTop = expandedCardPaddingTopFor(tone);
+  const expandedImageSize = computeExpandedImageSize(width, height);
+  // [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] オーバーレイの上下余白
+  // （`styles.overlay`のpadding、両側）を引いた残りを、拡大表示カード全体
+  // （閉じるボタンの余白＋絵＋文字＋内側の余白すべて込み）の縦幅の上限にする。
+  // これを超える組み合わせ（例: 横長で高さの低い端末＋子ども向けの大きい
+  // ボタン・文字）は、下の`ScrollView`でカードの中身だけをスクロールさせる
+  // （225.7節で数値を確認済み）。
+  const modalMaxHeight = height - theme.spacing.s4 * 2;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      {/* [2026-09-18・250章・3回目の修正] 238章（absoluteFillの受け皿を下に敷く）・
+          246章（余白調整）とも実機（Android）で効いていなかった。原因は「受け皿が
+          効いていない」ことではなく、**受け皿より上に、見た目には無いが実際には
+          場所を取っている透明な層があった**こと。詳細は開発部/成果物/実装メモ.md
+          250章。対策は二段構え：
+          (a) ScrollViewの`flexGrow`を0にして、透明な層自体を小さくする（下記）。
+          (b) それでも塞がれる可能性（Web版では未確認・250章参照）に備え、
+              `styles.overlay`自身に「誰も受け取らなかったタップは閉じる」という
+              土台の仕組みを追加する（下のViewの`onStartShouldSetResponder`/
+              `onResponderRelease`）。個々のPressableの当たり判定に依存しないため、
+              間にどんな透明な層があっても、最終的にここへ辿り着く。 */}
+      <View style={styles.overlay} onStartShouldSetResponder={() => true} onResponderRelease={onClose}>
+        {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
+            押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
+            中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
+            外側の Pressable が押下を受け取れない端末があった。**背景の受け皿を absoluteFill の
+            Pressable として下に敷き、カードを兄弟として上に置く**（入れ子に依存しない）。
+            [2026-09-18追記・250章] この対処（受け皿を敷く位置の変更）自体は効いていなかった
+            （build 9で未解決）。ここは読み上げ機（アクセシビリティ）向けに「閉じる」ボタンとして
+            残すために維持している（上記の`onStartShouldSetResponder`の土台が実質的な対処）。 */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel} />
+        <View style={{ maxHeight: modalMaxHeight }}>
+          {/* [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] `maxHeight`を
+              超える内容（小さい・横長の端末で絵＋複数行の文字がすべて乗った
+              とき）は、カードの外にはみ出させず内側でスクロールさせる。
+              カードの見た目（背景・枠線・角丸・内側の余白）は
+              `contentContainerStyle`側（`styles.expandedCard`）に置く。 */}
+          {/* [2026-09-18・250章] ScrollViewは既定スタイル（baseVertical）に
+              `flexGrow: 1` を持つ（`node_modules/react-native/Libraries/
+              Components/ScrollView/ScrollView.js`）。`style`に渡した
+              `maxHeight`はこれを上書きしないため、中身が短くても`flex:1`の
+              外側（`styles.overlay`）いっぱいまで透明に広がり、下に敷いた
+              背景`Pressable`（絵の外の暗い部分を閉じる担当）へのタップを
+              吸収してしまう**可能性がある**（Web版の検証では、この透明化
+              自体は再現しなかった。実装メモ250章参照）。`flexGrow: 0`で
+              「中身の高さぶんだけ」に戻す（`maxHeight`による内側スクロール
+              は維持、225.7章の対応は壊さない）。 */}
+          <ScrollView
+            style={{ maxHeight: modalMaxHeight, flexGrow: 0, flexShrink: 1 }}
+            contentContainerStyle={[styles.expandedCard, { paddingTop: expandedCardPaddingTop }]}
+            showsVerticalScrollIndicator={false}
+          >
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              style={[styles.expandedCloseButton, { width: closeSize, height: closeSize, borderRadius: closeSize / 2 }]}
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel}
+            >
+              <Text style={styles.expandedCloseButtonText}>×</Text>
+            </Pressable>
+            {children(expandedImageSize)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /** season_start/season_end（"YYYY-MM-DD"、JST基準の暦月初日）をJST 0時としてDate化する。 */
 function jstDate(dateOnly: string): Date {
   return new Date(`${dateOnly}T00:00:00+09:00`);
@@ -342,23 +453,11 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const { width, height } = useWindowDimensions();
 
   const shelfEntries = useMemo(() => buildShelfEntries(items), [items]);
   const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
   const selectedItem = selectedEntry?.item ?? null;
-  const expandedImageSize = computeExpandedImageSize(width, height);
-  const closeLabel = isChild ? "とじる" : "閉じる";
   const closeDetail = () => setSelectedItemId(null);
-  const closeSize = closeTapSizeFor(tone);
-  const expandedCardPaddingTop = expandedCardPaddingTopFor(tone);
-  // [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] オーバーレイの上下余白
-  // （`styles.overlay`のpadding、両側）を引いた残りを、拡大表示カード全体
-  // （閉じるボタンの余白＋絵＋文字＋内側の余白すべて込み）の縦幅の上限にする。
-  // これを超える組み合わせ（例: 横長で高さの低い端末＋子ども向けの大きい
-  // ボタン・文字）は、下の`ScrollView`でカードの中身だけをスクロールさせる
-  // （225.7節で数値を確認済み）。
-  const modalMaxHeight = height - theme.spacing.s4 * 2;
 
   if (shelfEntries.length === 0) return null;
 
@@ -398,71 +497,13 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
       </View>
 
       {selectedItem && (
-        <Modal visible transparent animationType="fade" onRequestClose={closeDetail}>
-          {/* [2026-09-18・250章・3回目の修正] 238章（absoluteFillの受け皿を下に敷く）・
-              246章（余白調整）とも実機（Android）で効いていなかった。原因は「受け皿が
-              効いていない」ことではなく、**受け皿より上に、見た目には無いが実際には
-              場所を取っている透明な層があった**こと。詳細は開発部/成果物/実装メモ.md
-              250章。対策は二段構え：
-              (a) ScrollViewの`flexGrow`を0にして、透明な層自体を小さくする（下記）。
-              (b) それでも塞がれる可能性（Web版では未確認・250章参照）に備え、
-                  `styles.overlay`自身に「誰も受け取らなかったタップは閉じる」という
-                  土台の仕組みを追加する（下のViewの`onStartShouldSetResponder`/
-                  `onResponderRelease`）。個々のPressableの当たり判定に依存しないため、
-                  間にどんな透明な層があっても、最終的にここへ辿り着く。 */}
-          <View
-            style={styles.overlay}
-            onStartShouldSetResponder={() => true}
-            onResponderRelease={closeDetail}
-          >
-            {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
-                押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
-                中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
-                外側の Pressable が押下を受け取れない端末があった。**背景の受け皿を absoluteFill の
-                Pressable として下に敷き、カードを兄弟として上に置く**（入れ子に依存しない）。
-                あわせて統括の要望「絵と×以外はどこを押しても閉じる」を入れる：本文ブロックを
-                閉じる Pressable にし、絵（絵文字・お絵かき・ステッカー）だけ無反応の Pressable で包む。
-                [2026-09-18追記・250章] この対処（受け皿を敷く位置の変更）自体は効いていなかった
-                （build 9で未解決）。ここは読み上げ機（アクセシビリティ）向けに「閉じる」ボタンとして
-                残すために維持している（下記の`onStartShouldSetResponder`の土台が実質的な対処）。 */}
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={closeDetail}
-              accessibilityRole="button"
-              accessibilityLabel={closeLabel}
-            />
-            <View style={{ maxHeight: modalMaxHeight }}>
-              {/* [2026-09-14追加・本部長差し戻し（実装メモ225.7章）] `maxHeight`を
-                  超える内容（小さい・横長の端末で絵＋複数行の文字がすべて乗った
-                  とき）は、カードの外にはみ出させず内側でスクロールさせる。
-                  カードの見た目（背景・枠線・角丸・内側の余白）は
-                  `contentContainerStyle`側（`styles.expandedCard`）に置く。 */}
-              {/* [2026-09-18・250章] ScrollViewは既定スタイル（baseVertical）に
-                  `flexGrow: 1` を持つ（`node_modules/react-native/Libraries/
-                  Components/ScrollView/ScrollView.js`）。`style`に渡した
-                  `maxHeight`はこれを上書きしないため、中身が短くても`flex:1`の
-                  外側（`styles.overlay`）いっぱいまで透明に広がり、下に敷いた
-                  背景`Pressable`（絵の外の暗い部分を閉じる担当）へのタップを
-                  吸収してしまう**可能性がある**（Web版の検証では、この透明化
-                  自体は再現しなかった。実装メモ250章参照）。`flexGrow: 0`で
-                  「中身の高さぶんだけ」に戻す（`maxHeight`による内側スクロール
-                  は維持、225.7章の対応は壊さない）。 */}
-              <ScrollView
-                style={{ maxHeight: modalMaxHeight, flexGrow: 0, flexShrink: 1 }}
-                contentContainerStyle={[styles.expandedCard, { paddingTop: expandedCardPaddingTop }]}
-                showsVerticalScrollIndicator={false}
-              >
-                <Pressable
-                  onPress={closeDetail}
-                  hitSlop={8}
-                  style={[styles.expandedCloseButton, { width: closeSize, height: closeSize, borderRadius: closeSize / 2 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={closeLabel}
-                >
-                  <Text style={styles.expandedCloseButtonText}>×</Text>
-                </Pressable>
-
-                {selectedItem.prizeKind === "preset_ornament" ? (
+        // [2026-09-23] 外枠は`ExpandedItemModal`へ切り出した（メダル・フィギュアと共用）。
+        // 統括の要望「絵と×以外はどこを押しても閉じる」（実装メモ238章）は中身の側で
+        // 引き続き実現する：本文ブロックを閉じる Pressable にし、絵（絵文字・お絵かき）
+        // だけ無反応の Pressable で包む。
+        <ExpandedItemModal tone={tone} onClose={closeDetail}>
+          {(expandedImageSize) =>
+                selectedItem.prizeKind === "preset_ornament" ? (
                 <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
                   <Pressable onPress={() => {}}>
                     <Text style={[styles.detailEmoji, { fontSize: Math.round(expandedImageSize * 0.5) }]}>
@@ -515,11 +556,9 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                     </Text>
                   </View>
                 </Pressable>
-              ) : null}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+              ) : null
+          }
+        </ExpandedItemModal>
       )}
     </>
   );
@@ -1227,7 +1266,27 @@ function StickerShelfSection({
           </View>
 
           {selectedEntry && (
-            <StickerDetailCard tone={tone} isViewingSelf={isViewingSelf} entry={selectedEntry} onPlace={onPlace} onMove={onMove} />
+            <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
+              {(imageSize) => (
+                <StickerDetailCard
+                  tone={tone}
+                  isViewingSelf={isViewingSelf}
+                  // 「木に飾る」「うごかす」は木の画面へ移るため、先にモーダルを閉じる
+                  // （開いたまま移ると、裏に残った前の画面のモーダルが上に被さり続ける）。
+                  onPlace={(...args) => {
+                    setSelectedKey(null);
+                    onPlace(...args);
+                  }}
+                  onMove={(...args) => {
+                    setSelectedKey(null);
+                    onMove(...args);
+                  }}
+                  entry={selectedEntry}
+                  imageSize={imageSize}
+                  onClose={() => setSelectedKey(null)}
+                />
+              )}
+            </ExpandedItemModal>
           )}
 
           {isViewingSelf && (
@@ -1262,12 +1321,16 @@ function StickerShelfSection({
  */
 function StickerDetailCard({
   tone,
+  imageSize,
+  onClose,
   isViewingSelf,
   entry,
   onPlace,
   onMove,
 }: {
   tone: Tone;
+  imageSize: number;
+  onClose: () => void;
   isViewingSelf: boolean;
   entry: { shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] };
   onPlace: (purchaseId: string, shape: StickerShape, rarity: StickerRarity) => void;
@@ -1283,58 +1346,58 @@ function StickerDetailCard({
   const pointsCost = owned[0]?.points_spent;
 
   return (
-    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-      <View style={styles.detailDrawingWrap}>
-        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-            （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-        <FigureFrame size={220}>
-          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={136} />
+    <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
+      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+      <Pressable onPress={() => {}}>
+        <FigureFrame size={imageSize}>
+          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
         </FigureFrame>
-        <View style={styles.detailDrawingTextWrap}>
-          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
-          {pointsCost != null && (
-            <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>{pointsCost}pt</Text>
-          )}
-          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-            {currentSeasonPlaced
-              ? isChild
-                ? "いまの きに かざってあるよ"
-                : "いまの木にかざってあります"
-              : isChild
-              ? "いまの きには かざっていないよ"
-              : "いまの木にはかざっていません"}
-          </Text>
-          {isViewingSelf && (
-            <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
-              {currentSeasonPlaced && currentSeasonPlaced.placement && (
-                <Pressable
-                  onPress={() =>
-                    onMove(
-                      currentSeasonPlaced.placement!.decorationId,
-                      shape,
-                      rarity,
-                      currentSeasonPlaced.placement!.posX,
-                      currentSeasonPlaced.placement!.posY
-                    )
-                  }
-                  hitSlop={8}
-                >
-                  <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
-                </Pressable>
-              )}
-              {unplaced.length > 0 && (
-                <AppButton
-                  label={isChild ? "木に かざる" : "木に飾る"}
-                  tone={tone}
-                  variant="secondary"
-                  onPress={() => onPlace(unplaced[0].id, shape, rarity)}
-                />
-              )}
-            </View>
-          )}
-        </View>
+      </Pressable>
+      <View style={styles.detailDrawingTextWrap}>
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
+        {pointsCost != null && (
+          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>{pointsCost}pt</Text>
+        )}
+        <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+          {currentSeasonPlaced
+            ? isChild
+              ? "いまの きに かざってあるよ"
+              : "いまの木にかざってあります"
+            : isChild
+            ? "いまの きには かざっていないよ"
+            : "いまの木にはかざっていません"}
+        </Text>
+        {isViewingSelf && (
+          <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
+            {currentSeasonPlaced && currentSeasonPlaced.placement && (
+              <Pressable
+                onPress={() =>
+                  onMove(
+                    currentSeasonPlaced.placement!.decorationId,
+                    shape,
+                    rarity,
+                    currentSeasonPlaced.placement!.posX,
+                    currentSeasonPlaced.placement!.posY
+                  )
+                }
+                hitSlop={8}
+              >
+                <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
+              </Pressable>
+            )}
+            {unplaced.length > 0 && (
+              <AppButton
+                label={isChild ? "木に かざる" : "木に飾る"}
+                tone={tone}
+                variant="secondary"
+                onPress={() => onPlace(unplaced[0].id, shape, rarity)}
+              />
+            )}
+          </View>
+        )}
       </View>
-    </Card>
+    </Pressable>
   );
 }
 
@@ -1412,7 +1475,19 @@ function FamilyMedalSection({
         })}
       </View>
 
-      {selectedEntry && <FamilyStickerDetailCard tone={tone} members={members} entry={selectedEntry} />}
+      {selectedEntry && (
+        <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
+          {(imageSize) => (
+            <FamilyStickerDetailCard
+              tone={tone}
+              members={members}
+              entry={selectedEntry}
+              imageSize={imageSize}
+              onClose={() => setSelectedKey(null)}
+            />
+          )}
+        </ExpandedItemModal>
+      )}
     </>
   );
 }
@@ -1428,10 +1503,14 @@ function FamilyMedalSection({
  */
 function FamilyStickerDetailCard({
   tone,
+  imageSize,
+  onClose,
   members,
   entry,
 }: {
   tone: Tone;
+  imageSize: number;
+  onClose: () => void;
   members: FamilyMember[];
   entry: { shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] };
 }) {
@@ -1448,29 +1527,29 @@ function FamilyStickerDetailCard({
   }, [owned, members]);
 
   return (
-    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-      <View style={styles.detailDrawingWrap}>
-        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-            （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-        <FigureFrame size={220}>
-          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={136} />
+    <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
+      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+      <Pressable onPress={() => {}}>
+        <FigureFrame size={imageSize}>
+          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
         </FigureFrame>
-        <View style={styles.detailDrawingTextWrap}>
-          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
-          <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
-            {ownerCounts.map(({ member, count }) => (
-              <View key={member.id} style={styles.legendRow}>
-                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
-                <Text style={captionStyle}>
-                  {member.display_name}
-                  {count > 1 ? ` ×${count}` : ""}
-                </Text>
-              </View>
-            ))}
-          </View>
+      </Pressable>
+      <View style={styles.detailDrawingTextWrap}>
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
+        <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
+          {ownerCounts.map(({ member, count }) => (
+            <View key={member.id} style={styles.legendRow}>
+              <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
+              <Text style={captionStyle}>
+                {member.display_name}
+                {count > 1 ? ` ×${count}` : ""}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
-    </Card>
+    </Pressable>
   );
 }
 
@@ -1589,7 +1668,27 @@ function HabitFigureShelfSection({
           </View>
 
           {selectedEntry && (
-            <HabitFigureDetailCard tone={tone} isViewingSelf={isViewingSelf} entry={selectedEntry} onPlace={onPlace} onMove={onMove} />
+            <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
+              {(imageSize) => (
+                <HabitFigureDetailCard
+                  tone={tone}
+                  isViewingSelf={isViewingSelf}
+                  // 「木に飾る」「うごかす」は木の画面へ移るため、先にモーダルを閉じる
+                  // （開いたまま移ると、裏に残った前の画面のモーダルが上に被さり続ける）。
+                  onPlace={(...args) => {
+                    setSelectedKey(null);
+                    onPlace(...args);
+                  }}
+                  onMove={(...args) => {
+                    setSelectedKey(null);
+                    onMove(...args);
+                  }}
+                  entry={selectedEntry}
+                  imageSize={imageSize}
+                  onClose={() => setSelectedKey(null)}
+                />
+              )}
+            </ExpandedItemModal>
           )}
         </>
       )}
@@ -1599,12 +1698,16 @@ function HabitFigureShelfSection({
 
 function HabitFigureDetailCard({
   tone,
+  imageSize,
+  onClose,
   isViewingSelf,
   entry,
   onPlace,
   onMove,
 }: {
   tone: Tone;
+  imageSize: number;
+  onClose: () => void;
   isViewingSelf: boolean;
   entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
   onPlace: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
@@ -1619,55 +1722,55 @@ function HabitFigureDetailCard({
   const currentSeasonPlaced = owned.find((g) => g.placement?.isCurrentSeason);
 
   return (
-    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-      <View style={styles.detailDrawingWrap}>
-        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-            （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-        <CircleFrame size={160} ringColor={null}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+    <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
+      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+      <Pressable onPress={() => {}}>
+        <CircleFrame size={imageSize} ringColor={null}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
         </CircleFrame>
-        <View style={styles.detailDrawingTextWrap}>
-          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
-          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-            {currentSeasonPlaced
-              ? isChild
-                ? "いまの きに かざってあるよ"
-                : "いまの木にかざってあります"
-              : isChild
-              ? "いまの きには かざっていないよ"
-              : "いまの木にはかざっていません"}
-          </Text>
-          {isViewingSelf && (
-            <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
-              {currentSeasonPlaced && currentSeasonPlaced.placement && (
-                <Pressable
-                  onPress={() =>
-                    onMove(
-                      currentSeasonPlaced.placement!.decorationId,
-                      figureKey,
-                      kindEmoji,
-                      currentSeasonPlaced.placement!.posX,
-                      currentSeasonPlaced.placement!.posY
-                    )
-                  }
-                  hitSlop={8}
-                >
-                  <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
-                </Pressable>
-              )}
-              {unplaced.length > 0 && (
-                <AppButton
-                  label={isChild ? "木に かざる" : "木に飾る"}
-                  tone={tone}
-                  variant="secondary"
-                  onPress={() => onPlace(unplaced[0].id, figureKey, kindEmoji)}
-                />
-              )}
-            </View>
-          )}
-        </View>
+      </Pressable>
+      <View style={styles.detailDrawingTextWrap}>
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+        <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+          {currentSeasonPlaced
+            ? isChild
+              ? "いまの きに かざってあるよ"
+              : "いまの木にかざってあります"
+            : isChild
+            ? "いまの きには かざっていないよ"
+            : "いまの木にはかざっていません"}
+        </Text>
+        {isViewingSelf && (
+          <View style={{ marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s2 }}>
+            {currentSeasonPlaced && currentSeasonPlaced.placement && (
+              <Pressable
+                onPress={() =>
+                  onMove(
+                    currentSeasonPlaced.placement!.decorationId,
+                    figureKey,
+                    kindEmoji,
+                    currentSeasonPlaced.placement!.posX,
+                    currentSeasonPlaced.placement!.posY
+                  )
+                }
+                hitSlop={8}
+              >
+                <Text style={[captionStyle, styles.stickerRowMoveLink]}>うごかす</Text>
+              </Pressable>
+            )}
+            {unplaced.length > 0 && (
+              <AppButton
+                label={isChild ? "木に かざる" : "木に飾る"}
+                tone={tone}
+                variant="secondary"
+                onPress={() => onPlace(unplaced[0].id, figureKey, kindEmoji)}
+              />
+            )}
+          </View>
+        )}
       </View>
-    </Card>
+    </Pressable>
   );
 }
 
@@ -1737,17 +1840,33 @@ function FamilyHabitFigureSection({
         })}
       </View>
 
-      {selectedEntry && <FamilyHabitFigureDetailCard tone={tone} members={members} entry={selectedEntry} />}
+      {selectedEntry && (
+        <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
+          {(imageSize) => (
+            <FamilyHabitFigureDetailCard
+              tone={tone}
+              members={members}
+              entry={selectedEntry}
+              imageSize={imageSize}
+              onClose={() => setSelectedKey(null)}
+            />
+          )}
+        </ExpandedItemModal>
+      )}
     </>
   );
 }
 
 function FamilyHabitFigureDetailCard({
   tone,
+  imageSize,
+  onClose,
   members,
   entry,
 }: {
   tone: Tone;
+  imageSize: number;
+  onClose: () => void;
   members: FamilyMember[];
   entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
 }) {
@@ -1763,29 +1882,29 @@ function FamilyHabitFigureDetailCard({
   }, [owned, members]);
 
   return (
-    <Card tone={tone} style={{ marginTop: theme.spacing.s4 }}>
-      <View style={styles.detailDrawingWrap}>
-        {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-            （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-        <CircleFrame size={160} ringColor={null}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={90} />
+    <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
+      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+      <Pressable onPress={() => {}}>
+        <CircleFrame size={imageSize} ringColor={null}>
+          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
         </CircleFrame>
-        <View style={styles.detailDrawingTextWrap}>
-          <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
-          <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
-            {ownerCounts.map(({ member, count }) => (
-              <View key={member.id} style={styles.legendRow}>
-                <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
-                <Text style={captionStyle}>
-                  {member.display_name}
-                  {count > 1 ? ` ×${count}` : ""}
-                </Text>
-              </View>
-            ))}
-          </View>
+      </Pressable>
+      <View style={styles.detailDrawingTextWrap}>
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+        <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
+          {ownerCounts.map(({ member, count }) => (
+            <View key={member.id} style={styles.legendRow}>
+              <MemberAvatar name={member.display_name} color={member.avatar_color} size={20} lineData={memberAvatars[member.id]} expandOnTap />
+              <Text style={captionStyle}>
+                {member.display_name}
+                {count > 1 ? ` ×${count}` : ""}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
-    </Card>
+    </Pressable>
   );
 }
 

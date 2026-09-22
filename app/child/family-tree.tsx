@@ -20,7 +20,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  */
 export default function ChildFamilyTreeScreen() {
   const { state } = useAppData();
-  const { loadState, season, breakdown, dots, stickerPlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -71,6 +71,7 @@ export default function ChildFamilyTreeScreen() {
             stage={stage}
             dots={dots}
             stickerPlacements={stickerPlacements}
+            habitFigurePlacements={habitFigurePlacements}
             enableTapExpand
             tone="child"
           />
