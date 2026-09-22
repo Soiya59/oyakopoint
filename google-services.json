@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "337813966271",
+    "project_id": "oyakopoint",
+    "storage_bucket": "oyakopoint.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337813966271:android:169f01acec381590d8650a",
+        "android_client_info": {
+          "package_name": "jp.soiyalab.oyakopoint"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAaWi97efwbjSr54A66AU4XfIlS-5FDwwo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

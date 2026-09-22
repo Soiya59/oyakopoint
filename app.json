@@ -21,6 +21,7 @@
     },
     "android": {
       "package": "jp.soiyalab.oyakopoint",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#DCEDE2",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -12,6 +12,21 @@ import { completeEmailSignIn } from "@/data/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import theme from "@/theme/theme";
 import AppErrorFallback from "@/components/AppErrorFallback";
+import {
+  configureForegroundNotificationHandler,
+  ensureAndroidNotificationChannelAsync,
+} from "@/lib/pushNotifications";
+
+/**
+ * [2026-09-22追加・実装メモ283章 欠落①] モジュール読み込み時（＝最初の
+ * コンポーネント描画より前）に1回だけ呼ぶ。これが無いと、SDK54以降の既定で
+ * 「アプリが前面にあるとき通知を表示しない」（src/lib/pushNotifications.ts
+ * のコメント・確認元ソース参照）。コンポーネント内のuseEffectに置くと、初回
+ * 描画〜effect実行までの一瞬（その間に通知を受け取る確率は低いが、ゼロでは
+ * ない）ハンドラ未設定の状態が生まれるため、あえてモジュールトップレベルに
+ * 置く。
+ */
+configureForegroundNotificationHandler();
 
 /**
  * アプリ全体のエラー境界（やること.md 4-37、開発部/成果物/実装メモ.md 242章）。
@@ -56,6 +71,14 @@ function useMagicLinkListener() {
 
 export default function RootLayout() {
   useMagicLinkListener();
+
+  // [2026-09-22追加・実装メモ283章 欠落②] Androidの通知チャンネルを
+  // 明示的に作る（現時点ではフォールバックチャンネルでも表示自体はできる。
+  // 詳細はsrc/lib/pushNotifications.tsのコメント参照）。iOS・Webでは
+  // 関数内部で早期リターンする。
+  useEffect(() => {
+    void ensureAndroidNotificationChannelAsync();
+  }, []);
 
   return (
     <SafeAreaProvider>

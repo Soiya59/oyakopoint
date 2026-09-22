@@ -185,3 +185,78 @@ export async function openDeviceNotificationSettings(): Promise<void> {
     console.warn("pushNotifications: openSettings failed", err);
   }
 }
+
+/**
+ * [2026-09-22追加・実装メモ283章 欠落①]
+ * フォアグラウンド（アプリを開いている最中）に通知を受け取ったときの表示挙動を
+ * 設定する。**これを一度も呼ばないと、expo-notificationsは「アプリが前面に
+ * あるときは通知を表示しない」を既定動作にする**
+ * （公式ソース: `node_modules/expo-notifications/build/NotificationsHandler.js`
+ * のJSDoc「The default behavior when the handler is not set or does not
+ * respond in time is not to show the notification.」で確認済み。憶測ではない）。
+ *
+ * SDK54以降、`handleNotification`の戻り値は`shouldShowAlert`ではなく
+ * `shouldShowBanner`/`shouldShowList`に分かれている（`shouldShowAlert`は
+ * deprecated。指定すると`[expo-notifications]: shouldShowAlert is
+ * deprecated`という警告が出る。同ファイルで確認済み）。
+ *
+ * アプリ起動直後（初回レンダリングより前）に1回だけ呼べばよい。何度呼んでも
+ * 副作用は無い（内部で古いリスナーを外してから張り直すだけ。同ファイル
+ * `setNotificationHandler`実装参照）ため、呼び出し側の多重呼び出しを気にする
+ * 必要はない。
+ */
+export function configureForegroundNotificationHandler(): void {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
+/** Android通知チャンネルのID。他の通知種別を増やすときもこのIDは変えないこと。 */
+export const FAMILY_BOARD_ANDROID_CHANNEL_ID = "family-board-post";
+
+/**
+ * [2026-09-22追加・実装メモ283章 欠落②で「欠落ではなかった」と判明した点の記録]
+ * Androidの通知チャンネルを明示的に作る。**ただし、これを一度も呼ばなくても
+ * 通知自体は表示される。** expo-notificationsのネイティブ側
+ * （`node_modules/expo-notifications/android/src/main/java/expo/modules/
+ * notifications/notifications/presentation/builders/BaseNotificationBuilder.kt`
+ * の`createFallbackChannel()`）が、送信側でchannelIdの指定が無い通知を受け取る
+ * たびに`expo_notifications_fallback_notification_channel`という
+ * フォールバックチャンネルを**自動生成**し、重要度は`IMPORTANCE_HIGH`
+ * （ヘッドアップ通知として表示される水準）で固定している。実際にソースを
+ * 読んで確認した結果であり、憶測ではない。
+ *
+ * それでも本関数を用意するのは、フォールバックチャンネルの表示名が
+ * 「Miscellaneous」等の汎用名になり、端末の「アプリ情報→通知」から見たとき
+ * 家族に何の通知か伝わらないため（将来の改善の下ごしらえ）。
+ *
+ * [★まだ効いていない・実装メモ283章に記載] このチャンネルを実際に使わせる
+ * には、送信側（`supabase/functions/notify-family-board-post/index.ts`が
+ * Expo Push APIへ送るメッセージ）に`channelId: "family-board-post"`を含める
+ * 必要がある（Expo Push APIの`channelId`はFCMの`data.channelId`に渡り、
+ * `FirebaseNotificationTrigger.getNotificationChannel()`がそこを読む。
+ * `node_modules/expo-notifications/android/.../FirebaseNotificationTrigger.kt`
+ * で確認済み）。現在の送信側はchannelIdを送っていないため、**本関数を呼んでも
+ * 実際に使われるのは今までどおりフォールバックチャンネルのままであり、
+ * 挙動は変わらない。** 送信側の変更はEdge
+ * Functionの修正・デプロイを伴うため本チケットのスコープ外とし、本部長への
+ * 報告事項として残す。
+ */
+export async function ensureAndroidNotificationChannelAsync(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  try {
+    await Notifications.setNotificationChannelAsync(FAMILY_BOARD_ANDROID_CHANNEL_ID, {
+      name: "家族の掲示板",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      showBadge: true,
+    });
+  } catch (err) {
+    console.warn("pushNotifications: setNotificationChannelAsync failed", err);
+  }
+}

@@ -23,13 +23,27 @@
  * ログイン中のメンバーが変わるたび（保護者⇄みまもり⇄子どものPIN切り替え
  * を含む）に、既にOS許可が"granted"であれば登録する
  * （設計部/成果物/スキーマ設計.sql 74.13章「開発部へ」2番）。
+ *
+ * [2026-09-22追加・実装メモ283章 欠落③] 通知をタップしたときの遷移
+ * （要件定義書07-37章2-1節「タップ先で本文を読む導線」必須要件、
+ * ワイヤーフレーム63.2.3節「タップ先は投稿履歴一覧」）。
+ * `addNotificationResponseReceivedListener`（アプリ起動中にタップした場合）と
+ * `getLastNotificationResponseAsync`（アプリが完全終了した状態からタップで
+ * 起動した場合）の両方を拾う。タップ先はログイン中のロールに応じて
+ * P32/C27/S20（家族の掲示板）を出し分ける。**未ログイン・ロール未確定の間は
+ * 何もしない**（自動ログイン誘導は作らない。落ちないことのみを保証する）。
+ * 63.2.3節が求める「対象の投稿の行を数秒だけハイライト表示する」は本追加の
+ * 対象外（一覧画面側の改修が要るため。実装メモ283章に申し送り済み）。
  */
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import * as Notifications from "expo-notifications";
 import AppButton from "@/components/AppButton";
 import Card from "@/components/Card";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
+import type { SessionStatus } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "@/hooks/useBackgroundAutoRefresh";
 import {
@@ -43,6 +57,22 @@ import {
 } from "@/lib/pushNotifications";
 
 type Phase = "ask" | "denied" | "granted";
+
+/** 掲示板の投稿通知のペイロード（Edge Function側の型と対応。
+ * `supabase/functions/notify-family-board-post/index.ts`の`data`参照）。 */
+type FamilyBoardPushData = { type?: string; post_id?: string };
+
+type FamilyBoardRoute = "/parent/family-board" | "/supporter/family-board" | "/child/family-board";
+
+/** ログイン中のロールから、家族の掲示板の遷移先ルートを決める。
+ * ロールが確定していない（"loading"）・ログインしていない（"signedOut"）・
+ * 家族に未所属（"parentNoFamily"）の間はnullを返し、呼び出し側は何もしない。 */
+function familyBoardRouteForStatus(status: SessionStatus): FamilyBoardRoute | null {
+  if (status === "parent") return "/parent/family-board";
+  if (status === "supporter") return "/supporter/family-board";
+  if (status === "child") return "/child/family-board";
+  return null;
+}
 
 interface PushSoftAskContextValue {
   /** 63.5.1節/63.5.2節「今すぐ設定する」から、条件チェックを経ずに直接開く。 */
@@ -105,6 +135,61 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
     if (!memberId) return;
     void registerPushTokenForMember(client, memberId);
   }, [client, memberId]);
+
+  // [2026-09-22追加・実装メモ283章 欠落③] 通知タップ時の遷移。
+  // タップされた事実は`pendingBoardTapRef`に保持し、ロールが確定して
+  // いなければ`status`が変わるたびに再評価する（コールドスタート直後は
+  // `status`が"loading"のことがあるため）。
+  const pendingBoardTapRef = useRef(false);
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data as FamilyBoardPushData | undefined;
+      if (data?.type !== "family_board_post") return;
+      pendingBoardTapRef.current = true;
+      // このeffectはstatusに依存させたくない（購読の張り直しを避ける）ため、
+      // 下のeffectに評価を委ねずここでも即時に試す（起動中のタップは大抵
+      // ロールが既に確定しているため、ここで即座に遷移できる）。
+      const route = familyBoardRouteForStatus(statusRef.current);
+      if (route) {
+        pendingBoardTapRef.current = false;
+        router.push(route);
+      }
+    };
+
+    // アプリが完全終了した状態から、通知タップで起動した場合。
+    // [Web版での制約・★正直に書く] Web版は`NotificationsEmitterModule`に
+    // `getLastNotificationResponse`が無く（`.web.js`が存在せず既定の
+    // no-op実装が使われる。`node_modules/expo-notifications/build/
+    // NotificationsEmitterModule.js`で確認済み）、呼ぶと`UnavailabilityError`
+    // で拒否される。catchせずに投げると未処理のPromise拒否になるため、
+    // 他の関数（`getOsPermissionStatus`等）と同じく黙って握りつぶす。
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) handleResponse(response);
+      })
+      .catch((err: unknown) => {
+        console.warn("NotificationSoftAsk: getLastNotificationResponseAsync failed", err);
+      });
+
+    // アプリ起動中（フォアグラウンド・バックグラウンド問わず）にタップした場合。
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    return () => sub.remove();
+  }, []);
+
+  // 上のeffectが起動した瞬間にロールがまだ確定していなかった場合
+  // （例: コールドスタート直後で`status`が"loading"）、statusが変わるたびに
+  // 再評価する。ロールが最後まで確定しない（未ログインのまま）場合は何も
+  // 起きない＝落ちない、で意図どおり。
+  useEffect(() => {
+    statusRef.current = status;
+    if (!pendingBoardTapRef.current) return;
+    const route = familyBoardRouteForStatus(status);
+    if (!route) return;
+    pendingBoardTapRef.current = false;
+    router.push(route);
+  }, [status]);
 
   const later = useCallback(async () => {
     await setSoftAskDeferred();
