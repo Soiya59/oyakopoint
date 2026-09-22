@@ -272,8 +272,14 @@ function computeExpandedImageSize(windowWidth: number, windowHeight: number): nu
  * 枠の形を入れ替えた際に大きさを揃えないまま残ったもの。枠の大きさは
  * `ExpandedItemModal`が渡す`imageSize`（絵と同じ160〜320pt）に統一し、
  * 中の絵はこの関数で決める。
+ *
+ * [2026-09-23追記・統括の実機確認「いい感じです。ただ、フィギュアとメダルはもう少し
+ * 大きくてもよいかも」] 枠の中の余白が広かったため、拡大表示のときだけ比率を
+ * 0.62→0.75（約2割大きく）に上げた。枠の部品の既定値（0.62）は変えていないので、
+ * 一覧のサムネイル・木の飾りは変わらない。
  */
-const detailIconSizeFor = (frameSize: number) => Math.round(frameSize * 0.62);
+const DETAIL_INNER_RATIO = 0.75;
+const detailIconSizeFor = (frameSize: number) => Math.round(frameSize * DETAIL_INNER_RATIO);
 
 /**
  * [2026-09-23切り出し・統括の実機要望「メダルとフィギュアも下に表示じゃなくて、
@@ -1350,7 +1356,7 @@ function StickerDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
           （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <FigureFrame size={imageSize}>
+        <FigureFrame size={imageSize} innerRatio={DETAIL_INNER_RATIO}>
           <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
         </FigureFrame>
       </Pressable>
@@ -1531,7 +1537,7 @@ function FamilyStickerDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
           （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <FigureFrame size={imageSize}>
+        <FigureFrame size={imageSize} innerRatio={DETAIL_INNER_RATIO}>
           <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
         </FigureFrame>
       </Pressable>
@@ -1726,7 +1732,7 @@ function HabitFigureDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
           （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null}>
+        <CircleFrame size={imageSize} ringColor={null} innerRatio={DETAIL_INNER_RATIO}>
           <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
         </CircleFrame>
       </Pressable>
@@ -1886,7 +1892,7 @@ function FamilyHabitFigureDetailCard({
       {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
           （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null}>
+        <CircleFrame size={imageSize} ringColor={null} innerRatio={DETAIL_INNER_RATIO}>
           <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize)} />
         </CircleFrame>
       </Pressable>

@@ -21,11 +21,17 @@ export interface CircleFrameProps {
   size: number;
   /** 枠線の色（本人のavatar_color。`FigureFrame`のringColorと同じ役割）。 */
   ringColor?: string | null;
+  /**
+   * 中の絵を置く領域の、枠に対する比率（既定0.62）。2026-09-23追加：コレクションの
+   * 拡大表示だけ大きく見せるため（統括の実機要望「フィギュアとメダルはもう少し
+   * 大きくてもよいかも」）。一覧のサムネイル・木の飾りなどは既定のまま変わらない。
+   */
+  innerRatio?: number;
   strokeWidth?: number;
   children: React.ReactNode;
 }
 
-export function CircleFrame({ size, ringColor, strokeWidth = 2, children }: CircleFrameProps) {
+export function CircleFrame({ size, ringColor, strokeWidth = 2, innerRatio = 0.62, children }: CircleFrameProps) {
   const color = ringColor ?? theme.colors.neutralBorder;
   return (
     <View
@@ -40,7 +46,7 @@ export function CircleFrame({ size, ringColor, strokeWidth = 2, children }: Circ
         },
       ]}
     >
-      <View style={{ width: size * 0.62, height: size * 0.62, alignItems: "center", justifyContent: "center" }}>{children}</View>
+      <View style={{ width: size * innerRatio, height: size * innerRatio, alignItems: "center", justifyContent: "center" }}>{children}</View>
     </View>
   );
 }
