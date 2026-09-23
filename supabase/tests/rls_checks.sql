@@ -636,8 +636,14 @@ GRANT INSERT ON _r TO authenticated;
 -- 列3つの追加（67章）は既存テーブルへのADD COLUMNのためS1には数えない。
 -- [2026-09-20再々更新] member_blocks（設計部/成果物/スキーマ設計.sql 69章）を
 -- 追加。36→37。NGワードフィルタ（70章）はDBに何も作らないためS1に影響しない。
+-- families・push_tokensへの列追加のみのプッシュ通知（掲示板の通知、74章）は
+-- 新規テーブルが無いためS1に影響しない。37のまま。
+-- [2026-09-23再更新] 「メッセージ」（社内呼称: 定時アナウンス、要件定義書
+-- 07-37章4章、開発部/成果物/実装メモ.md 292章）でfamily_scheduled_
+-- announcementsを追加。38→39（ローカルDockerで実測。96.5章の遵守）。
+-- family_membersへの列1本の追加のみはS1に影響しない。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '38', count(*)::text, count(*) = 38
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '39', count(*)::text, count(*) = 39
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -803,6 +809,14 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 〈SECURITY DEFINER〉のみに閉じることで担保する設計）。ローカルDockerで
   -- 実測して確認した。
   ('family_sticker_prices','family_sticker_prices_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-23追加] 「メッセージ」（社内呼称: 定時アナウンス、要件定義書
+  -- 07-37章4章、開発部/成果物/実装メモ.md 292章）。SELECT条件式
+  -- `family_id = current_family_id()`は既存の多数のSELECTポリシーと
+  -- 文字通り同一のためハッシュを引き写せる（104章の教訓）。INSERT/UPDATE/
+  -- DELETEポリシーは定義しない（書き込みはset_family_scheduled_
+  -- announcement()・delete_family_scheduled_announcement()〈いずれも
+  -- SECURITY DEFINER〉のみに閉じる設計）。ローカルDockerで実測して確認した。
+  ('family_scheduled_announcements','family_scheduled_announcements_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_tree_decorations','family_tree_decorations_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_tree_seasons','family_tree_seasons_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gacha_draws','gacha_draws_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
@@ -933,7 +947,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー70本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー71本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -1217,7 +1231,21 @@ WITH expected(f) AS (VALUES
   -- 掲示板の通知トグルを設定する、スキーマ設計.sql 74.5章）。SECURITY
   -- DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえでauthenticated
   -- へ明示的にGRANTしている（設計部の見込みどおり）。
-  ('set_family_push_notifications_enabled')
+  ('set_family_push_notifications_enabled'),
+  -- [2026-09-23追加] 「メッセージ」（社内呼称: 定時アナウンス、要件定義書
+  -- 07-37章4章、開発部/成果物/実装メモ.md 292章）。set_family_scheduled_
+  -- announcement（保護者が枠を保存、SECURITY DEFINER）・
+  -- delete_family_scheduled_announcement（保護者が枠を消す、★スキーマ設計.sql
+  -- 75章には無い本タスク追加のRPC、SECURITY DEFINER）・
+  -- current_family_push_permission_needed（ソフトアスク表示条件、SECURITY
+  -- INVOKER）の3本。いずれもPUBLIC/anonから明示的にREVOKEしたうえで
+  -- authenticatedへ明示的にGRANTしている。family_scheduled_announcement_
+  -- notification_payload・dispatch_due_family_scheduled_announcementsは
+  -- いずれもPUBLIC/anon/authenticatedからREVOKEしているため、この一覧には
+  -- 含まれない（ローカルDockerで実測して確認）。
+  ('set_family_scheduled_announcement'),
+  ('delete_family_scheduled_announcement'),
+  ('current_family_push_permission_needed')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1230,7 +1258,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数84件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数87件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

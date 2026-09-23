@@ -46,6 +46,9 @@ export const seedMembers: FamilyMember[] = [
     is_active: true,
     created_at: "2026-07-01T00:00:00+09:00",
     updated_at: "2026-07-01T00:00:00+09:00",
+    // [2026-09-23追加・要件定義書07-37章4-8節、開発部/成果物/実装メモ.md
+    // 292章] 「メッセージ」の個人受信オンオフ。既定true。
+    scheduled_announcement_notifications_enabled: true,
   },
   {
     id: "member-parent-2",
@@ -57,6 +60,7 @@ export const seedMembers: FamilyMember[] = [
     is_active: true,
     created_at: "2026-07-01T00:00:00+09:00",
     updated_at: "2026-07-01T00:00:00+09:00",
+    scheduled_announcement_notifications_enabled: true,
   },
   {
     id: "member-child-1",
@@ -68,6 +72,7 @@ export const seedMembers: FamilyMember[] = [
     is_active: true,
     created_at: "2026-07-01T00:00:00+09:00",
     updated_at: "2026-07-01T00:00:00+09:00",
+    scheduled_announcement_notifications_enabled: true,
   },
   {
     id: "member-child-2",
@@ -79,6 +84,7 @@ export const seedMembers: FamilyMember[] = [
     is_active: true,
     created_at: "2026-07-01T00:00:00+09:00",
     updated_at: "2026-07-01T00:00:00+09:00",
+    scheduled_announcement_notifications_enabled: true,
   },
 ];
 

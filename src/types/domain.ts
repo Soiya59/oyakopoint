@@ -43,6 +43,34 @@ export interface FamilyMember {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // [2026-09-23追加・要件定義書07-37章4-8節、設計部/成果物/スキーマ設計.sql
+  // 75.2章（本タスクでの適用はsupabase/migrations/
+  // 20260930130000_scheduled_announcements.sql）] 「メッセージ」（社内呼称:
+  // 定時アナウンス）を、この人自身の端末で受け取るかどうか。本人または
+  // 保護者のみ変更可（既存のfamily_members_update_scopedポリシーをそのまま
+  // 使う。新しいRPCは無い）。既定true。
+  scheduled_announcement_notifications_enabled: boolean;
+}
+
+// [2026-09-23新設・要件定義書07-37章4章、設計部/成果物/スキーマ設計.sql
+// 75章の骨格を踏襲しつつ、実装メモ292.1章のとおりslotを1|2に変更した。
+// 開発部/成果物/実装メモ.md 292章参照。
+export type ScheduledAnnouncementSlot = 1 | 2;
+
+export interface ScheduledAnnouncement {
+  family_id: string;
+  slot: ScheduledAnnouncementSlot;
+  enabled: boolean;
+  // "HH:MM:SS"（PostgreSQLのTIME型がPostgRESTを通るとこの形式で返る）。
+  send_time: string;
+  message: string | null;
+  last_sent_on: string | null;
+  last_dispatch_attempted_at: string | null;
+  last_dispatch_recipient_count: number | null;
+  last_dispatch_error: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+  created_at: string;
 }
 
 export interface Category {

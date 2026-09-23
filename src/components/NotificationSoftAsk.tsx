@@ -103,7 +103,21 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
   const [phase, setPhase] = useState<Phase>("ask");
 
   const eligible = isEligibleRole(status);
-  const familyToggleOn = state.family.push_notifications_enabled;
+  // [2026-09-23追加・要件定義書07-37章4章、UIUXデザイン部/成果物/主要画面
+  // ワイヤーフレーム.md 64.8節「決定4」、開発部/成果物/実装メモ.md 292章]
+  // 掲示板の通知トグル（families.push_notifications_enabled）だけでなく、
+  // 「メッセージ」の少なくとも1つの枠が「そうしんする」状態（enabled=true
+  // かつmessageが設定済み）で保存されていれば、この条件も成立させる
+  // （OR条件）。**63.4.0節・63.5.1節・63.5.2節の本文（掲示板のみを前提と
+  // した記述）は書き換えない——64.8節が実測済みの決定どおり「本節を実装時の
+  // 最新条件として参照する」形を取る。掲示板の通知だけを使っている家族の
+  // 挙動は変わらない（scheduledAnnouncementsが空配列、またはすべて
+  // enabled=falseの家族は、この行がfalseになりOR条件全体は従来どおり
+  // familyToggleOnだけで決まるため）。**
+  const hasActiveScheduledAnnouncement = state.scheduledAnnouncements.some(
+    (a) => a.enabled && !!a.message
+  );
+  const familyToggleOn = state.family.push_notifications_enabled || hasActiveScheduledAnnouncement;
 
   // [63.4.0節の1条件] 対象ロール・家族トグルON・端末が未回答・「あとで」印が
   // 無い、の4つを満たすときだけ表示する。

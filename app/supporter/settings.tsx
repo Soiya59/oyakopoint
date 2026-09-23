@@ -9,11 +9,12 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { removeMember } from "@/data/api";
+import { removeMember, setMemberScheduledAnnouncementReceiveEnabled } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
 import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
 import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
+import { SCHEDULED_ANNOUNCEMENT_FEATURE_NAME } from "@/constants/scheduledAnnouncement";
 
 /**
  * S13 設定（みまもりメンバー）
@@ -26,10 +27,24 @@ import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
  * とおり、みまもりメンバー自身の退会はresolveFamilyMemberCallerにより許可される。
  */
 export default function SupporterSettingsScreen() {
-  const { parentMember, logoutParent } = useSession();
-  const { state } = useAppData();
+  const { parentMember, logoutParent, client } = useSession();
+  const { state, refresh } = useAppData();
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // [2026-09-23追加・要件定義書07-37章4-8節、UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 64.7.2節] みまもりメンバー自身の
+  // 「メッセージ」受信オンオフ。
+  const hasActiveScheduledAnnouncement = state.scheduledAnnouncements.some((a) => a.enabled && !!a.message);
+  const myMember = state.members.find((m) => m.id === parentMember?.id);
+  const [savingReceive, setSavingReceive] = useState(false);
+  const setMyScheduledAnnouncementReceive = async (enabled: boolean) => {
+    if (!parentMember) return;
+    setSavingReceive(true);
+    const res = await setMemberScheduledAnnouncementReceiveEnabled(client, parentMember.id, enabled);
+    setSavingReceive(false);
+    if (res.ok) await refresh();
+  };
   // [2026-09-01追加・本部長] 主要画面ワイヤーフレーム.md 16章は「家族から抜ける」に
   // 確認モーダルを挟むと定めていたが、実装は**ボタン押下で即座に退会処理が走る**
   // 状態だった（2026-09-01の文書照合で発見）。退会は取り返しがつかない操作なので、
@@ -73,9 +88,40 @@ export default function SupporterSettingsScreen() {
       {/* [2026-09-22本部長の画面確認で追加] P40と同じ理由で、やりとりトグルが
           オフのときも表示しない（オフの間は投稿が止まり通知は発生しない）。 */}
       <NotificationDeviceStatusRow
-        visible={state.family.push_notifications_enabled && state.family.social_interactions_enabled}
+        visible={
+          (state.family.push_notifications_enabled && state.family.social_interactions_enabled) ||
+          hasActiveScheduledAnnouncement
+        }
         tone="supporter"
       />
+
+      {/* [2026-09-23追加・要件定義書07-37章4-8節、ワイヤーフレーム64.7.2節]
+          みまもりメンバー自身の「メッセージ」受信オンオフ。1つ以上の枠が
+          「そうしんする」状態のときだけ表示する。 */}
+      {hasActiveScheduledAnnouncement && (
+        <View style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={theme.typography.supporterBody}>わたしの うけとり</Text>
+          <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            「いまは うけとらない」にすると、あなたの端末にだけ{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}が届かなくなります。
+          </Text>
+          <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
+            <AppButton
+              tone="supporter"
+              label="うけとる"
+              variant={myMember?.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
+              onPress={() => void setMyScheduledAnnouncementReceive(true)}
+              disabled={savingReceive || !myMember}
+            />
+            <AppButton
+              tone="supporter"
+              label="いまは うけとらない"
+              variant={myMember && !myMember.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
+              onPress={() => void setMyScheduledAnnouncementReceive(false)}
+              disabled={savingReceive || !myMember}
+            />
+          </View>
+        </View>
+      )}
 
       {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] 掲示板が
           「いまは使わない」設定のあいだだけ、「使い方・お問い合わせ」見出しの

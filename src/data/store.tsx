@@ -38,6 +38,8 @@ import type {
   ReactionKind,
   Reward,
   RewardRedemption,
+  ScheduledAnnouncement,
+  ScheduledAnnouncementSlot,
   StampKey,
 } from "@/types/domain";
 import { excludeBlockedChoreReactionComments, blankBlockedGratitudeNotes } from "@/lib/blockFilter";
@@ -129,6 +131,14 @@ export interface State {
    * （hiddenContentKeysSet）としても公開し、各画面のフックがそちらを使う。
    */
   hiddenContents: HiddenContent[];
+  /**
+   * [2026-09-23追加・要件定義書07-37章4章、開発部/成果物/実装メモ.md 292章]
+   * 家族の「メッセージ」（社内呼称: 定時アナウンス）2枠。行が無い枠は
+   * 「まだ設定されていない」を意味する（配列に含まれない、最大2件）。
+   * RLS（family_scheduled_announcements_select_same_family）により家族
+   * 全員が読める。
+   */
+  scheduledAnnouncements: ScheduledAnnouncement[];
 }
 
 export type Action =
@@ -271,6 +281,23 @@ export interface DataContextValue {
    * insufficient_privilege）。成功後、家族データを再取得する。
    */
   setFamilyPushNotificationsEnabled: (enabled: boolean) => Promise<DispatchResult>;
+  /**
+   * [2026-09-23追加・要件定義書07-37章4章、開発部/成果物/実装メモ.md 292章]
+   * 保護者が家族の「メッセージ」（社内呼称: 定時アナウンス）の1枠
+   * （オンオフ・時刻・文面）をまとめて保存する（保護者のみ）。
+   * `sendTime`は"HH:MM"形式で渡す。成功後、家族データを再取得する。
+   */
+  setScheduledAnnouncement: (
+    slot: ScheduledAnnouncementSlot,
+    enabled: boolean,
+    sendTime: string,
+    message: string | null
+  ) => Promise<DispatchResult>;
+  /**
+   * [2026-09-23追加・ワイヤーフレーム64.6.0節「決定3」] 保護者が「メッセージ」
+   * の1枠を完全に消す（保護者のみ）。成功後、家族データを再取得する。
+   */
+  deleteScheduledAnnouncement: (slot: ScheduledAnnouncementSlot) => Promise<DispatchResult>;
 }
 
 const AppDataContext = createContext<DataContextValue | null>(null);
@@ -503,6 +530,7 @@ const EMPTY_STATE: State = {
   dailyFlaggedChoreIds: [],
   memberBlocks: [],
   hiddenContents: [],
+  scheduledAnnouncements: [],
 };
 
 function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
@@ -653,6 +681,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dailyFlagsRes,
       memberBlocksRes,
       hiddenContentsRes,
+      scheduledAnnouncementsRes,
     ] = await Promise.all([
       api.fetchCompletions(client, familyId, background ? recentWindowStartIso : undefined),
       api.fetchReactions(client, familyId),
@@ -683,6 +712,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       // 15秒〜次の画面遷移まで待たせてよい）ため、他の家族データと同じ
       // 背景更新サイクルに乗せる。
       api.fetchHiddenContents(client, familyId),
+      // [2026-09-23追加・要件定義書07-37章4章、開発部/成果物/実装メモ.md
+      // 292章] 家族の「メッセージ」2枠。他の家族データと同じ15秒背景更新
+      // サイクルに乗せる（掲示板通知トグル等と同じ扱い）。
+      api.fetchFamilyScheduledAnnouncements(client, familyId),
     ]);
     if (isStale()) return;
 
@@ -724,6 +757,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     }
     if (!hiddenContentsRes.ok) {
       fail(hiddenContentsRes.error.message);
+      return;
+    }
+    if (!scheduledAnnouncementsRes.ok) {
+      fail(scheduledAnnouncementsRes.error.message);
       return;
     }
 
@@ -771,6 +808,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dailyFlaggedChoreIds: dailyFlagsRes.data,
       memberBlocks: memberBlocksRes.data,
       hiddenContents: hiddenContentsRes.data,
+      scheduledAnnouncements: scheduledAnnouncementsRes.data,
     });
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
@@ -1377,6 +1415,45 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     [session.client, session.status, load]
   );
 
+  /**
+   * [2026-09-23新設・要件定義書07-37章4章、開発部/成果物/実装メモ.md 292章]
+   * 保護者が「メッセージ」の1枠を保存する。`set_family_scheduled_
+   * announcement()`自体が保護者以外をinsufficient_privilegeで拒否する
+   * ため、ここでのロール判定はUXのための早期リターンに過ぎない。
+   */
+  const setScheduledAnnouncement = useCallback(
+    async (
+      slot: ScheduledAnnouncementSlot,
+      enabled: boolean,
+      sendTime: string,
+      message: string | null
+    ): Promise<DispatchResult> => {
+      if (session.status !== "parent") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この設定は保護者のみ変更できます" } };
+      }
+      const res = await api.setFamilyScheduledAnnouncement(session.client, slot, enabled, sendTime, message);
+      if (!res.ok) return { ok: false, error: res.error };
+      await load();
+      return { ok: true };
+    },
+    [session.client, session.status, load]
+  );
+
+  /** [2026-09-23新設・ワイヤーフレーム64.6.0節「決定3」] 保護者が「メッセージ」
+   * の1枠を完全に消す。 */
+  const deleteScheduledAnnouncement = useCallback(
+    async (slot: ScheduledAnnouncementSlot): Promise<DispatchResult> => {
+      if (session.status !== "parent") {
+        return { ok: false, error: { code: "insufficient_privilege", message: "この設定は保護者のみ変更できます" } };
+      }
+      const res = await api.deleteFamilyScheduledAnnouncement(session.client, slot);
+      if (!res.ok) return { ok: false, error: res.error };
+      await load();
+      return { ok: true };
+    },
+    [session.client, session.status, load]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       state,
@@ -1405,6 +1482,8 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
       setFamilyPushNotificationsEnabled,
+      setScheduledAnnouncement,
+      deleteScheduledAnnouncement,
     }),
     [
       state,
@@ -1420,6 +1499,8 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
       setFamilyPushNotificationsEnabled,
+      setScheduledAnnouncement,
+      deleteScheduledAnnouncement,
       findChoreByTag,
       stampReactionIndex,
       dailySummaryRows,
@@ -1483,6 +1564,9 @@ const initialState: State = {
   memberBlocks: [],
   // [2026-09-21追加] 同上の理由でhidden_contentsも常に空配列から始める。
   hiddenContents: [],
+  // [2026-09-23追加・開発部/成果物/実装メモ.md 292章] 同上の理由で
+  // scheduledAnnouncementsも常に空配列から始める。
+  scheduledAnnouncements: [],
 };
 
 function reducer(state: State, action: Action): State {
@@ -1720,6 +1804,28 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // [2026-09-23追加・開発部/成果物/実装メモ.md 292章] モック実装では
+  // family_scheduled_announcementsの取得元が無いため、hiddenContents等と
+  // 同じ簡略化方針で常に空配列のまま（state.scheduledAnnouncementsは
+  // initialStateどおり常に[]）。保存・削除もDBへは書き込まない（no-op）。
+  const setScheduledAnnouncement = useCallback(
+    async (
+      _slot: ScheduledAnnouncementSlot,
+      _enabled: boolean,
+      _sendTime: string,
+      _message: string | null
+    ): Promise<DispatchResult> => {
+      return { ok: true };
+    },
+    []
+  );
+  const deleteScheduledAnnouncement = useCallback(
+    async (_slot: ScheduledAnnouncementSlot): Promise<DispatchResult> => {
+      return { ok: true };
+    },
+    []
+  );
+
   const dispatch = useCallback(async (action: Action): Promise<DispatchResult> => {
     // [2026-09-03追加] REPORT_COMPLETIONのみ、C7が直後の取消の対象を特定できるよう
     // idを事前に採番してreducerへ渡し、そのまま呼び出し元へ返す（reducer内部で
@@ -1770,6 +1876,8 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
       setFamilyPushNotificationsEnabled,
+      setScheduledAnnouncement,
+      deleteScheduledAnnouncement,
     }),
     [
       state,
@@ -1786,6 +1894,8 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       hiddenContentKeysSet,
       setFamilySocialInteractionsEnabled,
       setFamilyPushNotificationsEnabled,
+      setScheduledAnnouncement,
+      deleteScheduledAnnouncement,
     ]
   );
 

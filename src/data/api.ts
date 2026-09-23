@@ -66,6 +66,8 @@ import type {
   ReportChoreCompletionByNfcTagResult,
   Reward,
   RewardRedemption,
+  ScheduledAnnouncement,
+  ScheduledAnnouncementSlot,
   StampKey,
   StickerCatalogItem,
   StickerPurchaseWithCatalog,
@@ -847,6 +849,101 @@ export async function setFamilyPushNotificationsEnabled(
   });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: null };
+}
+
+/**
+ * [2026-09-23新設・要件定義書07-37章4章、開発部/成果物/実装メモ.md 292章]
+ * 家族の「メッセージ」（社内呼称: 定時アナウンス）2枠を取得する。RLS
+ * （family_scheduled_announcements_select_same_family）により家族全員が
+ * 読める。行が無い枠は「まだ設定されていない」を意味する（配列に含まれない）。
+ */
+export async function fetchFamilyScheduledAnnouncements(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<ScheduledAnnouncement[]>> {
+  const { data, error } = await client
+    .from("family_scheduled_announcements")
+    .select("*")
+    .eq("family_id", familyId)
+    .order("slot");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as ScheduledAnnouncement[] };
+}
+
+/**
+ * [2026-09-23新設・要件定義書07-37章4章、設計部/成果物/スキーマ設計.sql
+ * 75.8章（実装メモ292章のとおりslotの型をSMALLINT 1|2に変更）] 保護者が
+ * 「メッセージ」の1枠（オンオフ・時刻・文面）をまとめて保存する
+ * （`set_family_scheduled_announcement()`、SECURITY DEFINER。保護者のみ
+ * 呼べる）。UPSERTのため初回設定・変更のいずれも同じ呼び出しでよい。
+ * `sendTime`は"HH:MM"または"HH:MM:SS"形式で渡す。
+ */
+export async function setFamilyScheduledAnnouncement(
+  client: SupabaseClient,
+  slot: ScheduledAnnouncementSlot,
+  enabled: boolean,
+  sendTime: string,
+  message: string | null
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("set_family_scheduled_announcement", {
+    p_slot: slot,
+    p_enabled: enabled,
+    p_send_time: sendTime,
+    p_message: message,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * [2026-09-23新設・ワイヤーフレーム64.6.0節「決定3」、開発部/成果物/
+ * 実装メモ.md 292章] 保護者が「メッセージ」の1枠を完全に消す（行ごと
+ * DELETE。`delete_family_scheduled_announcement()`、SECURITY DEFINER。
+ * 保護者のみ呼べる。スキーマ設計.sql 75章には無い、本タスクでの追加RPC）。
+ */
+export async function deleteFamilyScheduledAnnouncement(
+  client: SupabaseClient,
+  slot: ScheduledAnnouncementSlot
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("delete_family_scheduled_announcement", {
+    p_slot: slot,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * [2026-09-23新設・要件定義書07-37章4-8節、設計部/成果物/スキーマ設計.sql
+ * 75.2章] 本人（または保護者）が、自分自身の「メッセージ」受信オンオフを
+ * 設定する。新しいRPCは無く、既存のfamily_members_update_scopedポリシーを
+ * そのまま使う直接UPDATE（updateMemberDisplayName等と同じ形）。
+ */
+export async function setMemberScheduledAnnouncementReceiveEnabled(
+  client: SupabaseClient,
+  memberId: string,
+  enabled: boolean
+): Promise<ApiResult<FamilyMember>> {
+  const { data, error } = await client
+    .from("family_members")
+    .update({ scheduled_announcement_notifications_enabled: enabled })
+    .eq("id", memberId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyMember };
+}
+
+/**
+ * [2026-09-23新設・API仕様.md 31.7章・32.2章] ソフトアスクの表示条件(a)を
+ * DB側で1箇所にまとめた`current_family_push_permission_needed()`を呼ぶ。
+ * 掲示板の通知トグル、または「メッセージ」のいずれかの枠が有効なら true。
+ */
+export async function fetchCurrentFamilyPushPermissionNeeded(
+  client: SupabaseClient
+): Promise<ApiResult<boolean>> {
+  const { data, error } = await client.rpc("current_family_push_permission_needed");
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: Boolean(data) };
 }
 
 /**

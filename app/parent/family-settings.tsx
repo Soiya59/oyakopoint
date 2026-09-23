@@ -9,8 +9,9 @@ import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { updateFamilyName } from "@/data/api";
+import { updateFamilyName, setMemberScheduledAnnouncementReceiveEnabled } from "@/data/api";
 import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
+import { SCHEDULED_ANNOUNCEMENT_FEATURE_NAME } from "@/constants/scheduledAnnouncement";
 
 /**
  * P40 家族の設定（保護者、2026-09-21新設）
@@ -23,7 +24,30 @@ import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
  */
 export default function FamilySettingsScreen() {
   const { state, refresh, setFamilySocialInteractionsEnabled, setFamilyPushNotificationsEnabled } = useAppData();
-  const { client } = useSession();
+  const { client, parentMember } = useSession();
+
+  // [2026-09-23追加・要件定義書07-37章4-8節、UIUXデザイン部/成果物/
+  // 主要画面ワイヤーフレーム.md 64.7.1節] 保護者自身の「メッセージ」
+  // 受信オンオフ。
+  const me = state.members.find((m) => m.id === parentMember?.id);
+  const [savingReceive, setSavingReceive] = useState(false);
+  const [receiveError, setReceiveError] = useState<string | null>(null);
+  const setMyScheduledAnnouncementReceive = async (enabled: boolean) => {
+    if (!parentMember) return;
+    setSavingReceive(true);
+    setReceiveError(null);
+    const res = await setMemberScheduledAnnouncementReceiveEnabled(client, parentMember.id, enabled);
+    setSavingReceive(false);
+    if (!res.ok) {
+      setReceiveError("変更できませんでした。もう一度お試しください。");
+      return;
+    }
+    await refresh();
+  };
+
+  // [2026-09-23追加・要件定義書07-37章4章] 「メッセージ」2枠のうち、実際に
+  // 「そうしんする」状態のものが1つでもあるか（64.7節の表示条件）。
+  const hasActiveScheduledAnnouncement = state.scheduledAnnouncements.some((a) => a.enabled && !!a.message);
 
   const [familyName, setFamilyName] = useState(state.family.name);
   const [savingFamilyName, setSavingFamilyName] = useState(false);
@@ -231,10 +255,74 @@ export default function FamilySettingsScreen() {
               起きない導線が残ってしまう（決定4「やりとりがオフならグレー
               アウト」の趣旨と食い違う）。 */}
           <NotificationDeviceStatusRow
-            visible={state.family.push_notifications_enabled && state.family.social_interactions_enabled}
+            visible={
+              (state.family.push_notifications_enabled && state.family.social_interactions_enabled) ||
+              hasActiveScheduledAnnouncement
+            }
             tone="parent"
           />
         </View>
+      </Card>
+
+      {/* [2026-09-23追加・要件定義書07-37章4章、UIUXデザイン部/成果物/
+          主要画面ワイヤーフレーム.md 64.1.1節] 「メッセージ」の入口Card。
+          やりとりトグルとは独立した新しいCard（64.1.0節決定1。掲示板の
+          通知トグルとは異なり、「やりとり」機能の可否とは無関係のため）。
+          置き場所は64.1章のとおりP40。名前は1か所の定数から参照する
+          （SCHEDULED_ANNOUNCEMENT_FEATURE_NAME、実装メモ292.1章）。 */}
+      <Card style={{ marginTop: theme.spacing.s4 }}>
+        <Text style={theme.typography.parentBodyMedium}>{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}</Text>
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          家族の毎日に、決まった時間の一言を届けます。書いた本人にもとどきます。
+        </Text>
+        {[1, 2].map((slot) => {
+          const item = state.scheduledAnnouncements.find((a) => a.slot === slot);
+          const label = slot === 1 ? "1つ目" : "2つ目";
+          return (
+            <Text key={slot} style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>
+              {label}：
+              {item?.message
+                ? `${item.send_time.slice(0, 5)}「${item.message.slice(0, 12)}${item.message.length > 12 ? "…" : ""}」`
+                : "まだ 設定されていません"}
+            </Text>
+          );
+        })}
+        <AppButton
+          label={state.scheduledAnnouncements.length > 0 ? "編集する" : "設定する"}
+          variant="secondary"
+          style={{ marginTop: theme.spacing.s3, alignSelf: "flex-end" }}
+          onPress={() => router.push("/parent/scheduled-announcements")}
+        />
+
+        {/* [ワイヤーフレーム64.7.1節] 保護者自身の受信オンオフ。1つ以上の
+            枠が「そうしんする」状態のときだけ表示する（64.7節）。 */}
+        {hasActiveScheduledAnnouncement && (
+          <View style={styles.notifyDivider}>
+            <Text style={theme.typography.parentBody}>わたしの うけとり</Text>
+            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              「いまは うけとらない」にすると、あなたの端末にだけ届かなくなります。ほかの家族には、これまでどおり届きます。
+            </Text>
+            <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
+              <Pressable
+                onPress={() => void setMyScheduledAnnouncementReceive(true)}
+                disabled={savingReceive || !me}
+                style={[styles.chip, me?.scheduled_announcement_notifications_enabled && styles.chipSelected]}
+              >
+                <Text>うけとる</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void setMyScheduledAnnouncementReceive(false)}
+                disabled={savingReceive || !me}
+                style={[styles.chip, me && !me.scheduled_announcement_notifications_enabled && styles.chipSelected]}
+              >
+                <Text>いまは うけとらない</Text>
+              </Pressable>
+            </View>
+            {receiveError && (
+              <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{receiveError}</Text>
+            )}
+          </View>
+        )}
       </Card>
     </Screen>
   );
