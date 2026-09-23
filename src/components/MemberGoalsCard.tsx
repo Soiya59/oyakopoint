@@ -17,7 +17,7 @@
  * （要件定義書07-36章。本コンポーネントの文言は開発部の仮置き）。
  */
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -86,7 +86,15 @@ function MemberGoalEditModal({
       <View style={styles.backdrop}>
         <Card style={styles.card}>
           <Text style={theme.typography.parentTitle}>{child.display_name}の目標を編集する</Text>
-          <ScrollView style={styles.body}>
+          {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] keyboardShouldPersistTaps
+              が無いと、キーボード表示中に「保存する」を押しても1回目はキーボードが閉じる
+              だけになる。背景をKeyboardAvoidingViewで包むのはやめ、
+              automaticallyAdjustKeyboardInsets（iOS専用）に一本化した。 */}
+          <ScrollView
+            style={styles.body}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios" ? true : undefined}
+          >
             <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s3 }]}>目標</Text>
             <TextInput
               value={goalText}

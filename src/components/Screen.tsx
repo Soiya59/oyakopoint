@@ -1,6 +1,7 @@
 import React from "react";
-import { ScrollView, StyleSheet, View, ViewStyle } from "react-native";
+import { Platform, ScrollView, StyleSheet, View, ViewStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import KeyboardAvoidingPaddingView from "@/components/KeyboardAvoidingPaddingView";
 import theme from "@/theme/theme";
 
 interface ScreenProps {
@@ -88,7 +89,38 @@ export function Screen({
   // （edgesはpaddingの有無だけを決め、Viewの位置・大きさは変えない）なので、
   // 背景色が画面上端まで伸びる見え方は変わらない。
   const insets = useSafeAreaInsets();
-  return (
+  // [2026-09-23追加・実装メモ.md 289章。同日、本部長の差し戻しで289.4節のとおり
+  // 直し方を変更] 画面下のほうにあるTextInputがiOSでキーボードに隠れる不具合
+  // （統括・ばあば実機報告）への対応。`Screen`はほぼ全画面が経由する共通の器なので、
+  // ここ1か所を直せば個々の画面を書き換えずに済む（`Modal`の中身は別レイヤーで
+  // 描かれるためこれの外。289.4節②〜③参照）。
+  //
+  // 【最初の直し方（差し戻し前）】`Screen`全体を`KeyboardAvoidingView(padding)`で
+  // 1段包んでいた。**これだと、`scroll=true`（`ScrollView`）のとき、キーボード分だけ
+  // 器を縮めてもScrollViewのcontentOffset（スクロール位置）自体は動かないため、
+  // 画面の下のほうにあった入力欄はキーボードに隠れなくなる代わりに、縮んだ
+  // ScrollViewの表示範囲の外（下）に押し出されたままになり、結局見えなかった**
+  // （本部長が`node_modules/react-native/React/Fabric/Mounting/ComponentViews/
+  // ScrollView/RCTScrollViewComponentView.mmの`_keyboardWillChangeFrame:`を
+  // 読んで指摘）。
+  //
+  // 【直した内容】
+  //  - `scroll=true`（`Container`が`ScrollView`）: `KeyboardAvoidingView`はやめ、
+  //    `ScrollView`自身の`automaticallyAdjustKeyboardInsets`（iOS専用。同じ.mmの
+  //    `_keyboardWillChangeFrame:`が(1)キーボードと重なる分だけ下insetを足し、
+  //    (2)`reactUpdateResponderOffsetForScrollView:`でフォーカス中の入力欄の位置を
+  //    取ってキーボードより下ならcontentOffsetを動かして見える位置まで持ち上げる。
+  //    無効時は`if (!_automaticallyAdjustKeyboardInsets) return;`で何もしない）を使う。
+  //    Androidは何もしない（Expoの既定`android.softwareKeyboardLayoutMode: "resize"`で
+  //    OS自身がウィンドウをリサイズし、Android標準のScrollViewがフォーカス中の子を
+  //    見える位置へ動かす。ここへ足すと二重にずれる）。
+  //  - `scroll=false`（`Container`が`View`。`ListScreen`経由のみ、289章時点で
+  //    TextInputを持つ画面はこの経路を直接使っていない——`approvals.tsx`・
+  //    `activity.tsx`はこの経路を使うが、TextInput自体はどちらも`Modal`の中にあり
+  //    この`View`の外）: `ScrollView`が無くフォーカス位置への自動スクロールという
+  //    概念自体が無いため、器をキーボード分だけ縮める`KeyboardAvoidingPaddingView`
+  //    （`behavior="padding"`、iOSのみ）で包む、という最初の考え方をそのまま残す。
+  const scrollBody = (
     <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["left", "right"]}>
       <Container
         style={scroll ? styles.scroll : [styles.flex, styles.outer]}
@@ -98,6 +130,12 @@ export function Screen({
         // （contentContainerStyleと同じ、上のternaryの書き方に揃える）。
         scrollEnabled={scroll ? scrollEnabled : undefined}
         canCancelContentTouches={scroll ? canCancelContentTouches : undefined}
+        // [2026-09-23追加・実装メモ.md 289章] キーボード表示中に送信ボタン等を
+        // タップしたとき、1回目でキーボードが閉じるだけで押せないことがある
+        // （RN公式ドキュメントのScrollView.keyboardShouldPersistTaps）。
+        keyboardShouldPersistTaps={scroll ? "handled" : undefined}
+        // [2026-09-23追加・実装メモ.md 289.4章] 上のコメントのとおりiOSのみ。
+        automaticallyAdjustKeyboardInsets={scroll && Platform.OS === "ios" ? true : undefined}
       >
         <View
           style={[
@@ -115,6 +153,7 @@ export function Screen({
       </Container>
     </SafeAreaView>
   );
+  return scroll ? scrollBody : <KeyboardAvoidingPaddingView style={styles.flex}>{scrollBody}</KeyboardAvoidingPaddingView>;
 }
 
 /** 画面下端の基本余白。端末の下端インセットをこれに足して使う（上のコメント参照）。 */

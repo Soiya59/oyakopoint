@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -364,6 +364,14 @@ export default function SupporterFamilyScreen() {
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>
           <Card tone="supporter" style={styles.modalCard}>
+          {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] 背景の
+              KeyboardAvoidingViewはやめ、ScrollView自身の
+              automaticallyAdjustKeyboardInsets（iOS専用）に一本化する。 */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios" ? true : undefined}
+          >
             {detailTarget &&
               (() => {
                 const member = memberOf(detailTarget.reported_by);
@@ -484,6 +492,7 @@ export default function SupporterFamilyScreen() {
                   </>
                 );
               })()}
+          </ScrollView>
           </Card>
         </View>
       </Modal>
@@ -549,7 +558,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: theme.spacing.s4,
   },
-  modalCard: { width: "100%", maxWidth: 420 },
+  // [2026-09-23追加・実装メモ.md 289章] maxHeightは内側のScrollViewをスクロール
+  // させるために必要（親の高さが無限だとスクロールしない）。
+  modalCard: { width: "100%", maxWidth: 420, maxHeight: "85%" },
   stampGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

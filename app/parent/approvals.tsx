@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ListRenderItemInfo, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ListRenderItemInfo, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import ListScreen from "@/components/ListScreen";
 import Card from "@/components/Card";
@@ -470,6 +470,14 @@ export default function ApprovalsScreen() {
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
         <View style={styles.modalBackdrop}>
           <Card style={styles.modalCard}>
+          {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] 背景の
+              KeyboardAvoidingViewはやめ、ScrollView自身の
+              automaticallyAdjustKeyboardInsets（iOS専用）に一本化する。 */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios" ? true : undefined}
+          >
             {detailTarget &&
               (() => {
                 const member = memberOf(detailTarget.reported_by);
@@ -598,6 +606,7 @@ export default function ApprovalsScreen() {
                   </>
                 );
               })()}
+          </ScrollView>
           </Card>
         </View>
       </Modal>
@@ -646,7 +655,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: theme.spacing.s4,
   },
-  modalCard: { width: "100%", maxWidth: 420 },
+  // [2026-09-23追加・実装メモ.md 289章] maxHeightは詳細モーダル（コメント欄あり）に
+  // 内側のScrollViewをスクロールさせるために必要（親の高さが無限だとスクロールしない）。
+  // 取り消し確認モーダル（TextInputなし）も同じstyleを使うが、内容が短く85%に収まるため実害はない。
+  modalCard: { width: "100%", maxWidth: 420, maxHeight: "85%" },
   stampGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

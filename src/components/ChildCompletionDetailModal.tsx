@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
@@ -81,6 +81,15 @@ export function ChildCompletionDetailModal({
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <Card tone="child" style={styles.modalCard}>
+        {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] 背景を
+            KeyboardAvoidingViewで包むのはやめた（ScrollViewのcontentOffsetは
+            動かないため、器を縮めるだけでは入力欄が見えるとは限らない）。
+            ScrollView自身のautomaticallyAdjustKeyboardInsets（iOS専用）に一本化する。 */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios" ? true : undefined}
+        >
           {target &&
             (() => {
               const member = memberOf(target.reported_by);
@@ -178,6 +187,7 @@ export function ChildCompletionDetailModal({
                 </>
               );
             })()}
+        </ScrollView>
         </Card>
       </View>
     </Modal>
@@ -192,7 +202,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: theme.spacing.s4,
   },
-  modalCard: { width: "100%", maxWidth: 420 },
+  // [2026-09-23追加・実装メモ.md 289章] maxHeightを付けたのは、内側に足した
+  // ScrollViewが「あふれたら止まってスクロールする」ために親の高さを
+  // 確定させる必要があるため（RNのScrollViewは親の高さが無限だとスクロール
+  // 自体が発生しない。MemberGoalsCard.tsxのmodalCard/cardと同じ考え方）。
+  modalCard: { width: "100%", maxWidth: 420, maxHeight: "85%" },
   stampGrid: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
   stampChip: {
     paddingHorizontal: theme.spacing.s3,
