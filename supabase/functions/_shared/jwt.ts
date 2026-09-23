@@ -19,12 +19,64 @@
  *     Edge Function secrets名を予約する仕様により変更。_shared/env.ts参照）
  *     で署名されている（認証・データ管理設計書.md 2章）ため、
  *     発行(create)・検証(verify)の両方をdjwt 1本で賄える。
+ *
+ * [2026-09-23追加・やること4-73対応] `verifyToken()`はHS256（共有シークレット）
+ * でしか検証できず、SupabaseがJWTの署名鍵を非対称鍵（ES256等）へ切り替えた
+ * 瞬間に全滅する問題への対処。**HS256と非対称鍵の両方を受け付けるよう変更**。
+ *
+ * [方式の選定・理由] JWTヘッダーの`alg`を見て分岐する点は「候補(a)」だが、
+ * 非対称鍵側の実装は自前でJWKS取得・JWKパース・crypto.subtle検証を書かず、
+ * 既に依存している`@supabase/supabase-js@2.112.3`（`supabaseAdmin.ts`と
+ * バージョンを揃えている）の`auth.getClaims()`に委譲する（「候補(b)」の
+ * 実装を借りる）。理由は実際に`node_modules/@supabase/auth-js/dist/module/
+ * GoTrueClient.js`のソースを読んで確認した下記の事実による:
+ *   - `getClaims(jwt)`は`alg`が`HS`で始まる・`kid`が無い・WebCrypto利用不可の
+ *     いずれかなら`getUser(jwt)`（Auth serverへの都度リクエスト）にフォール
+ *     バックし、そうでなければ`/.well-known/jwks.json`から鍵を取得して
+ *     （インスタンス内に10分＝`JWKS_TTL`でキャッシュ）`crypto.subtle`で
+ *     ローカル検証する（同ファイル5221〜5387行）。
+ *   - `getAlgorithm()`は`RS256`/`ES256`のみ対応し、それ以外（`none`含む）は
+ *     例外を投げる（同ファイル`lib/helpers.js`427〜443行）ため、想定外の
+ *     `alg`を鍵とみなして通すことはない。
+ *   - `validateExp()`は`exp`欠落・期限切れをいずれも例外にする
+ *     （同ファイル`lib/helpers.js`418〜426行）。
+ * これを自前実装しない理由（却下した案）: 上記を手書きすると、JWK→
+ * CryptoKey変換のアルゴリズム指定間違い等、暗号コードの車輪の再発明に
+ * なりリスクが高い。一方、**非対称鍵の検証を丸ごと`getClaims()`任せに
+ * せず、HS256は今までどおり`djwt`でローカル検証する**（＝alg分岐は自前で
+ * 行う）理由: `getClaims()`は`alg`が`HS`始まりだと問答無用で`getUser()`の
+ * ネットワーク呼び出しにフォールバックする（前述の分岐）。今の本番は
+ * HS256のみのため、全部`getClaims()`に委ねると**今は不要な通信が全リクエスト
+ * で毎回発生し**、レイテンシと可用性（Auth serverが落ちていると道連れで
+ * 401になる）を今より悪化させる。alg分岐を自前で行い、HS256は現状の
+ * ローカル検証のまま変更しないことで、本番の挙動を変えずに非対称鍵だけ
+ * 新しい経路に乗せる。
+ * [鍵のキャッシュについて] `getClaims()`のJWKSキャッシュはSupabaseClient
+ * インスタンスのプロパティ（`this.jwks`）なので、リクエストの都度
+ * `createClient()`し直すと毎回キャッシュが失われる。本ファイルはこの
+ * ためだけの検証用クライアントを**モジュールスコープに1個だけ生成して
+ * 使い回す**（HMACキーの`cachedKey`と同じ考え方。Edge Functionのインスタンス
+ * はリクエスト間で再利用され得るため、ウォームなインスタンスではJWKSの
+ * 再取得が省略される）。
+ * [安全性] HS256側は変更なし。非対称鍵側は、Supabaseが公開する本物のJWKS
+ * （kid一致）で検証できた場合のみローカルで信頼し、それ以外（kid不一致・
+ * 想定外alg・WebCrypto不可など）は必ずSupabase Auth server本体への
+ * `getUser()`照会に回るため、攻撃者が用意した鍵を信頼する経路は無い。
+ * `verifyToken()`の外部シグネチャ（引数・戻り値）は変更しないため、
+ * 呼び出し元（delete-account/index.ts、_shared/parentAuth.ts）は無改修。
  */
 import {
   create,
+  decode,
   verify,
+  type Header,
   type Payload,
 } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
+import {
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2.112.3";
+import { env } from "./env.ts";
 
 // HMACキーはリクエストの都度importKeyし直すとオーバーヘッドがあるため、
 // 同一シークレット文字列である間はモジュールスコープでキャッシュする
@@ -108,6 +160,26 @@ export interface VerifiedCallerClaims {
   raw: Payload;
 }
 
+// [2026-09-23追加] 非対称鍵（ES256/RS256）のJWT検証専用。HMACキーと違い
+// シークレット文字列ではなく`SUPABASE_URL`しか要らないため、モジュール
+// スコープに1個だけ生成して使い回す（ファイル冒頭コメント「鍵のキャッシュ
+// について」を参照。supabase-js内部のJWKSキャッシュを効かせるため）。
+let cachedClaimsClient: SupabaseClient | null = null;
+
+function getClaimsClient(): SupabaseClient {
+  if (!cachedClaimsClient) {
+    // service_role キーを使うが、ここでの用途はJWKS取得と`getUser()`
+    // フォールバックのみ（DBへの特権アクセスはしない）。他のservice_role
+    // client（_shared/supabaseAdmin.ts）とは別インスタンスとして持つ
+    // （呼び出し元の関数シグネチャを変えずに済ませるため、admin clientを
+    // 引数で受け取らず本ファイル内で完結させている）。
+    cachedClaimsClient = createClient(env.supabaseUrl, env.serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return cachedClaimsClient;
+}
+
 /**
  * 呼び出し元が送ってきたJWT（set-child-pin/remove-memberでは保護者の
  * Supabase Auth標準JWTを想定）を検証し、subクレーム等を取り出す。
@@ -116,13 +188,42 @@ export interface VerifiedCallerClaims {
  * （auth.users.id）の取り出しのみを行い、実際のfamily_id/role解決は
  * 呼び出し元がservice_role clientでfamily_membersを引いて行う
  * （_shared/parentAuth.ts参照）。
+ *
+ * [2026-09-23変更・やること4-73対応] HS256はこれまでどおりdjwtでローカル
+ * 検証する（本番の現状の署名方式・挙動を変えない）。それ以外（ES256/RS256
+ * 等の非対称鍵）は、ファイル冒頭コメントの理由によりsupabase-jsの
+ * `auth.getClaims()`に委譲する。alg判定は署名検証前のヘッダー読み取り
+ * （djwtの`decode()`。シグネチャ未検証の値なので分岐にしか使わない）で行う。
  */
 export async function verifyToken(
   secret: string,
   token: string
 ): Promise<VerifiedCallerClaims> {
-  const key = await getHmacKey(secret);
-  const payload = await verify(token, key);
+  let header: Header;
+  try {
+    [header] = decode(token) as [Header, Payload, Uint8Array];
+  } catch {
+    throw new Error("JWTの形式が不正です");
+  }
+
+  let payload: Payload;
+
+  if (header.alg === "HS256") {
+    // 現状の本番（HS256・共有シークレット）はここを通る。ネットワーク
+    // 通信を発生させない、従来どおりのローカル検証。
+    const key = await getHmacKey(secret);
+    payload = await verify(token, key);
+  } else {
+    // ES256/RS256等の非対称鍵、または想定外のalg。すべてsupabase-jsに
+    // 委ね、真正なJWKS一致 or Auth server本体での検証のいずれかでしか
+    // 通らないようにする（ファイル冒頭コメント「安全性」を参照）。
+    const client = getClaimsClient();
+    const { data, error } = await client.auth.getClaims(token);
+    if (error || !data || !data.claims) {
+      throw new Error("JWTの検証に失敗しました（Supabase Auth）");
+    }
+    payload = data.claims as Payload;
+  }
 
   if (typeof payload.sub !== "string" || payload.sub.length === 0) {
     throw new Error("JWTにsubクレームがありません");
