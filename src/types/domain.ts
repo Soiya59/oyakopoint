@@ -234,6 +234,16 @@ export interface ChoreReaction {
   stamp_key: StampKey | null; // kind='stamp'のときのみ非null
   comment_body: string | null; // kind='comment'のときのみ非null（1〜200文字）
   created_at: string;
+  /**
+   * [2026-09-23追加・要件定義書07章「コメントの削除ルール」、設計部/成果物/
+   * スキーマ設計.sql 76.4章] kind='comment'の行にのみ設定されうる論理削除
+   * カラム。SELECT RLS（chore_reactions_select_same_family）が
+   * `deleted_at IS NULL`を要求するため、クライアントが取得できる行は常に
+   * 未削除のものだけになる（本フィールドは常にnullとして届くが、型としては
+   * 将来の直接クエリのために残す）。kind='stamp'の行では常にnull。
+   */
+  deleted_at: string | null;
+  deleted_by_member_id: string | null;
 }
 
 // [新設] gratitude_points（スキーマ設計.sql 13章）。感謝ポイント（要件定義書.md v0.6
@@ -587,6 +597,14 @@ export interface FamilyBoardReactionWithReactor {
 export interface FamilyBoardPostWithAuthor extends FamilyBoardPost {
   family_members: { display_name: string; avatar_color: string | null } | null;
   reactions: { stamp_key: StampKey; reactor_member_id: string }[];
+  /**
+   * [2026-09-23追加・要件定義書07-30章、開発部/成果物/実装メモ.md 293章]
+   * 投稿に届いたコメント（family_board_comments）。RLS
+   * （family_board_comments_select_same_family）が`deleted_at IS NULL`を
+   * 常に要求するため、埋め込みに含まれるのは常に未削除のものだけ
+   * （nested embedにもRLSは適用される）。フラットな時系列一覧（決定3）。
+   */
+  comments: FamilyBoardCommentWithAuthor[];
 }
 
 /**
@@ -599,6 +617,79 @@ export interface FamilyBoardPostWithAuthor extends FamilyBoardPost {
 export interface FamilyBoardReactionWithPostBody extends FamilyBoardReaction {
   family_board_posts: { body: string; author_member_id: string } | null;
 }
+
+// ============================================================
+// [2026-09-23新設] 掲示板のコメント・完了報告のコメント削除・お絵かきの
+// 公開通知・リアクション・コメント（要件定義書07章「コメントの削除
+// ルール」・07-30章・07-38章、設計部/成果物/スキーマ設計.sql 76章、
+// API仕様.md 33章、やること.md 2-69・2-70・5-13）。
+// ============================================================
+
+/**
+ * family_board_comments テーブルの1行（要件定義書07-30章）。SELECT RLS
+ * （family_board_comments_select_same_family）が常にdeleted_at IS NULLを
+ * 要求するため、クライアントが取得できる行は常に未削除のものだけになる。
+ */
+export interface FamilyBoardComment {
+  id: string;
+  family_id: string;
+  post_id: string;
+  commenter_member_id: string;
+  body: string;
+  created_at: string;
+  deleted_at: string | null;
+  deleted_by_member_id: string | null;
+}
+
+/** コメント者の表示名・アバター色をネストした1行（一覧表示用）。 */
+export interface FamilyBoardCommentWithAuthor extends FamilyBoardComment {
+  family_members: { display_name: string; avatar_color: string | null } | null;
+}
+
+/** family_drawing_comments テーブルの1行（要件定義書07-38章6章）。対象は公開済みの絵のみ。 */
+export interface FamilyDrawingComment {
+  id: string;
+  family_id: string;
+  drawing_id: string;
+  commenter_member_id: string;
+  body: string;
+  created_at: string;
+  deleted_at: string | null;
+  deleted_by_member_id: string | null;
+}
+
+export interface FamilyDrawingCommentWithAuthor extends FamilyDrawingComment {
+  family_members: { display_name: string; avatar_color: string | null } | null;
+}
+
+/**
+ * family_drawing_reactions テーブルの1行（要件定義書07-38章5章）。
+ * family_board_reactionsと同型（スタンプ専用、コメントは対象外）。
+ */
+export interface FamilyDrawingReaction {
+  id: string;
+  family_id: string;
+  drawing_id: string;
+  reactor_member_id: string;
+  stamp_key: StampKey;
+  created_at: string;
+}
+
+/** 「だれが送ったか見る」モーダル用、反応者の表示名・アバター色をネストした1行。 */
+export interface FamilyDrawingReactionWithReactor {
+  id: string;
+  stamp_key: StampKey;
+  reactor_member_id: string;
+  created_at: string;
+  family_members: { display_name: string; avatar_color: string | null } | null;
+}
+
+/**
+ * `delete_family_comment(p_kind, p_comment_id)` RPCのp_kind引数の値
+ * （設計部/成果物/スキーマ設計.sql 76.5章。hidden_contents.content_kindと
+ * 同じ命名を流用）。
+ */
+export type DeletableCommentKind = "family_board_comment" | "chore_reaction_comment" | "family_drawing_comment";
 
 // [新設・2026-09-07] 木を飾るステッカー購入とバッジ（要件定義書07-19章、
 // スキーマ設計.sql 47章、API仕様.md 14章、開発部/成果物/実装メモ.md 138章）。
@@ -851,7 +942,11 @@ export type HiddenContentKind =
   | "chore_completion_note"
   | "chore_reaction_comment"
   | "gratitude_note"
-  | "family_drawing";
+  | "family_drawing"
+  // [2026-09-23追加・設計部/成果物/スキーマ設計.sql 76.8章] お絵かきの
+  // コメント（family_drawing_comments）。hidden_contents.content_kindの
+  // CHECK制約が7値に拡張されたことに対応する。
+  | "family_drawing_comment";
 
 export interface HiddenContent {
   id: string;

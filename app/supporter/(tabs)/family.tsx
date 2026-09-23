@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
+import ChoreReactionsList from "@/components/ChoreReactionsList";
 import TabIntroBubble from "@/components/TabIntroBubble";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
@@ -400,29 +401,19 @@ export default function SupporterFamilyScreen() {
                     <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s4 }]}>
                       とどいたリアクション
                     </Text>
-                    {reactions.length === 0 ? (
-                      <Text
-                        style={[
-                          theme.typography.supporterCaption,
-                          { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
-                        ]}
-                      >
-                        まだ誰も反応していないよ
-                      </Text>
-                    ) : (
-                      <View style={{ marginTop: theme.spacing.s1, gap: theme.spacing.s1 }}>
-                        {reactions.map((r) => {
-                          const reactor = memberOf(r.reacted_by);
-                          const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
-                          return (
-                            <Text key={r.id} style={theme.typography.supporterBody}>
-                              {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                              {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    )}
+                    {/* [2026-09-23改訂・要件定義書07章「コメントの削除ルール」、
+                        やること.md 5-13、実装メモ.md 293章] コメントにのみ
+                        65.1節の削除導線を追加。みまもりメンバーは自分の
+                        コメントの5分以内取消のみ（保護者の是正権限は無い）。 */}
+                    <ChoreReactionsList
+                      tone="supporter"
+                      reactions={reactions}
+                      memberOf={memberOf}
+                      myMemberId={myId}
+                      emptyText="まだ誰も反応していないよ"
+                      bodyStyle={theme.typography.supporterBody}
+                      captionStyle={theme.typography.supporterCaption}
+                    />
 
                     {!isOwnCard && (
                       <>

@@ -3,6 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
+import ChoreReactionsList from "@/components/ChoreReactionsList";
 import theme from "@/theme/theme";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import type { ChoreCompletion, ChoreReaction, FamilyMember, StampKey } from "@/types/domain";
@@ -110,24 +111,19 @@ export function ChildCompletionDetailModal({
                   </Text>
 
                   <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>とどいたリアクション</Text>
-                  {reactions.length === 0 ? (
-                    <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      まだだれもリアクションしてないよ
-                    </Text>
-                  ) : (
-                    <View style={{ marginTop: theme.spacing.s1, gap: theme.spacing.s1 }}>
-                      {reactions.map((r) => {
-                        const reactor = memberOf(r.reacted_by);
-                        const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
-                        return (
-                          <Text key={r.id} style={theme.typography.childBody}>
-                            {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                            {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
-                          </Text>
-                        );
-                      })}
-                    </View>
-                  )}
+                  {/* [2026-09-23改訂・要件定義書07章「コメントの削除ルール」、
+                      やること.md 5-13、実装メモ.md 293章] コメントにのみ
+                      65.1節の削除導線を追加。子どもは自分のコメントの5分以内
+                      取消のみ（保護者の是正権限は無い）。 */}
+                  <ChoreReactionsList
+                    tone="child"
+                    reactions={reactions}
+                    memberOf={memberOf}
+                    myMemberId={myChildId}
+                    emptyText="まだだれもリアクションしてないよ"
+                    bodyStyle={theme.typography.childBody}
+                    captionStyle={theme.typography.childBody}
+                  />
 
                   <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s4 }]}>スタンプをおくる</Text>
                   <View style={styles.stampGrid}>

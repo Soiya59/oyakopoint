@@ -642,8 +642,14 @@ GRANT INSERT ON _r TO authenticated;
 -- 07-37章4章、開発部/成果物/実装メモ.md 292章）でfamily_scheduled_
 -- announcementsを追加。38→39（ローカルDockerで実測。96.5章の遵守）。
 -- family_membersへの列1本の追加のみはS1に影響しない。
+-- [2026-09-23再々更新・やること.md 2-69・2-70・5-13、実装メモ.md 293章]
+-- 掲示板のコメント・お絵かきのコメント・お絵かきのリアクション
+-- （family_board_comments・family_drawing_comments・family_drawing_
+-- reactions）の3テーブルを新設。39→42（ローカルDockerで実測。96.5章の
+-- 遵守）。chore_reactionsへの列2本（deleted_at・deleted_by_member_id）の
+-- 追加のみはS1に影響しない（既存テーブルへのADD COLUMN）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '39', count(*)::text, count(*) = 39
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '42', count(*)::text, count(*) = 42
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -751,7 +757,15 @@ WITH expected(t, p, c, h) AS (VALUES
   -- `20260916010000`時点の定義と1文字ずつ突き合わせ、差分がこの1箇所のみである
   -- ことを確認したうえでローカルDockerで実測した値。
   ('chore_reactions','chore_reactions_insert_scoped','INSERT','b7e8b9ad7f8cd74a9f752434770251f4'),
-  ('chore_reactions','chore_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-23改訂・やること.md 5-13、実装メモ.md 293章] 完了報告への
+  -- コメントを消せるようにする対応で、SELECT条件式に`AND deleted_at IS
+  -- NULL`を追加した（削除済みコメントを除外する。kind='stamp'の行は
+  -- deleted_atが常にNULLのため可視性は変わらない）。新しい条件式
+  -- `family_id = current_family_id() AND deleted_at IS NULL`は
+  -- family_board_posts_select_same_familyと文字通り同一のため、同じ
+  -- ハッシュ`a5197b0b086df242e18aa62005bacd00`になることをローカル
+  -- Dockerで実測して確認した。
+  ('chore_reactions','chore_reactions_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
   ('chores','chores_select_scoped','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('chores','chores_write_family_by_parent','ALL','db358d8f020247f149283dbae29932a2'),
   ('chores','chores_write_personal_by_creator','ALL','c6135ee6661c1603743441b1049cb23f'),
@@ -791,9 +805,33 @@ WITH expected(t, p, c, h) AS (VALUES
   -- SQL文から導かれるため、103章時点の逆算よりも確度が高い推定値ではあるが、
   -- あくまで推定であり実測ではない）。
   ('family_board_reactions','family_board_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
+  -- [2026-09-23追加・やること.md 2-69、実装メモ.md 293章] 掲示板のコメント
+  -- （設計部/成果物/スキーマ設計.sql 76.1章）。SELECT条件式`family_id =
+  -- current_family_id() AND deleted_at IS NULL`はfamily_board_posts_
+  -- select_same_familyと文字通り同一のためハッシュを引き写せる（104章の
+  -- 教訓）。INSERT条件式`family_id = current_family_id() AND
+  -- commenter_member_id = current_family_member_id()`は承認済み一覧に
+  -- 文字通り同一のものが無い新しい形のため、ローカルDockerで実測した。
+  -- UPDATE/DELETEポリシーは無い（削除はdelete_family_comment()経由のみ）。
+  ('family_board_comments','family_board_comments_insert_self','INSERT','e18c8dbf2b8922a9452f1d16345caf76'),
+  ('family_board_comments','family_board_comments_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
   ('family_drawings','family_drawings_delete_own_unpublished','DELETE','b288307c791de3293dbe0464121e47b2'),
   ('family_drawings','family_drawings_insert_self','INSERT','d5df22021847ff4c6881807027f61ff4'),
   ('family_drawings','family_drawings_select_scoped','SELECT','10deb005fa63c8ea72d3cc971d7f672d'),
+  -- [2026-09-23追加・やること.md 2-70、実装メモ.md 293章] お絵かきの
+  -- コメント（設計部/成果物/スキーマ設計.sql 76.2章）。SELECT/INSERTとも
+  -- family_board_commentsの対応ポリシーと条件式が文字通り同一のため同じ
+  -- ハッシュになる（ローカルDockerで実測して確認）。UPDATE/DELETEポリシー
+  -- は無い（削除はdelete_family_comment()経由のみ）。
+  ('family_drawing_comments','family_drawing_comments_insert_self','INSERT','e18c8dbf2b8922a9452f1d16345caf76'),
+  ('family_drawing_comments','family_drawing_comments_select_same_family','SELECT','a5197b0b086df242e18aa62005bacd00'),
+  -- [2026-09-23追加・やること.md 2-70、実装メモ.md 293章] お絵かきの
+  -- リアクション（設計部/成果物/スキーマ設計.sql 76.3章）。SELECT条件式
+  -- `family_id = current_family_id()`のみで、既存の多数のSELECTポリシーと
+  -- 文字通り同一のためハッシュを引き写せる（104章の教訓）。INSERT/UPDATE/
+  -- DELETEポリシーは無い（書き込みはtoggle_family_drawing_reaction_
+  -- stamp()経由のみ）。
+  ('family_drawing_reactions','family_drawing_reactions_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('family_invites','family_invites_insert_by_parent','INSERT','111d46a4a91a73e658bd8dec8250e658'),
   ('family_invites','family_invites_select_by_parent','SELECT','a64bcea5635a1759018a24e6bf16edc5'),
   ('family_invites','family_invites_update_revoke_by_parent','UPDATE','a9c21f23a1a0b9627d69fdb5a4d29425'),
@@ -947,7 +985,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー71本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー76本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -1245,7 +1283,32 @@ WITH expected(f) AS (VALUES
   -- 含まれない（ローカルDockerで実測して確認）。
   ('set_family_scheduled_announcement'),
   ('delete_family_scheduled_announcement'),
-  ('current_family_push_permission_needed')
+  ('current_family_push_permission_needed'),
+  -- [2026-09-23追加・やること.md 2-69・2-70・5-13、実装メモ.md 293章]
+  -- 掲示板のコメント・完了報告へのコメント削除・お絵かきの公開通知／
+  -- リアクション／コメント（設計部/成果物/スキーマ設計.sql 76章）。
+  -- SECURITY DEFINERでPUBLIC/anonから明示REVOKEのうえauthenticatedへ
+  -- 明示GRANTしている2本。
+  ('delete_family_comment'),
+  ('toggle_family_drawing_reaction_stamp'),
+  -- 以下9本はいずれもRETURNS TRIGGERのトリガー関数で、PUBLICからの
+  -- EXECUTEを明示REVOKEしていないため（member_goals_before_write等の
+  -- 既存トリガー関数と同じ34.5章の既知の挙動）、デフォルトのまま
+  -- authenticatedが実行可能と判定されこの一覧に含まれる。トリガー文脈の
+  -- 外で直接呼び出すとNEW参照でエラーになるだけで実害は無い。
+  -- comment_notification_payload・drawing_published_notification_
+  -- payloadの2本（いずれもRETURNS jsonbの通常のSECURITY DEFINER関数）は
+  -- PUBLIC/anon/authenticatedすべてから明示REVOKEしているため、この
+  -- 一覧には含まれない（ローカルDockerで実測して確認）。
+  ('family_board_comments_before_insert'),
+  ('family_drawing_comments_before_insert'),
+  ('family_drawing_reactions_before_insert'),
+  ('family_board_comments_social_toggle_guard'),
+  ('family_drawing_comments_social_toggle_guard'),
+  ('family_board_comments_after_insert_notify'),
+  ('chore_reactions_after_insert_notify'),
+  ('family_drawing_comments_after_insert_notify'),
+  ('family_drawings_after_publish_notify')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1258,7 +1321,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数87件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数98件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

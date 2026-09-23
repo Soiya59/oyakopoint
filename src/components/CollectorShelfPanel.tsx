@@ -30,14 +30,16 @@
  *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
 import React, { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
 import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "./FamilyTree";
 import { MemberAvatar } from "./MemberAvatar";
 import { HabitFigureCircleIcon } from "./StickerIcon";
+import AndroidKeyboardAvoidingPadding from "./AndroidKeyboardAvoidingPadding";
 import CircleFrame from "./CircleFrame";
+import DrawingEngagementSection from "./DrawingEngagementSection";
 import FigureIcon from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -341,7 +343,20 @@ function ExpandedItemModal({
               土台の仕組みを追加する（下のViewの`onStartShouldSetResponder`/
               `onResponderRelease`）。個々のPressableの当たり判定に依存しないため、
               間にどんな透明な層があっても、最終的にここへ辿り着く。 */}
-      <View style={styles.overlay} onStartShouldSetResponder={() => true} onResponderRelease={onClose}>
+      {/* [2026-09-23新設・実装メモ.md 289章、UIUXデザイン部/成果物/主要画面
+          ワイヤーフレーム.md 65.4.4節] `ExpandedItemModal`にはキーボード対策が
+          まだ効いていなかった（289.3節の対象漏れ。当時この中にTextInputが
+          無かったため）。本章でコメント入力欄を新設したため、289.8節①と
+          同じ考え方をここにも適用する。250章が対処した「透明な層」問題
+          （ScrollViewのflexGrow:0）とは別の問題であり、両者は独立に効く
+          （どちらか一方を選ぶ必要はない）。AndroidKeyboardAvoidingPaddingは
+          `styles.overlay`の当たり判定（onStartShouldSetResponder/
+          onResponderRelease）をそのまま引き継ぐ（rest props forwarding）。 */}
+      <AndroidKeyboardAvoidingPadding
+        style={styles.overlay}
+        onStartShouldSetResponder={() => true}
+        onResponderRelease={onClose}
+      >
         {/* [2026-09-17・やること.md 4-42・実装メモ238章] 統括の実機報告「カードの外の暗い部分を
             押しても閉じない（アバターの拡大は閉じる）」への対処。従来は overlay の Pressable の
             中に ScrollView を抱えた Pressable を入れ子にしていたが、ScrollView を含む入れ子では
@@ -371,6 +386,8 @@ function ExpandedItemModal({
             style={{ maxHeight: modalMaxHeight, flexGrow: 0, flexShrink: 1 }}
             contentContainerStyle={[styles.expandedCard, { paddingTop: expandedCardPaddingTop }]}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios" ? true : undefined}
           >
             <Pressable
               onPress={onClose}
@@ -384,7 +401,7 @@ function ExpandedItemModal({
             {children(expandedImageSize)}
           </ScrollView>
         </View>
-      </View>
+      </AndroidKeyboardAvoidingPadding>
     </Modal>
   );
 }
@@ -462,10 +479,11 @@ function buildShelfEntries(items: CollectedGachaDraw[]): { key: string; item: Co
  * 目的の一部であるため、今回に限り「モーダルを増やさない」方針よりも
  * 「既存の操作感に揃える」ことを優先し、方針を上書きする。
  */
-function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw[] }) {
+function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: CollectedGachaDraw[]; myMemberId: string }) {
   const isChild = tone === "child";
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
+  const { state } = useAppData();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const shelfEntries = useMemo(() => buildShelfEntries(items), [items]);
@@ -541,35 +559,52 @@ function ShelfItemsGrid({ tone, items }: { tone: Tone; items: CollectedGachaDraw
                 // 160〜320ptの範囲で可変）で表示するよう変更した。縦積み
                 // （絵を中央上、テキストをその下に中央寄せ）のレイアウト自体は
                 // 2026-09-09時点のものをそのまま踏襲する。
-                <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
-                  <Pressable onPress={() => {}}>
-                    <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
-                  </Pressable>
-                  <View style={styles.detailDrawingTextWrap}>
-                    <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
-                      {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
-                    </Text>
-                    {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
-                        主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
-                        直後に、独立した1行のラベル付き表示として追加する。無い絵は
-                        この行自体が無い（プレースホルダは出さない）。 */}
-                    {selectedItem.drawing.title && (
-                      <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-                        {isChild ? "だいめい：" : "題名："}
-                        {selectedItem.drawing.title}
+                <>
+                  <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
+                    <Pressable onPress={() => {}}>
+                      <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                    </Pressable>
+                    <View style={styles.detailDrawingTextWrap}>
+                      <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
+                        {isChild ? `「${selectedItem.drawing.artistName}」の絵` : `「${selectedItem.drawing.artistName}」が描いた絵`}
                       </Text>
-                    )}
-                    {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
-                        絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
-                        （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
-                        だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
-                        日付と一緒に見つけた人も出す。 */}
-                    <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
-                      {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
-                      {isChild ? "が みつけたよ" : "が獲得"}
-                    </Text>
-                  </View>
-                </Pressable>
+                      {/* [2026-09-02追加] お絵かきの題名（要件定義書07-13-2a章、
+                          主要画面ワイヤーフレーム.md 21.0節決定17）。「描いた人の名前」の
+                          直後に、独立した1行のラベル付き表示として追加する。無い絵は
+                          この行自体が無い（プレースホルダは出さない）。 */}
+                      {selectedItem.drawing.title && (
+                        <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+                          {isChild ? "だいめい：" : "題名："}
+                          {selectedItem.drawing.title}
+                        </Text>
+                      )}
+                      {/* [2026-08-29修正・本部長] 既製の飾りには「◯◯が獲得」と出るのに、
+                          絵には**描いた人しか出ておらず、ガチャで引き当てた人が分からなかった**
+                          （ユーザーの実機指摘）。collectorNameは既に取得済みで使っていないだけ
+                          だった。絵は「描いた人」と「見つけた人」が別人になりうるので、
+                          日付と一緒に見つけた人も出す。 */}
+                      <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+                        {formatShortDate(selectedItem.drawnAt)} {selectedItem.collectorName}
+                        {isChild ? "が みつけたよ" : "が獲得"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {/* [2026-09-23新設・要件定義書07-38章5章・6章、UIUXデザイン部/
+                      成果物/主要画面ワイヤーフレーム.md 65.4.3節、やること.md
+                      2-70] リアクション・コメント区画。`detailDrawingWrap`
+                      （本文を押すと閉じるPressable）の外に、絵と同じ「無反応の
+                      Pressable」で包んで配置する（238・246・250章の当たり判定を
+                      壊さないため）。 */}
+                  <Pressable onPress={() => {}} style={styles.detailEngagementWrap}>
+                    <DrawingEngagementSection
+                      tone={tone}
+                      drawingId={selectedItem.drawing.drawingId}
+                      artistMemberId={selectedItem.drawing.artistId}
+                      myMemberId={myMemberId}
+                      socialInteractionsEnabled={state.family.social_interactions_enabled}
+                    />
+                  </Pressable>
+                </>
               ) : null
           }
         </ExpandedItemModal>
@@ -845,7 +880,7 @@ export function CollectorShelfPanel({
                   />
                 </View>
               )}
-              {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} />}
+              {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} myMemberId={myMemberId} />}
 
               {/* --- メダル区分（「全員」選択時。実装メモ158章・統括の実機確認「あつめたものに
                   メダルも入れてほしい」対応）
@@ -895,7 +930,7 @@ export function CollectorShelfPanel({
                   <Text style={bodyStyle}>{isChild ? "まだ なにも あつまっていないよ" : "まだ何も集まっていません"}</Text>
                 )}
                 {collectedLoadState === "ready" && memberMadeOrCollected.length > 0 && (
-                  <ShelfItemsGrid tone={tone} items={memberMadeOrCollected} />
+                  <ShelfItemsGrid tone={tone} items={memberMadeOrCollected} myMemberId={myMemberId} />
                 )}
               </View>
 
@@ -1956,6 +1991,9 @@ const styles = StyleSheet.create({
   detailEmoji: { fontSize: 40 },
   // [2026-09-09新設] 家族の絵の詳細表示専用（拡大サムネイル＋縦積みレイアウト）。
   detailDrawingWrap: { alignItems: "center" },
+  // [2026-09-23新設] お絵かきのリアクション・コメント区画の幅。detailDrawingWrapの
+  // 兄弟要素（無反応のPressableで包んだもの）。
+  detailEngagementWrap: { width: "100%", alignItems: "center" },
   detailDrawingTextWrap: { marginTop: theme.spacing.s3, alignItems: "center" },
   detailDrawingCenterText: { textAlign: "center" },
   // [2026-09-14新設・実装メモ225章] 「集めたもの」詳細の拡大表示モーダル。

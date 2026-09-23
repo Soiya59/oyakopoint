@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
 import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
+import ChoreReactionsList from "@/components/ChoreReactionsList";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
@@ -509,32 +510,20 @@ export default function ApprovalsScreen() {
                     <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s4 }]}>
                       とどいたリアクション
                     </Text>
-                    {reactions.length === 0 ? (
-                      <Text
-                        style={[
-                          theme.typography.parentCaption,
-                          { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
-                        ]}
-                      >
-                        まだ誰も反応していないよ
-                      </Text>
-                    ) : (
-                      <View style={{ marginTop: theme.spacing.s1, gap: theme.spacing.s1 }}>
-                        {reactions.map((r) => {
-                          const reactor = memberOf(r.reacted_by);
-                          const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
-                          return (
-                            <Text key={r.id} style={theme.typography.parentBody}>
-                              {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                              {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}{" "}
-                              <Text style={theme.typography.parentCaption}>
-                                {new Date(r.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                              </Text>
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    )}
+                    {/* [2026-09-23改訂・要件定義書07章「コメントの削除ルール」、
+                        やること.md 5-13、実装メモ.md 293章] コメント
+                        （kind='comment'）にのみ65.1節の削除導線を追加した
+                        （本人5分以内は「取消」、保護者の是正は「削除」）。
+                        スタンプの表示は変更していない。 */}
+                    <ChoreReactionsList
+                      tone="parent"
+                      reactions={reactions}
+                      memberOf={memberOf}
+                      myMemberId={myParentId}
+                      emptyText="まだ誰も反応していないよ"
+                      bodyStyle={theme.typography.parentBody}
+                      captionStyle={theme.typography.parentCaption}
+                    />
 
                     {/* [2026-08-16追加] 3.1章「自分自身の完了報告カードにはリアクション
                         ボタン自体を表示しない」。受け取ったリアクション一覧（上のブロック）は

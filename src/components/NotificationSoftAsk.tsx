@@ -62,7 +62,18 @@ type Phase = "ask" | "denied" | "granted";
  * `supabase/functions/notify-family-board-post/index.ts`の`data`参照）。 */
 type FamilyBoardPushData = { type?: string; post_id?: string };
 
+/**
+ * [2026-09-23追加・要件定義書07章隣接の2026-09-23決定「コメントが付いたら
+ * 書いた人にだけ通知」、07-38章4章、開発部/成果物/実装メモ.md 293章]
+ * コメント通知（`notify-comment`）・お絵かきの公開通知
+ * （`notify-drawing-published`）のペイロード。
+ */
+type CommentPushData = { type?: string; kind?: string; comment_id?: string };
+type DrawingPublishedPushData = { type?: string; drawing_id?: string };
+
 type FamilyBoardRoute = "/parent/family-board" | "/supporter/family-board" | "/child/family-board";
+type ChoreActivityRoute = "/parent/approvals" | "/supporter/activity" | "/child/family";
+type CollectorShelfRoute = "/parent/collector-shelf" | "/supporter/collector-shelf" | "/child/collector-shelf";
 
 /** ログイン中のロールから、家族の掲示板の遷移先ルートを決める。
  * ロールが確定していない（"loading"）・ログインしていない（"signedOut"）・
@@ -71,6 +82,35 @@ function familyBoardRouteForStatus(status: SessionStatus): FamilyBoardRoute | nu
   if (status === "parent") return "/parent/family-board";
   if (status === "supporter") return "/supporter/family-board";
   if (status === "child") return "/child/family-board";
+  return null;
+}
+
+/**
+ * [2026-09-23追加] 完了報告へのコメント通知（`chore_reaction_comment`）の
+ * タップ先。「とどいたリアクション」一覧を持つ既存画面（P9/S2/かぞくタブ）を
+ * 流用する。対象の行を特定して自動でハイライトする導線までは作らない
+ * （283章が掲示板投稿通知で同じ理由により見送った「一覧を開くところまで」と
+ * 同じ判断。設計部76.13章「タップ先の導線は未確定」）。
+ */
+function choreActivityRouteForStatus(status: SessionStatus): ChoreActivityRoute | null {
+  if (status === "parent") return "/parent/approvals";
+  if (status === "supporter") return "/supporter/activity";
+  if (status === "child") return "/child/family";
+  return null;
+}
+
+/**
+ * [2026-09-23追加・要件定義書07-38章4-5節・6-5節] お絵かきの公開通知・
+ * コメント通知のタップ先。コレクション「集めたもの」画面を開く
+ * （対象アイテムの自動ハイライトは65.4.5節がUIUXデザイン部の判断で
+ * 「一覧＋利用者の能動的なタップ」に具体化したものだが、その一覧側の
+ * ハイライト実装自体は本タスクのスコープ外——283章と同じ「一覧を開く
+ * ところまで」の判断。設計部76.13章にも同旨の申し送りがある）。
+ */
+function collectorShelfRouteForStatus(status: SessionStatus): CollectorShelfRoute | null {
+  if (status === "parent") return "/parent/collector-shelf";
+  if (status === "supporter") return "/supporter/collector-shelf";
+  if (status === "child") return "/child/collector-shelf";
   return null;
 }
 
@@ -150,25 +190,44 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
     void registerPushTokenForMember(client, memberId);
   }, [client, memberId]);
 
-  // [2026-09-22追加・実装メモ283章 欠落③] 通知タップ時の遷移。
-  // タップされた事実は`pendingBoardTapRef`に保持し、ロールが確定して
-  // いなければ`status`が変わるたびに再評価する（コールドスタート直後は
-  // `status`が"loading"のことがあるため）。
-  const pendingBoardTapRef = useRef(false);
+  // [2026-09-22追加・実装メモ283章 欠落③、2026-09-23拡張・実装メモ293章]
+  // 通知タップ時の遷移。タップされた事実は`pendingRouteResolverRef`に
+  // 「ロールから遷移先を決める関数」として保持し、ロールが確定していなければ
+  // `status`が変わるたびに再評価する（コールドスタート直後は`status`が
+  // "loading"のことがあるため）。掲示板投稿通知（家族の掲示板）・コメント
+  // 通知（種類ごとに遷移先が異なる）・お絵かきの公開通知（コレクション）の
+  // 4種類のdata.typeをここで振り分ける。
+  const pendingRouteResolverRef = useRef<((status: SessionStatus) => string | null) | null>(null);
   const statusRef = useRef(status);
 
   useEffect(() => {
+    const resolverForData = (
+      data: (FamilyBoardPushData & CommentPushData & DrawingPublishedPushData) | undefined
+    ): ((status: SessionStatus) => string | null) | null => {
+      if (data?.type === "family_board_post") return familyBoardRouteForStatus;
+      if (data?.type === "drawing_published") return collectorShelfRouteForStatus;
+      if (data?.type === "comment") {
+        if (data.kind === "family_board_comment") return familyBoardRouteForStatus;
+        if (data.kind === "chore_reaction_comment") return choreActivityRouteForStatus;
+        if (data.kind === "family_drawing_comment") return collectorShelfRouteForStatus;
+      }
+      return null;
+    };
+
     const handleResponse = (response: Notifications.NotificationResponse) => {
-      const data = response.notification.request.content.data as FamilyBoardPushData | undefined;
-      if (data?.type !== "family_board_post") return;
-      pendingBoardTapRef.current = true;
+      const data = response.notification.request.content.data as
+        | (FamilyBoardPushData & CommentPushData & DrawingPublishedPushData)
+        | undefined;
+      const resolver = resolverForData(data);
+      if (!resolver) return;
+      pendingRouteResolverRef.current = resolver;
       // このeffectはstatusに依存させたくない（購読の張り直しを避ける）ため、
       // 下のeffectに評価を委ねずここでも即時に試す（起動中のタップは大抵
       // ロールが既に確定しているため、ここで即座に遷移できる）。
-      const route = familyBoardRouteForStatus(statusRef.current);
+      const route = resolver(statusRef.current);
       if (route) {
-        pendingBoardTapRef.current = false;
-        router.push(route);
+        pendingRouteResolverRef.current = null;
+        router.push(route as import("expo-router").Href);
       }
     };
 
@@ -198,11 +257,11 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
   // 起きない＝落ちない、で意図どおり。
   useEffect(() => {
     statusRef.current = status;
-    if (!pendingBoardTapRef.current) return;
-    const route = familyBoardRouteForStatus(status);
+    if (!pendingRouteResolverRef.current) return;
+    const route = pendingRouteResolverRef.current(status);
     if (!route) return;
-    pendingBoardTapRef.current = false;
-    router.push(route);
+    pendingRouteResolverRef.current = null;
+    router.push(route as import("expo-router").Href);
   }, [status]);
 
   const later = useCallback(async () => {

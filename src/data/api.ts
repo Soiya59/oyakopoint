@@ -29,13 +29,20 @@ import type {
   ChoreNfcTagWithMember,
   ChoreReaction,
   ChoreWeeklyCompletionCount,
+  DeletableCommentKind,
   Family,
+  FamilyBoardComment,
+  FamilyBoardCommentWithAuthor,
   FamilyBoardPost,
   FamilyBoardPostWithAuthor,
   FamilyBoardReactionWithPostBody,
   FamilyBoardReactionWithReactor,
   FamilyDrawing,
+  FamilyDrawingComment,
+  FamilyDrawingCommentWithAuthor,
   FamilyDrawingLineData,
+  FamilyDrawingReaction,
+  FamilyDrawingReactionWithReactor,
   FamilyHomeCard,
   FamilyInvite,
   FamilyInviteLookupResult,
@@ -2313,6 +2320,30 @@ export async function createDrawing(
   return { ok: true, data: data as FamilyDrawing };
 }
 
+/**
+ * [2026-09-23新設・要件定義書07-38章4章「公開通知」] 「とどいたもの」
+ * （InboxPanel）へお絵かきの公開通知を合流させるための家族全体ログ取得。
+ * 公開済み（is_published=true）の絵だけを返す。`family_drawings_select_
+ * scoped`により未公開の絵は本人以外に見えないが、本クエリはis_published=trueで
+ * 明示的に絞っているため他家族・未公開の絵が紛れ込むことはない。
+ */
+export async function fetchFamilyPublishedDrawings(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<{ id: string; artist_member_id: string; published_at: string | null; title: string | null }[]>> {
+  const { data, error } = await client
+    .from("family_drawings")
+    .select("id, artist_member_id, published_at, title")
+    .eq("family_id", familyId)
+    .eq("is_published", true)
+    .order("published_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: (data ?? []) as { id: string; artist_member_id: string; published_at: string | null; title: string | null }[],
+  };
+}
+
 export interface DeleteDrawingResult {
   /**
    * [2026-09-08追加・やること.md 4-4] 削除しようとしたまさにその瞬間に、他の家族
@@ -2784,10 +2815,18 @@ export async function fetchFamilyBoardPostsHistory(
   const { data, error } = await client
     .from("family_board_posts")
     .select(
-      "*, family_members!author_member_id(display_name, avatar_color), reactions:family_board_reactions(stamp_key, reactor_member_id)"
+      "*, family_members!author_member_id(display_name, avatar_color), " +
+        "reactions:family_board_reactions(stamp_key, reactor_member_id), " +
+        // [2026-09-23追加・要件定義書07-30章、実装メモ.md 293章] コメントを
+        // 投稿と同時に埋め込み取得する。件数が0か1以上かで一覧の表示分岐が
+        // 変わる（07-30章決定7-2「0件は不在を強調しない」）ため、遅延取得
+        // （「だれが送ったか見る」と同じ方式）にはせず、投稿一覧と同時に
+        // 取得する。1投稿あたりの件数はページング無しのMVP想定（65.6節）。
+        "comments:family_board_comments(*, family_members!commenter_member_id(display_name, avatar_color))"
     )
     .eq("family_id", familyId)
     .order("created_at", { ascending: false })
+    .order("created_at", { ascending: true, referencedTable: "family_board_comments" })
     .range(range.from, range.to);
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardPostWithAuthor[] };
@@ -2950,6 +2989,210 @@ export async function fetchFamilyBoardReactionsLog(
     .order("created_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithPostBody[] };
+}
+
+// ============================================================
+// 33. 掲示板のコメント・完了報告へのコメント削除・お絵かきの公開通知／
+//     リアクション／コメント（要件定義書.md 07章「コメントの削除ルール」・
+//     07-30章・07-38章、設計部/成果物/スキーマ設計.sql 76章、API仕様.md
+//     33章、やること.md 2-69・2-70・5-13、2026-09-23新設）
+// ============================================================
+
+/**
+ * API仕様.md 33.0章「3つの削除ルールは同じ」・33.1〜33.3章。掲示板の
+ * コメント・完了報告へのコメント・お絵かきのコメントの3種を、同一の
+ * SECURITY DEFINER RPC `delete_family_comment` 1本で削除する（判定順は
+ * スキーマ設計.sql 76.5章。本人5分以内／保護者は本人以外を時間制限なく／
+ * それ以外は不可）。
+ */
+export async function deleteFamilyComment(
+  client: SupabaseClient,
+  kind: DeletableCommentKind,
+  commentId: string
+): Promise<ApiResult<null>> {
+  const { error } = await client.rpc("delete_family_comment", { p_kind: kind, p_comment_id: commentId });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: null };
+}
+
+/**
+ * API仕様.md 33.1章。掲示板の投稿に届いたコメントを、コメント者の表示名・
+ * アバター色付きで古い順（時系列フラット表示、07-30章決定3）に取得する。
+ * `family_board_comments_select_same_family`が`deleted_at IS NULL`を
+ * 常に要求するため、取得できる行は常に未削除のものだけになる。
+ */
+export async function fetchFamilyBoardCommentsForPost(
+  client: SupabaseClient,
+  postId: string
+): Promise<ApiResult<FamilyBoardCommentWithAuthor[]>> {
+  const { data, error } = await client
+    .from("family_board_comments")
+    .select("*, family_members!commenter_member_id(display_name, avatar_color)")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyBoardCommentWithAuthor[] };
+}
+
+/**
+ * API仕様.md 33.1章。掲示板の投稿へコメントする（自分自身の投稿を含む、
+ * 07-30章決定1）。`family_id`・`created_at`・`deleted_at`・
+ * `deleted_by_member_id`はクライアントから送る必要がない
+ * （`family_board_comments_before_insert`トリガーが自動補完する）。
+ */
+export async function createFamilyBoardComment(
+  client: SupabaseClient,
+  input: { post_id: string; commenter_member_id: string; body: string }
+): Promise<ApiResult<FamilyBoardComment>> {
+  const { data, error } = await client
+    .from("family_board_comments")
+    .insert({ post_id: input.post_id, commenter_member_id: input.commenter_member_id, body: input.body })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyBoardComment };
+}
+
+/**
+ * [2026-09-23新設] 「とどいたもの」（InboxPanel）へ掲示板コメントを合流
+ * させるための家族全体ログ取得（要件定義書07-30章決定5「投稿者本人のみに
+ * 合算」）。fetchFamilyBoardReactionsLogと同じ「家族全体を取得し、呼び出し側
+ * が自分宛の分だけをclient側でフィルタする」パターン。
+ */
+export async function fetchFamilyBoardCommentsLog(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<(FamilyBoardComment & { family_board_posts: { body: string; author_member_id: string } | null })[]>> {
+  const { data, error } = await client
+    .from("family_board_comments")
+    .select("*, family_board_posts(body, author_member_id)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: (data ?? []) as unknown as (FamilyBoardComment & {
+      family_board_posts: { body: string; author_member_id: string } | null;
+    })[],
+  };
+}
+
+/**
+ * API仕様.md 33.3章。公開済みの絵に届いたコメントを、コメント者の表示名・
+ * アバター色付きで古い順に取得する。対象は公開済みの絵のみ（未公開の絵には
+ * コメント欄という概念自体が無い、07-38章3章）。
+ */
+export async function fetchFamilyDrawingCommentsForDrawing(
+  client: SupabaseClient,
+  drawingId: string
+): Promise<ApiResult<FamilyDrawingCommentWithAuthor[]>> {
+  const { data, error } = await client
+    .from("family_drawing_comments")
+    .select("*, family_members!commenter_member_id(display_name, avatar_color)")
+    .eq("drawing_id", drawingId)
+    .order("created_at", { ascending: true });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyDrawingCommentWithAuthor[] };
+}
+
+/**
+ * API仕様.md 33.3章。公開済みの絵へコメントする（自分自身の絵を含む、
+ * 07-38章6-1節）。対象の絵が未公開・他家族・存在しない場合は
+ * `foreign_key_violation`「対象の絵が見つからないか、まだ公開されていません」
+ * に収束する（区別しない設計）。
+ */
+export async function createFamilyDrawingComment(
+  client: SupabaseClient,
+  input: { drawing_id: string; commenter_member_id: string; body: string }
+): Promise<ApiResult<FamilyDrawingComment>> {
+  const { data, error } = await client
+    .from("family_drawing_comments")
+    .insert({ drawing_id: input.drawing_id, commenter_member_id: input.commenter_member_id, body: input.body })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as FamilyDrawingComment };
+}
+
+/**
+ * [2026-09-23新設] 「とどいたもの」（InboxPanel）へお絵かきコメントを合流
+ * させるための家族全体ログ取得（要件定義書07-38章6-5節「作者本人のみに
+ * 合算」）。
+ */
+export async function fetchFamilyDrawingCommentsLog(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<(FamilyDrawingComment & { family_drawings: { artist_member_id: string; title: string | null } | null })[]>> {
+  const { data, error } = await client
+    .from("family_drawing_comments")
+    .select("*, family_drawings(artist_member_id, title)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: (data ?? []) as unknown as (FamilyDrawingComment & {
+      family_drawings: { artist_member_id: string; title: string | null } | null;
+    })[],
+  };
+}
+
+/**
+ * API仕様.md 33.4章。お絵かきへのスタンプの追加・取消・切替。
+ * `toggle_family_board_reaction_stamp`と完全に同型（同じスタンプの再送信で
+ * 取消、違う種類は追加）。対象は公開済みの絵のみ・自己リアクション禁止
+ * （07-38章5-1節）。
+ */
+export async function toggleFamilyDrawingReactionStamp(
+  client: SupabaseClient,
+  input: { drawing_id: string; stamp_key: StampKey }
+): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
+  const { data, error } = await client
+    .rpc("toggle_family_drawing_reaction_stamp", { p_drawing_id: input.drawing_id, p_stamp_key: input.stamp_key })
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
+}
+
+/**
+ * API仕様.md 33.4章。ある絵に届いたスタンプ一覧を、反応者の表示名・
+ * アバター色付きで取得する（「だれが送ったか見る」用の遅延取得、
+ * fetchFamilyBoardReactionsForPostと同じパターン）。
+ */
+export async function fetchFamilyDrawingReactionsForDrawing(
+  client: SupabaseClient,
+  drawingId: string
+): Promise<ApiResult<FamilyDrawingReactionWithReactor[]>> {
+  const { data, error } = await client
+    .from("family_drawing_reactions")
+    .select("id, stamp_key, reactor_member_id, created_at, family_members!reactor_member_id(display_name, avatar_color)")
+    .eq("drawing_id", drawingId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return { ok: true, data: (data ?? []) as unknown as FamilyDrawingReactionWithReactor[] };
+}
+
+/**
+ * [2026-09-23新設] 「とどいたもの」（InboxPanel）へお絵かきリアクションを
+ * 合流させるための家族全体ログ取得（要件定義書07-38章5-4節「作者本人のみに
+ * 合算」）。fetchFamilyBoardReactionsLogと同じパターン。
+ */
+export async function fetchFamilyDrawingReactionsLog(
+  client: SupabaseClient,
+  familyId: string
+): Promise<ApiResult<(FamilyDrawingReaction & { family_drawings: { artist_member_id: string; title: string | null } | null })[]>> {
+  const { data, error } = await client
+    .from("family_drawing_reactions")
+    .select("*, family_drawings(artist_member_id, title)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: (data ?? []) as unknown as (FamilyDrawingReaction & {
+      family_drawings: { artist_member_id: string; title: string | null } | null;
+    })[],
+  };
 }
 
 // ============================================================

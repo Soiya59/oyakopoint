@@ -42,6 +42,12 @@ export default function ChildFamilyBoardScreen() {
     reactionError,
     reactToPost,
     viewReactorsForPost,
+    sendingCommentPostId,
+    commentError,
+    addComment,
+    deletingCommentId,
+    commentActionError,
+    deleteComment,
   } = useFamilyBoardHistory(familyId);
   const { remaining } = useFamilyBoardRemainingToday();
 
@@ -90,6 +96,13 @@ export default function ChildFamilyBoardScreen() {
         reactionError={reactionError}
         onReact={(postId, stampKey) => reactToPost(postId, myMemberId, stampKey)}
         onViewReactors={viewReactorsForPost}
+        commentsEnabled={state.family.social_interactions_enabled}
+        sendingCommentPostId={sendingCommentPostId}
+        commentError={commentError}
+        onAddComment={addComment}
+        deletingCommentId={deletingCommentId}
+        commentActionError={commentActionError}
+        onDeleteComment={deleteComment}
       />
     </Screen>
   );

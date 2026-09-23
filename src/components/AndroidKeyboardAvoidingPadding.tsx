@@ -1,5 +1,5 @@
 import React from "react";
-import { KeyboardAvoidingView, Platform, StyleProp, View, ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, StyleProp, View, ViewProps, ViewStyle } from "react-native";
 
 /**
  * Androidでだけ`behavior="padding"`の`KeyboardAvoidingView`で包む。iOSは中身の
@@ -27,18 +27,23 @@ import { KeyboardAvoidingView, Platform, StyleProp, View, ViewStyle } from "reac
 export function AndroidKeyboardAvoidingPadding({
   style,
   children,
+  ...rest
 }: {
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
-}) {
+} & Omit<ViewProps, "style" | "children">) {
   if (Platform.OS === "android") {
     return (
-      <KeyboardAvoidingView style={style} behavior="padding">
+      <KeyboardAvoidingView style={style} behavior="padding" {...rest}>
         {children}
       </KeyboardAvoidingView>
     );
   }
-  return <View style={style}>{children}</View>;
+  return (
+    <View style={style} {...rest}>
+      {children}
+    </View>
+  );
 }
 
 export default AndroidKeyboardAvoidingPadding;

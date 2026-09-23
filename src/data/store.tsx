@@ -27,8 +27,11 @@ import type {
   ChoreCompletion,
   ChoreReaction,
   DailySummaryEntry,
+  FamilyBoardComment,
   FamilyBoardReactionWithPostBody,
+  FamilyDrawingComment,
   FamilyDrawingLineData,
+  FamilyDrawingReaction,
   FamilyMember,
   GratitudePoint,
   HiddenContent,
@@ -95,6 +98,34 @@ export interface State {
    * パターン。
    */
   familyBoardReactions: FamilyBoardReactionWithPostBody[];
+  /**
+   * [2026-09-23追加・要件定義書07-30章決定5、開発部/成果物/実装メモ.md 293章]
+   * 掲示板の投稿に届いたコメント（family_board_comments）の家族全体ログ
+   * （対象投稿の本文・投稿者を埋め込み済み）。`InboxPanel`が
+   * `family_board_posts.author_member_id === 自分`の行だけを抜き出して
+   * 合流させる（familyBoardReactionsと同じパターン）。
+   */
+  familyBoardComments: (FamilyBoardComment & { family_board_posts: { body: string; author_member_id: string } | null })[];
+  /**
+   * [2026-09-23追加・要件定義書07-38章5-4節、開発部/成果物/実装メモ.md 293章]
+   * お絵かきに届いたスタンプ（family_drawing_reactions）の家族全体ログ
+   * （対象の絵の作者を埋め込み済み）。
+   */
+  familyDrawingReactions: (FamilyDrawingReaction & { family_drawings: { artist_member_id: string; title: string | null } | null })[];
+  /**
+   * [2026-09-23追加・要件定義書07-38章6-5節、開発部/成果物/実装メモ.md 293章]
+   * お絵かきに届いたコメント（family_drawing_comments）の家族全体ログ
+   * （対象の絵の作者を埋め込み済み）。
+   */
+  familyDrawingComments: (FamilyDrawingComment & { family_drawings: { artist_member_id: string; title: string | null } | null })[];
+  /**
+   * [2026-09-23追加・要件定義書07-38章4章「公開通知」、開発部/成果物/
+   * 実装メモ.md 293章] 公開済みの絵の一覧（`InboxPanel`が
+   * `artist_member_id === 自分`の行を「あなたの絵が公開されました」として
+   * 合流させる）。コレクター棚（CollectedGachaDraw、useCollectorShelf.ts）とは
+   * 別の軽量な取得経路（作者id・公開日時・題名のみ）。
+   */
+  publishedDrawings: { id: string; artist_member_id: string; published_at: string | null; title: string | null }[];
   /** 子ども向け画面で「いまログイン中」として扱うmember_id */
   activeChildMemberId: string;
   /** 保護者向け画面で「いま操作中」として扱うmember_id（リアクションのreacted_byに使う） */
@@ -525,6 +556,10 @@ const EMPTY_STATE: State = {
   redemptions: [],
   gratitude: [],
   familyBoardReactions: [],
+  familyBoardComments: [],
+  familyDrawingReactions: [],
+  familyDrawingComments: [],
+  publishedDrawings: [],
   activeChildMemberId: "",
   activeParentMemberId: "",
   dailyFlaggedChoreIds: [],
@@ -677,6 +712,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       memberPointsRes,
       gratitudeRes,
       familyBoardReactionsRes,
+      familyBoardCommentsRes,
+      familyDrawingReactionsRes,
+      familyDrawingCommentsRes,
+      publishedDrawingsRes,
       dailySummaryRes,
       dailyFlagsRes,
       memberBlocksRes,
@@ -695,6 +734,14 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       // [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのリアクション
       // 家族全体ログ（InboxPanel「とどいたもの」への合流用）。
       api.fetchFamilyBoardReactionsLog(client, familyId),
+      // [2026-09-23追加・要件定義書07-30章決定5、開発部/成果物/実装メモ.md
+      // 293章] 掲示板コメント・お絵かきリアクション・お絵かきコメント・
+      // 公開済みの絵の家族全体ログ（InboxPanel「とどいたもの」への合流用）。
+      // 他の家族データと同じ15秒背景更新サイクルに乗せる。
+      api.fetchFamilyBoardCommentsLog(client, familyId),
+      api.fetchFamilyDrawingReactionsLog(client, familyId),
+      api.fetchFamilyDrawingCommentsLog(client, familyId),
+      api.fetchFamilyPublishedDrawings(client, familyId),
       client
         .from("chore_completion_daily_summary")
         .select("*")
@@ -741,6 +788,22 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     }
     if (!familyBoardReactionsRes.ok) {
       fail(familyBoardReactionsRes.error.message);
+      return;
+    }
+    if (!familyBoardCommentsRes.ok) {
+      fail(familyBoardCommentsRes.error.message);
+      return;
+    }
+    if (!familyDrawingReactionsRes.ok) {
+      fail(familyDrawingReactionsRes.error.message);
+      return;
+    }
+    if (!familyDrawingCommentsRes.ok) {
+      fail(familyDrawingCommentsRes.error.message);
+      return;
+    }
+    if (!publishedDrawingsRes.ok) {
+      fail(publishedDrawingsRes.error.message);
       return;
     }
     if (dailySummaryRes.error) {
@@ -803,6 +866,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       redemptions: redemptionsRes.data,
       gratitude: filteredGratitude,
       familyBoardReactions: familyBoardReactionsRes.data,
+      familyBoardComments: familyBoardCommentsRes.data,
+      familyDrawingReactions: familyDrawingReactionsRes.data,
+      familyDrawingComments: familyDrawingCommentsRes.data,
+      publishedDrawings: publishedDrawingsRes.data,
       activeChildMemberId,
       activeParentMemberId,
       dailyFlaggedChoreIds: dailyFlagsRes.data,
@@ -1556,6 +1623,10 @@ const initialState: State = {
   gratitude: [],
   // [2026-09-01追加・実装メモ.md 104章] gratitudeと同じ理由でモック実装では空配列。
   familyBoardReactions: [],
+  familyBoardComments: [],
+  familyDrawingReactions: [],
+  familyDrawingComments: [],
+  publishedDrawings: [],
   activeChildMemberId: "member-child-1",
   activeParentMemberId: "member-parent-1",
   dailyFlaggedChoreIds: [],
@@ -1629,6 +1700,8 @@ function reducer(state: State, action: Action): State {
         kind: action.kind,
         stamp_key: action.kind === "stamp" ? action.stampKey ?? null : null,
         comment_body: action.kind === "comment" ? action.commentBody ?? null : null,
+        deleted_at: null,
+        deleted_by_member_id: null,
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...state.reactions, reaction] };
@@ -1660,6 +1733,8 @@ function reducer(state: State, action: Action): State {
         kind: "stamp",
         stamp_key: action.stampKey,
         comment_body: null,
+        deleted_at: null,
+        deleted_by_member_id: null,
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...withoutMine, reaction] };

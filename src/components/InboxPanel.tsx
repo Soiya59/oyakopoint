@@ -27,6 +27,15 @@
  * `state.familyBoardReactions`（家族全体ログ）から、対象投稿の`author_member_id`が
  * 自分と一致する行だけを抜き出す（既存のfromReactions/fromGratitudeと同じ
  * client側フィルタのパターン）。
+ *
+ * [2026-09-23追加・要件定義書07-30章決定5・07-38章4-3節/5-4節/6-5節、
+ * 開発部/成果物/実装メモ.md 293章] 掲示板コメント（自分の投稿宛）・お絵かき
+ * リアクション（自分の絵宛）・お絵かきコメント（自分の絵宛）・お絵かきの
+ * 公開通知（自分が描いた絵が公開された）の4種を合流させる。既存の
+ * fromBoardReactionsと同じ「家族全体ログをclient側でフィルタする」パターン。
+ * 公開通知は「誰が引いたか」を出さない設計（07-38章4-4節、きょうだい間の
+ * 比較誘発を避ける）ため、`fromMemberId`をnullにしてアバター・「〜から」の
+ * 行自体を出さない特別扱いにする。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -41,7 +50,9 @@ type Tone = "parent" | "child" | "supporter";
 
 interface InboxItem {
   id: string;
-  fromMemberId: string;
+  /** [2026-09-23改訂] nullは「特定の誰かからではない」システム由来の通知
+   *  （お絵かきの公開通知）。アバター・「〜から」の行を描かない。 */
+  fromMemberId: string | null;
   at: string;
   /** リアクションなら「👏 すごい！」、感謝なら「💌 ありがとう +1pt」 */
   headline: string;
@@ -78,6 +89,19 @@ export function countRecentInbox(
       created_at: string;
       family_board_posts: { author_member_id: string } | null;
     }[];
+    familyBoardComments: {
+      created_at: string;
+      family_board_posts: { author_member_id: string } | null;
+    }[];
+    familyDrawingReactions: {
+      created_at: string;
+      family_drawings: { artist_member_id: string } | null;
+    }[];
+    familyDrawingComments: {
+      created_at: string;
+      family_drawings: { artist_member_id: string } | null;
+    }[];
+    publishedDrawings: { artist_member_id: string; published_at: string | null }[];
   },
   memberId: string,
   sinceMs: number
@@ -93,7 +117,20 @@ export function countRecentInbox(
   const boardReactions = state.familyBoardReactions.filter(
     (r) => r.family_board_posts?.author_member_id === memberId && new Date(r.created_at).getTime() >= sinceMs
   ).length;
-  return reactions + gratitude + boardReactions;
+  // [2026-09-23追加・要件定義書07-30章決定5・07-38章5-4節/6-5節/4-3節]
+  const boardComments = state.familyBoardComments.filter(
+    (c) => c.family_board_posts?.author_member_id === memberId && new Date(c.created_at).getTime() >= sinceMs
+  ).length;
+  const drawingReactions = state.familyDrawingReactions.filter(
+    (r) => r.family_drawings?.artist_member_id === memberId && new Date(r.created_at).getTime() >= sinceMs
+  ).length;
+  const drawingComments = state.familyDrawingComments.filter(
+    (c) => c.family_drawings?.artist_member_id === memberId && new Date(c.created_at).getTime() >= sinceMs
+  ).length;
+  const published = state.publishedDrawings.filter(
+    (d) => d.artist_member_id === memberId && !!d.published_at && new Date(d.published_at).getTime() >= sinceMs
+  ).length;
+  return reactions + gratitude + boardReactions + boardComments + drawingReactions + drawingComments + published;
 }
 
 /**
@@ -177,10 +214,83 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         };
       });
 
-    return [...fromReactions, ...fromGratitude, ...fromBoardReactions].sort(
-      (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
-    );
-  }, [memberId, state.completions, state.reactions, state.gratitude, state.familyBoardReactions]);
+    // [2026-09-23追加・要件定義書07-30章決定5] 掲示板のコメント。対象投稿が
+    // 自分の投稿である行だけを抜き出す。
+    const fromBoardComments: InboxItem[] = state.familyBoardComments
+      .filter((c) => c.family_board_posts?.author_member_id === memberId)
+      .map((c) => ({
+        id: `board_comment:${c.id}`,
+        fromMemberId: c.commenter_member_id,
+        at: c.created_at,
+        headline: "💬 コメント",
+        body: c.body,
+        choreLabel: `「${boardPostExcerpt(c.family_board_posts?.body ?? "")}」`,
+      }));
+
+    // [2026-09-23追加・要件定義書07-38章5-4節] お絵かきへのリアクション。
+    // 対象の絵が自分が描いた絵である行だけを抜き出す。
+    const fromDrawingReactions: InboxItem[] = state.familyDrawingReactions
+      .filter((r) => r.family_drawings?.artist_member_id === memberId)
+      .map((r) => {
+        const stamp = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
+        return {
+          id: `drawing_reaction:${r.id}`,
+          fromMemberId: r.reactor_member_id,
+          at: r.created_at,
+          headline: stamp ? `${stamp.emoji} ${stamp.label}` : "💬 コメント",
+          body: null,
+          choreLabel: r.family_drawings?.title ? `「${r.family_drawings.title}」の絵` : "えの さくひん",
+        };
+      });
+
+    // [2026-09-23追加・要件定義書07-38章6-5節] お絵かきへのコメント。
+    const fromDrawingComments: InboxItem[] = state.familyDrawingComments
+      .filter((c) => c.family_drawings?.artist_member_id === memberId)
+      .map((c) => ({
+        id: `drawing_comment:${c.id}`,
+        fromMemberId: c.commenter_member_id,
+        at: c.created_at,
+        headline: "💬 コメント",
+        body: c.body,
+        choreLabel: c.family_drawings?.title ? `「${c.family_drawings.title}」の絵` : "えの さくひん",
+      }));
+
+    // [2026-09-23追加・要件定義書07-38章4章「公開通知」（3つの中で最優先）]
+    // 自分が描いた絵が公開された（家族の誰かがガチャで引いた）というイベント。
+    // 発見者の名前は出さない（4-4節、きょうだい間の比較誘発を避ける）ため
+    // fromMemberIdはnull——アバター・「〜から」の行自体を出さない。
+    const fromPublishedDrawings: InboxItem[] = state.publishedDrawings
+      .filter((d) => d.artist_member_id === memberId && !!d.published_at)
+      .map((d) => ({
+        id: `drawing_published:${d.id}`,
+        fromMemberId: null,
+        at: d.published_at as string,
+        headline: isChild ? "🎨 あなたの絵が、かぞくに とどきました！" : "🎨 あなたの絵が、かぞくに届きました",
+        body: null,
+        choreLabel: d.title ? `「${d.title}」` : null,
+      }));
+
+    return [
+      ...fromReactions,
+      ...fromGratitude,
+      ...fromBoardReactions,
+      ...fromBoardComments,
+      ...fromDrawingReactions,
+      ...fromDrawingComments,
+      ...fromPublishedDrawings,
+    ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [
+    memberId,
+    isChild,
+    state.completions,
+    state.reactions,
+    state.gratitude,
+    state.familyBoardReactions,
+    state.familyBoardComments,
+    state.familyDrawingReactions,
+    state.familyDrawingComments,
+    state.publishedDrawings,
+  ]);
 
   // [2026-09-08改訂・やること.md 4-3] `src/lib/calendarDates.ts`の`formatDateTimeShort`
   // （M/D HH:MM、JST固定）に寄せた。従来は独自実装（端末TZ依存）だったが、共通関数と
@@ -207,6 +317,20 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
   return (
     <View style={styles.list}>
       {items.map((it) => {
+        // [2026-09-23追加] fromMemberId===nullはお絵かきの公開通知
+        // （システム由来。発見者の名前を出さない設計、07-38章4-4節）。
+        // アバター・「〜から」の行を出さず、見出し・対象・時刻だけを表示する。
+        if (it.fromMemberId === null) {
+          return (
+            <Card key={it.id} tone={tone} style={styles.card}>
+              <View style={styles.main}>
+                <Text style={[bodyStyle, styles.headline]}>{it.headline}</Text>
+                {it.choreLabel && <Text style={styles.meta}>{it.choreLabel}</Text>}
+                <Text style={styles.meta}>{formatWhen(it.at)}</Text>
+              </View>
+            </Card>
+          );
+        }
         const from = memberOf(it.fromMemberId);
         return (
           <Card key={it.id} tone={tone} style={styles.card}>

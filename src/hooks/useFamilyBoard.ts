@@ -46,7 +46,9 @@ import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
 import {
+  createFamilyBoardComment,
   deleteFamilyBoardPost,
+  deleteFamilyComment,
   fetchFamilyBoardPostsHistory,
   fetchFamilyBoardReactionsForPost,
   fetchFamilyHomeCard,
@@ -133,7 +135,18 @@ export function useFamilyBoardHistory(familyId: string) {
   const filterVisible = useCallback(
     (rows: FamilyBoardPostWithAuthor[]) => {
       const withoutBlocked = excludeBlockedByAuthor(rows, (p) => p.author_member_id, blockedMemberIdsSet);
-      return excludeHiddenById(withoutBlocked, "family_board_post", hiddenContentKeysSet);
+      const withoutHiddenPosts = excludeHiddenById(withoutBlocked, "family_board_post", hiddenContentKeysSet);
+      // [2026-09-23追加・要件定義書07-32章 決定7の段階3、実装メモ.md 293章]
+      // コメントも同じ「ブロック・非表示を取得後にclient側で除く」パターンを
+      // 適用する（33.9章「掲示板のコメントも運営が非表示にできる対象」）。
+      return withoutHiddenPosts.map((p) => ({
+        ...p,
+        comments: excludeHiddenById(
+          excludeBlockedByAuthor(p.comments, (c) => c.commenter_member_id, blockedMemberIdsSet),
+          "family_board_comment",
+          hiddenContentKeysSet
+        ),
+      }));
     },
     [blockedMemberIdsSet, hiddenContentKeysSet]
   );
@@ -297,6 +310,64 @@ export function useFamilyBoardHistory(familyId: string) {
     [client]
   );
 
+  // [2026-09-23追加・要件定義書07-30章、UIUXデザイン部/成果物/主要画面
+  // ワイヤーフレーム.md 65.2章、やること.md 2-69] 掲示板のコメント。一覧取得
+  // 時に投稿と同時に埋め込み済み（fetchFamilyBoardPostsHistory参照）のため、
+  // 追加・削除はローカルの`posts`配列の対象投稿の`comments`だけを更新する
+  // （reactToPost・removePostと同じ「該当行だけをローカル更新し、全件reload
+  // しない」パターン）。
+  const [sendingCommentPostId, setSendingCommentPostId] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<{ postId: string; message: string } | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [commentActionError, setCommentActionError] = useState<{ commentId: string; message: string } | null>(null);
+
+  const addComment = useCallback(
+    async (postId: string, commenterMemberId: string, body: string): Promise<boolean> => {
+      setSendingCommentPostId(postId);
+      setCommentError(null);
+      const res = await createFamilyBoardComment(client, { post_id: postId, commenter_member_id: commenterMemberId, body });
+      setSendingCommentPostId(null);
+      if (!res.ok) {
+        if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
+          setPosts((prev) => prev.filter((p) => p.id !== postId));
+        }
+        setCommentError({ postId, message: res.error.message });
+        return false;
+      }
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id !== postId ? p : { ...p, comments: [...p.comments, { ...res.data, family_members: null }] }
+        )
+      );
+      return true;
+    },
+    [client]
+  );
+
+  const deleteComment = useCallback(
+    async (postId: string, commentId: string): Promise<boolean> => {
+      setDeletingCommentId(commentId);
+      setCommentActionError(null);
+      const res = await deleteFamilyComment(client, "family_board_comment", commentId);
+      setDeletingCommentId(null);
+      if (!res.ok) {
+        if (res.error.code === PG_ERRCODE.checkViolation && res.error.message.includes("削除されています")) {
+          setPosts((prev) =>
+            prev.map((p) => (p.id !== postId ? p : { ...p, comments: p.comments.filter((c) => c.id !== commentId) }))
+          );
+          return false;
+        }
+        setCommentActionError({ commentId, message: res.error.message });
+        return false;
+      }
+      setPosts((prev) =>
+        prev.map((p) => (p.id !== postId ? p : { ...p, comments: p.comments.filter((c) => c.id !== commentId) }))
+      );
+      return true;
+    },
+    [client]
+  );
+
   return {
     loadState,
     posts,
@@ -311,6 +382,12 @@ export function useFamilyBoardHistory(familyId: string) {
     reactionError,
     reactToPost,
     viewReactorsForPost,
+    sendingCommentPostId,
+    commentError,
+    addComment,
+    deletingCommentId,
+    commentActionError,
+    deleteComment,
   };
 }
 

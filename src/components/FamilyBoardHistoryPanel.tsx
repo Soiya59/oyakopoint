@@ -30,14 +30,16 @@
  * プッシュ通知は実装しない（本部長指示、要件定義書08章参照）。
  */
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
 import MemberAvatar from "./MemberAvatar";
+import NgWordWarningText from "./NgWordWarningText";
 import { EmptyState, ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
+import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import theme from "@/theme/theme";
-import type { FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
+import type { FamilyBoardCommentWithAuthor, FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -87,6 +89,21 @@ export interface FamilyBoardHistoryPanelProps {
   onViewReactors: (
     postId: string
   ) => Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string }>;
+
+  /**
+   * [2026-09-23追加・要件定義書07-30章、UIUXデザイン部/成果物/主要画面
+   * ワイヤーフレーム.md 65.2章、やること.md 2-69] 掲示板のコメント。
+   * `onCompose`と同じく、やりとりトグルがオフの間は呼び出し側が
+   * `commentsEnabled=false`を渡し、コメント一覧・入力欄を丸ごと隠す
+   * （65.2.5節「トグルがオフのとき」）。
+   */
+  commentsEnabled: boolean;
+  sendingCommentPostId: string | null;
+  commentError: { postId: string; message: string } | null;
+  onAddComment: (postId: string, commenterMemberId: string, body: string) => Promise<boolean>;
+  deletingCommentId: string | null;
+  commentActionError: { commentId: string; message: string } | null;
+  onDeleteComment: (postId: string, commentId: string) => Promise<boolean>;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -146,6 +163,50 @@ const CANCEL_LABEL: Record<Tone, string> = {
   child: "とりけす",
   supporter: "取消",
 };
+
+/**
+ * [2026-09-23・本部長差し戻し対応、UIUXデザイン部/成果物/主要画面
+ * ワイヤーフレーム.md 65.2.2節] 完了報告の既存表記（`app/parent/approvals.tsx`
+ * 188行目・572行目）に一字一句揃える。「コメント」という新しい語は使わない。
+ */
+const ADD_COMMENT_LABEL: Record<Tone, string> = {
+  parent: "＋コメント",
+  supporter: "＋コメント",
+  child: "＋ひとこと",
+};
+const COMMENT_INPUT_LABEL: Record<Tone, string> = {
+  parent: "ひとことおくる（にんい・200文字まで）",
+  supporter: "ひとことおくる（にんい・200文字まで）",
+  child: "ひとことおくる（にんい）",
+};
+const COMMENT_PLACEHOLDER: Record<Tone, string> = {
+  parent: "例: 楽しみだね",
+  supporter: "例: 楽しみだね",
+  child: "たとえば「たのしみだね！」",
+};
+const COMMENT_SEND_FAIL_TEXT: Record<Tone, string> = {
+  parent: "コメントを送信できませんでした。もう一度お試しください",
+  supporter: "コメントを送信できませんでした。もう一度お試しください",
+  child: "おくれなかったよ。もういちど おしてね",
+};
+const COMMENT_ALREADY_DELETED_TEXT: Record<Tone, string> = {
+  parent: "このコメントはすでに削除されています",
+  supporter: "このコメントはすでに削除されています",
+  child: "このコメントは もう なくなっちゃったみたい",
+};
+const COMMENT_DELETE_CONFIRM_TEXT: Record<Tone, string> = {
+  parent: "このコメントを削除しますか？",
+  supporter: "このコメントを削除しますか？",
+  child: "このコメントを けしますか？",
+};
+
+/** 65.2.7節のフォーマット（"8/27 19:45"）。formatDateTimeと同じだが呼び出し元を分けておく。 */
+function formatCommentTime(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  const time = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+}
 
 /** 22.2.1節「3ロールのトーン・文言」内訳リンクの文言。 */
 const VIEW_REACTORS_LABEL: Record<Tone, string> = {
@@ -247,6 +308,13 @@ export function FamilyBoardHistoryPanel({
   reactionError,
   onReact,
   onViewReactors,
+  commentsEnabled,
+  sendingCommentPostId,
+  commentError,
+  onAddComment,
+  deletingCommentId,
+  commentActionError,
+  onDeleteComment,
 }: FamilyBoardHistoryPanelProps) {
   const isChild = tone === "child";
   const isParent = tone === "parent";
@@ -304,6 +372,38 @@ export function FamilyBoardHistoryPanel({
       return;
     }
     setReactorsData(res.data);
+  };
+
+  // [2026-09-23追加・要件定義書07-30章、65.2章、やること.md 2-69] コメント。
+  // 「1件だけ入力欄を開ける」というconfirmDeleteId・viewingReactorsIdと同じ
+  // パターン。NGワードフィルタは1つのガードを使い回す（1度に1つの投稿しか
+  // 入力できないため、対象が切り替わるたびに`clear()`する）。
+  const [composingPostId, setComposingPostId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const ngGuard = useNgWordGuard();
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null);
+
+  const openComposer = (postId: string) => {
+    setComposingPostId(postId);
+    setDraft("");
+    ngGuard.clear();
+  };
+  const closeComposer = () => {
+    setComposingPostId(null);
+    setDraft("");
+    ngGuard.clear();
+  };
+  const handleSendComment = async (postId: string) => {
+    if (ngGuard.guard(draft)) return;
+    const ok = await onAddComment(postId, myMemberId, draft.trim());
+    if (ok) closeComposer();
+  };
+  const handleCancelComment = async (postId: string, commentId: string) => {
+    await onDeleteComment(postId, commentId);
+  };
+  const handleConfirmDeleteComment = async (postId: string, commentId: string) => {
+    await onDeleteComment(postId, commentId);
+    setConfirmDeleteCommentId(null);
   };
 
   return (
@@ -375,6 +475,12 @@ export function FamilyBoardHistoryPanel({
             const isReactingThisPost = reactingReaction?.postId === post.id;
             const reactRowError = reactionError?.postId === post.id ? reactionError.message : null;
             const isViewingReactors = viewingReactorsId === post.id;
+
+            // [2026-09-23追加・要件定義書07-30章、65.2章] コメント。
+            const comments = post.comments ?? [];
+            const isComposingThisPost = composingPostId === post.id;
+            const isSendingThisComment = sendingCommentPostId === post.id;
+            const commentRowError = commentError?.postId === post.id ? commentError.message : null;
 
             return (
               <Card key={post.id} tone={tone}>
@@ -566,6 +672,129 @@ export function FamilyBoardHistoryPanel({
                     {reactionErrorText(tone, reactRowError)}
                   </Text>
                 )}
+
+                {/* [2026-09-23新設・要件定義書07-30章、UIUXデザイン部/成果物/
+                    主要画面ワイヤーフレーム.md 65.2章、やること.md 2-69]
+                    コメント。やりとりトグルがオフの間は一覧・入力欄とも
+                    丸ごと非表示（65.2.5節）。0件のときは一覧を出さず
+                    「＋コメント」リンクのみ（07-30章決定7-2）。 */}
+                {commentsEnabled && !isConfirming && (
+                  <View style={styles.commentSection}>
+                    {comments.length > 0 && (
+                      <View style={{ gap: theme.spacing.s2 }}>
+                        {comments.map((c) => {
+                          const isOwnComment = c.commenter_member_id === myMemberId;
+                          const withinFiveMinComment = Date.now() - new Date(c.created_at).getTime() <= FIVE_MIN_MS;
+                          const canCancelComment = isOwnComment && withinFiveMinComment;
+                          const canDeleteComment = isParent && !isOwnComment;
+                          const isDeletingThisComment = deletingCommentId === c.id;
+                          const isConfirmingThisComment = confirmDeleteCommentId === c.id;
+                          const thisCommentError = commentActionError?.commentId === c.id ? commentActionError.message : null;
+                          return (
+                            <View key={c.id}>
+                              <Text style={bodyStyle}>
+                                💬 {c.family_members?.display_name ?? "?"}より「{c.body}」
+                              </Text>
+                              <View style={styles.commentMetaRow}>
+                                <Text style={captionStyle}>{formatCommentTime(c.created_at)}</Text>
+                                {isConfirmingThisComment ? (
+                                  <View style={styles.commentActionLinksRow}>
+                                    <Pressable onPress={() => setConfirmDeleteCommentId(null)} disabled={isDeletingThisComment}>
+                                      <Text style={styles.actionLink}>やめる</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => void handleConfirmDeleteComment(post.id, c.id)}
+                                      disabled={isDeletingThisComment}
+                                      style={{ marginLeft: theme.spacing.s3 }}
+                                    >
+                                      <Text style={styles.actionLink}>{isDeletingThisComment ? "…" : "削除する"}</Text>
+                                    </Pressable>
+                                  </View>
+                                ) : (
+                                  (canCancelComment || canDeleteComment) && (
+                                    <View style={styles.commentActionLinksRow}>
+                                      {canCancelComment && (
+                                        <Pressable onPress={() => void handleCancelComment(post.id, c.id)} disabled={isDeletingThisComment}>
+                                          <Text style={styles.actionLink}>{isDeletingThisComment ? "…" : CANCEL_LABEL[tone]}</Text>
+                                        </Pressable>
+                                      )}
+                                      {canDeleteComment && (
+                                        <Pressable
+                                          onPress={() => setConfirmDeleteCommentId(c.id)}
+                                          disabled={isDeletingThisComment}
+                                          style={{ marginLeft: canCancelComment ? theme.spacing.s3 : 0 }}
+                                        >
+                                          <Text style={styles.actionLink}>削除</Text>
+                                        </Pressable>
+                                      )}
+                                    </View>
+                                  )
+                                )}
+                              </View>
+                              {isConfirmingThisComment && (
+                                <Text style={[captionStyle, { color: theme.colors.neutralTextSecondary }]}>
+                                  {COMMENT_DELETE_CONFIRM_TEXT[tone]}
+                                </Text>
+                              )}
+                              {thisCommentError && (
+                                <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
+                                  {COMMENT_ALREADY_DELETED_TEXT[tone]}
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {isComposingThisPost ? (
+                      <View style={{ marginTop: theme.spacing.s2 }}>
+                        <View style={styles.commentCounterRow}>
+                          <Text style={bodyStyle}>{COMMENT_INPUT_LABEL[tone]}</Text>
+                        </View>
+                        <TextInput
+                          value={draft}
+                          onChangeText={(t) => {
+                            setDraft(t);
+                            ngGuard.clear();
+                          }}
+                          placeholder={COMMENT_PLACEHOLDER[tone]}
+                          multiline
+                          maxLength={200}
+                          style={styles.commentTextArea}
+                        />
+                        <Text style={[captionStyle, { textAlign: "right" }]}>{draft.length}/200字</Text>
+                        {ngGuard.blocked && <NgWordWarningText tone={tone} />}
+                        {commentRowError && (
+                          <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
+                            {COMMENT_SEND_FAIL_TEXT[tone]}
+                          </Text>
+                        )}
+                        <View style={styles.commentComposeButtonRow}>
+                          <AppButton
+                            tone={tone}
+                            variant="secondary"
+                            label="やめる"
+                            onPress={closeComposer}
+                            disabled={isSendingThisComment}
+                            style={{ flex: 1, marginRight: theme.spacing.s2 }}
+                          />
+                          <AppButton
+                            tone={tone}
+                            label={isSendingThisComment ? "…" : "おくる"}
+                            onPress={() => void handleSendComment(post.id)}
+                            disabled={!draft.trim() || isSendingThisComment}
+                            style={{ flex: 1 }}
+                          />
+                        </View>
+                      </View>
+                    ) : (
+                      <Pressable onPress={() => openComposer(post.id)} style={{ marginTop: theme.spacing.s2 }}>
+                        <Text style={styles.viewReactorsLink}>{ADD_COMMENT_LABEL[tone]}</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
               </Card>
             );
           })}
@@ -636,6 +865,27 @@ const styles = StyleSheet.create({
   },
   confirmButtonRow: { flexDirection: "row", marginTop: theme.spacing.s3 },
   rowError: { marginTop: theme.spacing.s2 },
+  // [2026-09-23新設] コメント区画（65.2章）。
+  commentSection: {
+    marginTop: theme.spacing.s2,
+    paddingTop: theme.spacing.s2,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutralBorder,
+  },
+  commentMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
+  commentActionLinksRow: { flexDirection: "row", alignItems: "center" },
+  commentCounterRow: { flexDirection: "row", justifyContent: "space-between" },
+  commentTextArea: {
+    marginTop: theme.spacing.s1,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentMd,
+    padding: theme.spacing.s2,
+    minHeight: 60,
+    textAlignVertical: "top",
+    backgroundColor: theme.colors.neutralBg,
+  },
+  commentComposeButtonRow: { flexDirection: "row", marginTop: theme.spacing.s2 },
 });
 
 export default FamilyBoardHistoryPanel;
