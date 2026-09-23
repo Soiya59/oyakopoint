@@ -1,6 +1,7 @@
 import React from "react";
 import { Platform, ScrollView, StyleSheet, View, ViewStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
 import KeyboardAvoidingPaddingView from "@/components/KeyboardAvoidingPaddingView";
 import theme from "@/theme/theme";
 
@@ -89,37 +90,45 @@ export function Screen({
   // （edgesはpaddingの有無だけを決め、Viewの位置・大きさは変えない）なので、
   // 背景色が画面上端まで伸びる見え方は変わらない。
   const insets = useSafeAreaInsets();
-  // [2026-09-23追加・実装メモ.md 289章。同日、本部長の差し戻しで289.4節のとおり
-  // 直し方を変更] 画面下のほうにあるTextInputがiOSでキーボードに隠れる不具合
-  // （統括・ばあば実機報告）への対応。`Screen`はほぼ全画面が経由する共通の器なので、
-  // ここ1か所を直せば個々の画面を書き換えずに済む（`Modal`の中身は別レイヤーで
-  // 描かれるためこれの外。289.4節②〜③参照）。
+  // [2026-09-23追加・実装メモ.md 289章。同日2回にわたり本部長が差し戻し、
+  // 289.4節・289.7節のとおり直し方を変更（経緯は両節に残してある）] 画面下の
+  // ほうにあるTextInputがキーボードに隠れる不具合（統括・ばあば実機報告）への対応。
+  // `Screen`はほぼ全画面が経由する共通の器なので、ここ1か所を直せば個々の画面を
+  // 書き換えずに済む（`Modal`の中身は別レイヤーで描かれるためこれの外。
+  // 289.4節②〜③・289.7節参照）。
   //
-  // 【最初の直し方（差し戻し前）】`Screen`全体を`KeyboardAvoidingView(padding)`で
-  // 1段包んでいた。**これだと、`scroll=true`（`ScrollView`）のとき、キーボード分だけ
-  // 器を縮めてもScrollViewのcontentOffset（スクロール位置）自体は動かないため、
-  // 画面の下のほうにあった入力欄はキーボードに隠れなくなる代わりに、縮んだ
-  // ScrollViewの表示範囲の外（下）に押し出されたままになり、結局見えなかった**
-  // （本部長が`node_modules/react-native/React/Fabric/Mounting/ComponentViews/
-  // ScrollView/RCTScrollViewComponentView.mmの`_keyboardWillChangeFrame:`を
-  // 読んで指摘）。
+  // 【1回目の直し方（1回目の差し戻し前）】`Screen`全体を`KeyboardAvoidingView(padding)`
+  // で1段包んでいた。`scroll=true`のとき、キーボード分だけ器を縮めても
+  // ScrollViewのcontentOffsetは動かないため、入力欄はキーボードに隠れなくなる
+  // 代わりに表示範囲の外に押し出されたままだった（289.4節）。
   //
-  // 【直した内容】
-  //  - `scroll=true`（`Container`が`ScrollView`）: `KeyboardAvoidingView`はやめ、
-  //    `ScrollView`自身の`automaticallyAdjustKeyboardInsets`（iOS専用。同じ.mmの
-  //    `_keyboardWillChangeFrame:`が(1)キーボードと重なる分だけ下insetを足し、
-  //    (2)`reactUpdateResponderOffsetForScrollView:`でフォーカス中の入力欄の位置を
-  //    取ってキーボードより下ならcontentOffsetを動かして見える位置まで持ち上げる。
-  //    無効時は`if (!_automaticallyAdjustKeyboardInsets) return;`で何もしない）を使う。
-  //    Androidは何もしない（Expoの既定`android.softwareKeyboardLayoutMode: "resize"`で
-  //    OS自身がウィンドウをリサイズし、Android標準のScrollViewがフォーカス中の子を
-  //    見える位置へ動かす。ここへ足すと二重にずれる）。
+  // 【2回目の直し方（1回目の差し戻し後→2回目の差し戻し前）】`scroll=true`は
+  // iOS・Androidとも`KeyboardAvoidingView`をやめ、`ScrollView`自身の
+  // `automaticallyAdjustKeyboardInsets`（iOS専用）に一本化し、**Androidは
+  // 「OSの既定`adjustResize`でウィンドウが自動で縮むので何もしない」とした**。
+  // **これがAndroid実機で直っていなかった**（統括のスクショ、`approvals.tsx`の
+  // 詳細モーダル）。原因はExpo SDK 56 / RN 0.85でedge-to-edgeが実質必須になり、
+  // `SOFT_INPUT_ADJUST_RESIZE`を設定してもedge-to-edgeのウィンドウはOSが
+  // 縮めてくれないため（事実は289.7節、根拠のソースパス付き）。
+  //
+  // 【直した内容（今回）】
+  //  - `scroll=true`（`Container`が`ScrollView`）:
+  //    - iOS: 変更なし。`ScrollView`の`automaticallyAdjustKeyboardInsets`のまま
+  //      （`KeyboardAvoidingView`と併用すると二重にずれるため足さない）。
+  //    - Android: `AndroidKeyboardAvoidingPadding`（`KeyboardAvoidingView`
+  //      `behavior="padding"`をAndroidでだけ効かせる部品）で1段包む。
+  //      edge-to-edgeでウィンドウ自体は縮まなくても、RNの`KeyboardAvoidingView`は
+  //      `WindowInsets`から得たキーボード高さ・位置でJS側から器を縮めるため
+  //      edge-to-edgeでも動く。中の`ScrollView`（`ReactScrollView`、AOSPの
+  //      `android.widget.ScrollView`を継承）は縮んだ分だけフォーカス中の子を
+  //      追いかける（289.7節）。
   //  - `scroll=false`（`Container`が`View`。`ListScreen`経由のみ、289章時点で
   //    TextInputを持つ画面はこの経路を直接使っていない——`approvals.tsx`・
-  //    `activity.tsx`はこの経路を使うが、TextInput自体はどちらも`Modal`の中にあり
-  //    この`View`の外）: `ScrollView`が無くフォーカス位置への自動スクロールという
-  //    概念自体が無いため、器をキーボード分だけ縮める`KeyboardAvoidingPaddingView`
-  //    （`behavior="padding"`、iOSのみ）で包む、という最初の考え方をそのまま残す。
+  //    `activity.tsx`はこの経路を使うが、TextInput自体はどちらも`Modal`の中に
+  //    あり、この`View`の外）: `ScrollView`が無くフォーカス位置への自動スクロール
+  //    という概念自体が無いため、器をキーボード分だけ縮める
+  //    `KeyboardAvoidingPaddingView`（`behavior="padding"`）で包む。
+  //    **今回、iOS専用だったのをAndroidにも広げた**（同じ理由でAndroidにも要る）。
   const scrollBody = (
     <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["left", "right"]}>
       <Container
@@ -153,7 +162,11 @@ export function Screen({
       </Container>
     </SafeAreaView>
   );
-  return scroll ? scrollBody : <KeyboardAvoidingPaddingView style={styles.flex}>{scrollBody}</KeyboardAvoidingPaddingView>;
+  return scroll ? (
+    <AndroidKeyboardAvoidingPadding style={styles.flex}>{scrollBody}</AndroidKeyboardAvoidingPadding>
+  ) : (
+    <KeyboardAvoidingPaddingView style={styles.flex}>{scrollBody}</KeyboardAvoidingPaddingView>
+  );
 }
 
 /** 画面下端の基本余白。端末の下端インセットをこれに足して使う（上のコメント参照）。 */

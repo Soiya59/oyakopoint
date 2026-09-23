@@ -20,6 +20,7 @@ import React, { useEffect, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
+import AndroidKeyboardAvoidingPadding from "./AndroidKeyboardAvoidingPadding";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
@@ -83,13 +84,17 @@ function MemberGoalEditModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      {/* [2026-09-23・289.4章改訂→289.7章2回目の差し戻しで再改訂] iOSは背景を
+          素のViewのままScrollView側のautomaticallyAdjustKeyboardInsetsに一本化
+          （289.4章）。**Androidはそれだけでは直っていなかった**（統括の実機報告、
+          289.7章、edge-to-edgeでSOFT_INPUT_ADJUST_RESIZEが効かない）ため、
+          Androidにだけbehavior="padding"のKeyboardAvoidingViewを足す
+          （AndroidKeyboardAvoidingPadding）。 */}
+      <AndroidKeyboardAvoidingPadding style={styles.backdrop}>
         <Card style={styles.card}>
           <Text style={theme.typography.parentTitle}>{child.display_name}の目標を編集する</Text>
-          {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] keyboardShouldPersistTaps
-              が無いと、キーボード表示中に「保存する」を押しても1回目はキーボードが閉じる
-              だけになる。背景をKeyboardAvoidingViewで包むのはやめ、
-              automaticallyAdjustKeyboardInsets（iOS専用）に一本化した。 */}
+          {/* keyboardShouldPersistTapsが無いと、キーボード表示中に「保存する」を
+              押しても1回目はキーボードが閉じるだけになる。 */}
           <ScrollView
             style={styles.body}
             keyboardShouldPersistTaps="handled"
@@ -136,7 +141,7 @@ function MemberGoalEditModal({
             <AppButton label="やめておく" variant="ghost" style={{ marginTop: theme.spacing.s2 }} onPress={onClose} disabled={saving} />
           </ScrollView>
         </Card>
-      </View>
+      </AndroidKeyboardAvoidingPadding>
     </Modal>
   );
 }

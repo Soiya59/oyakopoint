@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
+import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
 import theme from "@/theme/theme";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import type { ChoreCompletion, ChoreReaction, FamilyMember, StampKey } from "@/types/domain";
@@ -79,12 +80,17 @@ export function ChildCompletionDetailModal({
   };
   return (
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      {/* [2026-09-23・289.4章改訂→289.7章2回目の差し戻しで再改訂]
+          iOSは背景をKeyboardAvoidingViewで包むのをやめ、ScrollView自身の
+          automaticallyAdjustKeyboardInsetsに一本化した（289.4章）。
+          **Androidはそれだけでは直っていなかった**（統括の実機報告、289.7章）。
+          edge-to-edgeでSOFT_INPUT_ADJUST_RESIZEが効かないため、Androidにだけ
+          KeyboardAvoidingView(padding)を足す（AndroidKeyboardAvoidingPadding、
+          iOSでは素のViewのまま）。 */}
+      <AndroidKeyboardAvoidingPadding style={styles.modalBackdrop}>
         <Card tone="child" style={styles.modalCard}>
-        {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] 背景を
-            KeyboardAvoidingViewで包むのはやめた（ScrollViewのcontentOffsetは
-            動かないため、器を縮めるだけでは入力欄が見えるとは限らない）。
-            ScrollView自身のautomaticallyAdjustKeyboardInsets（iOS専用）に一本化する。 */}
+        {/* keyboardShouldPersistTapsが無いと、キーボード表示中に送信ボタンを
+            1回目タップしてもキーボードが閉じるだけになる。 */}
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -189,7 +195,7 @@ export function ChildCompletionDetailModal({
             })()}
         </ScrollView>
         </Card>
-      </View>
+      </AndroidKeyboardAvoidingPadding>
     </Modal>
   );
 }

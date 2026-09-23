@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import MemberAvatar from "@/components/MemberAvatar";
+import AndroidKeyboardAvoidingPadding from "@/components/AndroidKeyboardAvoidingPadding";
 import TabIntroBubble from "@/components/TabIntroBubble";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
@@ -362,11 +363,14 @@ export default function SupporterFamilyScreen() {
       )}
 
       <Modal visible={!!detailTarget} transparent animationType="fade" onRequestClose={() => setDetailTarget(null)}>
-        <View style={styles.modalBackdrop}>
+        {/* [2026-09-23・289.4章改訂→289.7章2回目の差し戻しで再改訂] iOSは背景を
+            素のViewのままScrollView側のautomaticallyAdjustKeyboardInsetsに一本化
+            （289.4章）。**Androidはそれだけでは直っていなかった**（統括の実機報告、
+            289.7章、edge-to-edgeでSOFT_INPUT_ADJUST_RESIZEが効かない）ため、
+            Androidにだけbehavior="padding"のKeyboardAvoidingViewを足す
+            （AndroidKeyboardAvoidingPadding）。 */}
+        <AndroidKeyboardAvoidingPadding style={styles.modalBackdrop}>
           <Card tone="supporter" style={styles.modalCard}>
-          {/* [2026-09-23改訂・実装メモ.md 289.4章・本部長差し戻し] 背景の
-              KeyboardAvoidingViewはやめ、ScrollView自身の
-              automaticallyAdjustKeyboardInsets（iOS専用）に一本化する。 */}
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -494,7 +498,7 @@ export default function SupporterFamilyScreen() {
               })()}
           </ScrollView>
           </Card>
-        </View>
+        </AndroidKeyboardAvoidingPadding>
       </Modal>
     </Screen>
   );
