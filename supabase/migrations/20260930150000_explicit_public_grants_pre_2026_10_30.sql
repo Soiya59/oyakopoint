@@ -1,0 +1,47 @@
+-- ============================================================
+-- publicスキーマの表・ビューへの明示的GRANT（Supabaseの自動GRANT廃止対応、2026-09-25）
+-- ============================================================
+-- 参照:
+--   Supabaseからの通知メール（2026-09-24受信）:
+--     2026年10月30日から、publicスキーマに新しく作る表は、明示的なGRANT文が
+--     無いとData API（supabase-js・PostgREST・GraphQL）から権限エラーになる。
+--     既存の本番の表はそのまま動く（今回の変更の対象外）。ただしマイグレーション
+--     経由の作成（db push・db reset・プレビューブランチ・新規プロジェクト）も
+--     対象であり、「今のうちにマイグレーションにGRANTを足せ」との案内。
+--   やること.md 4-78、開発部/成果物/実装メモ.md 295章（本部長依頼2026-09-25）
+--
+-- 破壊性: 無し。GRANTの追加のみ（REVOKEは1文も無い）。
+--   本番は今すでに anon・authenticated・service_role の3ロールが、
+--   publicの表42個・ビュー12個＝54個すべてに DELETE, INSERT, REFERENCES,
+--   SELECT, TRIGGER, TRUNCATE, UPDATE の7権限を持っている
+--   （2026-09-25、本部長がSQL Editorで information_schema.role_table_grants を
+--   実測。Supabaseが今のところ新規オブジェクトへ自動付与している権限一式と
+--   完全に一致する）。本マイグレーションはこれと**文字通り同じ権限**を
+--   明示的なGRANT文として書き下すものであり、本番に適用しても実際の権限は
+--   1件も変化しない（既にある権限を重ねてGRANTするだけ。GRANTは冪等）。
+--   目的は「Supabase側の自動付与が10月30日に止まっても、本番の権限状態が
+--   そのまま残る」ことの担保であり、ローカルの`supabase db reset`が10月30日
+--   以降の新しいイメージに切り替わった場合に備える意味もある
+--   （実装メモ295.2〜295.3章参照。ローカルで実測して確認済み）。
+--
+-- なぜ ALL TABLES IN SCHEMA を使うか、ビュー・シーケンスは含まれるか:
+--   PostgreSQLの `GRANT ... ON ALL TABLES IN SCHEMA public` は、ビュー・
+--   外部テーブルにも同じ扱いで及ぶ（PostgreSQL公式ドキュメントの仕様どおり）。
+--   本番のpublicスキーマは表42個・ビュー12個の合計54個であり
+--   （ローカルでも `pg_tables`=42・`pg_views`=12 と実測して一致を確認）、
+--   ちょうど本番の「54個」と一致する。マテリアライズドビューは0個。
+--   シーケンス（`serial`・`identity`列）はこのプロジェクトに1つも無い
+--   （全テーブルのPKは `UUID DEFAULT gen_random_uuid()`。
+--   `information_schema.sequences` をローカルで実測し0件を確認、
+--   マイグレーション全文を`serial|identity|bigserial|CREATE SEQUENCE|nextval`で
+--   grepしても該当無し）。よってシーケンスへのGRANTは不要（対象が無い）。
+--
+-- 実測結果（実装メモ295.5章）: ローカルで `supabase db reset` 後に本
+--   マイグレーションまで適用し、`role_table_grants` を集計したところ
+--   anon・authenticated・service_role の3ロール×7権限×54個＝1134件で、
+--   本番の実測（3ロール×7権限×54個）と一致した。
+-- ============================================================
+
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+  ON ALL TABLES IN SCHEMA public
+  TO anon, authenticated, service_role;

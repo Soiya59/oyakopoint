@@ -567,6 +567,20 @@
 -- いずれもローカルDocker環境で`supabase db reset`後に実測した値（96.5章の
 -- 遵守。手計算していない）。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-25追加・開発部] Supabaseの自動GRANT廃止対応（やること.md 4-78、
+-- 開発部/成果物/実装メモ.md 295章）に伴い、C層にS5を新設した。
+-- `20260930150000_explicit_public_grants_pre_2026_10_30.sql`で本番と同じ権限
+-- （anon・authenticated・service_role の3ロール×7権限×54個〈表42＋ビュー12〉）
+-- を明示的なGRANTとして書き下したが、これはS1〜S4のいずれの判定対象
+-- （RLS有効化・ポリシー本数・関数のEXECUTE権限）にも含まれないため、本ファイル
+-- の既存項目だけでは「GRANTを付け忘れたこと」自体を検出できない。S5はこの穴を
+-- 埋めるためのテーブル横断チェックであり、10月30日以降に新しい表を作る
+-- マイグレーションでGRANTを書き忘れた場合、`supabase db reset`後の本スイート
+-- 実行でFAILとして検出できる（詳細はS5本体のコメント参照）。上記マイグレーション
+-- はローカルDockerで実測し、本番の権限（3ロール×7権限×54個）と一致すること・
+-- 本スイート52件（S5追加後は53件）全てPASSすることを確認済み（実装メモ.md
+-- 295章）。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -1325,6 +1339,36 @@ SELECT 'C層', 'S4 authenticatedが実行できる関数98件が承認済みと�
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
+
+-- S5. publicの全テーブルに、authenticatedのSELECT権限が付いているか。
+--     [2026-09-25追加・開発部/成果物/実装メモ.md 295章、やること.md 4-78]
+--     Supabaseからの通知メール（2026-09-24受信）: 2026年10月30日から、public
+--     スキーマに新しく作る表は、明示的なGRANT文が無いとData API
+--     （supabase-js・PostgREST・GraphQL）から権限エラーになる（`supabase db
+--     reset`・プレビューブランチ・新規プロジェクトも対象）。既存の本番の表は
+--     対象外だが、10月30日以降にこの書き方のまま新しい表を作るマイグレーション
+--     を書くと、GRANTの付け忘れに気づけないまま本番に反映してしまう危険がある。
+--     S1（RLS有効テーブル数）・S3（ポリシー本数）は「新しいテーブルを作った
+--     こと」自体は検出するが、「そのテーブルにGRANTを書き忘れたこと」は検出
+--     しない。本チェックはその穴を埋める——10月30日以降、ローカルで
+--     `supabase db reset` した結果を本チェックにかければ、GRANTの付け忘れを
+--     機械的に見つけられる（開発部/成果物/CLAUDE.mdの「新しい表を作るときの
+--     決まり文句」を書き忘れた場合の網）。
+--     SELECTのみを見る理由: 4-78章の決まり文句はauthenticatedにSELECT/
+--     INSERT/UPDATE/DELETEの4権限をまとめて書く1行のGRANT文であり、書き忘れ
+--     れば4権限とも同時に無くなる（1権限だけ抜けることは通常ない）。よって
+--     代表してSELECTの有無だけを見れば十分に検出できる。
+WITH missing AS (
+  SELECT schemaname || '.' || tablename AS t
+  FROM pg_tables
+  WHERE schemaname = 'public'
+    AND NOT has_table_privilege('authenticated', (schemaname || '.' || tablename)::regclass, 'SELECT')
+)
+INSERT INTO _r
+SELECT 'C層', 'S5 publicの全テーブルにauthenticatedのSELECTがある',
+       '不足0件',
+       coalesce((SELECT string_agg(t, ' / ') FROM missing), '不足0件'),
+       NOT EXISTS (SELECT 1 FROM missing);
 
 
 -- ============================================================
