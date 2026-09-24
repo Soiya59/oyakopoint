@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { cancelRedemptionErrorText, CANCEL_LABEL, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { playSound } from "@/lib/sound";
 
 /**
@@ -27,7 +28,14 @@ import { playSound } from "@/lib/sound";
  * 削除済み）廃止に伴い、成功後の戻り先・残高不足時の「ごほうびへもどる」ボタンの
  * 戻り先を、両方とも旧S10のルートから`/supporter/rewards`（S8）へ変更した。
  * ロジック自体（`rewardId`のみで判定）は変更なし。
+ *
+ * [2026-09-25改訂・要件定義書07-39章「ごほうびの交換の直後の取消」、設計部/成果物/
+ * スキーマ設計.sql 77.9章] app/parent/my-reward-confirm.tsxと同じ改修（成功時に
+ * 一覧へ即遷移するのをやめ、この画面上で1分間「取消」リンクを出す）。取消権限は
+ * みまもり共通・自分専用いずれも本人のみ（77.3章）で、保護者は取り消せない。
  */
+type CancelState = "idle" | "confirming" | "processing" | "success" | "error" | "networkError";
+
 export default function SupporterRewardConfirmScreen() {
   const { rewardId } = useLocalSearchParams<{ rewardId: string }>();
   const { state, dispatch, memberPoints } = useAppData();
@@ -36,6 +44,23 @@ export default function SupporterRewardConfirmScreen() {
   const balance = me ? memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0 : 0;
   const [insufficientError, setInsufficientError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [redeemed, setRedeemed] = useState<{ redemptionId: string; costPaid: number } | null>(null);
+  const [cancelState, setCancelState] = useState<CancelState>("idle");
+  const [cancelErrorText, setCancelErrorText] = useState<string | null>(null);
+  const [withinWindow, setWithinWindow] = useState(true);
+  useEffect(() => {
+    if (!redeemed) return;
+    const mountedAt = Date.now();
+    setWithinWindow(true);
+    const id = setInterval(() => {
+      if (Date.now() - mountedAt > 60_000) {
+        setWithinWindow(false);
+        clearInterval(id);
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [redeemed]);
 
   if (!reward || !me) {
     return (
@@ -65,10 +90,28 @@ export default function SupporterRewardConfirmScreen() {
     // `confirm()`内で鳴らす）。
     playSound("reward");
 
-    router.replace({
-      pathname: "/supporter/rewards",
-      params: { justRewardId: reward.id, justName: reward.name, justCost: String(reward.cost) },
-    });
+    setRedeemed({ redemptionId: result.redemptionId ?? "", costPaid: reward.cost });
+  };
+
+  const handleCancel = async () => {
+    if (!redeemed?.redemptionId) return;
+    setCancelState("processing");
+    setCancelErrorText(null);
+    const result = await dispatch({ type: "CANCEL_REDEMPTION", redemptionId: redeemed.redemptionId });
+    if (!result.ok) {
+      const isKnownDbError =
+        result.error.code === PG_ERRCODE.checkViolation ||
+        result.error.code === PG_ERRCODE.noDataFound ||
+        result.error.code === PG_ERRCODE.insufficientPrivilege;
+      if (!isKnownDbError) {
+        setCancelState("networkError");
+        return;
+      }
+      setCancelState("error");
+      setCancelErrorText(cancelRedemptionErrorText("supporter", result.error));
+      return;
+    }
+    setCancelState("success");
   };
 
   if (insufficientError) {
@@ -76,6 +119,72 @@ export default function SupporterRewardConfirmScreen() {
       <Screen tone="supporter">
         <Text style={theme.typography.supporterTitle}>ポイントが足りません</Text>
         <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>（いま {balance}pt）</Text>
+        <AppButton
+          tone="supporter"
+          label="ごほうびへもどる"
+          style={{ marginTop: theme.spacing.s6 }}
+          onPress={() => router.replace("/supporter/rewards")}
+        />
+      </Screen>
+    );
+  }
+
+  if (redeemed) {
+    const showCancelArea = redeemed.redemptionId && withinWindow && cancelState !== "success";
+    return (
+      <Screen tone="supporter">
+        <Text style={theme.typography.supporterTitle}>
+          {reward.emoji ?? "🎁"} {reward.name} と交換しました
+        </Text>
+        <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s2 }]}>
+          -{redeemed.costPaid}pt（残高 {balance - redeemed.costPaid}pt）
+        </Text>
+
+        {showCancelArea && (
+          <View style={{ marginTop: theme.spacing.s4 }}>
+            {cancelState === "confirming" ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.s3 }}>
+                <Text style={theme.typography.supporterBody}>この交換を取り消しますか？</Text>
+                <Pressable onPress={() => setCancelState("idle")} hitSlop={8}>
+                  <Text style={{ color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" }}>
+                    やめる
+                  </Text>
+                </Pressable>
+                <Pressable onPress={handleCancel} hitSlop={8}>
+                  <Text style={{ color: theme.colors.statusBlocking, textDecorationLine: "underline" }}>
+                    取り消す
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => setCancelState("confirming")}
+                disabled={cancelState === "processing"}
+                hitSlop={8}
+              >
+                <Text style={{ color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" }}>
+                  {cancelState === "processing" ? CANCEL_PROCESSING_TEXT.supporter : CANCEL_LABEL.supporter}
+                </Text>
+              </Pressable>
+            )}
+            {cancelState === "error" && cancelErrorText && (
+              <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
+                {cancelErrorText}
+              </Text>
+            )}
+            {cancelState === "networkError" && (
+              <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
+                とどきませんでした…
+              </Text>
+            )}
+          </View>
+        )}
+        {cancelState === "success" && (
+          <Text style={{ marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }}>
+            {CANCEL_SUCCESS_TEXT.supporter}
+          </Text>
+        )}
+
         <AppButton
           tone="supporter"
           label="ごほうびへもどる"

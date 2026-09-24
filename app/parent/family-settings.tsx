@@ -141,21 +141,15 @@ export default function FamilySettingsScreen() {
       />
 
       <Card style={{ marginTop: theme.spacing.s6 }}>
-        <Text style={theme.typography.parentBodyMedium}>家族のやりとりの設定</Text>
-        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-          家族みんなの画面に反映されます。これまでに書いたものは消えません。
-        </Text>
-        <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
-          家族の掲示板・完了報告への「＋コメント」・ありがとうのメッセージを使う
-        </Text>
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          ・掲示板は、子どもの画面では「かぞくのけいじばん」といいます
+        {/* [2026-09-25短縮・統括「記載が長く見にくい」・実装メモ299章] 子どもの
+            画面での呼び名（かぞくのけいじばん／＋ひとこと）の説明は取扱説明書に
+            移し、ここでは何が止まり何が残るかだけを1行で書く。 */}
+        <Text style={theme.typography.parentBodyMedium}>家族のやりとり</Text>
+        <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>
+          書き込み（掲示板・コメント・ありがとうのメッセージ）
         </Text>
         <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          ・「＋コメント」は、子どもの画面では「＋ひとこと」といいます
-        </Text>
-        <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
-          「いまは使わない」にすると、この3つを書く・送ることが止まります。スタンプを送ることと、ありがとうのポイントを贈ることは、そのまま使えます。とまるのはメッセージだけです。
+          止めても、スタンプとありがとうのポイントは使えます。書いたものは消えません。
         </Text>
         <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
           <Pressable
@@ -194,48 +188,34 @@ export default function FamilySettingsScreen() {
 
         {/* [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
             主要画面ワイヤーフレーム.md 63.1節] 通知トグル。やりとりトグルと
-            同じCardの中に、区切り線＋1段インデントで従属配置する
-            （決定1。新しいCardは作らない・横並びの独立トグルとして置かない）。
-            やりとりトグルが「いまは使わない」のときはグレーアウト（非表示に
-            しない。決定4）。保存済みの値は保持する。 */}
-        <View style={styles.notifyDivider} />
-        <View style={{ paddingLeft: theme.spacing.s4 }}>
-          <Text style={[theme.typography.parentBody, !state.family.social_interactions_enabled && styles.disabledText]}>
-            書き込みがあったら、お知らせする
-          </Text>
-          <Text
-            style={[
-              theme.typography.parentCaption,
-              { color: theme.colors.neutralTextSecondary },
-              !state.family.social_interactions_enabled && styles.disabledText,
-            ]}
-          >
-            「いまは使わない」にすると、書き込み自体が止まるため、お知らせも届きません。
-          </Text>
-          <View style={[styles.chipRow, { marginTop: theme.spacing.s2, paddingLeft: theme.spacing.s4 }]}>
-            <Pressable
-              onPress={() => setNotificationsEnabled(true)}
-              disabled={savingNotify || !state.family.social_interactions_enabled}
-              style={[
-                styles.chip,
-                state.family.push_notifications_enabled && styles.chipSelected,
-                !state.family.social_interactions_enabled && styles.chipDisabled,
-              ]}
-            >
-              <Text>お知らせする</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setNotificationsEnabled(false)}
-              disabled={savingNotify || !state.family.social_interactions_enabled}
-              style={[
-                styles.chip,
-                !state.family.push_notifications_enabled && styles.chipSelected,
-                !state.family.social_interactions_enabled && styles.chipDisabled,
-              ]}
-            >
-              <Text>いまはお知らせしない</Text>
-            </Pressable>
-          </View>
+            同じCardの中に、区切り線の下に従属配置する（決定1。新しいCardは
+            作らない・横並びの独立トグルとして置かない）。保存済みの値は保持する。
+            [2026-09-25変更・統括承認・実装メモ299章] やりとりトグルが「いまは
+            使わない」のときは、グレーアウトではなく行ごと隠す（決定4を変更）。
+            隠せば「お知らせも届きません」という説明が不要になり、短くなるため。 */}
+        <View>
+          {state.family.social_interactions_enabled && (
+            <>
+              <View style={styles.notifyDivider} />
+              <Text style={theme.typography.parentBody}>書き込みのお知らせ</Text>
+              <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
+                <Pressable
+                  onPress={() => setNotificationsEnabled(true)}
+                  disabled={savingNotify}
+                  style={[styles.chip, state.family.push_notifications_enabled && styles.chipSelected]}
+                >
+                  <Text>する</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setNotificationsEnabled(false)}
+                  disabled={savingNotify}
+                  style={[styles.chip, !state.family.push_notifications_enabled && styles.chipSelected]}
+                >
+                  <Text>しない</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
           {savingNotify && (
             <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
               保存中…
@@ -358,8 +338,4 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.neutralBorder,
     paddingTop: theme.spacing.s4,
   },
-  // [決定4] グレーアウト時の淡色表示。新しい色トークンは作らず、既存の
-  // neutralTextSecondaryを流用する。
-  disabledText: { color: theme.colors.neutralTextSecondary },
-  chipDisabled: { opacity: 0.5 },
 });

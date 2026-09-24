@@ -581,6 +581,15 @@
 -- 本スイート52件（S5追加後は53件）全てPASSすることを確認済み（実装メモ.md
 -- 295章）。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-25再追加・開発部] ごほうびの交換の直後の取消（要件定義書07-39章、
+-- 設計部/成果物/スキーマ設計.sql 77章、開発部/成果物/実装メモ.md 298章）に
+-- 伴い、S4（98→99、SECURITY DEFINER関数`cancel_reward_redemption`を
+-- `cancel_chore_completion`と同じ方式で追加）を更新した。S1（新しいテーブル
+-- を追加していない）・S3（`reward_redemptions`への新しいポリシーを追加して
+-- いない）はいずれも±0（77.6章の見込みどおり。ローカルDockerで
+-- `supabase db reset`後に実測して一致を確認した。96.5章の遵守）。ローカル
+-- Docker環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -1019,6 +1028,12 @@ WITH expected(f) AS (VALUES
   -- SECURITY DEFINERであり、43.7章の方針どおりPUBLIC/anonから明示的にREVOKEした
   -- うえでauthenticatedへ明示的にGRANTしている。
   ('cancel_chore_completion'),
+  -- [2026-09-25追加] cancel_reward_redemption（ごほうびの交換の直後の取消、
+  -- 要件定義書07-39章、設計部/成果物/スキーマ設計.sql 77章、開発部/成果物/
+  -- 実装メモ.md 298章）。cancel_chore_completion()と同じくSECURITY DEFINERで
+  -- あり、77.5章の方針どおりPUBLIC/anonから明示的にREVOKEしたうえで
+  -- authenticatedへ明示的にGRANTしている。
+  ('cancel_reward_redemption'),
   ('chore_completions_before_insert'),
   -- [2026-09-01追加] chore_nfc_tags_before_write（NFCタグの人ごと化、設計部/成果物/
   -- スキーマ設計.sql 39.3章、開発部/成果物/実装メモ.md 108章）。他のBEFORE INSERT/
@@ -1335,7 +1350,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数98件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数99件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

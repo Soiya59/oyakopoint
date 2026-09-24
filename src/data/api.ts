@@ -1245,6 +1245,32 @@ export async function redeemReward(
   return { ok: true, data: data as RewardRedemption };
 }
 
+/**
+ * API仕様.md 34章「ごほうびの交換の直後の取消（誤操作リカバリ、1分以内）」。
+ * SECURITY DEFINERのRPC `cancel_reward_redemption()`（スキーマ設計.sql 77章）が
+ * 権限・時間窓を確認したうえで対象行を物理削除する。戻り値は「消えた交換記録」の
+ * 確認情報のみ。呼び出し側は成功後、残高（`member_points`）・通帳（`reward_
+ * redemptions`）を再取得すること（`refreshAfterRedeem`と同じ2本、34章参照）。
+ *
+ * 起こりうるエラー（API仕様.md 11章、いずれもPG_ERRCODE経由で判定すること）:
+ * - `no_data_found`: 対象が存在しない、または他家族の交換記録。
+ * - `insufficient_privilege`: 対象rewardの区分に応じた権限が無い。
+ * - `check_violation`: 交換から1分を超えている。
+ * `cancel_chore_completion`と異なり、ガチャ消費後・木の飾り付け済み・残高
+ * マイナス化に相当する理由は無い（77.2章、「もう使われている」状態が存在しない）。
+ */
+export async function cancelRewardRedemption(
+  client: SupabaseClient,
+  redemptionId: string
+): Promise<ApiResult<{ redemption_id: string; reward_id: string | null; reward_name: string; member_id: string; cost: number }>> {
+  const { data, error } = await client.rpc("cancel_reward_redemption", { p_redemption_id: redemptionId }).single();
+  if (error) return { ok: false, error: fromPostgrestError(error) };
+  return {
+    ok: true,
+    data: data as { redemption_id: string; reward_id: string | null; reward_name: string; member_id: string; cost: number },
+  };
+}
+
 /** API仕様.md 3a章手順3: NFCタグをchoreに紐づける */
 /**
  * クエスト（chore）の完全削除。要件定義書07-14章…ではなく、2026-08-29のユーザー要望

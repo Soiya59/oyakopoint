@@ -52,7 +52,14 @@ export default function RewardConfirmScreen() {
     }
     router.replace({
       pathname: "/child/reward-complete",
-      params: { rewardName: reward.name, rewardEmoji: reward.emoji, remaining: String(balance - reward.cost) },
+      params: {
+        rewardName: reward.name,
+        rewardEmoji: reward.emoji,
+        remaining: String(balance - reward.cost),
+        // [2026-09-25追加・要件定義書07-39章「ごほうびの交換の直後の取消」]
+        // 交換記録のID。取消（cancel_reward_redemption）の対象を特定するために使う。
+        redemptionId: result.redemptionId,
+      },
     });
   };
 

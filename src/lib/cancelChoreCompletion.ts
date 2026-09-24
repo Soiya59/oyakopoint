@@ -74,3 +74,31 @@ export function cancelCompletionErrorText(tone: CancelTone, error: ApiError): st
   }
   return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
 }
+
+/**
+ * 要件定義書07-39章「ごほうびの交換の直後の取消」・API仕様.md 34章・11章に対応する。
+ *
+ * [設計部の申し送り（スキーマ設計.sql 77.9章）] `cancelCompletionErrorText`と同じ
+ * PG_ERRCODE判定方式を流用した新関数。**ただし本機能には「もう使われている」状態が
+ * 存在しない（77.2章）ため、ガチャ消費後・木の色丸・残高マイナス化に相当する
+ * check_violationの理由は無く、check_violationは「1分超過」の1通りのみ**である点が
+ * `cancelCompletionErrorText`と異なる（分岐を複製せず、必要な3ケースだけに絞った）。
+ */
+export function cancelRedemptionErrorText(tone: CancelTone, error: ApiError): string {
+  if (error.code === PG_ERRCODE.checkViolation) {
+    // [77.4章] 交換から1分を超過した場合のみ（クライアント側は1分経過でリンクごと
+    // 非表示にする設計のため、通常は到達しない。端末時計のずれ等への保険）。
+    return tone === "child" ? "じかんが すぎちゃったよ" : "時間が過ぎたため取り消せません";
+  }
+  if (error.code === PG_ERRCODE.noDataFound) {
+    // 対象が見つからない（すでに他の人が取り消した等）。存在しない場合と他家族の
+    // 場合を意図的に区別しない（API仕様.md 34章・11章）。
+    return tone === "child" ? "みつからなかったよ" : "見つかりませんでした";
+  }
+  if (error.code === PG_ERRCODE.insufficientPrivilege) {
+    // UI側で対象ロールにのみ取消導線を出していれば通常は発生しない想定
+    // （API仕様.md 11章）。
+    return tone === "child" ? "できなかったよ" : "この操作はできません";
+  }
+  return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
+}

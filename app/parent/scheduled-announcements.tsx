@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
@@ -204,9 +204,9 @@ function SlotCard({
       {editing && (
         <View style={{ marginTop: theme.spacing.s3 }}>
           <Text style={theme.typography.parentBody}>届ける時刻</Text>
-          <View style={{ flexDirection: "row", gap: theme.spacing.s3, marginTop: theme.spacing.s2 }}>
-            <TimeChipScroller values={HOURS} value={hour} onChange={setHour} suffix="時" />
-            <TimeChipScroller values={MINUTES} value={minute} onChange={setMinute} suffix="分" pad />
+          <View style={styles.wheelRow}>
+            <TimeWheel values={HOURS} value={hour} onChange={setHour} suffix="時" />
+            <TimeWheel values={MINUTES} value={minute} onChange={setMinute} suffix="分" pad />
           </View>
 
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>
@@ -271,12 +271,22 @@ function SlotCard({
   );
 }
 
+const WHEEL_ITEM_HEIGHT = 44;
+const WHEEL_VISIBLE_ROWS = 5; // 真ん中の1行＋上下2行ずつ
+
 /**
  * 時刻の選択部品（ワイヤーフレーム64.4節「数値を直接入力させず、選ぶだけで
- * 確定する方式」）。ネイティブの依存（picker等）を足さないため、横スクロール
- * するチップの一覧で実装する（実装メモ292章）。
+ * 確定する方式」）。
+ *
+ * [2026-09-25変更・統括「くるくる回して決める方法はできるか」・実装メモ299章]
+ * 横スクロールのチップ一覧は、選んでいる時刻が画面の外に隠れて見にくかった
+ * ため、iPhoneの目覚まし時計のような縦に回る列に置き換えた。真ん中の帯に
+ * 止まった数字が選ばれる。ネイティブの依存（picker等）は足さず、ScrollViewの
+ * snapToIntervalで作る（OTAで配れるようにするため。OS標準の時刻ピッカーは
+ * Androidでは文字盤になり見た目がそろわず、ビルドも要る）。数字を押しても
+ * その数字まで回る。
  */
-function TimeChipScroller({
+function TimeWheel({
   values,
   value,
   onChange,
@@ -289,24 +299,69 @@ function TimeChipScroller({
   suffix: string;
   pad?: boolean;
 }) {
+  const ref = useRef<ScrollView>(null);
+  const placed = useRef(false);
   const label = (v: number) => (pad ? String(v).padStart(2, "0") : String(v));
+  const initialIndex = Math.max(0, values.indexOf(value));
+  const [centerIndex, setCenterIndex] = useState(initialIndex);
+
+  const settle = (offsetY: number) => {
+    const i = Math.min(values.length - 1, Math.max(0, Math.round(offsetY / WHEEL_ITEM_HEIGHT)));
+    setCenterIndex(i);
+    if (values[i] !== value) onChange(values[i]);
+  };
+
+  const scrollToIndex = (i: number, animated: boolean) => {
+    ref.current?.scrollTo({ y: i * WHEEL_ITEM_HEIGHT, animated });
+  };
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeScroller}>
-      <View style={{ flexDirection: "row", gap: theme.spacing.s1 }}>
-        {values.map((v) => (
+    <View style={styles.wheel}>
+      <View pointerEvents="none" style={styles.wheelBand} />
+      <ScrollView
+        ref={ref}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        snapToInterval={WHEEL_ITEM_HEIGHT}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        contentOffset={{ x: 0, y: initialIndex * WHEEL_ITEM_HEIGHT }}
+        // Androidは contentOffset を無視するため、最初の配置時に回しておく
+        // （2回目以降の配置し直しでは回さない。選び直した値が戻ってしまうため）
+        onLayout={() => {
+          if (placed.current) return;
+          placed.current = true;
+          scrollToIndex(initialIndex, false);
+        }}
+        onScroll={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.y / WHEEL_ITEM_HEIGHT);
+          if (i !== centerIndex && i >= 0 && i < values.length) setCenterIndex(i);
+        }}
+        onMomentumScrollEnd={(e) => settle(e.nativeEvent.contentOffset.y)}
+        // 勢いをつけずに指を離したときは onMomentumScrollEnd が来ない端末があるため
+        onScrollEndDrag={(e) => {
+          if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < 0.05) settle(e.nativeEvent.contentOffset.y);
+        }}
+        contentContainerStyle={{ paddingVertical: WHEEL_ITEM_HEIGHT * Math.floor(WHEEL_VISIBLE_ROWS / 2) }}
+      >
+        {values.map((v, i) => (
           <Pressable
             key={v}
-            onPress={() => onChange(v)}
-            style={[styles.timeChip, v === value && styles.chipSelected]}
+            onPress={() => {
+              scrollToIndex(i, true);
+              setCenterIndex(i);
+              onChange(v);
+            }}
+            style={styles.wheelItem}
           >
-            <Text>
+            <Text style={i === centerIndex ? styles.wheelTextSelected : styles.wheelText}>
               {label(v)}
               {suffix}
             </Text>
           </Pressable>
         ))}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -323,15 +378,30 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
   },
   chipSelected: { borderColor: theme.colors.brandPrimary, backgroundColor: theme.colors.brandPrimarySoft },
-  timeChip: {
-    paddingHorizontal: theme.spacing.s3,
-    paddingVertical: theme.spacing.s2,
+  wheelRow: { flexDirection: "row", justifyContent: "center", gap: theme.spacing.s4, marginTop: theme.spacing.s2 },
+  wheel: {
+    width: 110,
+    height: WHEEL_ITEM_HEIGHT * WHEEL_VISIBLE_ROWS,
     borderRadius: theme.radius.parentMd,
     borderWidth: 1,
     borderColor: theme.colors.neutralBorder,
     backgroundColor: theme.colors.neutralSurface,
+    overflow: "hidden",
   },
-  timeScroller: { maxHeight: 56 },
+  wheelBand: {
+    position: "absolute",
+    left: 4,
+    right: 4,
+    top: WHEEL_ITEM_HEIGHT * Math.floor(WHEEL_VISIBLE_ROWS / 2),
+    height: WHEEL_ITEM_HEIGHT,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.brandPrimary,
+    backgroundColor: theme.colors.brandPrimarySoft,
+  },
+  wheelItem: { height: WHEEL_ITEM_HEIGHT, alignItems: "center", justifyContent: "center" },
+  wheelText: { fontSize: 18, color: theme.colors.neutralTextSecondary },
+  wheelTextSelected: { fontSize: 22, fontWeight: "700", color: theme.colors.neutralTextPrimary },
   exampleCard: {
     borderWidth: 1,
     borderColor: theme.colors.neutralBorder,

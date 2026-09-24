@@ -199,11 +199,20 @@ export type Action =
    * 誰の操作かを判別するのに必要（ADD_REACTIONと同じ形）。
    */
   | { type: "TOGGLE_REACTION_STAMP"; completionId: string; reactedBy: string; stampKey: StampKey }
-  | { type: "REDEEM_REWARD"; rewardId: string; memberId: string }
+  | {
+      type: "REDEEM_REWARD";
+      rewardId: string;
+      memberId: string;
+      /** [2026-09-25追加] モック実装専用。実接続時はDBが生成するidを使うため無視される
+       *  （下記RealDataProviderImplのREDEEM_REWARD参照）。 */
+      redemptionId?: string;
+    }
   | { type: "SET_CHORE_NFC_TAG"; choreId: string; tagValue: string }
   | { type: "SET_DAILY_FLAG"; memberId: string; choreId: string; flagged: boolean }
   /** [2026-09-03追加] 完了報告の直後の取消（要件定義書07-17章、API仕様.md 4d節）。 */
   | { type: "CANCEL_COMPLETION"; completionId: string }
+  /** [2026-09-25追加] ごほうびの交換の直後の取消（要件定義書07-39章、API仕様.md 34章）。 */
+  | { type: "CANCEL_REDEMPTION"; redemptionId: string }
   /**
    * [2026-09-21追加・要件定義書07-32章 決定20〜24・決定33] モック実装専用。
    * 保護者トグル「家族のやりとりを使う」。実接続時はRPC（set_family_social_settings）
@@ -231,8 +240,13 @@ export type Action =
 // `habit_figure_grants.granted_at >= reportedAt`で判定するために使う
 // （同一トランザクション内のnow()は完全に一致するため`>=`で安全に判定できる）。
 // 他のアクションは従来どおりoptionalのため後方互換。
+/**
+ * [2026-09-25追加] REDEEM_REWARD成功時、生成された交換記録id（redemptionId）も
+ * 併せて返す。C10（`app/child/reward-confirm.tsx`）等が、直後の取消
+ * （要件定義書07-39章）の対象を特定するために使う。optionalなので後方互換。
+ */
 export type DispatchResult =
-  | { ok: true; completionId?: string; reportedAt?: string }
+  | { ok: true; completionId?: string; reportedAt?: string; redemptionId?: string }
   | { ok: false; error: ApiError };
 
 export interface DataContextValue {
@@ -1326,6 +1340,19 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           // 2本（redemptions・memberPoints）だけの取り直しに変更した
           // （根拠はrefreshAfterRedeem定義部のコメント参照）。
           await refreshAfterRedeem();
+          // [2026-09-25追加] 要件定義書07-39章「ごほうびの交換の直後の取消」。
+          // 呼び出し元が取消の対象を特定できるよう、生成された交換記録idを返す。
+          return { ok: true, redemptionId: res.data.id };
+        }
+
+        // [2026-09-25追加] 要件定義書07-39章「ごほうびの交換の直後の取消」・API仕様.md 34章。
+        case "CANCEL_REDEMPTION": {
+          const res = await api.cancelRewardRedemption(client, action.redemptionId);
+          if (!res.ok) return { ok: false, error: res.error };
+          // 完了報告の取消（refreshAfterCancel）と異なり、家族の木・ガチャ進捗を
+          // 戻す処理は無い（77.2章「もう使われている」状態が存在しないため）。
+          // 変わるのはredemptions・memberPointsの2本のみ（REDEEM_REWARDの逆操作）。
+          await refreshAfterRedeem();
           return { ok: true };
         }
 
@@ -1749,7 +1776,10 @@ function reducer(state: State, action: Action): State {
         return state;
       }
       const redemption: RewardRedemption = {
-        id: `redemption-${Date.now()}`,
+        // [2026-09-25改訂] MockDataProviderImpl.dispatchが事前に採番したidを使う
+        // （C11等が直後の取消の対象を特定できるようにするため。REPORT_COMPLETIONと
+        // 同じ方式。下記参照）。
+        id: action.redemptionId ?? `redemption-${Date.now()}`,
         family_id: state.family.id,
         reward_id: reward.id,
         reward_name: reward.name,
@@ -1759,6 +1789,14 @@ function reducer(state: State, action: Action): State {
         created_at: new Date().toISOString(),
       };
       return { ...state, redemptions: [redemption, ...state.redemptions] };
+    }
+
+    // [2026-09-25追加] 要件定義書07-39章「ごほうびの交換の直後の取消」。モック実装では
+    // 権限・時間窓等のRPC側チェック（スキーマ設計.sql 77章）を再現せず、単純に該当行を
+    // 取り除くのみとする（CANCEL_COMPLETIONと同じ簡略化方針。実接続でのみ実際の
+    // 業務ルールが働く）。
+    case "CANCEL_REDEMPTION": {
+      return { ...state, redemptions: state.redemptions.filter((r) => r.id !== action.redemptionId) };
     }
 
     case "SET_CHORE_NFC_TAG": {
@@ -1910,6 +1948,13 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       const reportedAt = new Date().toISOString();
       dispatchRaw({ ...action, completionId });
       return { ok: true, completionId, reportedAt };
+    }
+    // [2026-09-25追加] REDEEM_REWARDも同じ理由（C11等が直後の取消の対象を
+    // 特定できるようにするため）でidを事前に採番する。
+    if (action.type === "REDEEM_REWARD") {
+      const redemptionId = `redemption-${Date.now()}`;
+      dispatchRaw({ ...action, redemptionId });
+      return { ok: true, redemptionId };
     }
     dispatchRaw(action);
     return { ok: true };
