@@ -273,7 +273,7 @@ export default function FamilySettingsScreen() {
       <Card style={{ marginTop: theme.spacing.s4 }}>
         <Text style={theme.typography.parentBodyMedium}>{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}</Text>
         <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-          家族の毎日に、決まった時間の一言を届けます。書いた本人にもとどきます。
+          家族の毎日に、決まった時間の一言を届けます。書いた本人にも届きます。
         </Text>
         {[1, 2].map((slot) => {
           const item = state.scheduledAnnouncements.find((a) => a.slot === slot);
@@ -283,7 +283,7 @@ export default function FamilySettingsScreen() {
               {label}：
               {item?.message
                 ? `${item.send_time.slice(0, 5)}「${item.message.slice(0, 12)}${item.message.length > 12 ? "…" : ""}」`
-                : "まだ 設定されていません"}
+                : "まだ設定されていません"}
             </Text>
           );
         })}
@@ -295,12 +295,12 @@ export default function FamilySettingsScreen() {
         />
 
         {/* [ワイヤーフレーム64.7.1節] 保護者自身の受信オンオフ。1つ以上の
-            枠が「そうしんする」状態のときだけ表示する（64.7節）。 */}
+            枠が「送信する」状態のときだけ表示する（64.7節）。 */}
         {hasActiveScheduledAnnouncement && (
           <View style={styles.notifyDivider}>
-            <Text style={theme.typography.parentBody}>わたしの うけとり</Text>
+            <Text style={theme.typography.parentBody}>自分の受け取り</Text>
             <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-              「いまは うけとらない」にすると、あなたの端末にだけ届かなくなります。ほかの家族には、これまでどおり届きます。
+              「いまは受け取らない」にすると、あなたの端末にだけ届かなくなります。ほかの家族には、これまでどおり届きます。
             </Text>
             <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
               <Pressable
@@ -308,14 +308,14 @@ export default function FamilySettingsScreen() {
                 disabled={savingReceive || !me}
                 style={[styles.chip, me?.scheduled_announcement_notifications_enabled && styles.chipSelected]}
               >
-                <Text>うけとる</Text>
+                <Text>受け取る</Text>
               </Pressable>
               <Pressable
                 onPress={() => void setMyScheduledAnnouncementReceive(false)}
                 disabled={savingReceive || !me}
                 style={[styles.chip, me && !me.scheduled_announcement_notifications_enabled && styles.chipSelected]}
               >
-                <Text>いまは うけとらない</Text>
+                <Text>いまは受け取らない</Text>
               </Pressable>
             </View>
             {receiveError && (

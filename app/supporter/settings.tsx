@@ -97,24 +97,24 @@ export default function SupporterSettingsScreen() {
 
       {/* [2026-09-23追加・要件定義書07-37章4-8節、ワイヤーフレーム64.7.2節]
           みまもりメンバー自身の「メッセージ」受信オンオフ。1つ以上の枠が
-          「そうしんする」状態のときだけ表示する。 */}
+          「送信する」状態のときだけ表示する。 */}
       {hasActiveScheduledAnnouncement && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={theme.typography.supporterBody}>わたしの うけとり</Text>
+          <Text style={theme.typography.supporterBody}>自分の受け取り</Text>
           <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-            「いまは うけとらない」にすると、あなたの端末にだけ{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}が届かなくなります。
+            「いまは受け取らない」にすると、あなたの端末にだけ{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}が届かなくなります。
           </Text>
           <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
             <AppButton
               tone="supporter"
-              label="うけとる"
+              label="受け取る"
               variant={myMember?.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
               onPress={() => void setMyScheduledAnnouncementReceive(true)}
               disabled={savingReceive || !myMember}
             />
             <AppButton
               tone="supporter"
-              label="いまは うけとらない"
+              label="いまは受け取らない"
               variant={myMember && !myMember.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
               onPress={() => void setMyScheduledAnnouncementReceive(false)}
               disabled={savingReceive || !myMember}

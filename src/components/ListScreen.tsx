@@ -20,7 +20,7 @@ import Screen, {
  * 見た目（カードの中身・トーン）は画面ごとに違うため、ここには持ち込まない。
  *
  * この部品が引き受けること:
- *  1. `Screen`を`scroll={false}` ＋ `contentStyle={{ padding: 0 }}`にし、`FlatList`自身を
+ *  1. `Screen`を`scroll={false}` ＋ `contentStyle`で余白0にし、`FlatList`自身を
  *     唯一のスクロールコンテナにする。`Screen`の既定（ScrollView）に`FlatList`を
  *     入れ子にすると仮想化が効かず、「VirtualizedLists should never be nested」警告も出る。
  *  2. `Screen.tsx`が`styles.content`で当てているpadding（左右・上・下＋safe areaインセット）を
@@ -54,8 +54,13 @@ export default function ListScreen<ItemT>({
     paddingTop: SCREEN_CONTENT_TOP_PADDING + insets.top,
     paddingBottom: SCREEN_CONTENT_BOTTOM_PADDING + insets.bottom,
   };
+  // [2026-09-25修正・やること.md 4-80] `padding: 0`だけでは、`Screen.tsx`が個別に
+  // 指定している`paddingTop`・`paddingBottom`を消せず、上下の余白が`Screen`の器と
+  // FlatListの中身の両方に入って二重になっていた（統括の実機報告「完了報告の上画面の
+  // 謎の空白」）。React Nativeは`paddingTop`のような個別指定を`padding`より常に
+  // 優先するため、上下も名指しで0にする。
   return (
-    <Screen tone={tone} scroll={false} contentStyle={{ padding: 0 }}>
+    <Screen tone={tone} scroll={false} contentStyle={{ padding: 0, paddingTop: 0, paddingBottom: 0 }}>
       <FlatList
         style={[styles.list, style]}
         contentContainerStyle={[padding, contentContainerStyle]}

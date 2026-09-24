@@ -41,7 +41,7 @@ export default function ScheduledAnnouncementsScreen() {
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/family-settings")} />
       <Text style={theme.typography.parentTitle}>{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}</Text>
       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
-        家族の毎日に、決まった時間の一言を届けます。かかなければ、その時間には何もとどきません。とどく相手は、書いた本人を含む家族全員です。
+        家族の毎日に、決まった時間の一言を届けます。書かなければ、その時間には何も届きません。届く相手は、書いた本人を含む家族全員です。「ありがとうのメッセージ」とは別の機能です。
       </Text>
 
       {SCHEDULED_ANNOUNCEMENT_SLOTS.map(({ slot, label }) => (
@@ -155,7 +155,7 @@ function SlotCard({
                 {saved.send_time.slice(0, 5)}
               </Text>
               <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s1 }]}>
-                「{saved.message}」{!saved.enabled && "（とうぶん とめています）"}
+                「{saved.message}」{!saved.enabled && "（いまは止めています）"}
               </Text>
               <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
                 <Pressable
@@ -163,27 +163,27 @@ function SlotCard({
                   disabled={saving}
                   style={[styles.chip, saved.enabled && styles.chipSelected]}
                 >
-                  <Text>そうしんする</Text>
+                  <Text>送信する</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => void setSending(false)}
                   disabled={saving}
                   style={[styles.chip, !saved.enabled && styles.chipSelected]}
                 >
-                  <Text>いまは そうしんしない</Text>
+                  <Text>いまは送信しない</Text>
                 </Pressable>
               </View>
               <View style={[styles.chipRow, { marginTop: theme.spacing.s3, justifyContent: "space-between" }]}>
                 <AppButton label="編集する" variant="secondary" onPress={beginEdit} disabled={saving} />
                 <Pressable onPress={() => setConfirmingDelete(true)} disabled={saving} style={{ justifyContent: "center" }}>
-                  <Text style={{ color: theme.colors.statusBlocking, textDecorationLine: "underline" }}>けす</Text>
+                  <Text style={{ color: theme.colors.statusBlocking, textDecorationLine: "underline" }}>消す</Text>
                 </Pressable>
               </View>
             </>
           ) : (
             <>
               <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-                まだ 設定されていません
+                まだ設定されていません
               </Text>
               <AppButton label="設定する" variant="secondary" style={{ marginTop: theme.spacing.s2, alignSelf: "flex-start" }} onPress={beginEdit} />
             </>
@@ -193,26 +193,26 @@ function SlotCard({
 
       {confirmingDelete && (
         <View style={{ marginTop: theme.spacing.s2 }}>
-          <Text style={theme.typography.parentBody}>この{label}のメッセージを けしますか？</Text>
+          <Text style={theme.typography.parentBody}>{label}を消しますか？</Text>
           <View style={[styles.chipRow, { marginTop: theme.spacing.s3 }]}>
             <AppButton label="やめる" variant="secondary" onPress={() => setConfirmingDelete(false)} disabled={saving} />
-            <AppButton label={saving ? "けしています…" : "けす"} variant="danger" onPress={() => void doDelete()} disabled={saving} />
+            <AppButton label={saving ? "消しています…" : "消す"} variant="danger" onPress={() => void doDelete()} disabled={saving} />
           </View>
         </View>
       )}
 
       {editing && (
         <View style={{ marginTop: theme.spacing.s3 }}>
-          <Text style={theme.typography.parentBody}>とどける じこく</Text>
+          <Text style={theme.typography.parentBody}>届ける時刻</Text>
           <View style={{ flexDirection: "row", gap: theme.spacing.s3, marginTop: theme.spacing.s2 }}>
-            <TimeChipScroller values={HOURS} value={hour} onChange={setHour} suffix="じ" />
-            <TimeChipScroller values={MINUTES} value={minute} onChange={setMinute} suffix="ふん" pad />
+            <TimeChipScroller values={HOURS} value={hour} onChange={setHour} suffix="時" />
+            <TimeChipScroller values={MINUTES} value={minute} onChange={setMinute} suffix="分" pad />
           </View>
 
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>
-            れいから えらぶ（タップすると したの らんに はいります。じぶんで かいても いいです）
+            例から選ぶ（タップすると下の欄に入ります。自分で書いても構いません）
           </Text>
-          {(["あさむけ", "よるむけ"] as const).map((heading) => (
+          {(["朝向け", "夜向け"] as const).map((heading) => (
             <View key={heading} style={{ marginTop: theme.spacing.s2 }}>
               <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>{heading}</Text>
               {SCHEDULED_ANNOUNCEMENT_EXAMPLES.filter((e) => e.heading === heading).map((example) => (
@@ -228,6 +228,12 @@ function SlotCard({
           ))}
 
           <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s4 }]}>メッセージ</Text>
+          {/* [2026-09-25追加・統括決定・やること.md 4-81] 例文を漢字にしたため、
+              子どもにも届くことを添える（統括「子供が読めない場合はひらがなにして
+              くださいと記載」）。 */}
+          <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+            お子さんが漢字を読めないときは、ひらがなに書きかえてください。
+          </Text>
           <TextInput
             value={message}
             onChangeText={setMessage}

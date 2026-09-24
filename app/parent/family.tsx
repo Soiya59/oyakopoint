@@ -126,32 +126,53 @@ export default function FamilyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.family.id]);
 
-  const removeChild = async (memberId: string) => {
+  // [2026-09-25追加・やること.md 4-83] 子ども・みまもりメンバーを退会させる操作は、
+  // ボタン1回で即座に実行されていた（統括の実機報告「子供を退会させるときは1タップで
+  // できた」）。みまもり自身の「家族から抜ける」（S13）が2026-09-01に入れた
+  // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認に揃える
+  // （Alert.alertはWeb版で挙動が不安定なため使わない。実装メモ107章）。
+  // 子ども・みまもりとも同じremove-member(soft_remove)を使う（みまもりは
+  // supabase/functions/_shared/parentAuth.ts resolveFamilyMemberCaller対応、実装メモ59.3.2章）。
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
+  const removeMemberConfirmed = async (memberId: string) => {
     setProcessingId(memberId);
     setErrorMessage(null);
     const res = await removeMember(memberId, "soft_remove");
     setProcessingId(null);
+    setConfirmingRemoveId(null);
     if (!res.ok) {
       setErrorMessage(res.error.message);
       return;
     }
     void refresh();
   };
-
-  // みまもりメンバー自身の退会も同じremove-member(soft_remove)を使う
-  // （supabase/functions/_shared/parentAuth.ts resolveFamilyMemberCaller対応、
-  // 実装メモ.md 59.3.2章参照。保護者側からも他のみまもりメンバーを退会させられる）。
-  const removeSupporter = async (memberId: string) => {
-    setProcessingId(memberId);
-    setErrorMessage(null);
-    const res = await removeMember(memberId, "soft_remove");
-    setProcessingId(null);
-    if (!res.ok) {
-      setErrorMessage(res.error.message);
-      return;
-    }
-    void refresh();
-  };
+  const renderRemoveControl = (memberId: string, displayName: string, anyEditOpen: boolean) =>
+    confirmingRemoveId === memberId ? (
+      <View style={{ gap: theme.spacing.s2 }}>
+        <Text style={theme.typography.parentBody}>
+          {displayName}さんを退会させますか？ {displayName}さんは、この家族でアプリを使えなくなります。
+        </Text>
+        <AppButton
+          label={processingId === memberId ? "処理中…" : "ほんとうに退会させる"}
+          variant="danger"
+          onPress={() => removeMemberConfirmed(memberId)}
+          disabled={processingId !== null}
+        />
+        <AppButton
+          label="やめる"
+          variant="ghost"
+          onPress={() => setConfirmingRemoveId(null)}
+          disabled={processingId !== null}
+        />
+      </View>
+    ) : (
+      <AppButton
+        label="退会させる"
+        variant="secondary"
+        onPress={() => setConfirmingRemoveId(memberId)}
+        disabled={processingId !== null || anyEditOpen || confirmingRemoveId !== null}
+      />
+    );
 
   const startEditName = (memberId: string, currentName: string) => {
     setErrorMessage(null);
@@ -463,25 +484,13 @@ export default function FamilyScreen() {
                           }
                           disabled={processingId !== null || anyEditOpen}
                         />
-                        <AppButton
-                          label={processingId === m.id ? "処理中…" : "退会させる"}
-                          variant="secondary"
-                          onPress={() => removeChild(m.id)}
-                          disabled={processingId !== null || anyEditOpen}
-                        />
+                        {renderRemoveControl(m.id, m.display_name, anyEditOpen)}
                       </>
                     )}
                     {/* [2026-08-22追加] みまもりメンバーの退会（07-7章「家族メンバーの招待発行・
                         削除・役割変更などの家族管理操作」は保護者専権。みまもりメンバー自身は
                         S13から自分自身のみ退会できるが、保護者はここから誰でも退会させられる）。 */}
-                    {m.role === "supporter" && (
-                      <AppButton
-                        label={processingId === m.id ? "処理中…" : "退会させる"}
-                        variant="secondary"
-                        onPress={() => removeSupporter(m.id)}
-                        disabled={processingId !== null || anyEditOpen}
-                      />
-                    )}
+                    {m.role === "supporter" && renderRemoveControl(m.id, m.display_name, anyEditOpen)}
                   </View>
                 )}
               </>

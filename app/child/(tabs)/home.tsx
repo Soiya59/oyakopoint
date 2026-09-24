@@ -15,11 +15,7 @@ import { useUnreadSince } from "@/hooks/useLastSeen";
 import { isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
-import {
-  buildChoreCompletionFamilyTotalsLookup,
-  keyChoreCompletionTotal,
-  useChoreCompletionTotals,
-} from "@/hooks/useChoreCompletionTotals";
+import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
  * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
@@ -69,13 +65,13 @@ export default function ChildHomeScreen() {
   const {
     loadState: totalsLoadState,
     lookup: totalsLookup,
-    entries: totalsEntries,
     reload: reloadCompletionTotals,
   } = useChoreCompletionTotals();
-  // [2026-09-20追加・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.9節5]
-  // 担当「誰でも実行可」の行向け、chore_id単位の家族合計。totalsEntries（既存の
-  // 家族ぶん取得）をクライアント側で合算するだけで、新しい問い合わせは発生しない。
-  const familyTotalsLookup = buildChoreCompletionFamilyTotalsLookup(totalsEntries);
+  // [2026-09-20追加→2026-09-25撤去・やること.md 4-77] 担当「誰でも実行可」の行だけ
+  // 家族合計（familyTotalsLookup）を出していたが、要件定義書07-31章決定6
+  // （2026-09-22）は「C5・P19・S5の個人向け画面は見ている本人の回数」を定めていた。
+  // 決定6はC5にこの分岐が無いと誤認してC5を直していなかった（統括の実機報告
+  // 「家族で合計になっている。個人の数を記載で統一されたと思う」）。
 
   // [2026-09-22廃止・統括判断] 「いまの もくひょう」カード（07-36章）はここで
   // 目標を読んでいたが、統括の判断により画面の導線を外した。理由は要件定義書
@@ -344,25 +340,13 @@ export default function ChildHomeScreen() {
                       {formatChoreRowRewardLabel(chore)}
                     </Text>
                   )}
-                  {/* [2026-09-20改訂・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md
-                      53.11.1節決定8・53.11.4節決定11・53.11.9節1] 担当「誰でも実行可」
-                      （assigned_to===null）のクエストは、本人の回数ではなく家族合計
-                      「かぞくで◯かい やったよ」に置き換える。0回でも「かぞくで まだ0かい」
-                      と表示する（決定11・決定12）。担当が自分自身のクエストは従来どおり
-                      本人の回数で、0回のときは行自体を出さない（53.6節決定7を維持。
-                      この非対称は意図したもの）。「✅ きろくずみ」の状態でも回数行は
+                  {/* [2026-09-25改訂・要件定義書07-31章決定6、やること.md 4-77] 担当に
+                      関係なく、見ている本人の回数を出す（P19・S5と同じ）。0回のときは
+                      行自体を出さない（53.6節決定7）。「✅ きろくずみ」の状態でも回数行は
                       消さない（今日やったか／これまで何回かは別の軸）。取得に失敗した
                       ときは回数の部分だけ出さない（53.7節、一覧全体は壊さない）。 */}
                   {totalsLoadState !== "error" &&
                     (() => {
-                      if (chore.assigned_to === null) {
-                        const familyCount = familyTotalsLookup[chore.id] ?? 0;
-                        return (
-                          <Text style={styles.completionTotalLabel} numberOfLines={1}>
-                            {familyCount === 0 ? "かぞくで まだ0かい" : `かぞくで${familyCount}かい やったよ`}
-                          </Text>
-                        );
-                      }
                       const count = totalsLookup[keyChoreCompletionTotal(chore.id, me.id)] ?? 0;
                       if (count === 0) return null;
                       return (
