@@ -42,3 +42,8 @@ a { color: var(--brand-strong); }
 .help-index-list .desc { display: block; color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
 .foot-nav { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
 .foot-nav a { margin-right: 16px; }
+.toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 6px; margin: 0 0 28px; }
+.toc-heading { font-weight: 700; font-size: 14px; margin: 0 0 8px; color: var(--text-secondary); }
+.toc ol { margin: 0; padding-left: 1.3em; }
+.toc li { margin: 0 0 8px; }
+.toc a { text-decoration: none; }
