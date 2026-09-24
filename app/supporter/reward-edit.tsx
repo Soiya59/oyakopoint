@@ -38,6 +38,7 @@ export default function SupporterRewardEditScreen() {
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const validate = (): string | null => {
@@ -171,16 +172,31 @@ export default function SupporterRewardEditScreen() {
         onPress={save}
       />
 
-      {reward && (
-        <AppButton
-          tone="supporter"
-          label={deleting ? "削除中…" : "このごほうびを削除する"}
-          variant="danger"
-          disabled={saving || deleting}
-          style={{ marginTop: theme.spacing.s3 }}
-          onPress={remove}
-        />
-      )}
+      {/* [2026-09-25追加・やること.md 4-84] 押すと確認なしで削除されていた。保護者の画面
+          （app/parent/reward-edit.tsx）と同じ2段階確認に揃える。 */}
+      {reward &&
+        (confirmingDelete ? (
+          <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s3 }}>
+            <Text style={[theme.typography.supporterBody, { color: theme.colors.statusBlocking }]}>
+              「{reward.name}」を削除しますか？取り消せません。
+            </Text>
+            <Text style={theme.typography.supporterCaption}>これまでの交換の記録とポイントはそのまま残ります。</Text>
+            <Text style={theme.typography.supporterCaption}>
+              ただし通帳に残る過去の交換の絵文字は、{reward.emoji ?? "🎁"} ではなく 🎁 に変わります。
+            </Text>
+            <AppButton tone="supporter" label={deleting ? "削除中…" : "本当に削除する"} variant="danger" onPress={remove} disabled={deleting} />
+            <AppButton tone="supporter" label="やめる" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={deleting} />
+          </View>
+        ) : (
+          <AppButton
+            tone="supporter"
+            label="このごほうびを削除する"
+            variant="danger"
+            disabled={saving || deleting}
+            style={{ marginTop: theme.spacing.s3 }}
+            onPress={() => setConfirmingDelete(true)}
+          />
+        ))}
 
       <AppButton tone="supporter" label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
     </Screen>

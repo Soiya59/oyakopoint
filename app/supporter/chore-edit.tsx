@@ -98,6 +98,7 @@ export default function SupporterChoreEditScreen() {
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // [2026-09-01追加・実装メモ.md 108章] NFCタグ管理（要件定義書07-2章判断事項7）。
@@ -401,21 +402,33 @@ export default function SupporterChoreEditScreen() {
         </Card>
       )}
 
-      {chore && (
-        <AppButton
-          tone="supporter"
-          label={deleting ? "削除中…" : "このクエストを削除する"}
-          variant="danger"
-          disabled={saving || deleting}
-          style={{ marginTop: theme.spacing.s3 }}
-          onPress={remove}
-        />
-      )}
-      {chore && tags.length > 0 && (
-        <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
-          ※ 削除すると、発行した{tags.length}まいのNFCタグも使えなくなります。
-        </Text>
-      )}
+      {/* [2026-09-25追加・やること.md 4-84] 押すと確認なしで削除されていた。保護者の画面
+          （app/parent/chore-edit.tsx）と同じ2段階確認に揃える。 */}
+      {chore &&
+        (confirmingDelete ? (
+          <View style={{ gap: theme.spacing.s2, marginTop: theme.spacing.s3 }}>
+            <Text style={[theme.typography.supporterBody, { color: theme.colors.statusBlocking }]}>
+              「{chore.title}」を削除しますか？取り消せません。
+            </Text>
+            <Text style={theme.typography.supporterCaption}>これまでの記録・ポイント・家族の木はそのまま残ります。</Text>
+            {tags.length > 0 && (
+              <Text style={theme.typography.supporterCaption}>
+                このクエストに発行した{tags.length}まいのNFCタグは使えなくなります（タグの貼り直しが必要です）。
+              </Text>
+            )}
+            <AppButton tone="supporter" label={deleting ? "削除中…" : "本当に削除する"} variant="danger" onPress={remove} disabled={deleting} />
+            <AppButton tone="supporter" label="やめる" variant="ghost" onPress={() => setConfirmingDelete(false)} disabled={deleting} />
+          </View>
+        ) : (
+          <AppButton
+            tone="supporter"
+            label="このクエストを削除する"
+            variant="danger"
+            disabled={saving || deleting}
+            style={{ marginTop: theme.spacing.s3 }}
+            onPress={() => setConfirmingDelete(true)}
+          />
+        ))}
 
       <AppButton tone="supporter" label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
 
