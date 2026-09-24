@@ -236,7 +236,10 @@ function main() {
 
   // 【2026-09-16変更】既定（引数なし）はA2を生成する。`--legacy`を付けたときだけ
   // 差し替え前の旧サイン波版を生成する（本ファイル冒頭コメント「追記その3」参照）。
+  // 【2026-09-25変更・統括決定】既定は「やさしい版」（本ファイル末尾のセクション）。
+  // A2は `--a2`、旧サイン波版は `--legacy` で生成する。
   const legacy = args.includes("--legacy");
+  const a2 = args.includes("--a2");
   const outDir = path.join(__dirname, "..", "assets", "sounds");
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -246,17 +249,25 @@ function main() {
         "reward.wav": buildReward(),
         "gacha.wav": buildGacha(),
       }
-    : {
-        "complete.wav": buildVariantComplete(A2_CONFIG),
-        "reward.wav": buildVariantReward(A2_CONFIG),
-        "gacha.wav": buildVariantGacha(A2_CONFIG),
-      };
+    : a2
+      ? {
+          "complete.wav": buildVariantComplete(A2_CONFIG),
+          "reward.wav": buildVariantReward(A2_CONFIG),
+          "gacha.wav": buildVariantGacha(A2_CONFIG),
+        }
+      : {
+          "complete.wav": buildGentleComplete(),
+          "reward.wav": buildGentleReward(),
+          "gacha.wav": buildGentleGacha(),
+        };
 
   console.log(
     legacy
       ? "旧サイン波版（--legacy指定・ピーク-6dBFS・0.45〜0.6秒）を生成します。"
-      : "A2（チャリーン・やわらかめ・ピーク-3dBFS・0.75〜0.95秒）を生成します。" +
-          "旧版が欲しい場合は --legacy を付けてください。"
+      : a2
+        ? "A2（--a2指定・チャリーン・やわらかめ・ピーク-3dBFS・0.75〜0.95秒）を生成します。"
+        : "やさしい版（ピーク-8dBFS・0.6〜1.05秒）を生成します。" +
+            "A2は --a2、旧サイン波版は --legacy を付けてください。"
   );
 
   for (const [name, samples] of Object.entries(files)) {
@@ -1104,6 +1115,128 @@ function generateSoftenCandidates(outDir) {
     );
   }
   console.log(`\n出力先: ${outDir}`);
+}
+
+/* =========================================================================
+ * やさしい版（2026-09-25、統括決定・やること.md 4-76・実装メモ297章）
+ *
+ * A2（鐘の響き・高い音を速く続けて鳴らす）が、家族から「緊急地震速報みたいで
+ * 心臓に悪い」と言われた。緊急地震速報のチャイムも鐘の音を続けて鳴らす作りで、
+ * 似たのは偶然ではない。統括が候補を聴き比べ、統括が持ち込んだWeb Audioの
+ * コード（「やさしい版」）の音を選んだ。ごほうび交換だけは余韻を0.35秒→1.0秒に
+ * 伸ばした（統括「もうすこしぽーんとながく」）。
+ *
+ * - 完了報告：三角波のド・ミ・ソ（C4・E4・G4、0.12秒おき）、900Hzのローパス
+ * - ガチャ：「ポコッ」（220→110Hz）のあと、ミ・ソ・ド・ミ（E4〜E5、0.09秒おき）
+ * - ごほうび交換：「ぽーん」（360→240Hz、600Hzのローパス、1.0秒で消える）
+ * - 鐘のような「整数倍からずれた倍音」は使わない。音はA2より大幅に低い
+ *
+ * 音量の時間変化とフィルターは、Web Audioの setValueAtTime・linearRamp・
+ * exponentialRamp と BiquadFilter(lowpass, Q=1dB) と同じ計算で再現している。
+ * 聴き比べに使ったファイルと1バイトも違わないことを確かめてある（297章）。
+ * ========================================================================= */
+
+const GENTLE_PEAK_DB = -8;
+
+function gentleEnvelope(points) {
+  return (t) => {
+    let v = points[0].v;
+    for (let k = 0; k < points.length; k++) {
+      const p = points[k];
+      if (t < p.t) {
+        const prev = points[k - 1];
+        if (!prev || p.type === "set") return v;
+        const r = (t - prev.t) / (p.t - prev.t);
+        return p.type === "lin" ? prev.v + (p.v - prev.v) * r : prev.v * Math.pow(p.v / prev.v, r);
+      }
+      v = p.v;
+    }
+    return v;
+  };
+}
+
+function gentleLowpass(cutoffHz) {
+  const q = Math.pow(10, 1 / 20);
+  const w = (2 * Math.PI * cutoffHz) / SAMPLE_RATE;
+  const alpha = Math.sin(w) / (2 * q);
+  const c = Math.cos(w);
+  const b0 = (1 - c) / 2, b1 = 1 - c, b2 = (1 - c) / 2, a0 = 1 + alpha, a1 = -2 * c, a2 = 1 - alpha;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  return (x) => {
+    const y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+    return y;
+  };
+}
+
+function gentleOsc(buffer, { type, start, stop, freq, gain, cutoff }) {
+  let phase = 0;
+  const lp = cutoff ? gentleLowpass(cutoff) : (x) => x;
+  for (let i = Math.floor(start * SAMPLE_RATE); i < Math.floor(stop * SAMPLE_RATE) && i < buffer.length; i++) {
+    const t = i / SAMPLE_RATE;
+    phase += (2 * Math.PI * freq(t)) / SAMPLE_RATE;
+    const wave = type === "triangle" ? (2 / Math.PI) * Math.asin(Math.sin(phase)) : Math.sin(phase);
+    buffer[i] += lp(wave) * gain(t);
+  }
+}
+
+/** ピークを-8dBFSに揃えてInt16にする（音は最後に自然に消えるので、フェードはかけない）。 */
+function finalizeGentle(buffer) {
+  let peak = 0;
+  for (const v of buffer) peak = Math.max(peak, Math.abs(v));
+  const scale = Math.pow(10, GENTLE_PEAK_DB / 20) / peak;
+  const out = new Int16Array(buffer.length);
+  for (let i = 0; i < buffer.length; i++) {
+    out[i] = Math.round(Math.max(-1, Math.min(1, buffer[i] * scale)) * 32767);
+  }
+  return out;
+}
+
+const gentleRise = (start, amp, riseSec, endSec) =>
+  gentleEnvelope([
+    { t: start, v: 0, type: "set" },
+    { t: start + riseSec, v: amp, type: "lin" },
+    { t: endSec, v: 0.001, type: "exp" },
+  ]);
+
+function buildGentleComplete() {
+  const buffer = new Float64Array(Math.floor(SAMPLE_RATE * 0.6));
+  [261.63, 329.63, 392.0].forEach((f, i) => {
+    const s = i * 0.12;
+    gentleOsc(buffer, { type: "triangle", start: s, stop: s + 0.3, freq: () => f, gain: gentleRise(s, 0.25, 0.02, s + 0.28), cutoff: 900 });
+  });
+  return finalizeGentle(buffer);
+}
+
+function buildGentleGacha() {
+  const buffer = new Float64Array(Math.floor(SAMPLE_RATE * 0.85));
+  gentleOsc(buffer, {
+    type: "sine",
+    start: 0,
+    stop: 0.1,
+    cutoff: 400,
+    freq: gentleEnvelope([{ t: 0, v: 220, type: "set" }, { t: 0.1, v: 110, type: "exp" }]),
+    gain: gentleEnvelope([{ t: 0, v: 0.3, type: "set" }, { t: 0.1, v: 0.01, type: "exp" }]),
+  });
+  [329.63, 392.0, 523.25, 659.25].forEach((f, i) => {
+    const s = 0.08 + i * 0.09;
+    gentleOsc(buffer, { type: "sine", start: s, stop: s + 0.4, freq: () => f, gain: gentleRise(s, 0.2, 0.015, s + 0.4) });
+  });
+  return finalizeGentle(buffer);
+}
+
+function buildGentleReward() {
+  const tail = 1.0;
+  const buffer = new Float64Array(Math.floor(SAMPLE_RATE * (tail + 0.05)));
+  gentleOsc(buffer, {
+    type: "sine",
+    start: 0,
+    stop: tail,
+    cutoff: 600,
+    freq: gentleEnvelope([{ t: 0, v: 360, type: "set" }, { t: 0.15, v: 240, type: "exp" }]),
+    gain: gentleRise(0, 0.35, 0.01, tail),
+  });
+  return finalizeGentle(buffer);
 }
 
 main();
