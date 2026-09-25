@@ -42,7 +42,12 @@ for _, s in leaves:
     layer_other = layer & ~anyLeaf
     layer_leaves = layer_leaves & ~halo
     layer = layer_leaves | layer_other | s
-shape = layer
+# [2026-09-26追加・統括「葉っぱの中央のラインをいれてほしい」] 元の絵の葉の中の白い筋
+# （背景より明るい点）の位置に、同じ太さの透明な線を抜く。葉の外には出さない。
+vein = a.sum(axis=2) > 700
+vein = ndi.binary_dilation(vein, iterations=2)
+vein = ndi.gaussian_filter(vein.astype(float), 1.5) > 0.5
+shape = layer & ~(vein & anyLeaf)
 ys, xs = np.where(shape)
 y0,y1,x0,x1 = ys.min(), ys.max(), xs.min(), xs.max()
 f = shape[y0:y1+1, x0:x1+1]
@@ -61,4 +66,5 @@ small = Image.new("RGBA", (48,48), (40,40,40,255)); small.alpha_composite(white.
 prev.paste(small, (8,232))
 prev.save(r"notification-icon-preview.png")
 print("ok", [round(t[0],3) for t in leaves])
+
 
