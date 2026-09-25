@@ -839,22 +839,36 @@ export function CollectorShelfPanel({
   // ため（統括依頼文3節「各見出しの位置はonLayoutで取る」）。ScrollView自体は
   // Screen側が持っているため、scrollViewRefが渡されない呼び出し元（想定外）では
   // ボタン自体を出さない。
+  //
+  // [2026-09-26修正・統括の実機報告「フィギュア、メダルの目次をタップしても飛ばない」]
+  // 当初は`getScrollableNode()`（数値のハンドル）を`measureLayout`に渡していたが、
+  // 新しい描画の仕組み（Fabric）では数値のハンドルを受け付けず、失敗のコールバック
+  // に落ちて位置が1度も取れていなかった。また、位置をonLayoutのときにしか測って
+  // いなかったため、あとからお絵かきの絵が出て上の区分の高さが変わると、測った
+  // 位置が古くなる。そこで、**押したその時に**、ScrollViewの中身の入れ物
+  // （`getInnerViewRef()`＝スクロールする中身そのもの）を基準に測り直す。中身を
+  // 基準にした上端は、そのままscrollToに渡せる値になる。
   const scrollAnchors = useRef<Record<string, View | null>>({});
   const scrollOffsets = useRef<Record<string, number>>({});
+  const getScrollContent = useCallback((): View | null => {
+    const sv = scrollViewRef?.current as unknown as { getInnerViewRef?: () => View | null } | null | undefined;
+    return sv?.getInnerViewRef?.() ?? null;
+  }, [scrollViewRef]);
   const measureSectionOffset = useCallback(
-    (key: string) => {
+    (key: string, onMeasured?: (top: number) => void) => {
       const node = scrollAnchors.current[key];
-      const scrollHandle = scrollViewRef?.current?.getScrollableNode?.();
-      if (!node || scrollHandle == null) return;
+      const content = getScrollContent();
+      if (!node || !content) return;
       node.measureLayout(
-        scrollHandle,
+        content as unknown as number,
         (_left: number, top: number) => {
           scrollOffsets.current[key] = top;
+          onMeasured?.(top);
         },
         () => {}
       );
     },
-    [scrollViewRef]
+    [getScrollContent]
   );
   const registerSectionRef = useCallback(
     (key: string) => (ref: View | null) => {
@@ -864,11 +878,12 @@ export function CollectorShelfPanel({
   );
   const scrollToSection = useCallback(
     (key: string) => {
-      const y = scrollOffsets.current[key];
-      if (y == null || !scrollViewRef?.current) return;
-      scrollViewRef.current.scrollTo({ y: Math.max(0, y - theme.spacing.s3), animated: true });
+      const go = (y: number) =>
+        scrollViewRef?.current?.scrollTo({ y: Math.max(0, y - theme.spacing.s3), animated: true });
+      // 押した時点で測り直す（上の区分の高さが後から変わっていても正しい位置へ行く）。
+      measureSectionOffset(key, go);
     },
-    [scrollViewRef]
+    [scrollViewRef, measureSectionOffset]
   );
 
   const toggleSeason = (season: FamilyTreeSeason) => {
