@@ -1,6 +1,12 @@
-﻿from PIL import Image
+﻿# Androidの通知用アイコン（白い木のシルエット）を assets/icon.png から作る。
+# 実装メモ306章。葉を1枚ずつの形として取り出し、奥（形が欠けている葉）から手前へ
+# 重ねて描く。手前の葉を置くたびに、下にある葉をその葉のまわり一定幅だけ削り、
+# 手前の葉の輪郭に沿ったすき間を作る（参考画像の描き方）。
+# 実行: python tools/generate_notification_icon.py（出力 assets/notification-icon.png）
+from PIL import Image, ImageDraw
 import numpy as np
 from scipy import ndimage as ndi
+from scipy.spatial import ConvexHull
 src = Image.open(r"C:\App_cursor\oyakopoint-app\assets\icon.png").convert("RGB")
 a = np.asarray(src).astype(int)
 R,G,B = a[...,0],a[...,1],a[...,2]
@@ -10,26 +16,36 @@ stroke = notbg & (R < 140) & (G > R + 40)
 lab, n = ndi.label(~stroke)
 border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:,0], lab[:,-1]])))
 leafIds = [i for i in range(1, n+1) if i not in border and (lab == i).sum() > 800 and np.abs(a[lab == i].mean(axis=0) - bg).sum() > 40]
-OUT = 12     # 縁の線の太さぶん外へ広げる（葉の外形）
-GAP = 9      # 葉と葉のすき間の幅（1024px基準）
-dists = np.stack([ndi.distance_transform_edt(lab != i) for i in leafIds])  # 各葉の内側からの距離
-order = np.sort(dists, axis=0)
-d1, d2 = order[0], order[1]
-nearest = np.argmin(dists, axis=0)
-leaves = d1 <= OUT
-gap = leaves & (d2 <= OUT + GAP) & ((d2 - d1) < GAP)     # 2枚の葉の境目（等距離の線）に沿った帯
-leafShape = leaves & ~gap
-# 幹・枝・地面：葉から離れた緑の線だけ残す
-nearLeaf = d1 <= OUT + GAP
-branches = stroke & ~nearLeaf
-# 枝の先が葉に届くよう、葉の外形の内側までは伸ばしてよい（すき間は保つ）
-branches = branches | (stroke & leaves & ~gap & (d1 > 0) & False)
-shape = leafShape | branches
-# 輪郭をなめらかに
-soft = ndi.gaussian_filter(shape.astype(float), 2.0) > 0.5
-ys, xs = np.where(soft)
+OUT = 12   # 縁の線の太さ（葉の外形は内側から12px外まで）
+GAP = 14   # 手前の葉のまわりに空けるすき間（1024px基準）
+def smooth(m, s=2.5):
+    return ndi.gaussian_filter(m.astype(float), s) > 0.5
+leaves = []
+for i in leafIds:
+    inner = lab == i
+    shape = smooth(ndi.distance_transform_edt(~inner) <= OUT)
+    ys, xs = np.where(inner)
+    pts = np.stack([xs, ys], axis=1)
+    hull = ConvexHull(pts)
+    solidity = inner.sum() / hull.volume          # 欠けていない葉ほど1に近い＝手前
+    leaves.append((solidity, shape))
+leaves.sort(key=lambda t: t[0])                   # 奥（欠けている葉）から手前へ
+anyLeaf = np.zeros(lab.shape, bool)
+for _, s in leaves: anyLeaf |= s
+# 幹・枝・地面（葉の外にある緑の線）を一番下に置く
+layer = stroke & ~anyLeaf
+layer = smooth(layer, 1.5)
+for _, s in leaves:
+    halo = ndi.distance_transform_edt(~s) <= GAP
+    # 既に描いた「葉」だけを削る（枝は葉の付け根につながったまま）
+    layer_leaves = layer & anyLeaf
+    layer_other = layer & ~anyLeaf
+    layer_leaves = layer_leaves & ~halo
+    layer = layer_leaves | layer_other | s
+shape = layer
+ys, xs = np.where(shape)
 y0,y1,x0,x1 = ys.min(), ys.max(), xs.min(), xs.max()
-f = soft[y0:y1+1, x0:x1+1]
+f = shape[y0:y1+1, x0:x1+1]
 h, w = f.shape
 side = int(round(max(h, w) * 24 / 21))
 canvas = np.zeros((side, side), dtype=np.uint8)
@@ -43,6 +59,6 @@ w288 = Image.new("RGBA", (288,288), (255,255,255,255)); w288.putalpha(big.resize
 prev.alpha_composite(w288)
 small = Image.new("RGBA", (48,48), (40,40,40,255)); small.alpha_composite(white.resize((48,48), Image.LANCZOS))
 prev.paste(small, (8,232))
-prev.save(r"C:\Users\seiya\AppData\Local\Temp\claude\C--App-cursor-oyakopoint\8055e926-dbe0-4d64-8ad6-3a4dc456ac37\scratchpad\notification-icon-preview.png")
-print("ok", len(leafIds))
+prev.save(r"notification-icon-preview.png")
+print("ok", [round(t[0],3) for t in leaves])
 
