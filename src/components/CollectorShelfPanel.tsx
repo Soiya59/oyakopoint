@@ -30,7 +30,7 @@
  *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
 import { DrawingThumbnail } from "./DrawingCanvas";
@@ -544,7 +544,16 @@ function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: Collec
               {item.prizeKind === "preset_ornament" ? (
                 <Text style={styles.gridEmoji}>{item.presetOrnament?.emoji ?? "🎁"}</Text>
               ) : item.drawing ? (
-                <DrawingThumbnail lineData={item.drawing.line_data} size={48} />
+                // [2026-09-25変更・実装メモ305章] line_dataは一覧取得時には
+                // 届いておらず（useCollectedPrizesが後から埋める）、届くまでの
+                // 一瞬だけ読み込み中の丸を出す。最終的に表示する絵自体は変わらない。
+                item.drawing.line_data ? (
+                  <DrawingThumbnail lineData={item.drawing.line_data} size={48} />
+                ) : (
+                  <View style={styles.gridDrawingLoading} accessibilityLabel="絵を読み込み中">
+                    <ActivityIndicator size="small" color={theme.colors.brandPrimary} />
+                  </View>
+                )
               ) : null}
               <Text style={[captionStyle, styles.gridCaption]}>
                 {entry.count > 1 ? `×${entry.count}` : formatShortDate(item.drawnAt)}
@@ -588,7 +597,22 @@ function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: Collec
                 <>
                   <Pressable style={styles.detailDrawingWrap} onPress={closeDetail}>
                     <Pressable onPress={() => {}}>
-                      <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                      {/* [2026-09-25変更・実装メモ305章] グリッドを開いた直後、line_dataが
+                          まだ届いていない場合はここも読み込み中の丸にする（届き次第絵に
+                          差し替わる。最終的に表示する絵自体は変わらない）。 */}
+                      {selectedItem.drawing.line_data ? (
+                        <DrawingThumbnail lineData={selectedItem.drawing.line_data} size={expandedImageSize} />
+                      ) : (
+                        <View
+                          style={[
+                            styles.gridDrawingLoading,
+                            { width: expandedImageSize, height: expandedImageSize, borderRadius: expandedImageSize / 2 },
+                          ]}
+                          accessibilityLabel="絵を読み込み中"
+                        >
+                          <ActivityIndicator size="small" color={theme.colors.brandPrimary} />
+                        </View>
+                      )}
                     </Pressable>
                     <View style={styles.detailDrawingTextWrap}>
                       <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
@@ -2438,6 +2462,18 @@ const styles = StyleSheet.create({
   gridItemSelected: { borderColor: theme.gachaColors.accent, borderWidth: 2, backgroundColor: theme.gachaColors.accentSoft },
   gridEmoji: { fontSize: 32 },
   gridCaption: { textAlign: "center" },
+  // [2026-09-25新設・実装メモ305章] line_data未到着の間だけ表示する読み込み中の丸
+  // （DrawingCanvas.tsxのDrawingThumbnailと同じ48pt四方・円形に揃える）。
+  gridDrawingLoading: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   detailEmoji: { fontSize: 40 },
   // [2026-09-09新設] 家族の絵の詳細表示専用（拡大サムネイル＋縦積みレイアウト）。
   detailDrawingWrap: { alignItems: "center" },

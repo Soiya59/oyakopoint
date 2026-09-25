@@ -2699,7 +2699,17 @@ export interface CollectedGachaDraw {
    * （content_kind='family_drawing'）・ブロックの取得後フィルタで対象の絵を
    * 特定するために追加した（`family_drawings.id`）。表示自体には使わない。
    */
-  drawing: { drawingId: string; line_data: FamilyDrawingLineData; artistName: string; artistId: string; title: string | null } | null;
+  /**
+   * [2026-09-25変更・実装メモ305章] `line_data`（線の座標。1件あたり最大64KB
+   * `theme.drawingLimits.maxBytes`）は`fetchFamilyCollectedGachaDraws`では
+   * 取得しなくなった。一覧（家族の絵＋既製の飾りの全件、`.limit()`無し）が
+   * この列だけ埋め込んでいたことで一覧全体の取得が遅くなっていたため
+   * （303.5節調査）。ここは`null`で返し、`fetchFamilyDrawingLineDataById`で
+   * 遅延取得したものを呼び出し側（`useCollectedPrizes`）がマージする。
+   * 縮小表示（`ShelfItemsGrid`）はこの値が届くまで一瞬だけ読み込み中の表示になるが、
+   * 最終的に表示する絵そのものは変わらない。
+   */
+  drawing: { drawingId: string; line_data: FamilyDrawingLineData | null; artistName: string; artistId: string; title: string | null } | null;
 }
 
 /**
@@ -2709,6 +2719,10 @@ export interface CollectedGachaDraw {
  * （33d章）、本クエリが未公開の絵を返すことは構造上ない（UI側の絞り込みは不要だが、
  * 依頼の「未公開の絵は棚に出してはいけない」はDB側の`family_drawings_select_scoped`
  * ポリシーとあわせてこの経路でも二重に守られている）。
+ *
+ * [2026-09-25変更・実装メモ305章] `line_data`は取得しない（上記`CollectedGachaDraw.drawing`
+ * コメント参照）。行数の絞り込み（`.limit()`）や並び順（`drawn_at`降順）は変更していない
+ * （「永久保管で全件出す」という既存設計はそのまま）。
  */
 export async function fetchFamilyCollectedGachaDraws(
   client: SupabaseClient,
@@ -2720,7 +2734,7 @@ export async function fetchFamilyCollectedGachaDraws(
       "id, drawn_at, prize_kind, member_id, " +
         "collector:family_members!member_id(display_name), " +
         "preset_ornament:gacha_preset_ornaments(display_name,emoji), " +
-        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(id,line_data,title,artist_member_id," +
+        "prize_drawing:family_drawings!gacha_draws_prize_drawing_id_fkey(id,title,artist_member_id," +
         "artist:family_members!artist_member_id(display_name))"
     )
     .eq("family_id", familyId)
@@ -2735,7 +2749,6 @@ export async function fetchFamilyCollectedGachaDraws(
     preset_ornament: { display_name: string; emoji: string | null } | null;
     prize_drawing: {
       id: string;
-      line_data: FamilyDrawingLineData;
       title: string | null;
       artist_member_id: string;
       artist: { display_name: string } | null;
@@ -2753,7 +2766,9 @@ export async function fetchFamilyCollectedGachaDraws(
       drawing: r.prize_drawing
         ? {
             drawingId: r.prize_drawing.id,
-            line_data: r.prize_drawing.line_data,
+            // [2026-09-25変更・実装メモ305章] ここでは取得しない。呼び出し側
+            // （useCollectedPrizes）が`fetchFamilyDrawingLineDataById`で後から埋める。
+            line_data: null,
             artistName: r.prize_drawing.artist?.display_name ?? "だれか",
             artistId: r.prize_drawing.artist_member_id,
             title: r.prize_drawing.title,
@@ -2761,6 +2776,44 @@ export async function fetchFamilyCollectedGachaDraws(
         : null,
     })),
   };
+}
+
+/**
+ * [2026-09-25新設・実装メモ305章] `fetchFamilyCollectedGachaDraws`が取得しなくなった
+ * `line_data`を、対象の`family_drawings.id`をまとめて指定して後から取得する。
+ * `useCollectedPrizes`が、一覧（メタデータのみ・高速）を先に画面へ出したあと、
+ * バックグラウンドでこの関数を呼んで縮小表示の絵を埋める（2段階取得）。
+ *
+ * RLSは`family_drawings_select_scoped`（`family_id = current_family_id() AND
+ * (is_published OR artist_member_id = current_family_member_id())`）がそのまま効く。
+ * 渡す`ids`は`fetchFamilyCollectedGachaDraws`が返した、かつブロック・非表示フィルタを
+ * 通過した後の絵に限定すること（ブロック対象の絵の`line_data`まで無駄に読まないため。
+ * useCollectedPrizes.ts参照）。
+ *
+ * `ids`が空配列のときはネットワークを叩かず空オブジェクトを返す（PostgRESTへの
+ * 無駄なリクエストを避ける）。
+ */
+export async function fetchFamilyDrawingLineDataById(
+  client: SupabaseClient,
+  ids: string[]
+): Promise<ApiResult<Record<string, FamilyDrawingLineData>>> {
+  if (ids.length === 0) return { ok: true, data: {} };
+  // [2026-09-25・本部長レビューで追加] `.in("id", ids)` はIDをURLに並べるGETになる。
+  // お絵かきが何百枚にもなるとURLが長くなりすぎて失敗しうるため、50件ずつに分けて
+  // 並列に問い合わせる（UUID36字×50≒2KB）。
+  const CHUNK = 50;
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+  const results = await Promise.all(
+    chunks.map((chunk) => client.from("family_drawings").select("id, line_data").in("id", chunk))
+  );
+  const byId: Record<string, FamilyDrawingLineData> = {};
+  for (const { data, error } of results) {
+    if (error) return { ok: false, error: fromPostgrestError(error) };
+    const rows = (data ?? []) as { id: string; line_data: FamilyDrawingLineData }[];
+    for (const row of rows) byId[row.id] = row.line_data;
+  }
+  return { ok: true, data: byId };
 }
 
 /** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */

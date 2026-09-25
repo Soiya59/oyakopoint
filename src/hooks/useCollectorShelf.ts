@@ -13,6 +13,7 @@ import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import {
   fetchFamilyCollectedGachaDraws,
+  fetchFamilyDrawingLineDataById,
   fetchFamilyTreeCompletionDots,
   fetchFamilyTreeHabitFigurePlacements,
   fetchFamilyTreeSeasonHistory,
@@ -38,6 +39,18 @@ export type CollectorShelfLoadState = "loading" | "error" | "ready";
  * または絵そのものが運営に非表示にされている場合、この行をカードごと除く**
  * （獲得した記録自体は残るためprizeKind==='preset'の行には影響しない。
  * 絵が無い＝景品が既製オーナメントのため、そもそもブロック・非表示の対象外）。
+ *
+ * [2026-09-25変更・実装メモ305章] `line_data`（縮小表示の絵に要る線データ、
+ * 1件あたり最大64KB）を2段階で取得するようにした。
+ * 1. `fetchFamilyCollectedGachaDraws`（メタデータのみ・軽量）が返り次第、ブロック・
+ *    非表示フィルタを適用して`loadState`を即座に`"ready"`にする。この時点では
+ *    `item.drawing.line_data`は全て`null`（グリッドは絵の部分だけ読み込み中表示）。
+ * 2. フィルタ通過後に残った家族の絵IDだけをまとめて`fetchFamilyDrawingLineDataById`
+ *    で取得し、届いた分だけ`items`へマージする（ブロック・非表示の絵は最初から
+ *    IDに含めないため、それらのline_dataは無駄に読まない）。
+ * 呼び出し画面（`app/*\/collector-shelf.tsx`）・グリッド（`ShelfItemsGrid`、
+ * `CollectorShelfPanel.tsx`）はこの2段階を意識せず、`items`の中身が後から
+ * 更新されることだけで絵が追いついて表示される。
  */
 export function useCollectedPrizes(familyId: string) {
   const { client } = useSession();
@@ -61,6 +74,23 @@ export function useCollectedPrizes(familyId: string) {
     });
     setItems(visible);
     setLoadState("ready");
+
+    // [2026-09-25追加・実装メモ305章] 段階2：フィルタ通過後の家族の絵だけ、
+    // line_dataをまとめて後追いで取得する。ここが失敗・0件でも一覧自体（段階1）は
+    // 既に表示済みのため、loadStateは変更しない（絵の一部が読み込み中のまま
+    // 残るだけで、一覧そのものがエラー扱いにはならない）。
+    const drawingIds = visible.map((item) => item.drawing?.drawingId).filter((id): id is string => !!id);
+    if (drawingIds.length === 0) return;
+    const lineDataRes = await fetchFamilyDrawingLineDataById(client, drawingIds);
+    if (!lineDataRes.ok) return;
+    const byId = lineDataRes.data;
+    setItems((prev) =>
+      prev.map((item) =>
+        item.drawing && byId[item.drawing.drawingId]
+          ? { ...item, drawing: { ...item.drawing, line_data: byId[item.drawing.drawingId] } }
+          : item
+      )
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, familyId, blockedMemberIdsSet, hiddenContentKeysSet]);
 
