@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Modal, Pressable, Share, StyleSheet, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -630,9 +630,27 @@ export default function FamilyScreen() {
 type InviteCodeDialogKind = "parent" | "child";
 
 /**
+ * OSの共有シートで招待コードを送る。`Share`はreact-native本体の機能で、
+ * 新しいネイティブの部品は要らない（OTAで配れる）。共有シートにはLINE・
+ * メールのほか「コピー」も並ぶため、コピーの手段も兼ねる。
+ */
+async function shareInviteCode(kind: InviteCodeDialogKind | null, code: string) {
+  const message =
+    kind === "child"
+      ? `おやこポイントの招待コード：${code}\n子どものスマホで「こどもモードで使う」を押して、このコードを入れてください。`
+      : `おやこポイントの招待コード：${code}\nアプリを開いて「招待コードをもってきた（保護者）」を押し、このコードを入れてください。`;
+  try {
+    await Share.share({ message });
+  } catch {
+    // 共有をキャンセル・失敗しても画面はそのまま（コードは画面に出ている）。
+  }
+}
+
+/**
  * 招待コードを、使い方の説明と一緒に出すポップアップ（実装メモ301章）。
- * コピー機能はネイティブの部品（expo-clipboard）が要りビルドが必要になるため
- * 付けず、コードの文字を長押しで選択・コピーできるようにした（`selectable`）。
+ * コピー専用のボタンはネイティブの部品（expo-clipboard）が要りビルドが必要に
+ * なるため付けず、「コードを送る」（OSの共有シート。中に「コピー」もある）と、
+ * コードの文字の長押し選択（`selectable`）で代える。
  */
 function InviteCodeDialog({
   kind,
@@ -654,9 +672,14 @@ function InviteCodeDialog({
         ];
   return (
     <Modal visible={kind !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.dialogBackdrop} onPress={onClose}>
-        {/* カードの中を押しても閉じないよう、外側のPressableへ伝えない */}
-        <Pressable onPress={() => undefined} style={styles.dialogCardWrap}>
+      {/* [2026-09-25修正・統括の実機報告「長押ししてもコピーできない」] 当初は
+          カード全体をPressableで包んでいたため、中の`selectable`な文字への
+          長押しをPressableが先に受け取ってしまい、選択できなかった。閉じる
+          ための押し場所は背景に敷いた別のPressableにし、カードはPressable
+          の外に出した。 */}
+      <View style={styles.dialogBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="とじる" />
+        <View style={styles.dialogCardWrap}>
           <Card>
             <Text style={theme.typography.parentBodyMedium}>{title}</Text>
             {steps.map((s, i) => (
@@ -670,10 +693,15 @@ function InviteCodeDialog({
             <Text selectable style={[theme.typography.parentTitle, { letterSpacing: 2, marginTop: theme.spacing.s1 }]}>
               {code}
             </Text>
-            <AppButton label="とじる" variant="secondary" style={{ marginTop: theme.spacing.s4 }} onPress={onClose} />
+            <AppButton
+              label="コードを送る"
+              style={{ marginTop: theme.spacing.s4 }}
+              onPress={() => void shareInviteCode(kind, code)}
+            />
+            <AppButton label="とじる" variant="secondary" style={{ marginTop: theme.spacing.s2 }} onPress={onClose} />
           </Card>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
