@@ -1052,7 +1052,7 @@ export function CollectorShelfPanel({
                       分かるよう見出しを追加した（従来はここに見出しが無かった）。
                       空状態のときは既存の絵文字中心の空状態表示（上の分岐）を
                       崩さないよう、件数がある時だけ出す。 */}
-                  <Text style={[captionStyle, styles.legendHeading]}>{collectedLabel}</Text>
+                  <Text style={styles.sectionHeading}>{collectedLabel}</Text>
                   <ShelfItemsGrid tone={tone} items={collectedItems} myMemberId={myMemberId} />
                 </>
               )}
@@ -1069,7 +1069,7 @@ export function CollectorShelfPanel({
                 onLayout={() => measureSectionOffset("figure")}
                 collapsable={false}
               >
-                <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+                <Text style={styles.sectionHeading}>フィギュア</Text>
                 <FamilyMedalSection
                   tone={tone}
                   members={members}
@@ -1090,7 +1090,7 @@ export function CollectorShelfPanel({
                 onLayout={() => measureSectionOffset("medal")}
                 collapsable={false}
               >
-                <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
+                <Text style={styles.sectionHeading}>メダル</Text>
                 <FamilyHabitFigureSection
                   tone={tone}
                   members={members}
@@ -1113,7 +1113,7 @@ export function CollectorShelfPanel({
                 onLayout={() => measureSectionOffset("collected")}
                 collapsable={false}
               >
-                <Text style={[captionStyle, styles.legendHeading]}>つくった・あつめたもの</Text>
+                <Text style={styles.sectionHeading}>つくった・あつめたもの</Text>
                 {collectedLoadState === "loading" && <SkeletonList count={2} />}
                 {collectedLoadState === "ready" && memberMadeOrCollected.length === 0 && (
                   <Text style={bodyStyle}>{isChild ? "まだ なにも あつまっていないよ" : "まだ何も集まっていません"}</Text>
@@ -1474,7 +1474,7 @@ function StickerShelfSection({
           DBの`sticker_key`・コンポーネント名・コメント中の「シール」「ステッカー」は変更しない。
           [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 見出しの語を
           「フィギュア」へ入れ替えた（関数名`StickerShelfSection`は変更していない）。 */}
-      <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
+      <Text style={styles.sectionHeading}>フィギュア</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
@@ -1688,6 +1688,21 @@ function StickerDetailCard({
  * 取れるかは実機で確認する必要がある（ワイヤーフレームの申し送りどおり、本実装では
  * 固定値を決め打ちする。問題があれば色の選定自体をデザイントークン.md側で見直す）。
  */
+/**
+ * 図鑑の並び（1種類×4段階の固定順）を、種類ごとの行に分ける（2026-09-26・統括の要望
+ * 「ドラゴンとかをメダルやフィギュアの上側に表示」）。並び順は入力のまま保つ。
+ */
+function groupCatalogRows<T>(entries: T[], labelOf: (e: T) => string): { label: string; items: T[] }[] {
+  const rows: { label: string; items: T[] }[] = [];
+  for (const e of entries) {
+    const label = labelOf(e);
+    const last = rows[rows.length - 1];
+    if (last && last.label === label) last.items.push(e);
+    else rows.push({ label, items: [e] });
+  }
+  return rows;
+}
+
 function UnknownCatalogCard({ size, tier }: { size: number; tier: StickerRarity }) {
   return (
     <View
@@ -1816,52 +1831,51 @@ function FamilyMedalSection({
     return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
   }
 
+  // [2026-09-26改訂・統括「ドラゴンとかをメダルやフィギュアの上側に表示できる？
+  // そうすると、おなじ文字を4回書かなくてもよいし、長くなった文字もかける」]
+  // 1種類（4段階）ごとに行を分け、行の上に種類名を1回だけ出す。カードの下の
+  // 名前はやめた（持っている数が2つ以上のときの「×N」だけ残す）。
+  const rows = groupCatalogRows(entries, (e) => stickerKindOnlyLabel(tone, e.shape));
+
   return (
     <>
-      <View style={styles.grid}>
-        {entries.map((entry) => {
-          const selected = entry.key === selectedKey;
-          const isUnknown = entry.owned.length === 0;
-          return (
-            <Pressable
-              key={entry.key}
-              onPress={() => setSelectedKey(selected ? null : entry.key)}
-              style={[styles.gridItem, selected && styles.gridItemSelected]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-            >
-              {isUnknown ? (
-                // [2026-09-25新設・決定3・7、2026-09-25追記・本部長差し戻し
-                // （実装メモ303.x章）] 家族の誰も持っていない行は「？」カード。
-                // 「？」カードの下にも持っているカードと同じ位置・同じ形で
-                // 種類名だけを薄い文字色で出す（依頼文1節）。
-                <>
-                  <UnknownCatalogCard size={48} tier={entry.rarity} />
-                  <Text style={[captionStyle, styles.gridCaption, { color: theme.colors.neutralTextSecondary }]}>
-                    {stickerKindOnlyLabel(tone, entry.shape)}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-                      （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-                  <FigureFrame size={48}>
-                    <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
-                  </FigureFrame>
-                  <Text style={[captionStyle, styles.gridCaption]}>
-                    {/* [2026-09-25改訂・本部長差し戻し「フィギュアの上にうさぎだけでも
-                        よいよ」] 1行が1種類・4列が銅→銀→金→クリスタルの固定順
-                        グリッドのため、段階は列位置とマスの色で分かる。種類名だけを
-                        出す（段階名まで入れた書き方は拡大表示・個別ビューで使う）。 */}
-                    {stickerKindOnlyLabel(tone, entry.shape)}
-                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+      {rows.map((row) => (
+        <View key={row.label}>
+          <Text style={[captionStyle, styles.catalogRowLabel]}>{row.label}</Text>
+          <View style={styles.grid}>
+            {row.items.map((entry) => {
+              const selected = entry.key === selectedKey;
+              const isUnknown = entry.owned.length === 0;
+              return (
+                <Pressable
+                  key={entry.key}
+                  onPress={() => setSelectedKey(selected ? null : entry.key)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityLabel={stickerEntryLabel(tone, entry.shape, entry.rarity)}
+                  accessibilityState={{ selected }}
+                >
+                  {isUnknown ? (
+                    // [決定3・7] 家族の誰も持っていないものは「？」カード。
+                    <UnknownCatalogCard size={48} tier={entry.rarity} />
+                  ) : (
+                    <>
+                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+                          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+                      <FigureFrame size={48}>
+                        <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
+                      </FigureFrame>
+                      {entry.owned.length > 1 && (
+                        <Text style={[captionStyle, styles.gridCaption]}>×{entry.owned.length}</Text>
+                      )}
+                    </>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ))}
 
       {selectedEntry && (
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
@@ -2087,7 +2101,7 @@ function HabitFigureShelfSection({
     <View>
       {/* [2026-09-21改訂・要件定義書07-34章] 見出しの語を「メダル」へ入れ替えた
           （関数名`HabitFigureShelfSection`は変更していない）。 */}
-      <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
+      <Text style={styles.sectionHeading}>メダル</Text>
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
@@ -2319,52 +2333,49 @@ function FamilyHabitFigureSection({
     return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
   }
 
+  // [2026-09-26改訂・統括の要望] FamilyMedalSectionと同じく、1種類ごとに行を分け、
+  // 行の上に種類名を1回だけ出す（カードの下の名前はやめ、「×N」だけ残す）。
+  const rows = groupCatalogRows(entries, (e) => habitFigureKindOnlyLabel(e.displayName, e.tier));
+
   return (
     <>
-      <View style={styles.grid}>
-        {entries.map((entry) => {
-          const selected = entry.key === selectedKey;
-          const isUnknown = entry.owned.length === 0;
-          return (
-            <Pressable
-              key={entry.key}
-              onPress={() => setSelectedKey(selected ? null : entry.key)}
-              style={[styles.gridItem, selected && styles.gridItemSelected]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-            >
-              {isUnknown ? (
-                // [2026-09-25新設・決定3・7、2026-09-25追記・本部長差し戻し
-                // （実装メモ303.x章）] 家族の誰も持っていない行は「？」カード。
-                // 「？」カードの下にも持っているカードと同じ位置・同じ形で
-                // 種類名だけを薄い文字色で出す（依頼文1節）。
-                <>
-                  <UnknownCatalogCard size={48} tier={entry.tier} />
-                  <Text style={[captionStyle, styles.gridCaption, { color: theme.colors.neutralTextSecondary }]}>
-                    {habitFigureKindOnlyLabel(entry.displayName, entry.tier)}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-                      （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-                  <CircleFrame size={48} ringColor={null}>
-                    <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-                  </CircleFrame>
-                  <Text style={[captionStyle, styles.gridCaption]}>
-                    {/* [2026-09-25改訂・本部長差し戻し「フィギュアの上にうさぎだけでも
-                        よいよ」] 1行が1種類・4列が銅→銀→金→クリスタルの固定順
-                        グリッドのため、段階は列位置とマスの色で分かる。種類名だけを
-                        出す（段階名まで入れた書き方は拡大表示・個別ビューで使う）。 */}
-                    {habitFigureKindOnlyLabel(entry.displayName, entry.tier)}
-                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+      {rows.map((row) => (
+        <View key={row.label}>
+          <Text style={[captionStyle, styles.catalogRowLabel]}>{row.label}</Text>
+          <View style={styles.grid}>
+            {row.items.map((entry) => {
+              const selected = entry.key === selectedKey;
+              const isUnknown = entry.owned.length === 0;
+              return (
+                <Pressable
+                  key={entry.key}
+                  onPress={() => setSelectedKey(selected ? null : entry.key)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityLabel={habitFigureEntryLabel(tone, entry.displayName, entry.tier)}
+                  accessibilityState={{ selected }}
+                >
+                  {isUnknown ? (
+                    // [決定3・7] 家族の誰も持っていないものは「？」カード。
+                    <UnknownCatalogCard size={48} tier={entry.tier} />
+                  ) : (
+                    <>
+                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+                          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+                      <CircleFrame size={48} ringColor={null}>
+                        <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+                      </CircleFrame>
+                      {entry.owned.length > 1 && (
+                        <Text style={[captionStyle, styles.gridCaption]}>×{entry.owned.length}</Text>
+                      )}
+                    </>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ))}
 
       {selectedEntry && (
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
@@ -2540,6 +2551,13 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: "center", paddingVertical: theme.spacing.s6 },
   legendWrap: { marginTop: theme.spacing.s3 },
   legendHeading: { color: theme.colors.neutralTextSecondary, marginBottom: theme.spacing.s2 },
+  // [2026-09-26新設・統括「フィギュアとかメダルを少し大きくか太文字に」] 「集めたもの」タブの
+  // 区分の見出し（集めたもの・フィギュア・メダル等）。行ごとの種類名（catalogRowLabel）より
+  // 一段強くして、区分と行の違いが分かるようにする。
+  sectionHeading: { fontSize: 18, fontWeight: "700", color: theme.colors.neutralTextPrimary, marginBottom: theme.spacing.s2 },
+  // [2026-09-26新設・統括「ドラゴンとかをメダルやフィギュアの上側に表示」] 図鑑の1行
+  // （1種類×4段階）の上に種類名を1回だけ出す。
+  catalogRowLabel: { marginTop: theme.spacing.s3, marginBottom: theme.spacing.s1 },
   legendRows: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.s3 },
   legendRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.s1 },
   legendNote: { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 },
