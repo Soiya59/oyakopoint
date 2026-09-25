@@ -100,21 +100,23 @@ export default function SupporterSettingsScreen() {
           「送信する」状態のときだけ表示する。 */}
       {hasActiveScheduledAnnouncement && (
         <View style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={theme.typography.supporterBody}>自分の受け取り</Text>
+          {/* [2026-09-25改称・実装メモ300章] 保護者の設定（family-settings.tsx）と
+              同じ言い方にそろえた。設定は人ごとなので「あなたの端末にだけ」は不正確。 */}
+          <Text style={theme.typography.supporterBody}>{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}の通知（あなただけ）</Text>
           <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-            「いまは受け取らない」にすると、あなたの端末にだけ{SCHEDULED_ANNOUNCEMENT_FEATURE_NAME}が届かなくなります。
+            「通知しない」にしても、ほかの家族には届きます。
           </Text>
           <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
             <AppButton
               tone="supporter"
-              label="受け取る"
+              label="通知する"
               variant={myMember?.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
               onPress={() => void setMyScheduledAnnouncementReceive(true)}
               disabled={savingReceive || !myMember}
             />
             <AppButton
               tone="supporter"
-              label="いまは受け取らない"
+              label="通知しない"
               variant={myMember && !myMember.scheduled_announcement_notifications_enabled ? "primary" : "secondary"}
               onPress={() => void setMyScheduledAnnouncementReceive(false)}
               disabled={savingReceive || !myMember}

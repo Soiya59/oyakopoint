@@ -302,11 +302,11 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
             {phase === "ask" && (
               <>
                 <Text style={styles.emoji}>{"\u{1F514}"}</Text>
-                <Text style={theme.typography.parentTitle}>書き込みが届いたら、{"\n"}お知らせしましょうか</Text>
+                <Text style={theme.typography.parentTitle}>書き込みが届いたら、{"\n"}通知しましょうか</Text>
                 <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
                   家族の掲示板に書き込みがあったとき、{"\n"}
-                  スマホへお知らせを送ります。{"\n"}
-                  届いたお知らせをタップすると、{"\n"}
+                  スマホへ通知を送ります。{"\n"}
+                  届いた通知をタップすると、{"\n"}
                   その書き込みをすぐに読めます。
                 </Text>
                 <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
@@ -314,7 +314,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
                 </Text>
                 <View style={styles.buttonRow}>
                   <AppButton label="あとで" variant="secondary" onPress={() => void later()} style={styles.buttonHalf} />
-                  <AppButton label="知らせてほしい" onPress={() => void askOs()} style={styles.buttonHalf} />
+                  <AppButton label="通知してほしい" onPress={() => void askOs()} style={styles.buttonHalf} />
                 </View>
               </>
             )}
@@ -323,7 +323,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
               <>
                 <Text style={styles.emoji}>{"\u{1F514}"}</Text>
                 <Text style={theme.typography.parentTitle}>
-                  この端末のお知らせが、{"\n"}OSの設定で止まっています
+                  この端末の通知が、{"\n"}OSの設定で止まっています
                 </Text>
                 <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
                   いちどOSに「許可しない」を伝えると、{"\n"}
@@ -346,7 +346,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
             {phase === "granted" && (
               <>
                 <Text style={styles.emoji}>{"\u{1F514}"}</Text>
-                <Text style={theme.typography.parentBody}>お知らせを設定しました</Text>
+                <Text style={theme.typography.parentBody}>通知を設定しました</Text>
               </>
             )}
           </Card>
@@ -396,7 +396,7 @@ export function NotificationDeviceStatusRow({
   if (rowState === "deferred") {
     return (
       <View style={{ marginTop: theme.spacing.s3 }}>
-        <Text style={bodyStyle}>この端末では、まだお知らせを受け取る設定になっていません。</Text>
+        <Text style={bodyStyle}>この端末では、まだ通知を受け取る設定になっていません。</Text>
         <Pressable onPress={openManually} style={{ marginTop: theme.spacing.s1 }}>
           <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>今すぐ設定する</Text>
         </Pressable>
@@ -407,7 +407,7 @@ export function NotificationDeviceStatusRow({
   // rowState === "denied"
   return (
     <View style={{ marginTop: theme.spacing.s3 }}>
-      <Text style={bodyStyle}>この端末のお知らせが、OSの設定で止まっています。</Text>
+      <Text style={bodyStyle}>この端末の通知が、OSの設定で止まっています。</Text>
       <Pressable onPress={() => void openDeviceNotificationSettings()} style={{ marginTop: theme.spacing.s1 }}>
         <Text style={[bodyStyle, { textDecorationLine: "underline" }]}>設定を開く</Text>
       </Pressable>
