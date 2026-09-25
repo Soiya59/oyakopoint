@@ -944,6 +944,9 @@ const treeStickerShapeLabel: Record<StickerShape, { child: string; parent: strin
   butterfly: { child: "ちょうちょ", parent: "ちょうちょ" },
   flower: { child: "おはな", parent: "おはな" },
   dragon: { child: "ドラゴン", parent: "ドラゴン" },
+  // [2026-09-25追加・統括「くまのフィギュアを作ったら替える」、やること.md 4-75]
+  // StickerShopPanel.tsx/CollectorShelfPanel.tsxと同じ表記。
+  bear: { child: "くま", parent: "くま" },
 };
 
 const treeStickerRarityLabel: Record<StickerRarity, { child: string; parent: string }> = {

@@ -217,7 +217,7 @@ export default function SupporterRewardsScreen() {
             「フィギュア」に入れ替えた。 */}
         <Card tone="supporter">
           <Text style={theme.typography.supporterBodyMedium}>
-            <Text style={{ fontSize: 22 }}>🪙</Text> フィギュアを買いに行く →
+            <Text style={{ fontSize: 22 }}>🧸</Text> フィギュアを買いに行く →
           </Text>
           <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1 }]}>
             貯めたポイントで、木を飾るフィギュアを買えます。

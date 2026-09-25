@@ -56,7 +56,7 @@ export default function ParentManageTabScreen() {
     // ここへ集約した（実装メモ191章）のと同じ整理。
     // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
     // 「フィギュア管理」に入れ替えた。遷移先URL（/parent/sticker-settings）は変更していない。
-    { emoji: "🪙", label: "フィギュア管理", path: "/parent/sticker-settings" },
+    { emoji: "🧸", label: "フィギュア管理", path: "/parent/sticker-settings" },
     // みまもりメンバーがいない家族では出さない（従来のリンク2つと同じ条件）。
     ...(hasAnySupporter
       ? [{ emoji: "👀", label: "みまもり（参考）", path: "/parent/supporter-chores" }]

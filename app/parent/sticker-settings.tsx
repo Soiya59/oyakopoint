@@ -266,7 +266,7 @@ export default function ParentStickerSettingsScreen() {
     return (
       <Screen tone="parent">
         <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/manage")} />
-        <Text style={theme.typography.parentTitle}>🪙 フィギュア管理</Text>
+        <Text style={theme.typography.parentTitle}>🧸 フィギュア管理</Text>
       </Screen>
     );
   }
@@ -274,7 +274,7 @@ export default function ParentStickerSettingsScreen() {
   return (
     <Screen tone="parent">
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent/manage")} />
-      <Text style={theme.typography.parentTitle}>🪙 フィギュア管理</Text>
+      <Text style={theme.typography.parentTitle}>🧸 フィギュア管理</Text>
 
 
     {/* [2026-09-11新設・要件定義書07-25-1章決定20〜27、UIUXデザイン部/成果物/

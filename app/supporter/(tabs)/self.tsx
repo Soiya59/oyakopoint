@@ -66,7 +66,7 @@ export default function SupporterSelfScreen() {
     // 保護者の「じぶん」タブと同じ理由・同じ🪙（app/parent/(tabs)/self.tsx参照）。
     // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
     // 「フィギュア」に入れ替えた（保護者側と同じ、app/parent/(tabs)/self.tsx参照）。
-    { emoji: "🪙", label: "フィギュア", path: "/supporter/sticker-shop" },
+    { emoji: "🧸", label: "フィギュア", path: "/supporter/sticker-shop" },
     { emoji: "🎨", label: "お絵かき", path: "/supporter/drawing" },
     // [2026-09-09追加・実装メモ.md 186章] 「かぞく」タブから移設したコレクション。
     { emoji: "🗄️", label: "コレクション", path: "/supporter/collector-shelf" },

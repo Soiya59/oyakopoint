@@ -71,7 +71,7 @@ export default function ChildSelfTabScreen() {
     // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] ラベルを
     // 「フィギュア」に入れ替えた（🪙は据え置き。62.4節4・62.9節2、本部長へ差し替え
     // 要否の確認を申し送り中）。遷移先URL（/child/sticker-shop）は変更していない。
-    { emoji: "🪙", label: "フィギュア", path: "/child/sticker-shop" },
+    { emoji: "🧸", label: "フィギュア", path: "/child/sticker-shop" },
     { emoji: "🎨", label: "おえかき", path: "/child/drawing" },
     { emoji: "🗄️", label: "コレクション", path: "/child/collector-shelf" },
     { emoji: "💌", label: "ありがとう", path: "/child/gratitude" },

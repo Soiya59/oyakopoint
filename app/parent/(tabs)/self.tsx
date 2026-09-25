@@ -72,7 +72,7 @@ export default function ParentSelfTabScreen() {
     // 「フィギュア」に入れ替えた。文字数（3字→5字）の折り返しは実機確認が必要
     // （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 62.4節1、開発部/成果物/
     // 実装メモ.md参照。本部長への確認事項）。
-    { emoji: "🪙", label: "フィギュア", path: "/parent/sticker-shop" },
+    { emoji: "🧸", label: "フィギュア", path: "/parent/sticker-shop" },
     { emoji: "🎨", label: "お絵かき", path: "/parent/drawing" },
     // 「コレクション」は6文字で、4列（タイル幅75px）だと15pxのままでは折り返す
     // （旧`app/parent/home.tsx`と同じ理由でこのタイルだけ12pxに縮める）。

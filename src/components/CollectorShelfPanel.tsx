@@ -80,6 +80,9 @@ const stickerShapeLabel: Record<StickerShape, { child: string; parent: string }>
   flower: { child: "おはな", parent: "おはな" },
   // [2026-09-09追加・本部長／実装メモ177章] StickerShopPanel.tsxと同じ表記。
   dragon: { child: "ドラゴン", parent: "ドラゴン" },
+  // [2026-09-25追加・統括「くまのフィギュアを作ったら替える」、やること.md 4-75]
+  // StickerShopPanel.tsxと同じ表記。
+  bear: { child: "くま", parent: "くま" },
 };
 
 const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string }> = {

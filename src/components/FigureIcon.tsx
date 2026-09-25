@@ -51,6 +51,20 @@ import figureBeetleBronze from "../../assets/figures/figure_beetle_bronze.png";
 import figureBeetleSilver from "../../assets/figures/figure_beetle_silver.png";
 import figureBeetleGold from "../../assets/figures/figure_beetle_gold.png";
 import figureBeetleCrystal from "../../assets/figures/figure_beetle_crystal.png";
+// [2026-09-25追加・統括が原画を制作、やること.md 4-75対応・開発部/成果物/実装メモ.md
+// 参照] `sticker_catalog`側（入れ替え後「フィギュア」）のbearぶん。
+import figureBearBronze from "../../assets/figures/figure_bear_bronze.png";
+import figureBearSilver from "../../assets/figures/figure_bear_silver.png";
+import figureBearGold from "../../assets/figures/figure_bear_gold.png";
+import figureBearCrystal from "../../assets/figures/figure_bear_crystal.png";
+// [2026-09-25追加・本部長差し戻し対応（統括原画は`figure_collection/flower/`）]
+// `sticker_catalog`側のflower（おはな）ぶん。DBのカタログ行・theme.tsのshapeは
+// 既存のまま（07-19章時点から存在）で、絵だけがこれまで無かった
+// （StickerShopPanel.tsxの`hasFigureImage`絞り込みでショップに出ていなかった）。
+import figureFlowerBronze from "../../assets/figures/figure_flower_bronze.png";
+import figureFlowerSilver from "../../assets/figures/figure_flower_silver.png";
+import figureFlowerGold from "../../assets/figures/figure_flower_gold.png";
+import figureFlowerCrystal from "../../assets/figures/figure_flower_crystal.png";
 
 /**
  * `habit_figure_catalog.figure_key`をキーにした画像の対応表。
@@ -78,6 +92,16 @@ const FIGURE_IMAGES: Record<string, unknown> = {
   figure_beetle_silver: figureBeetleSilver,
   figure_beetle_gold: figureBeetleGold,
   figure_beetle_crystal: figureBeetleCrystal,
+  // [2026-09-25追加] くま（sticker_catalog側、figureKeyOfSticker()が生成するキー）。
+  figure_bear_bronze: figureBearBronze,
+  figure_bear_silver: figureBearSilver,
+  figure_bear_gold: figureBearGold,
+  figure_bear_crystal: figureBearCrystal,
+  // [2026-09-25追加] おはな（sticker_catalog側）。カタログ・themeは既存のまま、絵だけ追加。
+  figure_flower_bronze: figureFlowerBronze,
+  figure_flower_silver: figureFlowerSilver,
+  figure_flower_gold: figureFlowerGold,
+  figure_flower_crystal: figureFlowerCrystal,
 };
 
 /**

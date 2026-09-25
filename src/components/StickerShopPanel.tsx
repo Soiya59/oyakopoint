@@ -66,6 +66,9 @@ export const shapeLabel: Record<StickerShape, { child: string; parent: string }>
   // [2026-09-09追加・本部長／実装メモ177章] ドラゴンは外来語のため、子ども向け・
   // 大人向けとも「ドラゴン」で統一する（クリスタルと同じ理由。173.3章参照）。
   dragon: { child: "ドラゴン", parent: "ドラゴン" },
+  // [2026-09-25追加・統括「くまのフィギュアを作ったら替える」、やること.md 4-75]
+  // 「くま」は和語のため、子ども向け・大人向けとも同じひらがな表記にする。
+  bear: { child: "くま", parent: "くま" },
 };
 
 export const rarityLabel: Record<StickerRarity, { child: string; parent: string }> = {
@@ -261,7 +264,7 @@ export function StickerShopPanel({
             🪙は「ポイントを使って手に入れる」という行為の記号として据え置く
             （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 62.4節4、62.9節2で
             本部長へ差し替えの要否を確認中。開発部/成果物/実装メモ.md参照）。 */}
-        <Text style={bodyMediumStyle}>🪙 {isChild ? "フィギュアを かう" : "フィギュアを買う"}</Text>
+        <Text style={bodyMediumStyle}>🧸 {isChild ? "フィギュアを かう" : "フィギュアを買う"}</Text>
         <Text style={bodyMediumStyle}>🌟{balance}pt</Text>
       </View>
 

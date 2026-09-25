@@ -139,7 +139,7 @@ export default function ParentMyRewardsScreen() {
             「フィギュア」に入れ替えた。 */}
         <Card>
           <Text style={theme.typography.parentBodyMedium}>
-            <Text style={{ fontSize: 22 }}>🪙</Text> フィギュアを買いに行く →
+            <Text style={{ fontSize: 22 }}>🧸</Text> フィギュアを買いに行く →
           </Text>
           <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1 }]}>
             貯めたポイントで、木を飾るフィギュアを買えます。

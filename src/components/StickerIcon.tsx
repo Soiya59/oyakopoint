@@ -91,6 +91,17 @@ import rabbitGoldSm from "../../assets/stickers/rabbit_gold@sm.png";
 import rabbitCrystalFull from "../../assets/stickers/rabbit_crystal.png";
 import rabbitCrystalSm from "../../assets/stickers/rabbit_crystal@sm.png";
 
+// [2026-09-25追加・統括が原画を制作、やること.md 4-75対応] 「くま」。ドラゴンと同じ
+// 木を飾る用の絵（assets/stickers/bear_*.png・@sm）。
+import bearBronzeFull from "../../assets/stickers/bear_bronze.png";
+import bearBronzeSm from "../../assets/stickers/bear_bronze@sm.png";
+import bearSilverFull from "../../assets/stickers/bear_silver.png";
+import bearSilverSm from "../../assets/stickers/bear_silver@sm.png";
+import bearGoldFull from "../../assets/stickers/bear_gold.png";
+import bearGoldSm from "../../assets/stickers/bear_gold@sm.png";
+import bearCrystalFull from "../../assets/stickers/bear_crystal.png";
+import bearCrystalSm from "../../assets/stickers/bear_crystal@sm.png";
+
 const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof beetleBronzeFull; sm: typeof beetleBronzeSm }>> = {
   beetle: {
     bronze: { full: beetleBronzeFull, sm: beetleBronzeSm },
@@ -115,6 +126,12 @@ const STICKER_IMAGES: Record<StickerShape, Record<StickerRarity, { full: typeof 
     silver: { full: dragonSilverFull, sm: dragonSilverSm },
     gold: { full: dragonGoldFull, sm: dragonGoldSm },
     crystal: { full: dragonCrystalFull, sm: dragonCrystalSm },
+  },
+  bear: {
+    bronze: { full: bearBronzeFull, sm: bearBronzeSm },
+    silver: { full: bearSilverFull, sm: bearSilverSm },
+    gold: { full: bearGoldFull, sm: bearGoldSm },
+    crystal: { full: bearCrystalFull, sm: bearCrystalSm },
   },
 };
 

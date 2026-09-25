@@ -357,7 +357,10 @@ export const gachaPlateSize = {
 // [2026-09-09改訂・本部長／実装メモ177章] やること5-9のうち「ドラゴン」のみを
 // 追加し、形4種（beetle/butterfly/flower/dragon）×レアリティ4段＝16種類にした。
 // どんぐり（acorn）・とり（bird）・くるま（car）は今回対象外のまま。
-export const stickerShapes = ["beetle", "butterfly", "flower", "dragon"] as const;
+// [2026-09-25改訂・統括が「くま」のフィギュア原画を制作、やること.md 4-75対応・
+// 開発部/成果物/実装メモ.md参照] 形5種（beetle/butterfly/flower/dragon/bear）×
+// レアリティ4段＝20種類にした。
+export const stickerShapes = ["beetle", "butterfly", "flower", "dragon", "bear"] as const;
 export type StickerShape = (typeof stickerShapes)[number];
 
 export const stickerRarities = ["bronze", "silver", "gold", "crystal"] as const;
@@ -433,6 +436,9 @@ export const stickerShapeFallbackEmoji: Record<StickerShape, string> = {
   butterfly: "🦋",
   flower: "🌸",
   dragon: "🐉",
+  // [2026-09-25追加] くま。フォールバック絵文字であり通常は画像（FigureIcon）が
+  // 優先されるため、bear_bronze等の絵が揃っている限りこの絵文字が表示に出ることはない。
+  bear: "🧸",
 };
 
 // ---- 1.12 累計到達バッジ（`badge-*`、2026-09-07追加、07-19-9b章対応） ----
@@ -486,7 +492,7 @@ export const badgeDefinitions: readonly {
   { key: "lifetime_gacha_draws", emoji: "🎰", nameParent: "ガチャ10かい", nameChild: "ガチャ10かい", unit: ["かい", "かい"] },
   // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 表示名を
   // 「フィギュア」に入れ替えた。🪙は据え置き（62.4節4、本部長へ確認中）。
-  { key: "lifetime_sticker_purchases", emoji: "🪙", nameParent: "フィギュア5こ", nameChild: "フィギュア5こ", unit: ["こ", "こ"] },
+  { key: "lifetime_sticker_purchases", emoji: "🧸", nameParent: "フィギュア5こ", nameChild: "フィギュア5こ", unit: ["こ", "こ"] },
 ] as const;
 
 /**

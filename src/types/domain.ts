@@ -694,10 +694,10 @@ export type DeletableCommentKind = "family_board_comment" | "chore_reaction_comm
 // [新設・2026-09-07] 木を飾るステッカー購入とバッジ（要件定義書07-19章、
 // スキーマ設計.sql 47章、API仕様.md 14章、開発部/成果物/実装メモ.md 138章）。
 
-/** sticker_catalog テーブルの1行（全家族共通グローバルカタログ、12種固定）。 */
+/** sticker_catalog テーブルの1行（全家族共通グローバルカタログ、2026-09-25時点20種）。 */
 export interface StickerCatalogItem {
   id: string;
-  shape: "beetle" | "butterfly" | "flower" | "dragon";
+  shape: "beetle" | "butterfly" | "flower" | "dragon" | "bear";
   rarity: "bronze" | "silver" | "gold" | "crystal";
   sticker_key: string;
   display_name: string;
