@@ -35,23 +35,55 @@ for _, s in leaves: anyLeaf |= s
 # 幹・枝・地面（葉の外にある緑の線）を一番下に置く
 layer = stroke & ~anyLeaf
 layer = smooth(layer, 1.5)
-for _, s in leaves:
+owner = np.full(lab.shape, -1, dtype=np.int32)   # 最終的にどの葉が一番上に見えているか
+for k, (_, s) in enumerate(leaves):
     halo = ndi.distance_transform_edt(~s) <= GAP
     # 既に描いた「葉」だけを削る（枝は葉の付け根につながったまま）
     layer_leaves = layer & anyLeaf
     layer_other = layer & ~anyLeaf
     layer_leaves = layer_leaves & ~halo
+    owner[halo & ~s] = -1
+    owner[s] = k
     layer = layer_leaves | layer_other | s
-# [2026-09-26追加・統括「葉っぱの中央のラインをいれてほしい」] 元の絵の葉の中の白い筋
-# （背景より明るい点）の位置に、同じ太さの透明な線を抜く。葉の外には出さない。
-vein = a.sum(axis=2) > 700
-vein = ndi.binary_dilation(vein, iterations=2)
-vein = ndi.gaussian_filter(vein.astype(float), 1.5) > 0.5
-# [2026-09-26修正・統括「右側のはっぱのかさなりだけ、中央ラインが上側の葉っぱにつながっている」]
-# 筋は、見えている形の縁（手前の葉のまわりのすき間を含む）から一定距離より内側だけに入れる。
-# 奥の葉の筋が、手前の葉のまわりのすき間とつながらないようにするため。
-innerOnly = ndi.distance_transform_edt(layer) > 14
-shape = layer & ~(vein & anyLeaf & innerOnly)
+owner[~layer] = -1
+
+# [2026-09-26改訂・統括「内側でとめなくてよいよ。葉っぱの輪郭にはいったあとでとめたらいいよ」]
+# 葉の中央の筋：元の絵の白い筋を1本ずつ取り出し、向きを求めて両側へまっすぐ延ばす。
+# どの葉の筋かを決め、その葉が見えている範囲の中だけに引く。縁から少し（EDGE）
+# 手前、つまり縁の帯に入ったところで止める。隣の葉やすき間にはつなげない。
+EDGE = 7
+VEIN_W = 13
+bright = a.sum(axis=2) > 700
+vlab, vn = ndi.label(ndi.binary_dilation(bright, iterations=1))
+veinCut = np.zeros(lab.shape, bool)
+for v in range(1, vn+1):
+    comp = vlab == v
+    if comp.sum() < 150: continue
+    ks = owner[comp]; ks = ks[ks >= 0]
+    if ks.size == 0: continue
+    k = np.bincount(ks).argmax()
+    vis = (owner == k) & layer
+    allowed = ndi.distance_transform_edt(vis) > EDGE
+    ys_, xs_ = np.where(comp)
+    cx, cy = xs_.mean(), ys_.mean()
+    cov = np.cov(np.stack([xs_ - cx, ys_ - cy]))
+    evals, evecs = np.linalg.eigh(cov)
+    dx, dy = evecs[:, 1]
+    L = 1400
+    img = Image.new("L", (lab.shape[1], lab.shape[0]), 0)
+    ImageDraw.Draw(img).line([(cx - dx*L, cy - dy*L), (cx + dx*L, cy + dy*L)], fill=255, width=VEIN_W)
+    line = np.asarray(img) > 0
+    # 筋の中心から、見えている範囲の中でつながっている部分だけを残す（途中で途切れたら止める）
+    seg = line & allowed
+    sl, _ = ndi.label(seg)
+    c = sl[int(round(cy)), int(round(cx))]
+    if c == 0:
+        cand = np.unique(sl[comp & seg]); cand = cand[cand > 0]
+        if cand.size == 0: continue
+        c = cand[0]
+    veinCut |= (sl == c)
+veinCut = ndi.gaussian_filter(veinCut.astype(float), 1.2) > 0.5
+shape = layer & ~veinCut
 ys, xs = np.where(shape)
 y0,y1,x0,x1 = ys.min(), ys.max(), xs.min(), xs.max()
 f = shape[y0:y1+1, x0:x1+1]
@@ -70,6 +102,7 @@ small = Image.new("RGBA", (48,48), (40,40,40,255)); small.alpha_composite(white.
 prev.paste(small, (8,232))
 prev.save(r"notification-icon-preview.png")
 print("ok", [round(t[0],3) for t in leaves])
+
 
 
 
