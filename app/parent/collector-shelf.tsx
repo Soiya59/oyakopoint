@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Pressable, Text } from "react-native";
+import React, { useRef, useState } from "react";
+import { Pressable, ScrollView, Text } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import CollectorShelfPanel, { ALL_MEMBERS_ID } from "@/components/CollectorShelfPanel";
@@ -45,6 +45,10 @@ export default function ParentCollectorShelfScreen() {
   const isViewingIndividual = selectedMemberId !== ALL_MEMBERS_ID;
   const effectiveMemberId = isViewingIndividual ? selectedMemberId : "";
 
+  // [2026-09-25追加・実装メモ303.x章] 「集めたもの」タブの区分ジャンプボタン
+  // （目次）用。ScreenのScrollViewへscrollToするためのref。
+  const scrollRef = useRef<ScrollView>(null);
+
   const { season } = useFamilyTreeDetail();
   const { loadState: stickersLoadState, purchases: stickerPurchases, reload: reloadStickers } = useMyStickerPurchases(
     effectiveMemberId,
@@ -70,7 +74,7 @@ export default function ParentCollectorShelfScreen() {
   } = useFamilyHabitFigureGrants(familyId, season?.id ?? null);
 
   return (
-    <Screen tone="parent">
+    <Screen tone="parent" scrollRef={scrollRef}>
       <Pressable onPress={() => router.back()}>
         <Text style={theme.typography.parentBody}>← もどる</Text>
       </Pressable>
@@ -87,6 +91,7 @@ export default function ParentCollectorShelfScreen() {
 
       <CollectorShelfPanel
         tone="parent"
+        scrollViewRef={scrollRef}
         collectedLoadState={collectedLoadState}
         collectedItems={collectedItems}
         onRetryCollected={reloadCollected}

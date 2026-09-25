@@ -29,7 +29,7 @@
  * 「過去の木」: シーズンごとの家族の木を、その月に飾られた景品・自由配置ステッカーが
  *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
@@ -90,6 +90,19 @@ const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string 
   // 改称（StickerShopPanel.tsxと同じ表記統一の理由）。
   crystal: { child: "クリスタル", parent: "クリスタル" },
 };
+
+/**
+ * [2026-09-25追記・実装メモ303.x章・本部長差し戻し「フィギュアの上にうさぎだけでも
+ * よいよ」] 「全員」ビューの図鑑グリッド（`FamilyMedalSection`）は1行が1種類・
+ * 4列が銅→銀→金→クリスタルの固定順のため、段階はマスの位置と枠の色
+ * （`habitCardCellColors`／`FigureFrame`の枠色）で分かる。キャプションに段階名まで
+ * 重ねると折り返して2行になる（例:「カブトムシ 銅」）ため、ここでは種類名だけを
+ * 返す。個別ビュー（`StickerShelfSection`）・拡大表示は種類が固定順で並ばないため、
+ * 引き続き`stickerEntryLabel`（種類名＋段階名）を使う。
+ */
+function stickerKindOnlyLabel(tone: Tone, shape: StickerShape): string {
+  return tone === "child" ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent;
+}
 
 export interface CollectorShelfPanelProps {
   tone: Tone;
@@ -178,6 +191,15 @@ export interface CollectorShelfPanelProps {
   onPlaceHabitFigure: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
   /** 自分選択時のみ: 「うごかす」導線。 */
   onMoveHabitFigure: (decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) => void;
+
+  /**
+   * [2026-09-25追記・実装メモ303.x章] 「集めたもの」タブの区分ジャンプボタン
+   * （目次）が、押された区分の見出しまでスクロールするために使う、呼び出し画面
+   * （`Screen`）が持つ外側ScrollViewへのref。`Screen`に`scrollRef`を渡した
+   * 呼び出し元（P31/C26/S19）だけがこのprop経由で渡す。渡されない場合（将来
+   * 別の入れ物から呼ばれた場合の保険）はジャンプボタン自体を出さない。
+   */
+  scrollViewRef?: React.RefObject<ScrollView | null>;
 }
 
 const bodyStyleFor = (tone: Tone) =>
@@ -769,6 +791,7 @@ export function CollectorShelfPanel({
   onRetryFamilyHabitFigures,
   onPlaceHabitFigure,
   onMoveHabitFigure,
+  scrollViewRef,
 }: CollectorShelfPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
@@ -780,6 +803,46 @@ export function CollectorShelfPanel({
   const pastTreesLabel = isChild ? "まえの木" : "過去の木";
   const isViewingSelf = selectedMemberId === myMemberId;
   const selectedMember = members.find((m) => m.id === selectedMemberId);
+
+  // [2026-09-25追加・要件定義書07-40章、実装メモ303.x章] 「集めたもの」タブの
+  // 区分ジャンプボタン（目次）。各区分の見出しView自身にonLayoutを付け、押された
+  // タイミングでscrollViewRef（呼び出し画面のScreenが包むScrollView）へ
+  // measureLayoutし、その区分の直前までスクロールする。onLayoutで発火させるのは
+  // 「全員」／個別ビューでどの区分がどんな高さで出るかがロード状態次第で変わる
+  // ため（統括依頼文3節「各見出しの位置はonLayoutで取る」）。ScrollView自体は
+  // Screen側が持っているため、scrollViewRefが渡されない呼び出し元（想定外）では
+  // ボタン自体を出さない。
+  const scrollAnchors = useRef<Record<string, View | null>>({});
+  const scrollOffsets = useRef<Record<string, number>>({});
+  const measureSectionOffset = useCallback(
+    (key: string) => {
+      const node = scrollAnchors.current[key];
+      const scrollHandle = scrollViewRef?.current?.getScrollableNode?.();
+      if (!node || scrollHandle == null) return;
+      node.measureLayout(
+        scrollHandle,
+        (_left: number, top: number) => {
+          scrollOffsets.current[key] = top;
+        },
+        () => {}
+      );
+    },
+    [scrollViewRef]
+  );
+  const registerSectionRef = useCallback(
+    (key: string) => (ref: View | null) => {
+      scrollAnchors.current[key] = ref;
+    },
+    []
+  );
+  const scrollToSection = useCallback(
+    (key: string) => {
+      const y = scrollOffsets.current[key];
+      if (y == null || !scrollViewRef?.current) return;
+      scrollViewRef.current.scrollTo({ y: Math.max(0, y - theme.spacing.s3), animated: true });
+    },
+    [scrollViewRef]
+  );
 
   const toggleSeason = (season: FamilyTreeSeason) => {
     const next = expandedSeasonId === season.id ? null : season.id;
@@ -804,6 +867,39 @@ export function CollectorShelfPanel({
       item.drawing ? item.drawing.artistId === selectedMemberId : item.collectorId === selectedMemberId
     );
   }, [collectedItems, selectedMemberId]);
+
+  // [2026-09-25追加・実装メモ303.x章] ジャンプボタンの一覧。ボタンの文言は
+  // 実際に画面へ出す見出しの文言とそろえる（依頼文3節「実際の区分名は画面の
+  // 見出しに合わせる」）。中身が0件（ロード未完了・0件どちらも含む）の区分は
+  // 出さない（依頼文3節「中身が0件で出ていない区分のボタンは出さない」）。
+  const jumpSections = useMemo(() => {
+    if (selectedMemberId === ALL_MEMBERS_ID) {
+      return [
+        { key: "collected", label: collectedLabel, visible: collectedLoadState === "ready" && collectedItems.length > 0 },
+        { key: "figure", label: "フィギュア", visible: familyStickersLoadState === "ready" },
+        { key: "medal", label: "メダル", visible: familyHabitFiguresLoadState === "ready" },
+      ];
+    }
+    return [
+      {
+        key: "collected",
+        label: "つくった・あつめたもの",
+        visible: collectedLoadState === "ready" && memberMadeOrCollected.length > 0,
+      },
+      { key: "figure", label: "フィギュア", visible: stickersLoadState === "ready" },
+      { key: "medal", label: "メダル", visible: habitFiguresLoadState === "ready" },
+    ];
+  }, [
+    selectedMemberId,
+    collectedLabel,
+    collectedLoadState,
+    collectedItems.length,
+    memberMadeOrCollected.length,
+    familyStickersLoadState,
+    familyHabitFiguresLoadState,
+    stickersLoadState,
+    habitFiguresLoadState,
+  ]);
 
   return (
     <View style={{ marginTop: theme.spacing.s4 }}>
@@ -854,9 +950,36 @@ export function CollectorShelfPanel({
             onSelectMember={onSelectMember}
           />
 
+          {/* [2026-09-25追加・要件定義書07-40章、実装メモ303.x章] 区分ジャンプ
+              ボタン（目次）。見た目は既存のメンバー選択チップと同じ部品を流用する
+              （新しい見た目は作らない、依頼文3節）。中身が0件の区分（jumpSections側で
+              判定済み）は出さない。scrollViewRefが渡っていない・出せる区分が無い
+              ときは行自体を出さない。 */}
+          {scrollViewRef && jumpSections.some((s) => s.visible) && (
+            <View style={[styles.stickerMemberRow, { marginTop: theme.spacing.s3 }]}>
+              {jumpSections
+                .filter((s) => s.visible)
+                .map((s) => (
+                  <Pressable
+                    key={s.key}
+                    onPress={() => scrollToSection(s.key)}
+                    style={styles.stickerMemberChip}
+                    accessibilityRole="button"
+                  >
+                    <Text style={captionStyle}>{s.label}</Text>
+                  </Pressable>
+                ))}
+            </View>
+          )}
+
           {selectedMemberId === ALL_MEMBERS_ID ? (
             // 「全員」選択時: 既存の家族共有プールドビューをそのまま表示する（決定21、変更なし）。
-            <View style={{ marginTop: theme.spacing.s4 }}>
+            <View
+              style={{ marginTop: theme.spacing.s4 }}
+              ref={registerSectionRef("collected")}
+              onLayout={() => measureSectionOffset("collected")}
+              collapsable={false}
+            >
               {collectedLoadState === "loading" && <SkeletonList count={3} />}
               {collectedLoadState === "error" && (
                 <ErrorState
@@ -881,7 +1004,16 @@ export function CollectorShelfPanel({
                   />
                 </View>
               )}
-              {collectedLoadState === "ready" && collectedItems.length > 0 && <ShelfItemsGrid tone={tone} items={collectedItems} myMemberId={myMemberId} />}
+              {collectedLoadState === "ready" && collectedItems.length > 0 && (
+                <>
+                  {/* [2026-09-25追加・実装メモ303.x章] ジャンプボタンの飛び先が
+                      分かるよう見出しを追加した（従来はここに見出しが無かった）。
+                      空状態のときは既存の絵文字中心の空状態表示（上の分岐）を
+                      崩さないよう、件数がある時だけ出す。 */}
+                  <Text style={[captionStyle, styles.legendHeading]}>{collectedLabel}</Text>
+                  <ShelfItemsGrid tone={tone} items={collectedItems} myMemberId={myMemberId} />
+                </>
+              )}
 
               {/* --- メダル区分（「全員」選択時。実装メモ158章・統括の実機確認「あつめたものに
                   メダルも入れてほしい」対応）
@@ -889,7 +1021,12 @@ export function CollectorShelfPanel({
                   見出しの語を入れ替えた（コンポーネント名`FamilyMedalSection`は
                   07-34章5節の原則により変更していない。渡すデータ〈sticker_catalog由来〉も
                   変わらない）。 --- */}
-              <View style={{ marginTop: theme.spacing.s6 }}>
+              <View
+                style={{ marginTop: theme.spacing.s6 }}
+                ref={registerSectionRef("figure")}
+                onLayout={() => measureSectionOffset("figure")}
+                collapsable={false}
+              >
                 <Text style={[captionStyle, styles.legendHeading]}>フィギュア</Text>
                 <FamilyMedalSection
                   tone={tone}
@@ -905,7 +1042,12 @@ export function CollectorShelfPanel({
                   [2026-09-21改訂・要件定義書07-34章] 見出しの語を入れ替えた
                   （コンポーネント名`FamilyHabitFigureSection`は変更していない。渡すデータ
                   〈habit_figure_catalog由来〉も変わらない）。 --- */}
-              <View style={{ marginTop: theme.spacing.s6 }}>
+              <View
+                style={{ marginTop: theme.spacing.s6 }}
+                ref={registerSectionRef("medal")}
+                onLayout={() => measureSectionOffset("medal")}
+                collapsable={false}
+              >
                 <Text style={[captionStyle, styles.legendHeading]}>メダル</Text>
                 <FamilyHabitFigureSection
                   tone={tone}
@@ -924,7 +1066,11 @@ export function CollectorShelfPanel({
             // 「ここまでの かず」に改称、58.2節）は変更しない。
             <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s6 }}>
               {/* --- つくった・あつめたもの区分（決定21） --- */}
-              <View>
+              <View
+                ref={registerSectionRef("collected")}
+                onLayout={() => measureSectionOffset("collected")}
+                collapsable={false}
+              >
                 <Text style={[captionStyle, styles.legendHeading]}>つくった・あつめたもの</Text>
                 {collectedLoadState === "loading" && <SkeletonList count={2} />}
                 {collectedLoadState === "ready" && memberMadeOrCollected.length === 0 && (
@@ -936,29 +1082,33 @@ export function CollectorShelfPanel({
               </View>
 
               {/* --- シール区分（決定23。所有数0の行は表示しない） --- */}
-              <StickerShelfSection
-                tone={tone}
-                isViewingSelf={isViewingSelf}
-                selectedMemberName={selectedMember?.display_name ?? "?"}
-                loadState={stickersLoadState}
-                purchases={stickerPurchases}
-                onRetry={onRetryStickers}
-                onGoToShop={onGoToStickerShop}
-                onPlace={onPlaceSticker}
-                onMove={onMoveSticker}
-              />
+              <View ref={registerSectionRef("figure")} onLayout={() => measureSectionOffset("figure")} collapsable={false}>
+                <StickerShelfSection
+                  tone={tone}
+                  isViewingSelf={isViewingSelf}
+                  selectedMemberName={selectedMember?.display_name ?? "?"}
+                  loadState={stickersLoadState}
+                  purchases={stickerPurchases}
+                  onRetry={onRetryStickers}
+                  onGoToShop={onGoToStickerShop}
+                  onPlace={onPlaceSticker}
+                  onMove={onMoveSticker}
+                />
+              </View>
 
               {/* --- フィギュア区分（決定23と同じ扱い。所有数0の種類×段階は表示しない） --- */}
-              <HabitFigureShelfSection
-                tone={tone}
-                isViewingSelf={isViewingSelf}
-                selectedMemberName={selectedMember?.display_name ?? "?"}
-                loadState={habitFiguresLoadState}
-                grants={habitFigureGrants}
-                onRetry={onRetryHabitFigures}
-                onPlace={onPlaceHabitFigure}
-                onMove={onMoveHabitFigure}
-              />
+              <View ref={registerSectionRef("medal")} onLayout={() => measureSectionOffset("medal")} collapsable={false}>
+                <HabitFigureShelfSection
+                  tone={tone}
+                  isViewingSelf={isViewingSelf}
+                  selectedMemberName={selectedMember?.display_name ?? "?"}
+                  loadState={habitFiguresLoadState}
+                  grants={habitFigureGrants}
+                  onRetry={onRetryHabitFigures}
+                  onPlace={onPlaceHabitFigure}
+                  onMove={onMoveHabitFigure}
+                />
+              </View>
             </View>
           )}
         </View>
@@ -1527,14 +1677,22 @@ function UnknownDetailCard({
   tier,
   imageSize,
   onClose,
+  name,
 }: {
   tone: Tone;
   tier: StickerRarity;
   imageSize: number;
   onClose: () => void;
+  /**
+   * [2026-09-25追加・実装メモ303.x章、依頼文1節「拡大表示にも名前を出してよい」]
+   * 呼び出し側が組み立てた「種類名 段階名」を渡す。省略時（呼び出し元が渡さない
+   * 場合の保険）は出さない。文言（「まだひみつだよ」等）は変えない。
+   */
+  name?: string;
 }) {
   const isChild = tone === "child";
   const bodyMediumStyle = bodyMediumStyleFor(tone);
+  const captionStyle = captionStyleFor(tone);
 
   return (
     <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
@@ -1545,6 +1703,17 @@ function UnknownDetailCard({
         <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
           {isChild ? "まだ ひみつだよ" : "家族の誰もまだ持っていません"}
         </Text>
+        {name && (
+          <Text
+            style={[
+              captionStyle,
+              styles.detailDrawingCenterText,
+              { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
+            ]}
+          >
+            {name}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -1620,8 +1789,16 @@ function FamilyMedalSection({
               accessibilityState={{ selected }}
             >
               {isUnknown ? (
-                // [2026-09-25新設・決定3・7] 家族の誰も持っていない行は「？」カード。
-                <UnknownCatalogCard size={48} tier={entry.rarity} />
+                // [2026-09-25新設・決定3・7、2026-09-25追記・本部長差し戻し
+                // （実装メモ303.x章）] 家族の誰も持っていない行は「？」カード。
+                // 「？」カードの下にも持っているカードと同じ位置・同じ形で
+                // 種類名だけを薄い文字色で出す（依頼文1節）。
+                <>
+                  <UnknownCatalogCard size={48} tier={entry.rarity} />
+                  <Text style={[captionStyle, styles.gridCaption, { color: theme.colors.neutralTextSecondary }]}>
+                    {stickerKindOnlyLabel(tone, entry.shape)}
+                  </Text>
+                </>
               ) : (
                 <>
                   {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
@@ -1630,7 +1807,11 @@ function FamilyMedalSection({
                     <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
                   </FigureFrame>
                   <Text style={[captionStyle, styles.gridCaption]}>
-                    {stickerEntryLabel(tone, entry.shape, entry.rarity)}
+                    {/* [2026-09-25改訂・本部長差し戻し「フィギュアの上にうさぎだけでも
+                        よいよ」] 1行が1種類・4列が銅→銀→金→クリスタルの固定順
+                        グリッドのため、段階は列位置とマスの色で分かる。種類名だけを
+                        出す（段階名まで入れた書き方は拡大表示・個別ビューで使う）。 */}
+                    {stickerKindOnlyLabel(tone, entry.shape)}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
                   </Text>
                 </>
@@ -1644,7 +1825,13 @@ function FamilyMedalSection({
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
           {(imageSize) =>
             selectedEntry.owned.length === 0 ? (
-              <UnknownDetailCard tone={tone} tier={selectedEntry.rarity} imageSize={imageSize} onClose={() => setSelectedKey(null)} />
+              <UnknownDetailCard
+                tone={tone}
+                tier={selectedEntry.rarity}
+                imageSize={imageSize}
+                onClose={() => setSelectedKey(null)}
+                name={stickerEntryLabel(tone, selectedEntry.shape, selectedEntry.rarity)}
+              />
             ) : (
               <FamilyStickerDetailCard
                 tone={tone}
@@ -1723,6 +1910,38 @@ function FamilyStickerDetailCard({
 }
 
 /**
+ * [2026-09-25追加・実装メモ303.x章・要件定義書07-40章10節決定6] メダルの名前を
+ * フィギュアの書き方「種類名 段階名」（`stickerEntryLabel`参照）にそろえる。
+ * `habit_figure_catalog.display_name`は「どうのうさぎ」のように段階名＋「の」＋
+ * 種類名が連結済みの1つの文字列で、種類名だけを取り出す列は存在しない
+ * （`kind_display_name`は「うさぎのシール帳」のような別の用途の文言で、ここには使えない）。
+ * 段階名の接頭辞（"どうの"/"ぎんの"/"きんの"/"クリスタルの"、`stickerRarityLabel`の
+ * child表記＝ひらがな）を`display_name`の先頭から取り除くことで種類名だけを得る。
+ * `kind_key`ごとの対応表をハードコードしないのは、habit_figure_catalogの設計方針
+ * （55章決定55-7「新しい種類の追加はINSERTのみで完結させる」）をこの画面のためだけに
+ * 壊さないため。
+ *
+ * [本部長指示・依頼文2節] このロジックは`HabitCardArchiveSection`（シール帳タブ）や
+ * `HabitFigureGrantBanner`（獲得演出）とは共有しない。あちらは`kind_display_name`／
+ * `kind_display_name_child`という別の列・別の文言（「うさぎのシール帳」等）を使っており、
+ * 本関数を経由しても影響しない（この画面の中だけで組み立てる）。
+ */
+function habitFigureKindOnlyLabel(displayName: string, tier: StickerRarity): string {
+  const prefix = `${stickerRarityLabel[tier].child}の`;
+  return displayName.startsWith(prefix) ? displayName.slice(prefix.length) : displayName;
+}
+
+/**
+ * 個別ビュー・拡大表示用のフルラベル（「種類名 段階名」、フィギュアの
+ * `stickerEntryLabel`と同じ書式）。「全員」ビューの図鑑グリッドは段階が列位置と
+ * 枠色で分かるため種類名だけ（`habitFigureKindOnlyLabel`）を使い、こちらは使わない。
+ */
+function habitFigureEntryLabel(tone: Tone, displayName: string, tier: StickerRarity): string {
+  const kindOnly = habitFigureKindOnlyLabel(displayName, tier);
+  return `${kindOnly} ${tone === "child" ? stickerRarityLabel[tier].child : stickerRarityLabel[tier].parent}`;
+}
+
+/**
  * 「フィギュア」区分（要件定義書07-28章決定27、主要画面ワイヤーフレーム.md
  * 49.2章決定3-③、開発部/成果物/実装メモ.md 237章）。`StickerShelfSection`と
  * 全く同じ構造（所有している種類×段階だけを列挙し、所有数0の組み合わせは
@@ -1734,7 +1953,7 @@ function FamilyStickerDetailCard({
  */
 function buildHabitFigureShelfEntries(
   grants: HabitFigureGrantWithPlacement[]
-): { key: string; figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] }[] {
+): { key: string; figureKey: string; kindEmoji: string | null; displayName: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] }[] {
   const map = new Map<string, HabitFigureGrantWithPlacement[]>();
   for (const g of grants) {
     const key = g.figure_catalog_id;
@@ -1748,8 +1967,11 @@ function buildHabitFigureShelfEntries(
       key,
       figureKey: catalog?.figure_key ?? "",
       kindEmoji: catalog?.kind_emoji ?? null,
-      // [2026-09-21改訂・要件定義書07-34章] フォールバック文言を「メダル」に入れ替えた。
-      label: catalog?.display_name ?? "メダル",
+      // [2026-09-25改訂・実装メモ303.x章] 表示用の組み立て（種類名＋段階名）は
+      // 呼び出し側（habitFigureEntryLabel）に一本化した。ここでは生の
+      // display_nameとtierだけ持つ（フォールバック文言はフィギュアと同じく「メダル」）。
+      displayName: catalog?.display_name ?? "メダル",
+      tier: owned[0].tier,
       owned,
     };
   });
@@ -1767,7 +1989,7 @@ function buildHabitFigureShelfEntries(
 function buildFamilyMedalCatalogEntries(
   catalog: HabitFigureCatalogItem[],
   grants: HabitFigureGrantWithPlacement[]
-): { key: string; figureKey: string; kindEmoji: string | null; label: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] }[] {
+): { key: string; figureKey: string; kindEmoji: string | null; displayName: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] }[] {
   // [2026-09-25発見・ローカルDB確認] `habit_figure_catalog.tier`はTEXT列（enumでは
   // ない、`20260925010000_habit_cards_and_figures.sql`225行目のCHECK制約）のため、
   // `fetchHabitFigureCatalog`の`.order("tier")`はPostgRESTの文字列順（bronze→
@@ -1785,7 +2007,7 @@ function buildFamilyMedalCatalogEntries(
     key: item.id,
     figureKey: item.figure_key,
     kindEmoji: item.kind_emoji,
-    label: item.display_name,
+    displayName: item.display_name,
     tier: item.tier,
     owned: grants.filter((g) => g.figure_catalog_id === item.id),
   }));
@@ -1864,7 +2086,11 @@ function HabitFigureShelfSection({
                     <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
                   </CircleFrame>
                   <Text style={[captionStyle, styles.gridCaption]}>
-                    {entry.label}
+                    {/* [2026-09-25改訂・実装メモ303.x章] 種類名＋段階名（フィギュアの
+                        stickerEntryLabelと同じ書式）。個別ビューは種類が固定順で
+                        並ばないため、ここは「全員」ビューの図鑑（種類名のみ）とは
+                        異なり段階名まで出す（依頼文2節）。 */}
+                    {habitFigureEntryLabel(tone, entry.displayName, entry.tier)}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
                   </Text>
                 </Pressable>
@@ -1914,7 +2140,7 @@ function HabitFigureDetailCard({
   imageSize: number;
   onClose: () => void;
   isViewingSelf: boolean;
-  entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
+  entry: { figureKey: string; kindEmoji: string | null; displayName: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] };
   onPlace: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
   onMove: (decorationId: string, figureKey: string, kindEmoji: string | null, posX: number, posY: number) => void;
 }) {
@@ -1922,7 +2148,7 @@ function HabitFigureDetailCard({
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
 
-  const { figureKey, kindEmoji, label, owned } = entry;
+  const { figureKey, kindEmoji, displayName, tier, owned } = entry;
   const unplaced = owned.filter((g) => !g.placement);
   const currentSeasonPlaced = owned.find((g) => g.placement?.isCurrentSeason);
 
@@ -1936,7 +2162,9 @@ function HabitFigureDetailCard({
         </CircleFrame>
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
-        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+        {/* [2026-09-25改訂・実装メモ303.x章] 拡大表示は「全員」ビューの図鑑グリッドと
+            違い種類が固定順で並ばないため、種類名＋段階名（フィギュアと同じ書式）を出す。 */}
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{habitFigureEntryLabel(tone, displayName, tier)}</Text>
         {/* [2026-09-25新設・要件定義書07-40章4節・10節決定5、主要画面ワイヤーフレーム.md
             66.2節決定5] 「いつ・どうやって」。常に自動付与の1通りのみ（どのクエストで
             到達したかは出さない、07-40章4節）。新しいデータ取得は不要（`owned`は
@@ -2064,8 +2292,16 @@ function FamilyHabitFigureSection({
               accessibilityState={{ selected }}
             >
               {isUnknown ? (
-                // [2026-09-25新設・決定3・7] 家族の誰も持っていない行は「？」カード。
-                <UnknownCatalogCard size={48} tier={entry.tier} />
+                // [2026-09-25新設・決定3・7、2026-09-25追記・本部長差し戻し
+                // （実装メモ303.x章）] 家族の誰も持っていない行は「？」カード。
+                // 「？」カードの下にも持っているカードと同じ位置・同じ形で
+                // 種類名だけを薄い文字色で出す（依頼文1節）。
+                <>
+                  <UnknownCatalogCard size={48} tier={entry.tier} />
+                  <Text style={[captionStyle, styles.gridCaption, { color: theme.colors.neutralTextSecondary }]}>
+                    {habitFigureKindOnlyLabel(entry.displayName, entry.tier)}
+                  </Text>
+                </>
               ) : (
                 <>
                   {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
@@ -2074,7 +2310,11 @@ function FamilyHabitFigureSection({
                     <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
                   </CircleFrame>
                   <Text style={[captionStyle, styles.gridCaption]}>
-                    {entry.label}
+                    {/* [2026-09-25改訂・本部長差し戻し「フィギュアの上にうさぎだけでも
+                        よいよ」] 1行が1種類・4列が銅→銀→金→クリスタルの固定順
+                        グリッドのため、段階は列位置とマスの色で分かる。種類名だけを
+                        出す（段階名まで入れた書き方は拡大表示・個別ビューで使う）。 */}
+                    {habitFigureKindOnlyLabel(entry.displayName, entry.tier)}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
                   </Text>
                 </>
@@ -2088,7 +2328,13 @@ function FamilyHabitFigureSection({
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
           {(imageSize) =>
             selectedEntry.owned.length === 0 ? (
-              <UnknownDetailCard tone={tone} tier={selectedEntry.tier} imageSize={imageSize} onClose={() => setSelectedKey(null)} />
+              <UnknownDetailCard
+                tone={tone}
+                tier={selectedEntry.tier}
+                imageSize={imageSize}
+                onClose={() => setSelectedKey(null)}
+                name={habitFigureEntryLabel(tone, selectedEntry.displayName, selectedEntry.tier)}
+              />
             ) : (
               <FamilyHabitFigureDetailCard
                 tone={tone}
@@ -2116,11 +2362,11 @@ function FamilyHabitFigureDetailCard({
   imageSize: number;
   onClose: () => void;
   members: FamilyMember[];
-  entry: { figureKey: string; kindEmoji: string | null; label: string; owned: HabitFigureGrantWithPlacement[] };
+  entry: { figureKey: string; kindEmoji: string | null; displayName: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] };
 }) {
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
-  const { figureKey, kindEmoji, label, owned } = entry;
+  const { figureKey, kindEmoji, displayName, tier, owned } = entry;
   const { memberAvatars } = useAppData();
 
   const ownerCounts = useMemo(() => {
@@ -2139,7 +2385,9 @@ function FamilyHabitFigureDetailCard({
         </CircleFrame>
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
-        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+        {/* [2026-09-25改訂・実装メモ303.x章] 拡大表示は種類名＋段階名（フィギュアと
+            同じ書式）を出す（依頼文2節「拡大表示でだけ」段階名まで出す）。 */}
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{habitFigureEntryLabel(tone, displayName, tier)}</Text>
         <View style={[styles.legendRows, { marginTop: theme.spacing.s3, justifyContent: "center" }]}>
           {ownerCounts.map(({ member, count }) => (
             <View key={member.id} style={styles.legendRow}>

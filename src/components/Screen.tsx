@@ -27,6 +27,14 @@ interface ScreenProps {
    * propは効果を持たない（iOS固有のScrollView実装のみが参照する）。
    */
   canCancelContentTouches?: boolean;
+  /**
+   * [2026-09-25追加・実装メモ303.x章] `scroll=true`（既定）のときの内側ScrollViewへの
+   * ref。既定は未指定（渡さない呼び出し元は今までどおり動く）。コレクター棚
+   * （P31/C26/S19）の「集めたもの」タブの区分ジャンプボタンが、`Screen`が包む
+   * ScrollViewへ`scrollTo`するために使う。`scroll=false`（`Container`がView）
+   * のときは無視する。
+   */
+  scrollRef?: React.RefObject<ScrollView | null>;
 }
 
 /**
@@ -50,6 +58,7 @@ export function Screen({
   contentStyle,
   scrollEnabled = true,
   canCancelContentTouches,
+  scrollRef,
 }: ScreenProps) {
   // tone="supporter"（デザイントークン.md 1.7節「neutralを基調にcolor-supporter-accentを
   // 差し色として使う」）は背景を保護者向けと同じneutralBgのままにし、差し色はボタン・見出し等
@@ -132,6 +141,9 @@ export function Screen({
   const scrollBody = (
     <SafeAreaView style={[styles.safe, { backgroundColor: bg }, style]} edges={["left", "right"]}>
       <Container
+        // [2026-09-25追加・実装メモ303.x章] scroll=falseのときはScrollView専用の
+        // refを渡さない（他のScrollView専用propと同じternaryの書き方に揃える）。
+        ref={scroll ? scrollRef : undefined}
         style={scroll ? styles.scroll : [styles.flex, styles.outer]}
         contentContainerStyle={scroll ? styles.scrollOuter : undefined}
         // [2026-09-17追加・実装メモ243章] scroll=falseのとき（Containerが
