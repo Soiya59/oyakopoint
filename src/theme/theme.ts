@@ -360,7 +360,11 @@ export const gachaPlateSize = {
 // [2026-09-25改訂・統括が「くま」のフィギュア原画を制作、やること.md 4-75対応・
 // 開発部/成果物/実装メモ.md参照] 形5種（beetle/butterfly/flower/dragon/bear）×
 // レアリティ4段＝20種類にした。
-export const stickerShapes = ["beetle", "butterfly", "flower", "dragon", "bear"] as const;
+// [2026-09-26改訂・統括「くまのフィギュアを一番上に持ってきてほしい」・やること.md 2-73]
+// くまを先頭にした。この配列の順番は表示の並び（ショップ・図鑑〈stickerCatalogOrder〉・
+// 自分の分のフィギュア・フィギュア管理）にだけ使われ、DBに保存される値
+// （sticker_key・shape）には影響しない（本部長が全使用箇所を確認）。
+export const stickerShapes = ["bear", "beetle", "butterfly", "flower", "dragon"] as const;
 export type StickerShape = (typeof stickerShapes)[number];
 
 export const stickerRarities = ["bronze", "silver", "gold", "crystal"] as const;
