@@ -54,6 +54,7 @@ import type {
   FamilyMember,
   FamilyTreeSeason,
   FamilyTreeWeeklyCompletionCount,
+  HabitFigureCatalogItem,
   HabitFigureGrantWithPlacement,
   StickerPurchaseWithCatalog,
 } from "@/types/domain";
@@ -1226,6 +1227,25 @@ function stickerEntryLabel(tone: Tone, shape: StickerShape, rarity: StickerRarit
   }`;
 }
 
+/**
+ * [2026-09-25新設・要件定義書07-40章、主要画面ワイヤーフレーム.md 66章（決定1・3、
+ * 66.9節申し送り3）] 「全員」ビューのフィギュア区分（`FamilyMedalSection`）用。
+ * `buildStickerShelfEntries`（決定23・所有数0は含めない、個別ビュー専用）とは違い、
+ * `theme.stickerCatalogOrder`（形×レアリティの固定順、32.1節購入画面と同じ）の
+ * 全16件をそのまま返す。家族の誰も持っていない行は`owned: []`のまま返し、
+ * 呼び出し側で「？」カード（`UnknownCatalogCard`）として描画する（決定3・66.3節）。
+ */
+function buildFamilyFigureCatalogEntries(
+  purchases: StickerPurchaseWithCatalog[]
+): { key: string; shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] }[] {
+  return theme.stickerCatalogOrder.map(({ shape, rarity }) => ({
+    key: `${shape}-${rarity}`,
+    shape,
+    rarity,
+    owned: purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity),
+  }));
+}
+
 function StickerShelfSection({
   tone,
   isViewingSelf,
@@ -1405,8 +1425,17 @@ function StickerDetailCard({
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
-        {pointsCost != null && (
-          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>{pointsCost}pt</Text>
+        {/* [2026-09-25新設・要件定義書07-40章4節・10節決定5、主要画面ワイヤーフレーム.md
+            66.2節決定5] 「いつ・どうやって」。既存の`points_spent`表示（金額のみ）に
+            購入日（`purchased_at`、複数所有時は最新）を並べて添える。新しいデータ
+            取得は不要（`owned`は`fetchMyStickerPurchases`が`purchased_at`降順で
+            返すため、`owned[0]`が常に最新）。 */}
+        {pointsCost != null && owned[0] && (
+          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+            {isChild
+              ? `${formatShortDate(owned[0].purchased_at)} ${pointsCost}pt で かったよ`
+              : `${formatShortDate(owned[0].purchased_at)} ${pointsCost}ptで購入しました`}
+          </Text>
         )}
         <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
           {currentSeasonPlaced
@@ -1451,9 +1480,86 @@ function StickerDetailCard({
 }
 
 /**
- * 「メダル」区分（「全員」選択時。実装メモ158章）。統括の実機確認「あつめたものに、
+ * 「？」カード（要件定義書07-40章決定3・10節決定5〜7、主要画面ワイヤーフレーム.md
+ * 66.3節決定7〜9）。「全員」ビューで、カタログの行のうち家族の誰もまだ持っていない
+ * ものを表す。メダル（円形の`CircleFrame`）・フィギュア（五角形の`FigureFrame`）の
+ * どちらの枠にも属さない第三の形（角丸四角形）にすることで、（a）「メダルとフィギュアを
+ * 同じ形の図鑑にそろえる」（決定1）を視覚的にも体現し、（b）フィギュアの五角形の枠に
+ * 輪郭だけ薄く見せる案で懸念された「輪郭でカブトムシ・ちょうちょ等と判別できてしまう」
+ * 問題（07-40章5節補足）を構造的に避ける（決定7）。塗り色は`theme.habitCardCellColors`
+ * （シール帳「いまの10マス」グリッドが既に使っている段階の色、`HabitCardBoard.tsx`
+ * `TenCellsGrid`参照）をそのまま流用し、新しい色トークンは追加しない。名前・入手方法・
+ * 形の輪郭は一切表示しない（決定7・8）。
+ *
+ * [文字色について・66.9節申し送り5] 「？」の文字色は白系（`theme.colors.neutralSurface`）を
+ * 想定しているが、4色（銅・銀・金・クリスタル）いずれに対しても十分なコントラストが
+ * 取れるかは実機で確認する必要がある（ワイヤーフレームの申し送りどおり、本実装では
+ * 固定値を決め打ちする。問題があれば色の選定自体をデザイントークン.md側で見直す）。
+ */
+function UnknownCatalogCard({ size, tier }: { size: number; tier: StickerRarity }) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: theme.radius.parentMd,
+        backgroundColor: theme.habitCardCellColors[tier],
+        borderWidth: 1,
+        borderColor: theme.habitCardCellBorderColor,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ color: theme.colors.neutralSurface, fontWeight: "700", fontSize: Math.round(size * 0.5) }}>?</Text>
+    </View>
+  );
+}
+
+/**
+ * 「？」カードの拡大表示（主要画面ワイヤーフレーム.md 66.3節決定9、66.11節統括回答2）。
+ * 名前・入手方法・達成率・ボタン・リンクは一切置かない（決定9理由4）。文言は
+ * 子ども「まだ ひみつだよ」（0.1節の既存語彙をそのまま流用）、大人（保護者・
+ * みまもりメンバー）「家族の誰もまだ持っていません」（66.11節・統括が決定9の
+ * 「まだ秘密です」から差し替え）。
+ */
+function UnknownDetailCard({
+  tone,
+  tier,
+  imageSize,
+  onClose,
+}: {
+  tone: Tone;
+  tier: StickerRarity;
+  imageSize: number;
+  onClose: () => void;
+}) {
+  const isChild = tone === "child";
+  const bodyMediumStyle = bodyMediumStyleFor(tone);
+
+  return (
+    <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
+      <Pressable onPress={() => {}}>
+        <UnknownCatalogCard size={imageSize} tier={tier} />
+      </Pressable>
+      <View style={styles.detailDrawingTextWrap}>
+        <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>
+          {isChild ? "まだ ひみつだよ" : "家族の誰もまだ持っていません"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * 「フィギュア」区分（「全員」選択時。実装メモ158章）。統括の実機確認「あつめたものに、
  * メダルも入れてほしい」への対応で、個別メンバー選択時の`StickerShelfSection`とは
- * 別に、家族全員分のメダル所有状況を1つのグリッドにまとめて表示する。
+ * 別に、家族全員分のフィギュア所有状況を1つのグリッドにまとめて表示する。
+ *
+ * [2026-09-25改訂・要件定義書07-40章、主要画面ワイヤーフレーム.md 66章] 従来は
+ * 「家族の誰かが持っている行だけ」を列挙していたが、`buildFamilyFigureCatalogEntries`
+ * （カタログ`theme.stickerCatalogOrder`の全16件を固定順で返す）に差し替え、
+ * 家族の誰も持っていない行は`UnknownCatalogCard`（「？」カード、決定3・66.3節）で
+ * 埋める「図鑑」形式にした。
  *
  * 表示グリッドは`StickerShelfSection`（個別メンバー版）と完全に同じスタイル
  * （`styles.grid`/`gridItem`/`gridCaption`）を使い、「つくった・あつめたもの」の
@@ -1480,7 +1586,7 @@ function FamilyMedalSection({
   const captionStyle = captionStyleFor(tone);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const entries = useMemo(() => buildStickerShelfEntries(purchases), [purchases]);
+  const entries = useMemo(() => buildFamilyFigureCatalogEntries(purchases), [purchases]);
   const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
 
   if (loadState === "loading") return <SkeletonList count={2} />;
@@ -1493,6 +1599,8 @@ function FamilyMedalSection({
       />
     );
   }
+  // [66.6節] `theme.stickerCatalogOrder`は16件固定のため、この分岐は通常到達しない
+  // 防御的コードとして残す（実装方法自体は開発部の判断に委ねる、66.9節申し送り7）。
   if (entries.length === 0) {
     return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
   }
@@ -1502,6 +1610,7 @@ function FamilyMedalSection({
       <View style={styles.grid}>
         {entries.map((entry) => {
           const selected = entry.key === selectedKey;
+          const isUnknown = entry.owned.length === 0;
           return (
             <Pressable
               key={entry.key}
@@ -1510,15 +1619,22 @@ function FamilyMedalSection({
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-                  （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-              <FigureFrame size={48}>
-                <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
-              </FigureFrame>
-              <Text style={[captionStyle, styles.gridCaption]}>
-                {stickerEntryLabel(tone, entry.shape, entry.rarity)}
-                {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
-              </Text>
+              {isUnknown ? (
+                // [2026-09-25新設・決定3・7] 家族の誰も持っていない行は「？」カード。
+                <UnknownCatalogCard size={48} tier={entry.rarity} />
+              ) : (
+                <>
+                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
+                      （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+                  <FigureFrame size={48}>
+                    <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
+                  </FigureFrame>
+                  <Text style={[captionStyle, styles.gridCaption]}>
+                    {stickerEntryLabel(tone, entry.shape, entry.rarity)}
+                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+                  </Text>
+                </>
+              )}
             </Pressable>
           );
         })}
@@ -1526,15 +1642,19 @@ function FamilyMedalSection({
 
       {selectedEntry && (
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
-          {(imageSize) => (
-            <FamilyStickerDetailCard
-              tone={tone}
-              members={members}
-              entry={selectedEntry}
-              imageSize={imageSize}
-              onClose={() => setSelectedKey(null)}
-            />
-          )}
+          {(imageSize) =>
+            selectedEntry.owned.length === 0 ? (
+              <UnknownDetailCard tone={tone} tier={selectedEntry.rarity} imageSize={imageSize} onClose={() => setSelectedKey(null)} />
+            ) : (
+              <FamilyStickerDetailCard
+                tone={tone}
+                members={members}
+                entry={selectedEntry}
+                imageSize={imageSize}
+                onClose={() => setSelectedKey(null)}
+              />
+            )
+          }
         </ExpandedItemModal>
       )}
     </>
@@ -1633,6 +1753,42 @@ function buildHabitFigureShelfEntries(
       owned,
     };
   });
+}
+
+/**
+ * [2026-09-25新設・要件定義書07-40章、主要画面ワイヤーフレーム.md 66章（決定1・3、
+ * 66.9節申し送り1・3）] 「全員」ビューのメダル区分（`FamilyHabitFigureSection`）用。
+ * `buildHabitFigureShelfEntries`（所有分のみ、個別ビュー専用）とは違い、
+ * `catalog`（`useHabitFigureCatalog()`が返す`habit_figure_catalog`の全件、
+ * `is_active=true`・`sort_order`→`tier`の固定順）をそのまま返す。家族の誰も
+ * 持っていない行は`owned: []`のまま返し、呼び出し側で「？」カード
+ * （`UnknownCatalogCard`）として描画する（決定3・66.3節）。
+ */
+function buildFamilyMedalCatalogEntries(
+  catalog: HabitFigureCatalogItem[],
+  grants: HabitFigureGrantWithPlacement[]
+): { key: string; figureKey: string; kindEmoji: string | null; label: string; tier: StickerRarity; owned: HabitFigureGrantWithPlacement[] }[] {
+  // [2026-09-25発見・ローカルDB確認] `habit_figure_catalog.tier`はTEXT列（enumでは
+  // ない、`20260925010000_habit_cards_and_figures.sql`225行目のCHECK制約）のため、
+  // `fetchHabitFigureCatalog`の`.order("tier")`はPostgRESTの文字列順（bronze→
+  // crystal→gold→silver）になり、決定1が求める「銅→銀→金→クリスタル」の進行順と
+  // 一致しない。既存の`groupHabitFigureCatalogByKind`（絵柄選び直し画面用）は
+  // `TIER_ORDER`で並べ替えてこの挙動を吸収していたが、本関数はその並べ替えを
+  // 経由しない新しい経路のため、ここで同じ理由の並べ替えを行う
+  // （`theme.stickerRarities`は既に`["bronze","silver","gold","crystal"]`の
+  // 正しい進行順で定義済みのため、新しい並び順定義を増やさずそのまま使う）。
+  const sorted = [...catalog].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return theme.stickerRarities.indexOf(a.tier) - theme.stickerRarities.indexOf(b.tier);
+  });
+  return sorted.map((item) => ({
+    key: item.id,
+    figureKey: item.figure_key,
+    kindEmoji: item.kind_emoji,
+    label: item.display_name,
+    tier: item.tier,
+    owned: grants.filter((g) => g.figure_catalog_id === item.id),
+  }));
 }
 
 function HabitFigureShelfSection({
@@ -1781,6 +1937,18 @@ function HabitFigureDetailCard({
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{label}</Text>
+        {/* [2026-09-25新設・要件定義書07-40章4節・10節決定5、主要画面ワイヤーフレーム.md
+            66.2節決定5] 「いつ・どうやって」。常に自動付与の1通りのみ（どのクエストで
+            到達したかは出さない、07-40章4節）。新しいデータ取得は不要（`owned`は
+            `fetchMyHabitFigureGrants`が`granted_at`降順で返すため、`owned[0]`が
+            常に最新）。 */}
+        {owned[0] && (
+          <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
+            {isChild
+              ? `${formatShortDate(owned[0].granted_at)} シールちょうが ${stickerRarityLabel[owned[0].tier].child}に とどいたよ`
+              : `${formatShortDate(owned[0].granted_at)} シール帳が${stickerRarityLabel[owned[0].tier].parent}に到達しました`}
+          </Text>
+        )}
         <Text style={[captionStyle, styles.detailDrawingCenterText, { marginTop: theme.spacing.s1 }]}>
           {currentSeasonPlaced
             ? isChild
@@ -1824,8 +1992,17 @@ function HabitFigureDetailCard({
 }
 
 /**
- * 「フィギュア」区分（「全員」選択時）。`FamilyMedalSection`と同型で、木への
+ * 「メダル」区分（「全員」選択時）。`FamilyMedalSection`と同型で、木への
  * 配置状況・操作導線は持たず「誰が何個獲得しているか」の内訳のみを示す。
+ *
+ * [2026-09-25改訂・要件定義書07-40章、主要画面ワイヤーフレーム.md 66章、66.9節
+ * 申し送り1] 従来は「家族の誰かが持っている行だけ」を列挙していたが、カタログ
+ * （`habit_figure_catalog`、`useHabitFigureCatalog()`）の全件を`buildFamilyMedalCatalogEntries`
+ * で固定順に並べ、家族の誰も持っていない行は`UnknownCatalogCard`（「？」カード、
+ * 決定3・66.3節）で埋める「図鑑」形式にした。既存の`familyHabitFigureGrants`
+ * （家族全員分の所有記録、`fetchFamilyHabitFigureGrants`）はそのまま使い、
+ * カタログ取得だけを本コンポーネント内で追加する（`HabitCardArchiveSection`が
+ * 既に使っているのと同じフック）。
  */
 function FamilyHabitFigureSection({
   tone,
@@ -1844,20 +2021,30 @@ function FamilyHabitFigureSection({
   const bodyStyle = bodyStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const { loadState: catalogLoadState, catalog, reload: reloadCatalog } = useHabitFigureCatalog();
 
-  const entries = useMemo(() => buildHabitFigureShelfEntries(grants), [grants]);
+  const entries = useMemo(() => buildFamilyMedalCatalogEntries(catalog, grants), [catalog, grants]);
   const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
 
-  if (loadState === "loading") return <SkeletonList count={2} />;
-  if (loadState === "error") {
+  const combinedLoading = loadState === "loading" || catalogLoadState === "loading";
+  const combinedError = loadState === "error" || catalogLoadState === "error";
+  const retryAll = () => {
+    onRetry();
+    void reloadCatalog();
+  };
+
+  if (combinedLoading) return <SkeletonList count={2} />;
+  if (combinedError) {
     return (
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
-        onRetry={onRetry}
+        onRetry={retryAll}
       />
     );
   }
+  // [66.6節] カタログ（habit_figure_catalog、is_active=true）が1件も無い場合のみ
+  // 到達する防御的な分岐（実装方法自体は開発部の判断に委ねる、66.9節申し送り7）。
   if (entries.length === 0) {
     return <Text style={bodyStyle}>{isChild ? "まだ ないよ" : "まだありません"}</Text>;
   }
@@ -1867,6 +2054,7 @@ function FamilyHabitFigureSection({
       <View style={styles.grid}>
         {entries.map((entry) => {
           const selected = entry.key === selectedKey;
+          const isUnknown = entry.owned.length === 0;
           return (
             <Pressable
               key={entry.key}
@@ -1875,15 +2063,22 @@ function FamilyHabitFigureSection({
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-                  （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-              <CircleFrame size={48} ringColor={null}>
-                <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-              </CircleFrame>
-              <Text style={[captionStyle, styles.gridCaption]}>
-                {entry.label}
-                {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
-              </Text>
+              {isUnknown ? (
+                // [2026-09-25新設・決定3・7] 家族の誰も持っていない行は「？」カード。
+                <UnknownCatalogCard size={48} tier={entry.tier} />
+              ) : (
+                <>
+                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
+                      （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+                  <CircleFrame size={48} ringColor={null}>
+                    <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
+                  </CircleFrame>
+                  <Text style={[captionStyle, styles.gridCaption]}>
+                    {entry.label}
+                    {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
+                  </Text>
+                </>
+              )}
             </Pressable>
           );
         })}
@@ -1891,15 +2086,19 @@ function FamilyHabitFigureSection({
 
       {selectedEntry && (
         <ExpandedItemModal tone={tone} onClose={() => setSelectedKey(null)}>
-          {(imageSize) => (
-            <FamilyHabitFigureDetailCard
-              tone={tone}
-              members={members}
-              entry={selectedEntry}
-              imageSize={imageSize}
-              onClose={() => setSelectedKey(null)}
-            />
-          )}
+          {(imageSize) =>
+            selectedEntry.owned.length === 0 ? (
+              <UnknownDetailCard tone={tone} tier={selectedEntry.tier} imageSize={imageSize} onClose={() => setSelectedKey(null)} />
+            ) : (
+              <FamilyHabitFigureDetailCard
+                tone={tone}
+                members={members}
+                entry={selectedEntry}
+                imageSize={imageSize}
+                onClose={() => setSelectedKey(null)}
+              />
+            )
+          }
         </ExpandedItemModal>
       )}
     </>
