@@ -40,7 +40,7 @@ import { HabitFigureCircleIcon } from "./StickerIcon";
 import AndroidKeyboardAvoidingPadding from "./AndroidKeyboardAvoidingPadding";
 import CircleFrame from "./CircleFrame";
 import DrawingEngagementSection from "./DrawingEngagementSection";
-import FigureIcon from "./FigureIcon";
+import FigureIcon, { hasFigureImage } from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
@@ -1430,12 +1430,19 @@ function stickerEntryLabel(tone: Tone, shape: StickerShape, rarity: StickerRarit
 function buildFamilyFigureCatalogEntries(
   purchases: StickerPurchaseWithCatalog[]
 ): { key: string; shape: StickerShape; rarity: StickerRarity; owned: StickerPurchaseWithCatalog[] }[] {
-  return theme.stickerCatalogOrder.map(({ shape, rarity }) => ({
-    key: `${shape}-${rarity}`,
-    shape,
-    rarity,
-    owned: purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity),
-  }));
+  // [2026-09-26追加・統括判断「図鑑からも外す」（やること.md 2-60、ちょうちょは保留）]
+  // フィギュアの絵がまだ無い形は、ショップ（StickerShopPanel.tsxの`hasFigureImage`）と
+  // 同じく図鑑からも外す。買えないので「？」のまま埋まらないため。ただし家族の誰かが
+  // その形を既に持っている場合は、持ち物を隠さないよう残す。絵が入れば自動で出る。
+  const ownedShapes = new Set(purchases.map((p) => p.sticker_catalog?.shape).filter(Boolean));
+  return theme.stickerCatalogOrder
+    .filter(({ shape }) => hasFigureImage(figureKeyOfSticker(shape, "bronze")) || ownedShapes.has(shape))
+    .map(({ shape, rarity }) => ({
+      key: `${shape}-${rarity}`,
+      shape,
+      rarity,
+      owned: purchases.filter((p) => p.sticker_catalog?.shape === shape && p.sticker_catalog?.rarity === rarity),
+    }));
 }
 
 function StickerShelfSection({
