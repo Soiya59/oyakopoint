@@ -9,6 +9,7 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
+import { formatDateShort, formatDateTimeShort, toJstDateString } from "@/lib/calendarDates";
 import {
   fetchGratitudeReceivedHistory,
   fetchGratitudeSentHistory,
@@ -146,8 +147,8 @@ export default function SupporterGratitudeHubScreen() {
                   <Card key={g.id} tone="supporter" style={{ opacity: g.revoked_at ? 0.6 : 1 }}>
                     <View style={styles.rowTop}>
                       <Text style={theme.typography.supporterCaption}>
-                        {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
-                        {new Date(g.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                        {/* [2026-09-25修正・実装メモ.md 302章] 端末のタイムゾーン依存を解消し、JST固定の共通関数に揃えた */}
+                        {formatDateTimeShort(g.created_at)}
                       </Text>
                       <Text style={{ flex: 1 }} />
                       <Text style={theme.typography.supporterBodyMedium}>
@@ -181,7 +182,7 @@ export default function SupporterGratitudeHubScreen() {
             {received.slice(0, 3).map((g) => (
               <View key={g.id}>
                 <Text style={theme.typography.supporterBody}>
-                  {new Date(g.created_at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
+                  {formatDateShort(toJstDateString(g.created_at))}{" "}
                   {g.family_members?.display_name ?? "?"}から {g.points}pt
                 </Text>
                 {g.note && (

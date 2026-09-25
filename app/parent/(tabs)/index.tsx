@@ -73,14 +73,11 @@ export default function ParentFamilyTabScreen() {
       : null;
   const cardExcerpt =
     cardMessage !== null && cardMessage.length > 40 ? `${cardMessage.slice(0, 40)}…` : cardMessage;
+  // [2026-09-25修正・実装メモ.md 302章] 従来は`toLocaleString`を端末のタイムゾーンの
+  // まま呼んでいた。JST固定の共通関数に揃えた（見た目の書式は変えない）。
   const cardTime =
     card?.source === "board_post" && card.board_post_created_at
-      ? new Date(card.board_post_created_at).toLocaleString("ja-JP", {
-          month: "numeric",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+      ? formatDateTimeShort(card.board_post_created_at)
       : null;
 
   // [2026-09-11変更・実装メモ.md 190章] 「24時間以内の件数」→「最後に見てからの未読件数」。

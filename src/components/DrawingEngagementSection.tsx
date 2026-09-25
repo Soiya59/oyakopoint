@@ -32,6 +32,7 @@ import { useAppData } from "@/data/store";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import { excludeBlockedByAuthor } from "@/lib/blockFilter";
 import { excludeHiddenById } from "@/lib/hiddenContentFilter";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 import {
   createFamilyDrawingComment,
   deleteFamilyComment,
@@ -76,8 +77,12 @@ const ALREADY_DELETED_TEXT: Record<Tone, string> = {
   child: "このコメントは もう なくなっちゃったみたい",
 };
 
+/**
+ * [2026-09-25修正・実装メモ.md 302章] 従来は`toLocaleDateString`/`toLocaleTimeString`を
+ * 端末のタイムゾーンのまま呼んでいた。JST固定の共通関数に揃えた（見た目の書式は変えない）。
+ */
 function formatTimeOnly(iso: string): string {
-  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) + " " + new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  return formatDateTimeShort(iso);
 }
 
 /** 22.2.1節「LINE風・個数」と同じ丸め方。 */

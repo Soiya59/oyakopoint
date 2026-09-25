@@ -105,15 +105,10 @@ export default function SupporterFamilyScreen() {
   const cardAuthorName = hasBoardPost
     ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
     : null;
+  // [2026-09-25修正・実装メモ.md 302章] 従来は`toLocaleString`を端末のタイムゾーンの
+  // まま呼んでいた。JST固定の共通関数に揃えた（見た目の書式は変えない）。
   const cardTime =
-    hasBoardPost && card.board_post_created_at
-      ? new Date(card.board_post_created_at).toLocaleString("ja-JP", {
-          month: "numeric",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : null;
+    hasBoardPost && card.board_post_created_at ? formatDateTimeShort(card.board_post_created_at) : null;
 
   const completions = [...state.completions].sort(
     (a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()

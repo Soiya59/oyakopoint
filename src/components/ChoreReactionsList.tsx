@@ -21,6 +21,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { deleteFamilyComment, PG_ERRCODE } from "@/data/api";
+import { formatTimeShort } from "@/lib/calendarDates";
 import type { ChoreReaction, FamilyMember } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -106,7 +107,7 @@ export function ChoreReactionsList({
               {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
               {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}{" "}
               <Text style={captionStyle}>
-                {new Date(r.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                {formatTimeShort(r.created_at)}
               </Text>
             </Text>
             {isComment &&

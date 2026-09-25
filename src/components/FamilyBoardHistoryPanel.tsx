@@ -38,6 +38,7 @@ import NgWordWarningText from "./NgWordWarningText";
 import { EmptyState, ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
+import { formatDateShort, formatDateTimeShort, formatTimeShort, toJstDateString } from "@/lib/calendarDates";
 import theme from "@/theme/theme";
 import type { FamilyBoardCommentWithAuthor, FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
 
@@ -117,22 +118,23 @@ const bodyMediumStyleFor = (tone: Tone) =>
 const captionStyleFor = (tone: Tone) =>
   tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
 
-/** ワイヤーフレーム.md 22.2節P32/S20の表示形式（"8/27 19:40"）に合わせる。 */
+/**
+ * ワイヤーフレーム.md 22.2節P32/S20の表示形式（"8/27 19:40"）に合わせる。
+ * [2026-09-25修正・実装メモ.md 302章] 従来は端末のタイムゾーンのまま`toLocaleDateString`/
+ * `toLocaleTimeString`を呼んでいた。JST固定の共通関数（`src/lib/calendarDates.ts`）に揃えた。
+ */
 function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  const date = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
-  const time = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-  return `${date} ${time}`;
+  return formatDateTimeShort(iso);
 }
 
 /** ワイヤーフレーム.md 22.2節C27の表示形式（時刻なし、"8/27"）に合わせる。 */
 function formatDateOnly(iso: string): string {
-  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  return formatDateShort(toJstDateString(iso));
 }
 
 /** 22.2.1節「内訳の見せ方」＝3.2節P9「とどいたリアクション」の時刻表示（"8:10"）を流用。 */
 function formatTimeOnly(iso: string): string {
-  return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  return formatTimeShort(iso);
 }
 
 /** 削除確認モーダル（22.4節）に載せる本文の抜粋。 */
@@ -202,10 +204,7 @@ const COMMENT_DELETE_CONFIRM_TEXT: Record<Tone, string> = {
 
 /** 65.2.7節のフォーマット（"8/27 19:45"）。formatDateTimeと同じだが呼び出し元を分けておく。 */
 function formatCommentTime(iso: string): string {
-  const d = new Date(iso);
-  const date = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
-  const time = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-  return `${date} ${time}`;
+  return formatDateTimeShort(iso);
 }
 
 /** 22.2.1節「3ロールのトーン・文言」内訳リンクの文言。 */

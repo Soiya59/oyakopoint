@@ -22,7 +22,7 @@ import FigureIcon from "./FigureIcon";
 import FigureFrame from "./FigureFrame";
 import CircleFrame from "./CircleFrame";
 import { useAppData } from "@/data/store";
-import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate } from "@/lib/calendarDates";
+import { addDaysToDateString, formatDateShort, getJstToday, getJstWeekStartDate, toJstDateString } from "@/lib/calendarDates";
 import { pickNearestTreeTapTarget } from "@/lib/treeTapTargets";
 
 /**
@@ -924,8 +924,12 @@ function computeTreeExpandedImageSize(windowWidth: number, windowHeight: number)
   return Math.max(160, Math.min(320, available));
 }
 
+/**
+ * [2026-09-25修正・実装メモ.md 302章] 従来は`toLocaleDateString`を端末の
+ * タイムゾーンのまま呼んでいた。JST固定の共通関数（`src/lib/calendarDates.ts`）に揃えた。
+ */
 function treeFormatShortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  return formatDateShort(toJstDateString(iso));
 }
 
 /**

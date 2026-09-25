@@ -10,6 +10,7 @@ import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { formatDateTimeShort } from "@/lib/calendarDates";
 
 /**
  * P16 ポイント通帳（保護者ビュー）（主要5画面のひとつ）
@@ -108,8 +109,8 @@ export default function ParentPointsScreen() {
                 <View key={entry.id} style={styles.rowWrap}>
                   <View style={styles.row}>
                     <Text style={theme.typography.parentCaption}>
-                      {new Date(entry.occurredAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}{" "}
-                      {new Date(entry.occurredAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                      {/* [2026-09-25修正・実装メモ.md 302章] 端末のタイムゾーン依存を解消し、JST固定の共通関数に揃えた */}
+                      {formatDateTimeShort(entry.occurredAt)}
                     </Text>
                     <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                       {entry.emoji} {entry.label}

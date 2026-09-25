@@ -120,6 +120,19 @@ export function formatDateShort(dateStr: string): string {
 }
 
 /**
+ * "YYYY-MM-DD" から「M月」形式の文字列を作る。
+ * [2026-09-25追加] `src/components/CollectorShelfPanel.tsx`のformatMonthLabel・
+ * `app/parent/family-tree.tsx`の月見出しが `toLocaleDateString("ja-JP", { month: "long" })`
+ * を端末のタイムゾーンのまま呼んでいた（実装メモ.md 98.7章・302章）。入力はすでに
+ * JST基準の日付文字列（season_start等）またはgetJstToday()の戻り値のため、
+ * Dateへ戻さず文字列のまま月だけ取り出す。
+ */
+export function formatMonthJp(dateStr: string): string {
+  const [, m] = dateStr.split("-").map(Number);
+  return `${m}月`;
+}
+
+/**
  * ISO日時から「HH:MM」を作る（JST固定）。
  * [2026-09-01追加・本部長] 各画面が `toLocaleTimeString("ja-JP", ...)` を直に呼んでおり、
  * 端末のタイムゾーンに依存していた。本ファイル冒頭の方針（日付計算はJSTで一貫させる）から

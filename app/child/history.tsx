@@ -112,7 +112,7 @@ export default function ChildHistoryScreen() {
       )}
 
       {loadState === "ready" && isWeekEmpty && !expanded && (
-        <EmptyState tone="child" emoji="📅" title="まだきろくがないよ。やることリストからはじめてみよう！" />
+        <EmptyState tone="child" emoji="📅" title="まだ きろくが ないよ。クエストから はじめてみよう！" />
       )}
 
       {loadState === "ready" && (

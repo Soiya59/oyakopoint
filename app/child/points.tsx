@@ -7,6 +7,7 @@ import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 /**
  * C8 じぶんの通帳（主要5画面のひとつ。P16と共通仕様）
@@ -78,7 +79,7 @@ export default function ChildPointsScreen() {
         <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={() => setLoadState("ready")} />
       )}
       {loadState === "ready" && ledger.length === 0 && (
-        <EmptyState tone="child" emoji="📔" title="まだきろくがないよ。やることリストからチャレンジしてみよう！" />
+        <EmptyState tone="child" emoji="📔" title="まだ きろくが ないよ。クエストから チャレンジしてみよう！" />
       )}
       {loadState === "ready" && ledger.length > 0 && (
         <View style={{ marginTop: theme.spacing.s2 }}>
@@ -96,7 +97,8 @@ export default function ChildPointsScreen() {
                     {entry.points}pt
                   </Text>
                   <Text style={[theme.typography.parentCaption, { marginLeft: theme.spacing.s2 }]}>
-                    {new Date(entry.occurredAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}
+                    {/* [2026-09-25修正・実装メモ.md 302章] 端末のタイムゾーン依存を解消し、JST固定の共通関数に揃えた */}
+                    {formatDateShort(toJstDateString(entry.occurredAt))}
                   </Text>
                 </View>
                 {/* [2026-08-16追加] 感謝ポイントの自由記述メモをそのまま表示する

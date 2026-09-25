@@ -46,7 +46,7 @@ import { ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
 import { useCompletedHabitCards, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 import { computeHabitCardDurationDays, getHabitCardKindInfo, summarizeHabitCardBreakdown } from "@/lib/habitCardDisplay";
-import { toJstDateString } from "@/lib/calendarDates";
+import { formatDateShort, formatMonthJp, toJstDateString } from "@/lib/calendarDates";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
@@ -406,17 +406,17 @@ function ExpandedItemModal({
   );
 }
 
-/** season_start/season_end（"YYYY-MM-DD"、JST基準の暦月初日）をJST 0時としてDate化する。 */
-function jstDate(dateOnly: string): Date {
-  return new Date(`${dateOnly}T00:00:00+09:00`);
-}
-
+/**
+ * [2026-09-25修正・実装メモ.md 302章] 従来は`toLocaleDateString`を端末の
+ * タイムゾーンのまま呼んでいた。JST固定の共通関数（`src/lib/calendarDates.ts`）に揃えた。
+ */
 function formatShortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  return formatDateShort(toJstDateString(iso));
 }
 
+/** season_start（"YYYY-MM-DD"、JST基準の暦月初日）から「M月」を作る。 */
 function formatMonthLabel(dateOnly: string): string {
-  return jstDate(dateOnly).toLocaleDateString("ja-JP", { month: "long" });
+  return formatMonthJp(dateOnly);
 }
 
 /**

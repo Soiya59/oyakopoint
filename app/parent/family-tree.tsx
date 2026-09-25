@@ -11,6 +11,7 @@ import TabIntroBubble from "@/components/TabIntroBubble";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
+import { formatMonthJp, getJstToday } from "@/lib/calendarDates";
 
 /**
  * P26 家族の木（保護者ビュー・内訳）
@@ -50,9 +51,8 @@ export default function ParentFamilyTreeScreen() {
       <View style={styles.headerRow}>
         <Text style={theme.typography.parentTitle}>家族の木</Text>
         <Text style={{ flex: 1 }} />
-        <Text style={theme.typography.parentCaption}>
-          {new Date().toLocaleDateString("ja-JP", { month: "long" })}
-        </Text>
+        {/* [2026-09-25修正・実装メモ.md 302章] 端末のタイムゾーン依存を解消し、JST固定の共通関数に揃えた */}
+        <Text style={theme.typography.parentCaption}>{formatMonthJp(getJstToday())}</Text>
       </View>
 
       {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 50.2.1節決定17、実装メモ.md 247章]
