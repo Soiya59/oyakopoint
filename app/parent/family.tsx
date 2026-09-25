@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
@@ -134,6 +134,7 @@ export default function FamilyScreen() {
   // 子ども・みまもりとも同じremove-member(soft_remove)を使う（みまもりは
   // supabase/functions/_shared/parentAuth.ts resolveFamilyMemberCaller対応、実装メモ59.3.2章）。
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
+  const [inviteCodeDialog, setInviteCodeDialog] = useState<InviteCodeDialogKind | null>(null);
   const removeMemberConfirmed = async (memberId: string) => {
     setProcessingId(memberId);
     setErrorMessage(null);
@@ -284,13 +285,10 @@ export default function FamilyScreen() {
       <ScreenBackLink tone="parent" onPress={() => router.replace("/parent")} />
       <Text style={theme.typography.parentTitle}>設定</Text>
 
-      <Card style={{ marginTop: theme.spacing.s4 }}>
-        <Text style={theme.typography.parentCaption}>招待コード</Text>
-        <Text style={[theme.typography.parentTitle, { letterSpacing: 2, marginTop: theme.spacing.s1 }]}>
-          {state.family.invite_code}
-        </Text>
-      </Card>
-
+      {/* [2026-09-25・統括「招待コードは一番上に置かなくてもいい」・実装メモ301章]
+          画面の一番上にあった招待コードのCardは削除した。コードは下の
+          「保護者を追加する」「子どものスマホで使うとき ›」を押したときに、
+          使い方の説明と一緒にポップアップで出す（InviteCodeDialog）。 */}
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
@@ -524,10 +522,26 @@ export default function FamilyScreen() {
         </View>
       )}
 
+      {/* [2026-09-25改訂・統括指示・実装メモ301章] メンバーを増やす入口を
+          「子ども→保護者→みまもり」の順に同じ見た目（secondary）で並べた。
+          子どもプロフィールだけ緑（primary）だったのをやめた（統括「子供モード
+          追加だけ緑色にするのとかは要らない」。家族がそろったあとはほとんど押さない）。 */}
+      <AppButton
+        label="子どもプロフィールを追加"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s6 }}
+        onPress={() => router.push("/parent/child-profile")}
+      />
+      <AppButton
+        label="保護者を追加する"
+        variant="secondary"
+        style={{ marginTop: theme.spacing.s3 }}
+        onPress={() => setInviteCodeDialog("parent")}
+      />
       <AppButton
         label="みまもりメンバーを招待する"
         variant="secondary"
-        style={{ marginTop: theme.spacing.s6 }}
+        style={{ marginTop: theme.spacing.s3 }}
         onPress={() => router.push("/parent/invite-supporter")}
       />
       {/* [2026-09-16追加・主要画面ワイヤーフレーム.md 45.7.5節、実装メモ.md 227章]
@@ -535,10 +549,16 @@ export default function FamilyScreen() {
       <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
         はなれて暮らす祖父母など、見て・讃える立場です。家族共有のクエスト・ごほうび・家族の管理には関わりません。
       </Text>
-      <AppButton
-        label="子どもプロフィールを追加"
-        style={{ marginTop: theme.spacing.s6 }}
-        onPress={() => router.push("/parent/child-profile")}
+      {/* 招待コードは子どもが自分のスマホでログインするときにも使うため、
+          「保護者を追加する」の中だけにしまわず、子ども用の入口も残す。 */}
+      <Pressable onPress={() => setInviteCodeDialog("child")} style={{ marginTop: theme.spacing.s4 }}>
+        <Text style={[theme.typography.parentBody, { color: theme.colors.brandPrimaryStrong }]}>子どものスマホで使うとき ›</Text>
+      </Pressable>
+
+      <InviteCodeDialog
+        kind={inviteCodeDialog}
+        code={state.family.invite_code}
+        onClose={() => setInviteCodeDialog(null)}
       />
 
       {/* ============================================================
@@ -607,7 +627,66 @@ export default function FamilyScreen() {
   );
 }
 
+type InviteCodeDialogKind = "parent" | "child";
+
+/**
+ * 招待コードを、使い方の説明と一緒に出すポップアップ（実装メモ301章）。
+ * コピー機能はネイティブの部品（expo-clipboard）が要りビルドが必要になるため
+ * 付けず、コードの文字を長押しで選択・コピーできるようにした（`selectable`）。
+ */
+function InviteCodeDialog({
+  kind,
+  code,
+  onClose,
+}: {
+  kind: InviteCodeDialogKind | null;
+  code: string;
+  onClose: () => void;
+}) {
+  const title = kind === "child" ? "子どものスマホで使うとき" : "保護者を追加する";
+  const steps =
+    kind === "child"
+      ? ["子どものスマホで、おやこポイントを開きます。", "「こどもモードで使う」を押します。", "下の招待コードを入れて、自分の顔と名前を選び、PINを入れます。"]
+      : [
+          "追加したい保護者のスマホで、おやこポイントを開きます。",
+          "「招待コードをもってきた（保護者）」を押し、メールアドレスを確認します。",
+          "下の招待コードを入れてもらってください。",
+        ];
+  return (
+    <Modal visible={kind !== null} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.dialogBackdrop} onPress={onClose}>
+        {/* カードの中を押しても閉じないよう、外側のPressableへ伝えない */}
+        <Pressable onPress={() => undefined} style={styles.dialogCardWrap}>
+          <Card>
+            <Text style={theme.typography.parentBodyMedium}>{title}</Text>
+            {steps.map((s, i) => (
+              <Text key={i} style={[theme.typography.parentBody, { marginTop: theme.spacing.s2 }]}>
+                {i + 1}. {s}
+              </Text>
+            ))}
+            <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary }]}>
+              招待コード
+            </Text>
+            <Text selectable style={[theme.typography.parentTitle, { letterSpacing: 2, marginTop: theme.spacing.s1 }]}>
+              {code}
+            </Text>
+            <AppButton label="とじる" variant="secondary" style={{ marginTop: theme.spacing.s4 }} onPress={onClose} />
+          </Card>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
+  dialogBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing.s4,
+  },
+  dialogCardWrap: { width: "100%", maxWidth: 480 },
   settingsDivider: {
     marginTop: theme.spacing.s8,
     borderTopWidth: 1,
