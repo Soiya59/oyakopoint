@@ -47,7 +47,11 @@ for _, s in leaves:
 vein = a.sum(axis=2) > 700
 vein = ndi.binary_dilation(vein, iterations=2)
 vein = ndi.gaussian_filter(vein.astype(float), 1.5) > 0.5
-shape = layer & ~(vein & anyLeaf)
+# [2026-09-26修正・統括「右側のはっぱのかさなりだけ、中央ラインが上側の葉っぱにつながっている」]
+# 筋は、見えている形の縁（手前の葉のまわりのすき間を含む）から一定距離より内側だけに入れる。
+# 奥の葉の筋が、手前の葉のまわりのすき間とつながらないようにするため。
+innerOnly = ndi.distance_transform_edt(layer) > 14
+shape = layer & ~(vein & anyLeaf & innerOnly)
 ys, xs = np.where(shape)
 y0,y1,x0,x1 = ys.min(), ys.max(), xs.min(), xs.max()
 f = shape[y0:y1+1, x0:x1+1]
@@ -66,5 +70,6 @@ small = Image.new("RGBA", (48,48), (40,40,40,255)); small.alpha_composite(white.
 prev.paste(small, (8,232))
 prev.save(r"notification-icon-preview.png")
 print("ok", [round(t[0],3) for t in leaves])
+
 
 
