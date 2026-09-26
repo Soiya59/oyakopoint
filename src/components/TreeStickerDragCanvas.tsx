@@ -34,13 +34,13 @@
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
-import { CANVAS_HEIGHT, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
+import { CANVAS_HEIGHT, DECORATION_DIM_OPACITY, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import FigureFrame from "./FigureFrame";
 import FigureIcon from "./FigureIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
-import type { FamilyTreeCompletionDot, FamilyTreeStickerPlacement } from "@/data/api";
+import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -62,8 +62,19 @@ export interface TreeStickerDragCanvasProps {
   treeLoadState: LoadState;
   stage: number;
   dots: FamilyTreeCompletionDot[];
-  /** 木の上にすでにある他の自由配置ステッカー（読み取り専用、背景として表示する）。 */
+  /**
+   * 木の上にすでにある他の自由配置ステッカー（フィギュア。読み取り専用、
+   * `DECORATION_DIM_OPACITY`で薄く背景として表示する。movingDecorationIdと
+   * 一致する1件は除外される、TreeStageVisualのhiddenStickerDecorationId）。
+   */
   stickerPlacements: FamilyTreeStickerPlacement[];
+  /**
+   * [2026-09-26追加・実装メモ308章・本部長依頼] 木の上にすでにある自由配置
+   * メダル（読み取り専用、`DECORATION_DIM_OPACITY`で薄く表示する。触っても
+   * 反応しない）。この画面はフィギュアの配置・移動を行う画面であり、メダルの
+   * 移動は行わないため、除外すべき「いま動かしている1件」は存在しない。
+   */
+  habitFigurePlacements: FamilyTreeHabitFigurePlacement[];
   /** 今まさに配置・移動しようとしているステッカーの絵柄（ドラッグ中のプレビュー表示用）。 */
   shape: StickerShape;
   rarity: StickerRarity;
@@ -85,6 +96,7 @@ export function TreeStickerDragCanvas({
   stage,
   dots,
   stickerPlacements,
+  habitFigurePlacements,
   shape,
   rarity,
   mode,
@@ -159,8 +171,12 @@ export function TreeStickerDragCanvas({
         <TreeStageVisual
           stage={stage}
           dots={dots}
+          dimExistingPrizes
           stickerPlacements={stickerPlacements}
           hiddenStickerDecorationId={movingDecorationId}
+          stickerPlacementsOpacity={DECORATION_DIM_OPACITY}
+          habitFigurePlacements={habitFigurePlacements}
+          habitFigurePlacementsOpacity={DECORATION_DIM_OPACITY}
         />
         <View
           style={[styles.dragOverlay, webTouchActionNoneStyle]}

@@ -209,6 +209,7 @@ export default function ChildTreeDecorateScreen() {
           stage={season?.current_stage ?? 0}
           dots={dots}
           habitFigurePlacements={habitFigurePlacements}
+          stickerPlacements={stickerPlacements}
           figureKey={habitFigureKey ?? ""}
           kindEmoji={habitFigureKindEmoji ?? null}
           mode={habitFigureGrantId ? "place" : "move"}
@@ -226,6 +227,7 @@ export default function ChildTreeDecorateScreen() {
           stage={season?.current_stage ?? 0}
           dots={dots}
           stickerPlacements={stickerPlacements}
+          habitFigurePlacements={habitFigurePlacements}
           shape={(shape as StickerShape) ?? "beetle"}
           rarity={(rarity as StickerRarity) ?? "bronze"}
           mode={purchaseId ? "place" : "move"}
@@ -242,6 +244,8 @@ export default function ChildTreeDecorateScreen() {
           treeLoadState={treeLoadState}
           stage={season?.current_stage ?? 0}
           dots={dots}
+          stickerPlacements={stickerPlacements}
+          habitFigurePlacements={habitFigurePlacements}
           candidatesLoadState={candidatesLoadState}
           candidates={candidates}
           myMemberId={myId}

@@ -18,12 +18,12 @@
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
-import { CANVAS_HEIGHT, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
+import { CANVAS_HEIGHT, DECORATION_DIM_OPACITY, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import { HabitFigureCircleIcon } from "./StickerIcon";
 import CircleFrame from "./CircleFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
-import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement } from "@/data/api";
+import type { FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
@@ -39,8 +39,19 @@ export interface TreeHabitFigureDragCanvasProps {
   treeLoadState: LoadState;
   stage: number;
   dots: FamilyTreeCompletionDot[];
-  /** 木の上にすでにある他の自由配置フィギュア（読み取り専用、背景として表示する）。 */
+  /**
+   * 木の上にすでにある他の自由配置メダル（読み取り専用、`DECORATION_DIM_OPACITY`で
+   * 薄く背景として表示する。movingDecorationIdと一致する1件は除外される、
+   * TreeStageVisualのhiddenHabitFigureDecorationId）。
+   */
   habitFigurePlacements: FamilyTreeHabitFigurePlacement[];
+  /**
+   * [2026-09-26追加・実装メモ308章・本部長依頼] 木の上にすでにある自由配置
+   * フィギュア（読み取り専用、`DECORATION_DIM_OPACITY`で薄く表示する。触っても
+   * 反応しない）。この画面はメダルの配置・移動を行う画面であり、フィギュアの
+   * 移動は行わないため、除外すべき「いま動かしている1件」は存在しない。
+   */
+  stickerPlacements: FamilyTreeStickerPlacement[];
   /** 今まさに配置・移動しようとしているフィギュアの絵柄（ドラッグ中のプレビュー表示用）。 */
   figureKey: string;
   kindEmoji: string | null;
@@ -61,6 +72,7 @@ export function TreeHabitFigureDragCanvas({
   stage,
   dots,
   habitFigurePlacements,
+  stickerPlacements,
   figureKey,
   kindEmoji,
   mode,
@@ -133,8 +145,12 @@ export function TreeHabitFigureDragCanvas({
         <TreeStageVisual
           stage={stage}
           dots={dots}
+          dimExistingPrizes
           habitFigurePlacements={habitFigurePlacements}
           hiddenHabitFigureDecorationId={movingDecorationId}
+          habitFigurePlacementsOpacity={DECORATION_DIM_OPACITY}
+          stickerPlacements={stickerPlacements}
+          stickerPlacementsOpacity={DECORATION_DIM_OPACITY}
         />
         <View
           style={[styles.dragOverlay, webTouchActionNoneStyle]}

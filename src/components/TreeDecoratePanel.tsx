@@ -28,10 +28,15 @@
 import React, { useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
-import { PRIZE_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
+import { DECORATION_DIM_OPACITY, PRIZE_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
-import type { FamilyTreeCompletionDot, DecoratableCompletion } from "@/data/api";
+import type {
+  FamilyTreeCompletionDot,
+  FamilyTreeHabitFigurePlacement,
+  FamilyTreeStickerPlacement,
+  DecoratableCompletion,
+} from "@/data/api";
 import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 type Tone = "parent" | "child" | "supporter";
@@ -43,6 +48,16 @@ export interface TreeDecoratePanelProps {
   treeLoadState: LoadState;
   stage: number;
   dots: FamilyTreeCompletionDot[];
+  /**
+   * [2026-09-26追加・実装メモ308章・本部長依頼] 木の上にすでにある自由配置
+   * フィギュア（読み取り専用、薄く重ねて表示する。触っても反応しない）。
+   * この画面はガチャの景品を交換する画面であり、フィギュアの配置・移動は
+   * 行わないため、`TreeStickerDragCanvas`のような`hidden*Id`は不要
+   * （除外すべき「いま動かしている1件」がそもそも存在しない）。
+   */
+  stickerPlacements: FamilyTreeStickerPlacement[];
+  /** `stickerPlacements`のメダル版。同じ理由で読み取り専用・薄く表示するのみ。 */
+  habitFigurePlacements: FamilyTreeHabitFigurePlacement[];
   /** 交換相手選択の一覧（自分の未交換の完了報告）の読み込み状態。 */
   candidatesLoadState: LoadState;
   candidates: DecoratableCompletion[];
@@ -77,6 +92,8 @@ export function TreeDecoratePanel({
   treeLoadState,
   stage,
   dots,
+  stickerPlacements,
+  habitFigurePlacements,
   candidatesLoadState,
   candidates,
   myMemberId,
@@ -130,6 +147,11 @@ export function TreeDecoratePanel({
         highlightMemberId={myMemberId}
         highlightCompletionId={selectedId}
         previewDecorationSize={previewDecorationSize}
+        dimExistingPrizes
+        stickerPlacements={stickerPlacements}
+        stickerPlacementsOpacity={DECORATION_DIM_OPACITY}
+        habitFigurePlacements={habitFigurePlacements}
+        habitFigurePlacementsOpacity={DECORATION_DIM_OPACITY}
       />
 
       <Text style={[bodyStyle, styles.question]}>

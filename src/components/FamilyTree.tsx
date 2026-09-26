@@ -67,6 +67,15 @@ const DOT_SIZE = 13;
 // 持ち、貢献度に応じて変動させない（誰が何回引いても常に同じ36pt）。
 export const PRIZE_DOT_SIZE = 36;
 /**
+ * [2026-09-26追加・実装メモ308章・本部長依頼] 木を飾る3画面で、いま配置・移動して
+ * いない種類の飾り（ガチャの景品・メダル・フィギュア）を背景として表示する際の
+ * 不透明度。「いま動かしている飾り」との見分けが付くようにするための値で、
+ * 統括の指示どおり0.5前後にした。3画面（`TreeDecoratePanel`・
+ * `TreeStickerDragCanvas`・`TreeHabitFigureDragCanvas`）が同じ値を使うことで、
+ * どの画面でも「薄さ」の見た目が揃う。
+ */
+export const DECORATION_DIM_OPACITY = 0.5;
+/**
  * [2026-09-07追加・要件定義書07-19-9a章、2026-09-10改訂・実装メモ149章]
  * 木を飾るステッカー（購入品）の表示直径。旧デザイントークン.md 1.11節は
  * 「木の上での表示直径 24pt固定」だったが、統括要望（本部長経由・149章）を
@@ -746,11 +755,14 @@ function PrizeDotView({
   x,
   y,
   size,
+  opacity = 1,
 }: {
   dot: FamilyTreeCompletionDot;
   x: number;
   y: number;
   size: number;
+  /** [2026-09-26追加・実装メモ308章] `dimExistingPrizes`用。既定は1（従来どおり）。 */
+  opacity?: number;
 }) {
   const prize = dot.prize;
   if (!prize) return null;
@@ -767,6 +779,7 @@ function PrizeDotView({
           height: size,
           borderRadius: size / 2,
           borderColor: ringColor,
+          opacity,
         },
       ]}
     >
@@ -1170,10 +1183,13 @@ export function TreeStageVisual({
   highlightMemberId = null,
   highlightCompletionId = null,
   previewDecorationSize = null,
+  dimExistingPrizes = false,
   stickerPlacements = null,
   hiddenStickerDecorationId = null,
+  stickerPlacementsOpacity = 1,
   habitFigurePlacements = null,
   hiddenHabitFigureDecorationId = null,
+  habitFigurePlacementsOpacity = 1,
   enableTapExpand = false,
   tone = "parent",
 }: {
@@ -1213,6 +1229,16 @@ export function TreeStageVisual({
    */
   previewDecorationSize?: number | null;
   /**
+   * [2026-09-26追加・実装メモ308章・本部長依頼] 既にガチャの景品に交換済みの色丸
+   * （`dot.prize`が非null）を、`DECORATION_DIM_OPACITY`で薄く表示する。
+   * `isPreviewTarget`（いま選択中でプレビュー表示している色丸、直上の
+   * `previewDecorationSize`参照）だけは対象から除外し、通常の濃さのまま表示する。
+   * 既定はfalse（通常の家族の木画面・過去の木など、既存呼び出し元は無変更で
+   * 従来どおりの濃さのまま）。`dot.prize`が無い通常の色丸（お手伝いの記録そのもの）
+   * には一切影響しない。
+   */
+  dimExistingPrizes?: boolean;
+  /**
    * [2026-09-08新設・スキーマ設計.sql 49.6章・決定49-8] 木の上の自由配置ステッカー
    * （`fetchFamilyTreeStickerPlacements`の結果）。指定すると、木の全レイヤーより
    * 前面（最前面固定）に描画する。`pickTreeRegion`・40スロットの優先確保からは
@@ -1240,6 +1266,19 @@ export function TreeStageVisual({
   habitFigurePlacements?: FamilyTreeHabitFigurePlacement[] | null;
   /** `habitFigurePlacements`のうち、この`decorationId`と一致する1件を描画から除外する（`TreeHabitFigureDragCanvas`の移動中プレビュー用、`hiddenStickerDecorationId`と同じ役割）。 */
   hiddenHabitFigureDecorationId?: string | null;
+  /**
+   * [2026-09-26追加・実装メモ308章・本部長依頼] 木を飾る3画面（`TreeDecoratePanel`・
+   * `TreeStickerDragCanvas`・`TreeHabitFigureDragCanvas`）で、いま配置・移動して
+   * いない種類の飾りを「薄く・触れない背景」として表示するための不透明度。
+   * 既定は1（通常の家族の木画面・過去の木など、既存呼び出し元は無変更で
+   * 従来どおりの濃さのまま表示される）。`stickerPlacements`レイヤー全体
+   * （最前面固定のViewごと）に掛かるため、個々の配置を選んで薄くすることは
+   * できないが、このレイヤーは常に「いま動かしている1件」を`hiddenStickerDecorationId`
+   * で除外した残り＝全て「他の飾り」であるため、レイヤー単位の指定で足りる。
+   */
+  stickerPlacementsOpacity?: number;
+  /** `habitFigurePlacements`レイヤー版の`stickerPlacementsOpacity`。既定は1。 */
+  habitFigurePlacementsOpacity?: number;
   /**
    * [2026-09-17新設・主要画面ワイヤーフレーム.md 46.5節 決定9] 景品・ステッカーの
    * タップ拡大表示（46.1〜46.9節）を有効にするかどうか。**既定はfalse（無効）**で、
@@ -1385,7 +1424,13 @@ export function TreeStageVisual({
             />
           )}
           {dot.prize ? (
-            <PrizeDotView dot={dot} x={x} y={y} size={size} />
+            <PrizeDotView
+              dot={dot}
+              x={x}
+              y={y}
+              size={size}
+              opacity={dimExistingPrizes && !isPreviewTarget(dot) ? DECORATION_DIM_OPACITY : 1}
+            />
           ) : (
             <View style={[styles.dotWrap, { left: x - size / 2, top: y - size / 2, width: size, height: size }]}>
               <StageDot color={dotColor(dot)} size={size} stage={stage} />
@@ -1861,7 +1906,7 @@ export function TreeStageVisual({
           いずれも通さず、pos_x/pos_y（0〜1000）をそのままキャンバスの実ピクセル
           座標に変換するだけの単純な層（決定49-11「重なりを許容する」）。 */}
       {stickerPlacements && stickerPlacements.length > 0 && (
-        <View style={styles.stickerOverlay} pointerEvents="none">
+        <View style={[styles.stickerOverlay, { opacity: stickerPlacementsOpacity }]} pointerEvents="none">
           {stickerPlacements
             .filter((p) => p.decorationId !== hiddenStickerDecorationId)
             .map((p) => (
@@ -1879,7 +1924,7 @@ export function TreeStageVisual({
       {/* [2026-09-17新設・要件定義書07-28章決定21] 自由配置フィギュア。ステッカーと
           同じ最前面固定レイヤー（メダルの表示コンポーネント自体は変更していない）。 */}
       {habitFigurePlacements && habitFigurePlacements.length > 0 && (
-        <View style={styles.stickerOverlay} pointerEvents="none">
+        <View style={[styles.stickerOverlay, { opacity: habitFigurePlacementsOpacity }]} pointerEvents="none">
           {habitFigurePlacements
             .filter((p) => p.decorationId !== hiddenHabitFigureDecorationId)
             .map((p) => (
