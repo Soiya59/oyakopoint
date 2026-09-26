@@ -132,6 +132,32 @@ function check(label: string, ok: boolean) {
   check("drawingZoomPanもmarkSeen後は既読扱い（表示しない）", computeIsSeen(state, keyA) === true);
 }
 
+// 9. [2026-09-27追加・実装メモ.md 314章] drawingFillToggleもdrawingZoomPanと同じく
+//    タブ単位の区別を持たず、memberIdだけで1つのキーになる。
+{
+  const keyA = buildIntroSeenKey({ kind: "drawingFillToggle" }, "member-1");
+  check(
+    "drawingFillToggleのキーはkind・memberIdのみで決まる",
+    keyA === "oyakopoint.introSeen.drawingFillToggle.member-1"
+  );
+  check(
+    "drawingFillToggleはメンバーが違えばキーも異なる",
+    buildIntroSeenKey({ kind: "drawingFillToggle" }, "member-1") !==
+      buildIntroSeenKey({ kind: "drawingFillToggle" }, "member-2")
+  );
+  check(
+    "drawingFillToggleは同じmemberIdのdrawingZoomPan等とは別キー",
+    keyA !== buildIntroSeenKey({ kind: "drawingZoomPan" }, "member-1") &&
+      keyA !== buildIntroSeenKey({ kind: "tab", tabKey: "parent.family" }, "member-1")
+  );
+
+  const state = createIntroSeenState();
+  applyHydration(state, keyA, null);
+  check("drawingFillToggleもhydrate後・記録なしは未読扱い（表示する）", computeIsSeen(state, keyA) === false);
+  applyMarkSeen(state, keyA);
+  check("drawingFillToggleもmarkSeen後は既読扱い（表示しない）", computeIsSeen(state, keyA) === true);
+}
+
 console.log("");
 if (failCount === 0) {
   console.log("全件OK");

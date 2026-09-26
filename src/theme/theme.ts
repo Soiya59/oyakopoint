@@ -311,12 +311,17 @@ export const avatarDrawingPalette = drawingPalette;
 
 // ---- 線の太さ（3段階、2026-09-05追加、07-13-2章拡張） ----
 // 参照: デザイントークン.md「線の太さ（3段階）」・主要画面ワイヤーフレーム.md 21.5b節
-// 決定20（値）・決定22（表示用の点の直径）。値（2/4/7）はDB側is_valid_drawing_line_data()
+// 決定20（値）・決定22（表示用の見本）。値（2/4/7）はDB側is_valid_drawing_line_data()
 // の許可リスト（スキーマ設計.sql 44.5章 v_allowed_widths）と一致させること。
+// [2026-09-27変更・実装メモ.md 314章、本部長依頼・軽微変更ルート] 見本を塗りつぶし円
+// （`dotSize`＝直径）から横線バー（`barWidth`固定・`barHeight`のみ太さで変える）に
+// 変更した。塗った形（313章）を導入したことで「太さの見本の丸」と「塗った丸(●)」の
+// 判別が付きにくくなったため（依頼文3.）。`barWidth`を`barHeight`の最大値（28）より
+// 常に大きい40に固定することで、3段階すべてで「丸ではなく横長の線」に見えるようにする。
 export const drawingStrokeWidths = [
-  { value: 2, label: "ほそい", dotSize: 14 },
-  { value: 4, label: "ふつう", dotSize: 24 },
-  { value: 7, label: "ふとい", dotSize: 36 },
+  { value: 2, label: "ほそい", barWidth: 40, barHeight: 8 },
+  { value: 4, label: "ふつう", barWidth: 40, barHeight: 16 },
+  { value: 7, label: "ふとい", barWidth: 40, barHeight: 28 },
 ] as const;
 
 // 決定23: 既定値は「ふつう」＝4pt（現行の固定値をそのまま踏襲）。決定25: `w`が

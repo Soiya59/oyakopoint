@@ -247,7 +247,9 @@ export function AvatarDrawingPanel({
       />
 
       {/* [2026-09-26追加・実装メモ.md 309章] 家族の絵（DrawingBoard.tsx）と同じ並び
-          （道具→色→太さ）にする。 */}
+          （道具→色→太さ）にする。
+          [2026-09-27変更・実装メモ.md 314章] `color`・`memberId`を追加で渡す
+          （DrawingBoard.tsxと同じ理由）。 */}
       <View style={styles.toolWrap}>
         <DrawingToolPicker
           tone={tone}
@@ -255,6 +257,8 @@ export function AvatarDrawingPanel({
           onSelect={setTool}
           filled={filled}
           onToggleFilled={() => setFilled((prev) => !prev)}
+          color={color}
+          memberId={memberId}
           disabled={saving}
         />
       </View>

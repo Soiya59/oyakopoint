@@ -15,11 +15,16 @@
  * [2026-09-18追加・主要画面ワイヤーフレーム.md 52.6節決定6] `drawingZoomPan`は
  * お絵かき拡大中の「2本指で動かせる」案内（52章）。`tabKey`のようなタブ単位の
  * 区別は不要で、`memberId`だけで足りるアプリ全体で1個のキーにする（52.6節理由）。
+ * [2026-09-27追加・実装メモ.md 314章、本部長依頼・軽微変更ルート] `drawingFillToggle`は
+ * お絵かきの形（○△□）ボタンを「もう一度押すと塗りつぶせる」案内。`drawingZoomPan`と
+ * 同じ理由で`memberId`だけの単一キー（`DrawingBoard`・`AvatarDrawingPanel`の
+ * どちらで初めて形を選んでも、以後どちらの画面でも出さない）。
  */
 export type IntroSurface =
   | { kind: "tab"; tabKey: string }
   | { kind: "postConsentGuide" }
-  | { kind: "drawingZoomPan" };
+  | { kind: "drawingZoomPan" }
+  | { kind: "drawingFillToggle" };
 
 /**
  * 保存キーを組み立てる（純粋関数）。`memberId`ごとに別のキーになることで、
@@ -35,6 +40,8 @@ export function buildIntroSeenKey(surface: IntroSurface, memberId: string): stri
       return `oyakopoint.introSeen.postConsentGuide.${memberId}`;
     case "drawingZoomPan":
       return `oyakopoint.introSeen.drawingZoomPan.${memberId}`;
+    case "drawingFillToggle":
+      return `oyakopoint.introSeen.drawingFillToggle.${memberId}`;
   }
 }
 

@@ -22,20 +22,46 @@
  * 描画する既存の書き方を踏襲する。
  *
  * [2026-09-27追加・実装メモ.md 313章、本部長依頼・軽微変更ルート「塗った形」]
- * 形（○／△／□）の中を塗れるようにする依頼。ボタンの並べ方は依頼文が挙げた
- * 二択（(a)塗った形専用のボタン「●▲■」を3つ足して7ボタンにする／(b)形のボタンに
- * 「線／塗り」の切り替えを1つ足す）のうち、**(b)を選んだ**。理由：56dpのタップ領域
- * ×7個は横幅を圧迫する（現状4個でも中央寄せいっぱいのため）一方、塗りは「今選んで
- * いる形の中身をどう見せるか」という直交した1つの状態にすぎず、5個目のボタン1つに
- * 閉じ込めるほうがシンプル。このトグルボタンは、今選んでいる形（`selected`）に応じて
- * 見た目の記号（○/●・△/▲・□/■）を動的に切り替える。`selected==="pen"`のときは
- * 塗りの概念が無いため無効化し、色・太さピッカーの`disabled`表示と同じ見た目
- * （`tapDisabled`、不透明度を落とす）にする。
+ * 形（○／△／□）の中を塗れるようにする依頼。
+ *
+ * [2026-09-27・実装メモ.md 314章、本部長依頼・軽微変更ルート「道具の並びを分かり
+ * やすく」で313章の並びを変更した]
+ * 313章では塗り切り替え専用の5個目のボタンを足したが、統括決定により**この
+ * ボタンは廃止し、選んでいる形のボタンをもう一度押すと線／塗りが切り替わる**
+ * 方式に変える（行を増やさないという依頼文の制約に、5個目のボタンより素直に
+ * 合う）。`onSelect`は「別の形を選ぶ」ときのみ呼び、「今すでに選んでいる形
+ * （ペン以外）をもう一度押す」ときだけ`onToggleFilled`を呼ぶ、という条件分岐は
+ * このコンポーネント内の`handlePress`に閉じ込め、呼び出し側（`DrawingBoard.tsx`・
+ * `AvatarDrawingPanel.tsx`）の呼び出し方は変えない。
+ *
+ * [別の形に移ったときの線／塗りの引き継ぎ・314章決定] 何もリセットしない
+ * （＝`filled`はそのまま次の形にも引き継ぐ）。理由: `tool`・`color`・`strokeWidth`は
+ * いずれも道具を切り替えても保持される既存の設計（309章・313章コメント参照）で
+ * あり、`filled`だけ切り替え時にリセットすると「さっきまで塗れていたのに
+ * 急に線に戻る」という一貫性のない挙動になる。「今塗っている最中に別の形も
+ * 塗りたい」という使い方（例: ●を描いた後に▲も塗りたい）のほうが「形を変えたら
+ * 線に戻したい」より頻度が高いと判断した。
+ *
+ * [色で表示する・314章決定2] ボタンの記号は`color`（今選んでいる描画色）で
+ * 表示する。ペン（✏）も同じ`color`を適用するが、これは「色で表示できるなら
+ * 合わせてよい（無理なら今のまま）」という依頼文への対応: 絵文字フォントとして
+ * 描画される端末では`color`指定が無視され、これまでと同じ見た目のまま残る
+ * （実害が無いため分岐を増やさず一律に適用する）。
+ *
+ * [白のときの縁取り・314章決定3] 白（#FFFFFF）を選んでいるときは、記号の背景
+ * （`DrawingBoard.tsx`ではCard内の`neutralSurface`＝`#FFFFFF`固定、
+ * `AvatarDrawingPanel.tsx`ではCard外＝画面の`neutralBg`＝`#FBF9F4`、いずれも
+ * 白に極めて近い）と同化しないよう、実際の背景色を場合分けせず一律に
+ * `DrawingCanvas.tsx`の`needsWhiteOutline`と同じ考え方で縁取りを付ける。ただし
+ * Textコンポーネントには実際のストローク（線画の二重描画）を描く手段が無いため、
+ * `textShadow`で暗い縁のにじみを作る近似的な実装にした（SVGの二重Polyline描画
+ * そのものは再現できない）。
  */
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import theme from "@/theme/theme";
 import type { DrawingTool } from "@/lib/drawingShapes";
+import { hydrateIntroSeen, isIntroSeen, markIntroSeen } from "@/lib/introSeen";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -66,14 +92,25 @@ const TOOL_ACCESSIBILITY_LABELS: Record<Tone, Record<DrawingTool, string>> = {
 };
 
 /**
- * [2026-09-27追加・実装メモ.md 313章] 塗り切り替えボタンのaccessibilityLabel。
- * `unavailable`は`selected==="pen"`（塗りの概念が無い）ときに使う。
+ * [2026-09-27追加・実装メモ.md 313章] 塗り状態のaccessibilityLabelの補足。
+ * ペン以外の選択中の形にだけ「（ぬりつぶし）」「（せんだけ）」を後ろに足す。
+ * [2026-09-27変更・実装メモ.md 314章] 専用ボタンの案内文からラベル補足へ変更。
  */
-const FILL_TOGGLE_ACCESSIBILITY_LABELS: Record<Tone, { filled: string; outline: string; unavailable: string }> = {
-  child: { filled: "ぬりつぶし", outline: "せんだけ", unavailable: "かたちを えらぶと つかえるよ" },
-  parent: { filled: "塗りつぶし", outline: "線のみ", unavailable: "形を選ぶと使えます" },
-  supporter: { filled: "塗りつぶし", outline: "線のみ", unavailable: "形を選ぶと使えます" },
+const FILL_STATE_ACCESSIBILITY_SUFFIX: Record<Tone, { filled: string; outline: string }> = {
+  child: { filled: "（ぬりつぶし。もう一度押すとせんだけに戻ります）", outline: "（もう一度押すとぬりつぶせます）" },
+  parent: { filled: "（塗りつぶし。もう一度押すと線のみに戻ります）", outline: "（もう一度押すと塗りつぶせます）" },
+  supporter: { filled: "（塗りつぶし。もう一度押すと線のみに戻ります）", outline: "（もう一度押すと塗りつぶせます）" },
 };
+
+/** [2026-09-27追加・実装メモ.md 314章] 初めて形を選んだときだけ出す案内。 */
+const FIRST_SHAPE_HINT_TEXT: Record<Tone, string> = {
+  child: "もういちど おすと ぬれるよ",
+  parent: "もう一度押すと塗りつぶせます",
+  supporter: "もう一度押すと塗りつぶせます",
+};
+
+/** [2026-09-27追加・実装メモ.md 314章] 一時表示を消すまでの時間（ミリ秒）。 */
+const FIRST_SHAPE_HINT_DURATION_MS = 4000;
 
 interface DrawingToolPickerProps {
   tone: Tone;
@@ -81,10 +118,17 @@ interface DrawingToolPickerProps {
   onSelect: (tool: DrawingTool) => void;
   /**
    * [2026-09-27追加・実装メモ.md 313章] 現在選んでいる形の中を塗るかどうか。
-   * `selected==="pen"`のときは意味を持たない（トグルボタンを無効化する）。
+   * `selected==="pen"`のときは意味を持たない。
    */
   filled: boolean;
   onToggleFilled: () => void;
+  /** [2026-09-27追加・実装メモ.md 314章] 記号の表示色（今選んでいる描画色）。 */
+  color: string;
+  /**
+   * [2026-09-27追加・実装メモ.md 314章]「もう一度押すと塗れる」の初回案内を
+   * 端末に記録するためのmemberId（`src/lib/introSeen.ts`と同じ考え方）。
+   */
+  memberId: string;
   disabled?: boolean;
 }
 
@@ -94,63 +138,99 @@ export function DrawingToolPicker({
   onSelect,
   filled,
   onToggleFilled,
+  color,
+  memberId,
   disabled = false,
 }: DrawingToolPickerProps) {
   const tap = theme.drawingLimits.swatchSize; // 10色パレット・太さ選択と同じ56dp（役割を問わず統一）
   const labels = TOOL_ACCESSIBILITY_LABELS[tone];
-  const fillLabels = FILL_TOGGLE_ACCESSIBILITY_LABELS[tone];
-  // [313章決定] ペンには塗りの概念が無いため、選んでいる道具が形（ペン以外）の
-  // ときだけ塗り切り替えボタンを有効にする。
-  const isShapeSelected = selected !== "pen";
-  const fillToggleSymbol = isShapeSelected
-    ? filled
-      ? FILLED_SYMBOLS[selected]
-      : TOOL_SYMBOLS[selected]
-    : TOOL_SYMBOLS.circle; // ペン選択中は無効化された状態の輪郭○をプレースホルダとして出す
-  const fillToggleDisabled = disabled || !isShapeSelected;
-  const fillToggleLabel = !isShapeSelected
-    ? fillLabels.unavailable
-    : filled
-    ? fillLabels.filled
-    : fillLabels.outline;
+  const fillSuffixes = FILL_STATE_ACCESSIBILITY_SUFFIX[tone];
+  const needsWhiteOutline = color === "#FFFFFF";
+
+  /**
+   * [2026-09-27追加・実装メモ.md 314章] 初めて形（ペン以外）を選んだときだけ、
+   * 数秒だけ「もう一度押すと塗れる」を出す。`src/lib/introSeen.ts`の
+   * `{kind:"drawingFillToggle"}`にmemberIdごとの記録を1回だけ書く（以後は
+   * `DrawingBoard`・`AvatarDrawingPanel`のどちらで開いても出ない）。
+   */
+  const [hintVisible, setHintVisible] = useState(false);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    void hydrateIntroSeen({ kind: "drawingFillToggle" }, memberId);
+  }, [memberId]);
+
+  useEffect(
+    () => () => {
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    },
+    []
+  );
+
+  const handlePress = (t: DrawingTool) => {
+    // [314章決定1] 選んでいる形（ペン以外）をもう一度押したら、線／塗りの切り替え。
+    if (t !== "pen" && t === selected) {
+      onToggleFilled();
+      return;
+    }
+    onSelect(t);
+    if (t !== "pen" && !isIntroSeen({ kind: "drawingFillToggle" }, memberId)) {
+      void markIntroSeen({ kind: "drawingFillToggle" }, memberId);
+      setHintVisible(true);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = setTimeout(() => setHintVisible(false), FIRST_SHAPE_HINT_DURATION_MS);
+    }
+  };
+
   return (
-    <View style={styles.row}>
-      {TOOL_ORDER.map((t) => (
-        <Pressable
-          key={t}
-          disabled={disabled}
-          onPress={() => onSelect(t)}
-          accessibilityRole="button"
-          accessibilityLabel={labels[t]}
-          style={[
-            styles.tap,
-            { width: tap, height: tap },
-            selected === t && styles.tapSelected,
-            disabled && styles.tapDisabled,
-          ]}
-        >
-          <Text style={styles.symbol}>{TOOL_SYMBOLS[t]}</Text>
-        </Pressable>
-      ))}
-      <Pressable
-        disabled={fillToggleDisabled}
-        onPress={onToggleFilled}
-        accessibilityRole="button"
-        accessibilityLabel={fillToggleLabel}
-        style={[
-          styles.tap,
-          { width: tap, height: tap },
-          isShapeSelected && filled && styles.tapSelected,
-          fillToggleDisabled && styles.tapDisabled,
-        ]}
-      >
-        <Text style={styles.symbol}>{fillToggleSymbol}</Text>
-      </Pressable>
+    <View style={styles.wrap}>
+      <View style={styles.row}>
+        {TOOL_ORDER.map((t) => {
+          const isSelectedShape = t !== "pen" && t === selected;
+          const symbol = isSelectedShape && filled ? FILLED_SYMBOLS[t] : TOOL_SYMBOLS[t];
+          const label = isSelectedShape ? labels[t] + (filled ? fillSuffixes.filled : fillSuffixes.outline) : labels[t];
+          return (
+            <Pressable
+              key={t}
+              disabled={disabled}
+              onPress={() => handlePress(t)}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              style={[
+                styles.tap,
+                { width: tap, height: tap },
+                selected === t && styles.tapSelected,
+                disabled && styles.tapDisabled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.symbol,
+                  { color },
+                  needsWhiteOutline && styles.symbolWhiteOutline,
+                ]}
+              >
+                {symbol}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {/* [314章決定4] 行を増やさないよう、絶対配置で下に重ねて数秒だけ出す
+          （レイアウトの高さには影響しない）。 */}
+      {hintVisible && (
+        <View style={styles.hintWrap} pointerEvents="none">
+          <Text style={styles.hintText}>{FIRST_SHAPE_HINT_TEXT[tone]}</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    position: "relative",
+  },
   row: {
     flexDirection: "row",
     justifyContent: "center",
@@ -173,7 +253,30 @@ const styles = StyleSheet.create({
   symbol: {
     fontSize: 26,
     lineHeight: 30,
-    color: theme.colors.neutralTextPrimary,
+  },
+  // [314章決定3] Textにはストローク（縁取り線）を描く手段が無いため、textShadowで
+  // 暗い縁のにじみを作る近似実装（DrawingCanvas.tsxのneedsWhiteOutlineと同じ狙い）。
+  symbolWhiteOutline: {
+    textShadowColor: theme.colors.neutralTextPrimary,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
+  },
+  hintWrap: {
+    position: "absolute",
+    top: theme.drawingLimits.swatchSize + theme.spacing.s2,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  hintText: {
+    backgroundColor: theme.colors.neutralSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentMd,
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    color: theme.colors.neutralTextSecondary,
+    textAlign: "center",
   },
 });
 

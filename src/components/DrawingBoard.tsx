@@ -568,7 +568,9 @@ export function DrawingBoard({
               道具切り替え（ペン／〇／△／□）。依頼文「色・太さを選ぶ道具の並びに
               足す」のとおり、色パレットの直前（10色パレット・太さ選択と同じ並びの
               先頭）に置く。無効化条件も色・太さと同じ`disabled={saving}`のみ
-              （`atCapacity`では無効化しない）。 */}
+              （`atCapacity`では無効化しない）。
+              [2026-09-27変更・実装メモ.md 314章] `color`（記号の表示色）・`memberId`
+              （初回案内の既読記録）を追加で渡す。 */}
           <View style={styles.toolWrap}>
             <DrawingToolPicker
               tone={tone}
@@ -576,6 +578,8 @@ export function DrawingBoard({
               onSelect={setTool}
               filled={filled}
               onToggleFilled={() => setFilled((prev) => !prev)}
+              color={color}
+              memberId={memberId}
               disabled={saving}
             />
           </View>

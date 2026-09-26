@@ -4,10 +4,14 @@
  *
  * 10色パレット（DrawingPalette.tsx）と全く同じ考え方: 見出し・説明文は付けず
  * （決定22・決定31）、3ロール共通の単一コンポーネントとし、56dp四方のタップ領域を
- * 3つ横に並べる。大きさの異なる塗りつぶし円（14/24/36dp）で太さの違いを一目で
- * 分かるようにし、点の塗り色は選択中の描画色に連動させず常に固定のニュートラル色
+ * 3つ横に並べる。見本の塗り色は選択中の描画色に連動させず常に固定のニュートラル色
  * （`color-neutral-text-primary`）にする（決定22）。選択状態はパレットと同じ
  * `color-brand-primary`の2pt枠で表現する。
+ *
+ * [2026-09-27変更・実装メモ.md 314章、本部長依頼・軽微変更ルート] 見本を塗りつぶし円
+ * （●、旧`dotSize`）から横線バー（`theme.drawingStrokeWidths`の`barWidth`固定・
+ * `barHeight`のみ太さで変える）に変更した。塗った形（313章、`DrawingToolPicker`の
+ * ●▲■）が増えたことで、丸い見本のままだと「塗った丸」と混同しやすくなったため。
  */
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -39,8 +43,8 @@ export function DrawingStrokeWidthPicker({ selected, onSelect, disabled = false 
         >
           <View
             style={[
-              styles.dot,
-              { width: w.dotSize, height: w.dotSize, borderRadius: w.dotSize / 2 },
+              styles.bar,
+              { width: w.barWidth, height: w.barHeight, borderRadius: w.barHeight / 2 },
             ]}
           />
         </Pressable>
@@ -69,7 +73,7 @@ const styles = StyleSheet.create({
   tapDisabled: {
     opacity: 0.4,
   },
-  dot: {
+  bar: {
     backgroundColor: theme.colors.neutralTextPrimary,
   },
 });
