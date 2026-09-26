@@ -28,10 +28,15 @@ import {
 } from "@/lib/errorMessages";
 
 // [2026-09-01追加・実装メモ.md 108章] 要件定義書07-2章判断事項7「みまもりメンバー
-// 自身の自分専用クエストへのタグ発行」。主要画面ワイヤーフレーム.md 7.6.2節のとおり、
-// 自分専用クエストのタグの持ち主は常に作成者本人固定のため、7.6.1節（P11）の
-// 「メンバー選択」ステップを完全に省略した簡易版のステップ構成にする。
-type NfcModalStep = "list" | "writing" | "writeFailed" | "unsupported";
+// 自身の自分専用クエストへのタグ発行」。当初は自分専用クエストのタグの持ち主が
+// 常に作成者本人固定だったため、7.6.1節（P11）の「メンバー選択」ステップを完全に
+// 省略した簡易版のステップ構成にしていた。
+// [2026-09-26改訂・やること.md 4-10、設計部/成果物/スキーマ設計.sql 78章、
+// 開発部/成果物/実装メモ.md 307章] みまもり共通クエスト（scope='supporter_shared'）
+// でもNFCタグを発行できるようにするのに伴い、P11と同じ「selectMember」ステップを
+// この画面にも移植した（78.11節・統括回答「メンバー選択の手順を今回あわせて入れる」）。
+// 自分専用クエストは候補が作成者本人1人のみになるため、実質的な挙動は従来と同じ。
+type NfcModalStep = "list" | "selectMember" | "writing" | "writeFailed" | "unsupported";
 
 // [2026-09-04追加・実装メモ.md 127章] app/parent/chore-edit.tsxのCHORE_EMOJI_SUGGESTIONS
 // （2026-08-23追加）と同じ発想の候補チップだが、保護者側の候補（勉強・掃除等の家事）を
@@ -101,14 +106,28 @@ export default function SupporterChoreEditScreen() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // [2026-09-01追加・実装メモ.md 108章] NFCタグ管理（要件定義書07-2章判断事項7）。
-  // 自分専用クエストのタグの持ち主は常に作成者本人（＝いまログイン中のみまもり
-  // メンバー自身、state.activeParentMemberId）固定のため、P11のようなメンバー選択
-  // ステップは無い（主要画面ワイヤーフレーム.md 7.6.2章）。
+  // [2026-09-01追加・実装メモ.md 108章、2026-09-26改訂・実装メモ.md 307章]
+  // NFCタグ管理（要件定義書07-2章判断事項7、スキーマ設計.sql 78章）。
+  // 自分専用クエスト（scope='personal'）のタグの持ち主は常に作成者本人（＝いま
+  // ログイン中のみまもりメンバー自身、state.activeParentMemberId）固定。
+  // みまもり共通クエスト（scope='supporter_shared'）は、作成者本人だけがこの
+  // 画面を開けるが、タグの持ち主は同じ家族のrole='supporter'のメンバーなら
+  // 誰でも選べる（78.2章の結論）。
   const myMemberId = state.activeParentMemberId;
+  // [2026-09-26追加・実装メモ.md 307章] NFCタグの持ち主として選べる候補。
+  // 自分専用クエストは作成者本人1人のみ（DBトリガーが他のmember_idを拒否する
+  // ため、候補を最初から1人に絞ることでユーザーに選ばせない）。みまもり共通は
+  // 家族の在籍中のみまもりメンバー全員（app/parent/chore-edit.tsxのmembersと
+  // 同じ絞り込み方だが、対象roleが逆〈保護者側はrole!=='supporter'、この画面は
+  // role==='supporter'〉）。
+  const nfcCandidateMembers =
+    chore?.scope === "personal"
+      ? state.members.filter((m) => m.id === myMemberId)
+      : state.members.filter((m) => m.is_active && m.role === "supporter");
   const [modalVisible, setModalVisible] = useState(false);
   const [nfcStep, setNfcStep] = useState<NfcModalStep>("list");
   const [nfcErrorMessage, setNfcErrorMessage] = useState<string | null>(null);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
   const [tags, setTags] = useState<ChoreNfcTagWithMember[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsError, setTagsError] = useState<string | null>(null);
@@ -134,23 +153,30 @@ export default function SupporterChoreEditScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chore?.id]);
 
-  const myTagCount = tags.filter((t) => t.member_id === myMemberId).length;
+  // [2026-09-26改訂・実装メモ.md 307章] メンバーごとのタグ枚数。selectMember
+  // ステップの上限表示・list表示のグルーピングの両方で使う（app/parent/
+  // chore-edit.tsxのtagCountForと同じ形）。
+  const tagCountFor = (memberId: string) => tags.filter((t) => t.member_id === memberId).length;
 
   const openIssueModal = () => {
-    if (!chore || myTagCount >= MAX_NFC_TAGS_PER_CHORE_MEMBER) return;
+    if (!chore) return;
     setIssuedSnackbar(null);
     if (!isNfcWriteSupported()) {
       setNfcStep("unsupported");
       setModalVisible(true);
       return;
     }
-    setNfcStep("writing");
+    // [2026-09-26改訂・実装メモ.md 307章] P11と同じくメンバー選択ステップを
+    // 経由する。既定選択は自分自身（自分専用クエストは候補がそもそも自分しか
+    // いない。みまもり共通は「まず自分の分」を既定にし、他のみまもりメンバーの
+    // 分にしたい場合は選び直せる）。
+    setSelectedOwnerId(myMemberId);
+    setNfcStep("selectMember");
     setModalVisible(true);
-    void startWrite();
   };
 
   const startWrite = async () => {
-    if (!chore) return;
+    if (!chore || !selectedOwnerId) return;
     setNfcErrorMessage(null);
     setNfcStep("writing");
     const newToken = generateNfcTagToken();
@@ -158,19 +184,20 @@ export default function SupporterChoreEditScreen() {
     if (result.ok && result.tagValue) {
       const res = await createChoreNfcTag(client, {
         chore_id: chore.id,
-        member_id: myMemberId,
+        member_id: selectedOwnerId,
         tag_value: result.tagValue,
       });
       if (res.ok) {
         await loadTags(chore.id);
-        setIssuedSnackbar("タグを発行しました");
+        const ownerName = state.members.find((m) => m.id === selectedOwnerId)?.display_name ?? "";
+        setIssuedSnackbar(`${ownerName}さんのタグを発行しました`);
         setNfcStep("list");
       } else {
         setNfcErrorMessage(res.error.message);
         setNfcStep("writeFailed");
       }
     } else if (result.errorReason === "cancelled") {
-      setModalVisible(false);
+      setNfcStep("selectMember");
     } else {
       setNfcErrorMessage(null);
       setNfcStep("writeFailed");
@@ -372,17 +399,25 @@ export default function SupporterChoreEditScreen() {
       {/* NFCタグ管理（要件定義書07-2章判断事項7、主要画面ワイヤーフレーム.md 7.6.2章）
           新規作成モード（choreがまだ存在しない）では対象のchore_idが無いため表示しない。
           [2026-09-06追加・スキーマ設計45.17章(2)・UIUXデザイン部30.3節決定10]
-          chore_nfc_tagsのRLSがsupporter_sharedを考慮していないため（39章未対応）、
-          scope='personal'（既存分）に限定して表示する。supporter_shared（新規分）
-          では、押しても0件書き込み失敗になる「動かない機能」を見せないためブロック
-          ごと非表示にする。将来39章がsupporter_sharedに対応した時点でこの条件を
-          外す（やること.mdに別途追記）。 */}
-      {chore && chore.scope === "personal" && (
+          当初はchore_nfc_tagsのRLSがsupporter_sharedを考慮しておらず（39章未対応）、
+          scope='personal'（既存分）に限定して表示していた。
+          [2026-09-26改訂・やること.md 4-10、スキーマ設計.sql 78章、実装メモ.md 307章]
+          78章でsupporter_sharedのRLS・トリガーを追加したため、表示条件を
+          personal・supporter_sharedの両方に広げた（family型は元々この画面の
+          対象外）。 */}
+      {chore && (chore.scope === "personal" || chore.scope === "supporter_shared") && (
         <Card style={{ marginTop: theme.spacing.s4 }} tone="supporter">
           <Text style={theme.typography.supporterBodyMedium}>NFCタグ</Text>
           <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
             このクエストに対応するタグにスマホをかざすと、完了報告が起動します。
           </Text>
+          {/* [2026-09-26追加・実装メモ.md 307章] みまもり共通クエストは、発行時に
+              「誰の分のタグか」を選べることを案内する（78.9章の申し送りに対応）。 */}
+          {chore.scope === "supporter_shared" && (
+            <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              あなた自身のほか、他のみまもりメンバーの分のタグも、あなたが発行できます。
+            </Text>
+          )}
           <AppButton
             tone="supporter"
             label={
@@ -432,8 +467,11 @@ export default function SupporterChoreEditScreen() {
 
       <AppButton tone="supporter" label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
 
-      {/* NFCタグ管理モーダル。7.6.2節「メンバー選択ステップを完全に省略」のとおり、
-          P11（app/parent/chore-edit.tsx）より1段少ない簡易版。 */}
+      {/* NFCタグ管理モーダル。
+          [2026-09-26改訂・実装メモ.md 307章] みまもり共通クエストにも対応する
+          ため、P11（app/parent/chore-edit.tsx）と同じ「selectMember」ステップを
+          追加した（7.6.2節「メンバー選択ステップを完全に省略」は自分専用クエスト
+          限定の構成だったが、みまもり共通は省略できないため）。 */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackdrop}>
           <Card style={styles.modalCard} tone="supporter">
@@ -441,7 +479,7 @@ export default function SupporterChoreEditScreen() {
               <>
                 <Text style={theme.typography.supporterTitle}>NFCタグを管理</Text>
                 <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-                  「{chore.title}」のタグ（{myTagCount}/{MAX_NFC_TAGS_PER_CHORE_MEMBER}まい）
+                  「{chore.title}」のタグ
                 </Text>
 
                 {issuedSnackbar && (
@@ -458,69 +496,77 @@ export default function SupporterChoreEditScreen() {
                     まだNFCタグは発行されていません
                   </Text>
                 ) : (
-                  <View style={{ marginTop: theme.spacing.s3 }}>
-                    {tags.map((t) =>
-                      confirmingRevokeTagId === t.id ? (
-                        <View key={t.id} style={styles.tagRowConfirm}>
-                          <Text style={{ color: theme.colors.statusBlocking }}>
-                            このタグはもう使えなくなります（元にはもどせません）。本当に解除しますか？
+                  // [2026-09-26改訂・実装メモ.md 307章] app/parent/chore-edit.tsxと
+                  // 同じく、持ち主（メンバー）ごとにグルーピングして表示する
+                  // （自分専用クエストは候補が自分1人だけなので、実質従来と同じ見た目）。
+                  <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s3 }}>
+                    {nfcCandidateMembers
+                      .filter((m) => tagCountFor(m.id) > 0)
+                      .map((m) => (
+                        <View key={m.id}>
+                          <Text style={theme.typography.supporterBodyMedium}>
+                            {m.display_name}（{tagCountFor(m.id)}まい）
                           </Text>
-                          {revokeErrorTagId === t.id && (
-                            <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                              {NFC_UNLINK_ERROR_MESSAGE}
-                            </Text>
-                          )}
-                          <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
-                            <AppButton
-                              tone="supporter"
-                              label="やめる"
-                              variant="ghost"
-                              disabled={revokingTagId === t.id}
-                              onPress={() => {
-                                setConfirmingRevokeTagId(null);
-                                setRevokeErrorTagId(null);
-                              }}
-                            />
-                            <AppButton
-                              tone="supporter"
-                              label={revokingTagId === t.id ? "解除中…" : "解除する"}
-                              variant="danger"
-                              disabled={revokingTagId === t.id}
-                              onPress={() => startRevoke(t.id)}
-                            />
-                          </View>
+                          {tags
+                            .filter((t) => t.member_id === m.id)
+                            .map((t) =>
+                              confirmingRevokeTagId === t.id ? (
+                                <View key={t.id} style={styles.tagRowConfirm}>
+                                  <Text style={{ color: theme.colors.statusBlocking }}>
+                                    このタグはもう使えなくなります（元にはもどせません）。本当に解除しますか？
+                                  </Text>
+                                  {revokeErrorTagId === t.id && (
+                                    <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
+                                      {NFC_UNLINK_ERROR_MESSAGE}
+                                    </Text>
+                                  )}
+                                  <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
+                                    <AppButton
+                                      tone="supporter"
+                                      label="やめる"
+                                      variant="ghost"
+                                      disabled={revokingTagId === t.id}
+                                      onPress={() => {
+                                        setConfirmingRevokeTagId(null);
+                                        setRevokeErrorTagId(null);
+                                      }}
+                                    />
+                                    <AppButton
+                                      tone="supporter"
+                                      label={revokingTagId === t.id ? "解除中…" : "解除する"}
+                                      variant="danger"
+                                      disabled={revokingTagId === t.id}
+                                      onPress={() => startRevoke(t.id)}
+                                    />
+                                  </View>
+                                </View>
+                              ) : (
+                                <View key={t.id} style={styles.tagRow}>
+                                  <Text style={theme.typography.supporterBody}>
+                                    ・{toJstDateString(t.created_at).replace(/-/g, "/")}発行
+                                  </Text>
+                                  <Pressable
+                                    onPress={() => {
+                                      setConfirmingRevokeTagId(t.id);
+                                      setRevokeErrorTagId(null);
+                                    }}
+                                  >
+                                    <Text style={{ color: theme.colors.statusBlocking }}>解除する</Text>
+                                  </Pressable>
+                                </View>
+                              )
+                            )}
                         </View>
-                      ) : (
-                        <View key={t.id} style={styles.tagRow}>
-                          <Text style={theme.typography.supporterBody}>
-                            ・{toJstDateString(t.created_at).replace(/-/g, "/")}発行
-                          </Text>
-                          <Pressable
-                            onPress={() => {
-                              setConfirmingRevokeTagId(t.id);
-                              setRevokeErrorTagId(null);
-                            }}
-                          >
-                            <Text style={{ color: theme.colors.statusBlocking }}>解除する</Text>
-                          </Pressable>
-                        </View>
-                      )
-                    )}
+                      ))}
                   </View>
                 )}
 
-                {myTagCount >= MAX_NFC_TAGS_PER_CHORE_MEMBER ? (
-                  <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s4 }]}>
-                    すでに{MAX_NFC_TAGS_PER_CHORE_MEMBER}まい発行しています。ちょうどいい枚数になったら、使わなくなったタグを解除するとまた発行できます
-                  </Text>
-                ) : (
-                  <AppButton
-                    tone="supporter"
-                    label="＋ 新しいタグを発行する"
-                    style={{ marginTop: theme.spacing.s4 }}
-                    onPress={openIssueModal}
-                  />
-                )}
+                <AppButton
+                  tone="supporter"
+                  label="＋ 新しいタグを発行する"
+                  style={{ marginTop: theme.spacing.s4 }}
+                  onPress={openIssueModal}
+                />
                 <AppButton
                   tone="supporter"
                   label="とじる"
@@ -531,11 +577,56 @@ export default function SupporterChoreEditScreen() {
               </>
             )}
 
+            {/* [2026-09-26新設・実装メモ.md 307章] app/parent/chore-edit.tsxの
+                selectMemberステップと同じ構成。自分専用クエストは候補が1人だけ
+                （myMemberId）になるため、実質「つぎへ」を押すだけの画面になる。 */}
+            {nfcStep === "selectMember" && chore && (
+              <>
+                <Text style={theme.typography.supporterTitle}>誰の分のタグを発行しますか？</Text>
+                <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
+                  {nfcCandidateMembers.map((m) => {
+                    const count = tagCountFor(m.id);
+                    const atLimit = count >= MAX_NFC_TAGS_PER_CHORE_MEMBER;
+                    const selected = selectedOwnerId === m.id;
+                    return (
+                      <View key={m.id}>
+                        <Pressable
+                          disabled={atLimit}
+                          onPress={() => setSelectedOwnerId(m.id)}
+                          style={[styles.memberRow, selected && styles.memberRowSelected, atLimit && styles.memberRowDisabled]}
+                        >
+                          <Text style={theme.typography.supporterBody}>
+                            {selected ? "●" : "○"} {m.display_name}（{count}/{MAX_NFC_TAGS_PER_CHORE_MEMBER}まい
+                            {atLimit ? "・選べません" : ""}）
+                          </Text>
+                        </Pressable>
+                        {atLimit && (
+                          <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginLeft: theme.spacing.s2 }]}>
+                            ちょうどいい枚数になったら、使わなくなったタグを解除するとまた発行できます
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+                <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s6 }}>
+                  <AppButton tone="supporter" label="もどる" variant="secondary" onPress={() => setNfcStep("list")} />
+                  <AppButton
+                    tone="supporter"
+                    label="つぎへ"
+                    disabled={!selectedOwnerId || tagCountFor(selectedOwnerId) >= MAX_NFC_TAGS_PER_CHORE_MEMBER}
+                    onPress={startWrite}
+                  />
+                </View>
+              </>
+            )}
+
             {nfcStep === "writing" && chore && (
               <>
                 <Text style={theme.typography.supporterTitle}>NFCタグを発行</Text>
                 <Text style={{ marginTop: theme.spacing.s3 }}>
-                  「{chore.title}」に対応するタグを{"\n"}新しいNFCタグに近づけてください
+                  {state.members.find((m) => m.id === selectedOwnerId)?.display_name ?? ""}の「{chore.title}」に対応するタグを
+                  {"\n"}新しいNFCタグに近づけてください
                 </Text>
                 <View style={{ alignItems: "center", marginTop: theme.spacing.s6 }}>
                   <ActivityIndicator size="large" />
@@ -545,7 +636,7 @@ export default function SupporterChoreEditScreen() {
                   label="キャンセル"
                   variant="secondary"
                   style={{ marginTop: theme.spacing.s6 }}
-                  onPress={() => setNfcStep("list")}
+                  onPress={() => setNfcStep("selectMember")}
                 />
               </>
             )}
@@ -562,7 +653,7 @@ export default function SupporterChoreEditScreen() {
                   label="キャンセル"
                   variant="secondary"
                   style={{ marginTop: theme.spacing.s2 }}
-                  onPress={() => setNfcStep("list")}
+                  onPress={() => setNfcStep("selectMember")}
                 />
               </>
             )}
@@ -630,6 +721,19 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.parentMd,
     backgroundColor: theme.colors.neutralBg,
   },
+  // [2026-09-26追加・実装メモ.md 307章] selectMemberステップの選択行。
+  // app/parent/chore-edit.tsxのmemberRow系と同じ構成だが、選択中の色は
+  // このアプリのみまもりトーン（supporterAccent系）に合わせる。
+  memberRow: {
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  memberRowSelected: { borderColor: theme.colors.supporterAccent, backgroundColor: theme.colors.supporterAccentSoft },
+  memberRowDisabled: { opacity: 0.5 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

@@ -590,6 +590,17 @@
 -- `supabase db reset`後に実測して一致を確認した。96.5章の遵守）。ローカル
 -- Docker環境に適用済み・実測済み。本番へは未適用（本部長の操作を待つ）。
 --
+-- [2026-09-26再追加・開発部] みまもり共通クエスト（scope='supporter_shared'）
+-- でもNFCタグを使えるようにする対応（やること.md 4-10、設計部/成果物/
+-- スキーマ設計.sql 78章、開発部/成果物/実装メモ.md 307章）に伴い、S3
+-- （76→78、`chore_nfc_tags_insert_supporter_shared_by_creator`・
+-- `chore_nfc_tags_revoke_supporter_shared_by_creator`の2本を追加）を更新した。
+-- S1（新しいテーブルを追加していない）・S4（`chore_nfc_tags_before_write`は
+-- 既存の名前・シグネチャのままCREATE OR REPLACEするのみ）はいずれも±0
+-- （78.7章の見積りどおり。ローカルDockerで実測して一致を確認した。96.5章の
+-- 遵守）。ローカルDocker環境に適用済み・実測済み。本番へは未適用（本部長の
+-- 操作を待つ）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -746,8 +757,15 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 一覧に文字通り同一のものが無いため、ローカルDockerで実測した（108章参照）。
   ('chore_nfc_tags','chore_nfc_tags_insert_family_by_parent','INSERT','c65f6bcf088e0509ebc68287eb3a2697'),
   ('chore_nfc_tags','chore_nfc_tags_insert_personal_by_creator','INSERT','6573bb8d8e4ba72fe84636642dbc942b'),
+  -- [2026-09-26追加] みまもり共通クエスト（scope='supporter_shared'）対応
+  -- （設計部/成果物/スキーマ設計.sql 78.3章・78.4章、開発部/成果物/実装メモ.md
+  -- 307章、やること.md 4-10）。EXISTSでchoresのscope・created_byを参照する
+  -- family/personal分と同種の新しい条件式であり、承認済み一覧に文字通り同一の
+  -- ものが無いため、ローカルDockerで実測した。
+  ('chore_nfc_tags','chore_nfc_tags_insert_supporter_shared_by_creator','INSERT','612f4c6e06171583aebd99ec12610ebc'),
   ('chore_nfc_tags','chore_nfc_tags_revoke_family_by_parent','UPDATE','4363f0549d157159f7553c9de572d3f4'),
   ('chore_nfc_tags','chore_nfc_tags_revoke_personal_by_creator','UPDATE','a299667c176e888b5d809f234cf7c088'),
+  ('chore_nfc_tags','chore_nfc_tags_revoke_supporter_shared_by_creator','UPDATE','7d2fa24a7cbe01a9c1a23a75efb294a0'),
   ('chore_nfc_tags','chore_nfc_tags_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   -- [2026-09-10改訂] スタンプ（絵文字）リアクションの取消・切替（開発部/成果物/
   -- 実装メモ.md 157章、マイグレーション`20260910020000_toggle_chore_reaction_stamp.sql`）
@@ -1008,7 +1026,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー76本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー78本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
