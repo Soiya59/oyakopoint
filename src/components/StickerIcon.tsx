@@ -90,6 +90,19 @@ import rabbitGoldFull from "../../assets/stickers/rabbit_gold.png";
 import rabbitGoldSm from "../../assets/stickers/rabbit_gold@sm.png";
 import rabbitCrystalFull from "../../assets/stickers/rabbit_crystal.png";
 import rabbitCrystalSm from "../../assets/stickers/rabbit_crystal@sm.png";
+// [2026-09-26追加・統括「星の精霊の入れ替えは、とり」、実装メモ310章] シール帳の
+// メダルの絵柄「星の精霊」（kind_key='spirit'）にはコインの絵が無く⭐の絵文字で
+// 出ていたため、既にある「とり」のコインの絵に差し替えた。DB側は
+// habit_figure_catalog の figure_key を 'figure_bird_*' に書き換える
+// （マイグレーション 20260930190000）。
+import birdBronzeFull from "../../assets/stickers/bird_bronze.png";
+import birdBronzeSm from "../../assets/stickers/bird_bronze@sm.png";
+import birdSilverFull from "../../assets/stickers/bird_silver.png";
+import birdSilverSm from "../../assets/stickers/bird_silver@sm.png";
+import birdGoldFull from "../../assets/stickers/bird_gold.png";
+import birdGoldSm from "../../assets/stickers/bird_gold@sm.png";
+import birdCrystalFull from "../../assets/stickers/bird_crystal.png";
+import birdCrystalSm from "../../assets/stickers/bird_crystal@sm.png";
 
 // [2026-09-25追加・統括が原画を制作、やること.md 4-75対応] 「くま」。ドラゴンと同じ
 // 木を飾る用の絵（assets/stickers/bear_*.png・@sm）。
@@ -171,6 +184,10 @@ const ORNAMENT_CIRCLE_IMAGES: Record<string, { full: typeof beetleBronzeFull; sm
   figure_rabbit_silver: { full: rabbitSilverFull, sm: rabbitSilverSm },
   figure_rabbit_gold: { full: rabbitGoldFull, sm: rabbitGoldSm },
   figure_rabbit_crystal: { full: rabbitCrystalFull, sm: rabbitCrystalSm },
+  figure_bird_bronze: { full: birdBronzeFull, sm: birdBronzeSm },
+  figure_bird_silver: { full: birdSilverFull, sm: birdSilverSm },
+  figure_bird_gold: { full: birdGoldFull, sm: birdGoldSm },
+  figure_bird_crystal: { full: birdCrystalFull, sm: birdCrystalSm },
 };
 
 export interface HabitFigureCircleIconProps {
