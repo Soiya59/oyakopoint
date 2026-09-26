@@ -409,16 +409,24 @@ export async function setChildPin(memberId: string, newPin: string): Promise<Api
  * 落とした完全一致でサーバ側が照合する）を新たに必須で渡す。一致しなければ
  * 400 family_name_mismatch が返る。mode:"soft_remove" では使わない
  * （省略可）。
+ *
+ * [2026-09-27変更・後方非互換・要件定義書07-42章、スキーマ設計.sql 80.5章、
+ * API仕様.md 36.2章] mode:"delete_family" は deletionCode（保護者のメールに
+ * 送った6桁の確認コード。`requestFamilyDeletionCode()`参照）も新たに必須で
+ * 渡す。confirmFamilyNameより先にサーバ側で検証される。
  */
 export async function removeMember(
   memberId: string,
   mode: "soft_remove" | "delete_family",
-  confirmFamilyName?: string
+  confirmFamilyName?: string,
+  deletionCode?: string
 ): Promise<ApiResult<{ ok: true }>> {
   return invokeEdgeFunction<{ ok: true }>("remove-member", {
     member_id: memberId,
     mode,
-    ...(mode === "delete_family" ? { confirm_family_name: confirmFamilyName ?? "" } : {}),
+    ...(mode === "delete_family"
+      ? { confirm_family_name: confirmFamilyName ?? "", deletion_code: deletionCode ?? "" }
+      : {}),
   });
 }
 
@@ -444,13 +452,44 @@ export async function fetchAccountDeletionPreview(
  * confirmFamilyName は「唯一の在籍保護者としてアカウントを削除する＝家族
  * ごと削除に合流する」場合のみ必須（account_deletion_preview()の
  * will_delete_family が true のとき）。
+ *
+ * [2026-09-27変更・後方非互換・要件定義書07-42章、スキーマ設計.sql 80.6章、
+ * API仕様.md 36.2章] deletionCode（保護者のメールに送った6桁の確認コード）
+ * も、confirmFamilyNameと全く同じ条件（will_delete_family が true のとき）
+ * のみ必須。
  */
 export async function deleteAccount(
-  confirmFamilyName?: string
+  confirmFamilyName?: string,
+  deletionCode?: string
 ): Promise<ApiResult<{ ok: true; family_deleted: boolean }>> {
   return invokeEdgeFunction<{ ok: true; family_deleted: boolean }>("delete-account", {
     ...(confirmFamilyName !== undefined ? { confirm_family_name: confirmFamilyName } : {}),
+    ...(deletionCode !== undefined ? { deletion_code: deletionCode } : {}),
   });
+}
+
+/**
+ * [新設・2026-09-27・要件定義書07-41章、スキーマ設計.sql 79章、API仕様.md
+ * 35.1章] Edge Function `child-switch`。保護者が自分の家族の子どもモードへ
+ * PINなしで切り替える。呼び出し元が有効な保護者セッションを持たない場合
+ * （子どもの端末単体・みまもりメンバー・期限切れ等）は401/403で弾かれ、
+ * 子どもトークンは一切発行されない。`childLogin()`が既に返している
+ * `ChildLoginResult`をそのまま再利用する（新しい型は不要）。
+ */
+export async function childSwitch(memberId: string): Promise<ApiResult<ChildLoginResult>> {
+  return invokeEdgeFunction<ChildLoginResult>("child-switch", { member_id: memberId });
+}
+
+/**
+ * [新設・2026-09-27・要件定義書07-42章、スキーマ設計.sql 80.4章、API仕様.md
+ * 36.1章] Edge Function `request-family-deletion-code`。「家族を削除する」
+ * （経路A・B・C）の実行前に、実行者（オーナー）本人のログイン用メール
+ * アドレス宛に6桁の確認コードを送る。宛先はクライアントが指定できない
+ * （常にJWTのemailクレームから決まる）。30秒以内の再送は
+ * 429 resend_too_soon、Resend送信失敗は502 resend_failedが返る。
+ */
+export async function requestFamilyDeletionCode(): Promise<ApiResult<{ ok: true }>> {
+  return invokeEdgeFunction<{ ok: true }>("request-family-deletion-code", {});
 }
 
 // ============================================================

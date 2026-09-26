@@ -4,11 +4,13 @@ import { TextInput, View } from "react-native";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import FamilyDeletionCodeField from "@/components/FamilyDeletionCodeField";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
-import { removeMember } from "@/data/api";
+import { removeMember, requestFamilyDeletionCode } from "@/data/api";
+import type { ApiResult } from "@/data/api";
 
 /**
  * P41 アカウントについて（保護者、2026-09-21新設）
@@ -32,10 +34,19 @@ import { removeMember } from "@/data/api";
  *   ログイン用アカウント（auth.users）もハード削除される（決定9）。
  *   「家族から抜ける」を押したときでも、自分が唯一の在籍保護者であれば
  *   このモードに合流する（決定4。59.3.1節ケースB）。
+ *
+ * [2026-09-27追加・要件定義書07-42章、スキーマ設計.sql 80章、API仕様.md
+ * 36章] delete_familyモードは、保護者のメール宛6桁確認コードの入力を
+ * 必須で追加した（`requestFamilyDeletionCode()`→`FamilyDeletionCodeField`）。
+ * 家族名の入力と合わせてどちらも一致しないと「本当に削除する」は押せない
+ * （このファイル内`canConfirmDelete`）。UIの段取り順（コード確認を家族名
+ * 入力の前後どちらに置くか）は要件として固定されていない（企画部案は
+ * 07-42章決定4）ため、開発部の判断で家族名の下にコード入力欄を並べた
+ * （最終確定はUIUXデザイン部の判断を待つ、実装メモ.md 311章）。
  */
 export default function ParentAccountScreen() {
   const { state } = useAppData();
-  const { parentMember, logoutParent } = useSession();
+  const { parentMember, logoutParent, authUser } = useSession();
   const me = parentMember;
 
   const [processing, setProcessing] = useState(false);
@@ -60,6 +71,8 @@ export default function ParentAccountScreen() {
   // 冒頭の1文の有無だけが変わる（59.3.2節と完全に共通のパネル）。
   const [deleteFamilyViaLeave, setDeleteFamilyViaLeave] = useState(false);
   const [deleteFamilyNameDraft, setDeleteFamilyNameDraft] = useState("");
+  // [2026-09-27追加・要件定義書07-42章] 確認コード（保護者のメールに送る6桁）。
+  const [deletionCodeDraft, setDeletionCodeDraft] = useState("");
 
   const doLogout = async () => {
     await logoutParent();
@@ -73,6 +86,7 @@ export default function ParentAccountScreen() {
       // 59.3.2節の確認パネルへそのまま合流する。
       setDeleteFamilyViaLeave(true);
       setDeleteFamilyNameDraft("");
+      setDeletionCodeDraft("");
       setConfirmMode("deleteFamily");
       return;
     }
@@ -83,6 +97,7 @@ export default function ParentAccountScreen() {
     setConfirmMode(null);
     setDeleteFamilyViaLeave(false);
     setDeleteFamilyNameDraft("");
+    setDeletionCodeDraft("");
   };
 
   const confirmLeave = async () => {
@@ -107,6 +122,7 @@ export default function ParentAccountScreen() {
     setErrorMessage(null);
     setDeleteFamilyViaLeave(false);
     setDeleteFamilyNameDraft("");
+    setDeletionCodeDraft("");
     setConfirmMode("deleteFamily");
   };
 
@@ -114,12 +130,18 @@ export default function ParentAccountScreen() {
     if (!me) return;
     setProcessing(true);
     setErrorMessage(null);
-    const res = await removeMember(me.id, "delete_family", deleteFamilyNameDraft);
+    const res = await removeMember(me.id, "delete_family", deleteFamilyNameDraft, deletionCodeDraft);
     setProcessing(false);
     if (!res.ok) {
       setErrorMessage(
         res.error.code === "family_name_mismatch"
           ? "家族の名前が一致しません。もう一度ご確認ください"
+          : res.error.code === "deletion_code_invalid" ||
+            res.error.code === "deletion_code_expired" ||
+            res.error.code === "deletion_code_not_requested"
+          ? "うまく確認できませんでした。もう一度、メールの数字をご確認のうえ入力してください。"
+          : res.error.code === "deletion_code_locked"
+          ? "少し時間をおいてから、もう一度お試しください。"
           : res.error.message
       );
       return;
@@ -130,6 +152,9 @@ export default function ParentAccountScreen() {
 
   const deleteFamilyNameMatches =
     deleteFamilyNameDraft.trim().length > 0 && deleteFamilyNameDraft.trim() === state.family.name.trim();
+  // [2026-09-27追加・要件定義書07-42章] 家族名・確認コードの両方がそろって
+  // 初めて「本当に削除する」を押せる。
+  const canConfirmDelete = deleteFamilyNameMatches && deletionCodeDraft.length === 6;
 
   return (
     <Screen tone="parent">
@@ -169,7 +194,11 @@ export default function ParentAccountScreen() {
               familyName: state.family.name,
               draft: deleteFamilyNameDraft,
               onChangeDraft: setDeleteFamilyNameDraft,
-              matches: deleteFamilyNameMatches,
+              email: authUser?.email ?? null,
+              deletionCode: deletionCodeDraft,
+              onChangeDeletionCode: setDeletionCodeDraft,
+              onSendDeletionCode: requestFamilyDeletionCode,
+              canConfirm: canConfirmDelete,
               processing,
               onConfirm: confirmDeleteFamily,
               onCancel: cancelConfirm,
@@ -199,7 +228,11 @@ export default function ParentAccountScreen() {
               familyName: state.family.name,
               draft: deleteFamilyNameDraft,
               onChangeDraft: setDeleteFamilyNameDraft,
-              matches: deleteFamilyNameMatches,
+              email: authUser?.email ?? null,
+              deletionCode: deletionCodeDraft,
+              onChangeDeletionCode: setDeletionCodeDraft,
+              onSendDeletionCode: requestFamilyDeletionCode,
+              canConfirm: canConfirmDelete,
               processing,
               onConfirm: confirmDeleteFamily,
               onCancel: cancelConfirm,
@@ -226,17 +259,36 @@ export default function ParentAccountScreen() {
  * 59.3.2節（決定6・7）・07-33章決定17の確認パネル本体。「家族から抜ける」
  * （ケースB・59.3.1b）と「家族を削除する」（59.3.2）の2箇所で完全に共通の
  * ため、ここに1つだけ用意する（冒頭の1文の有無は呼び出し側で出し分ける）。
+ *
+ * [2026-09-27追加・要件定義書07-42章] 保護者のメール宛6桁確認コード
+ * （`FamilyDeletionCodeField`）を、家族名の入力欄の下に追加した。
  */
 function renderDeleteFamilyBody(props: {
   familyName: string;
   draft: string;
   onChangeDraft: (v: string) => void;
-  matches: boolean;
+  email: string | null;
+  deletionCode: string;
+  onChangeDeletionCode: (v: string) => void;
+  onSendDeletionCode: () => Promise<ApiResult<{ ok: true }>>;
+  canConfirm: boolean;
   processing: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const { familyName, draft, onChangeDraft, matches, processing, onConfirm, onCancel } = props;
+  const {
+    familyName,
+    draft,
+    onChangeDraft,
+    email,
+    deletionCode,
+    onChangeDeletionCode,
+    onSendDeletionCode,
+    canConfirm,
+    processing,
+    onConfirm,
+    onCancel,
+  } = props;
   return (
     <View style={{ gap: theme.spacing.s2 }}>
       <Text style={theme.typography.parentBody}>
@@ -263,11 +315,18 @@ function renderDeleteFamilyBody(props: {
       <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
         上の名前とすべて同じ文字で入力してください。
       </Text>
+      <FamilyDeletionCodeField
+        email={email}
+        code={deletionCode}
+        onChangeCode={onChangeDeletionCode}
+        processing={processing}
+        onSend={onSendDeletionCode}
+      />
       <AppButton
         label={processing ? "削除しています…" : "本当に削除する"}
         variant="danger"
         onPress={onConfirm}
-        disabled={processing || !matches}
+        disabled={processing || !canConfirm}
       />
       <AppButton label="やめる" variant="ghost" onPress={onCancel} disabled={processing} />
     </View>

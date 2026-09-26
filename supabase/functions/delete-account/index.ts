@@ -44,6 +44,13 @@
  * ②を実行しない。①が成功し②が失敗した場合、もう一度「アカウントを削除
  * する」を押せば、今度は手順2で行が引けず手順5（auth.users削除）だけが
  * 走る（べき等）。
+ *
+ * ---- [2026-09-27変更・後方非互換・要件定義書07-42章、スキーマ設計.sql
+ * 80.6章、API仕様.md 36.2章] ----
+ * 手順3の分岐（戻り値がNULL＝他に在籍保護者がいない→家族ごと削除に合流）
+ * のときだけ deletion_code（6桁文字列）を新たに必須で受け取る
+ * （confirm_family_nameと全く同じ扱い）。confirm_family_nameの照合より
+ * 先に検証する（80.5章と同じ順序の理由）。
  */
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/http.ts";
@@ -51,6 +58,7 @@ import { createAdminClient } from "../_shared/supabaseAdmin.ts";
 import { env } from "../_shared/env.ts";
 import { extractBearerToken, ParentAuthError } from "../_shared/parentAuth.ts";
 import { verifyToken } from "../_shared/jwt.ts";
+import { verifyFamilyDeletionCode, DeletionCodeVerifyError } from "../_shared/deletionCode.ts";
 
 Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflight(req);
@@ -85,6 +93,7 @@ Deno.serve(async (req: Request) => {
   }
   const b = body as Record<string, unknown> | null;
   const confirmFamilyName = typeof b?.confirm_family_name === "string" ? b.confirm_family_name : null;
+  const deletionCode = typeof b?.deletion_code === "string" ? b.deletion_code : "";
 
   let familyDeleted = false;
 
@@ -129,6 +138,20 @@ Deno.serve(async (req: Request) => {
           console.error("delete-account: family lookup failed", { family_id: member.family_id });
           return jsonResponse({ error: "internal_error" }, 500);
         }
+        // [2026-09-27追加・要件定義書07-42章、スキーマ設計.sql 80.6章]
+        // deletion_codeの検証をconfirm_family_nameより先に行う（80.5章と
+        // 同じ順序の理由）。member.idはJWTのauth_user_idから解決した
+        // 「呼び出し本人」であり、クライアントが送るIDではない。
+        try {
+          await verifyFamilyDeletionCode(admin, member.id, deletionCode);
+        } catch (e) {
+          if (e instanceof DeletionCodeVerifyError) {
+            return jsonResponse({ error: e.code }, e.status);
+          }
+          console.error("delete-account: deletion code verify failed", { family_id: member.family_id });
+          return jsonResponse({ error: "internal_error" }, 500);
+        }
+
         const actualName = family?.name?.trim() ?? "";
         // 決定17の3段目をサーバ側でも照合する（画面だけの検査だとAPIを
         // 直接叩く経路で素通りするため）。比較は前後の空白を落とした完全一致。

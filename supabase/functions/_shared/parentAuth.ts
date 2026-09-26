@@ -20,6 +20,14 @@ export interface ParentCaller {
   memberId: string;
   isOwner: boolean;
   authUserId: string;
+  /**
+   * [2026-09-27追加・request-family-deletion-code専用・スキーマ設計.sql
+   * 80.4章手順2] JWTの標準クレームemailをそのまま格納する（追加の管理API
+   * 呼び出し〈admin.auth.admin.getUserById()〉は不要）。既存の呼び出し元
+   * （set-child-pin・remove-member）はこのフィールドを単に無視するため
+   * 無改修で動く。想定外にemailクレームが無い場合はnull。
+   */
+  email: string | null;
 }
 
 /**
@@ -66,9 +74,12 @@ export async function resolveParentCaller(
   const token = extractBearerToken(req);
 
   let authUserId: string;
+  let email: string | null = null;
   try {
     const claims = await verifyToken(jwtSecret, token);
     authUserId = claims.sub;
+    const rawEmail = (claims.raw as Record<string, unknown>)["email"];
+    email = typeof rawEmail === "string" ? rawEmail : null;
   } catch {
     throw new ParentAuthError(401, "invalid_token");
   }
@@ -98,6 +109,7 @@ export async function resolveParentCaller(
     memberId: member.id,
     isOwner: member.is_owner,
     authUserId,
+    email,
   };
 }
 
@@ -114,9 +126,12 @@ export async function resolveFamilyMemberCaller(
   const token = extractBearerToken(req);
 
   let authUserId: string;
+  let email: string | null = null;
   try {
     const claims = await verifyToken(jwtSecret, token);
     authUserId = claims.sub;
+    const rawEmail = (claims.raw as Record<string, unknown>)["email"];
+    email = typeof rawEmail === "string" ? rawEmail : null;
   } catch {
     throw new ParentAuthError(401, "invalid_token");
   }
@@ -143,6 +158,7 @@ export async function resolveFamilyMemberCaller(
     memberId: member.id,
     isOwner: member.is_owner,
     authUserId,
+    email,
     role: member.role as "parent" | "supporter",
   };
 }

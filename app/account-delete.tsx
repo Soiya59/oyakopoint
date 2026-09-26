@@ -4,10 +4,11 @@ import { TextInput, View } from "react-native";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import FamilyDeletionCodeField from "@/components/FamilyDeletionCodeField";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useSession } from "@/lib/session";
-import { deleteAccount, fetchAccountDeletionPreview } from "@/data/api";
+import { deleteAccount, fetchAccountDeletionPreview, requestFamilyDeletionCode } from "@/data/api";
 import type { AccountDeletionPreview } from "@/types/domain";
 
 /**
@@ -35,12 +36,19 @@ import type { AccountDeletionPreview } from "@/types/domain";
  * 自分がオーナーで他に在籍保護者がいない場合（`will_delete_family`）は、
  * 家族ごと削除（families行のDELETE、CASCADEで家族の全データが連動削除）を
  * 伴う（決定4・9）。
+ *
+ * [2026-09-27追加・要件定義書07-42章、スキーマ設計.sql 80.6章、API仕様.md
+ * 36章] `will_delete_family`のとき（経路C）も、`app/parent/account.tsx`の
+ * 経路A・Bと同じ保護者のメール宛6桁確認コードが必須になった
+ * （`requestFamilyDeletionCode()`→`FamilyDeletionCodeField`）。
  */
 export default function AccountDeleteScreen() {
-  const { client, logoutParent } = useSession();
+  const { client, logoutParent, authUser } = useSession();
   const [preview, setPreview] = useState<AccountDeletionPreview | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [familyNameDraft, setFamilyNameDraft] = useState("");
+  // [2026-09-27追加・要件定義書07-42章] 確認コード（保護者のメールに送る6桁）。
+  const [deletionCodeDraft, setDeletionCodeDraft] = useState("");
   const [processing, setProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -65,10 +73,23 @@ export default function AccountDeleteScreen() {
     if (!preview) return;
     setProcessing(true);
     setErrorMessage(null);
-    const res = await deleteAccount(preview.will_delete_family ? familyNameDraft : undefined);
+    const res = await deleteAccount(
+      preview.will_delete_family ? familyNameDraft : undefined,
+      preview.will_delete_family ? deletionCodeDraft : undefined
+    );
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage("削除できませんでした。もう一度お試しください。");
+      setErrorMessage(
+        res.error.code === "family_name_mismatch"
+          ? "家族の名前が一致しません。もう一度ご確認ください"
+          : res.error.code === "deletion_code_invalid" ||
+            res.error.code === "deletion_code_expired" ||
+            res.error.code === "deletion_code_not_requested"
+          ? "うまく確認できませんでした。もう一度、メールの数字をご確認のうえ入力してください。"
+          : res.error.code === "deletion_code_locked"
+          ? "少し時間をおいてから、もう一度お試しください。"
+          : "削除できませんでした。もう一度お試しください。"
+      );
       return;
     }
     await logoutParent();
@@ -79,6 +100,9 @@ export default function AccountDeleteScreen() {
     !!preview?.family_name &&
     familyNameDraft.trim().length > 0 &&
     familyNameDraft.trim() === preview.family_name.trim();
+  // [2026-09-27追加・要件定義書07-42章] will_delete_familyのときだけ、
+  // 家族名・確認コードの両方がそろって初めて「本当に削除する」を押せる。
+  const canConfirm = !preview?.will_delete_family || (familyNameMatches && deletionCodeDraft.length === 6);
 
   return (
     <Screen tone="parent">
@@ -139,6 +163,15 @@ export default function AccountDeleteScreen() {
           <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
             上の名前とすべて同じ文字で入力してください。
           </Text>
+          {/* [2026-09-27追加・要件定義書07-42章] app/parent/account.tsxの
+              経路A・Bと同じ保護者のメール宛6桁確認コード。 */}
+          <FamilyDeletionCodeField
+            email={authUser?.email ?? null}
+            code={deletionCodeDraft}
+            onChangeCode={setDeletionCodeDraft}
+            processing={processing}
+            onSend={requestFamilyDeletionCode}
+          />
         </View>
       )}
 
@@ -152,7 +185,7 @@ export default function AccountDeleteScreen() {
           variant="danger"
           style={{ marginTop: theme.spacing.s4 }}
           onPress={confirm}
-          disabled={processing || (preview.will_delete_family && !familyNameMatches)}
+          disabled={processing || !canConfirm}
         />
       )}
     </Screen>

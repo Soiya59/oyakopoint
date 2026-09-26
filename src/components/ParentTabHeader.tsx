@@ -13,7 +13,10 @@
  * 飛び先は保護者の設定にある「👦 こどもモードにする」と同一（実装メモ167.3章）。
  * **新しい画面も通信も増やしていない。** 子どもが1人もいなければ押せないようにする
  * （押しても空の選択画面が出るだけで行き止まりになるため）。
- * PINは従来どおり必要で、92.2章「保護者→子どもは変更していない」は崩していない。
+ *
+ * [2026-09-27変更・要件定義書07-41章] 保護者からの切り替えはPIN不要になった
+ * （`mode: "parent_switch"`、実装メモ.md 311章）。子ども自身の入口
+ * （招待コード→PIN）・きょうだい切替は変更していない。
  */
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -29,12 +32,16 @@ export function ParentTabHeader({ inboxCount }: { inboxCount: number }) {
     .filter((m) => m.is_active && m.role === "child")
     .map((m) => ({ member_id: m.id, display_name: m.display_name, avatar_color: m.avatar_color }));
 
+  // [2026-09-27変更・要件定義書07-41章、スキーマ設計.sql 79.6章、API仕様.md
+  // 35.4章] mode: "parent_switch" を渡すことで、profile-select.tsx側が
+  // PIN入力を経由せずchild-switch（新設Edge Function）を呼ぶ分岐に入る。
   const goToChildSwitch = () =>
     router.push({
       pathname: "/child-auth/profile-select",
       params: {
         inviteCode: state.family.invite_code,
         childrenJson: JSON.stringify(childProfiles),
+        mode: "parent_switch",
       },
     });
 

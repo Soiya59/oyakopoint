@@ -601,6 +601,28 @@
 -- 遵守）。ローカルDocker環境に適用済み・実測済み。本番へは未適用（本部長の
 -- 操作を待つ）。
 --
+-- [2026-09-27追加・開発部] 「家族を削除する」への確認コード追加
+-- （要件定義書07-42章、設計部/成果物/スキーマ設計.sql 80章、開発部/成果物/
+-- 実装メモ.md 311章）に伴い、family_deletion_codesテーブルを新設
+-- （supabase/migrations/20260930200000_family_deletion_codes.sql）。
+-- S1（42→43、family_deletion_codesをRLS有効化）を更新した。S3はポリシーを
+-- 1本も作らない（family_member_pinsと同じdefault-denyパターン。80.2章）
+-- ため±0。**S4は設計部80章冒頭の見込み「新しいSQL関数を作らないため
+-- ±0」とは異なり、実測すると99→100（+1）だった**——`family_deletion_
+-- codes_before_write`トリガー関数はSECURITY DEFINERでも明示REVOKEでもない
+-- ため、他の同種トリガー関数（family_member_pins_before_write等）と同じく
+-- authenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動。
+-- member_goals_before_write等・89〜149行目と同じ「トリガー関数もS4の
+-- 対象になる」パターン）。ローカルDockerで実測して確認した（開発部/成果物/
+-- 実装メモ.md 311章）。あわせてS2の直後にS2b（family_deletion_codesの
+-- ポリシー数も0であることの照査。80.9章の推奨、S2と同じ理由）を追加した。
+-- ローカルDocker環境に適用済み・実測済み。本番へは未適用（本部長の操作を
+-- 待つ）。
+--
+-- 07-41章（保護者→子どもモードのPIN不要化、Edge Function `child-switch`
+-- 新設）は新しいテーブル・新しいSQL関数を1つも作らない（スキーマ設計.sql
+-- 79章冒頭）ため、S1〜S4のいずれにも変更は無い。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -682,8 +704,11 @@ GRANT INSERT ON _r TO authenticated;
 -- reactions）の3テーブルを新設。39→42（ローカルDockerで実測。96.5章の
 -- 遵守）。chore_reactionsへの列2本（deleted_at・deleted_by_member_id）の
 -- 追加のみはS1に影響しない（既存テーブルへのADD COLUMN）。
+-- [2026-09-27再更新] 「家族を削除する」への確認コード（要件定義書07-42章、
+-- スキーマ設計.sql 80章）でfamily_deletion_codesを追加。42→43
+-- （ローカルDockerで実測。96.5章の遵守）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '42', count(*)::text, count(*) = 42
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '43', count(*)::text, count(*) = 43
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -693,6 +718,14 @@ WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 INSERT INTO _r
 SELECT 'C層', 'S2 PINテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins';
+
+-- S2b. [2026-09-27追加・スキーマ設計.sql 80.9章の推奨] family_deletion_codes
+--     （家族を削除するための確認コード）も、family_member_pinsと同じ
+--     default-denyパターン（RLSは有効・ポリシーは0本）。将来うっかり
+--     ポリシーを1本足すと、確認コードのハッシュが読める状態に変わる。
+INSERT INTO _r
+SELECT 'C層', 'S2b 確認コードテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
+FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_deletion_codes';
 
 -- S3. ポリシー52本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
@@ -1136,6 +1169,19 @@ WITH expected(f) AS (VALUES
   -- トグル「家族のやりとりを使う」、設計部/成果物/スキーマ設計.sql 67.4章）。
   -- family_board_posts_social_toggle_guardと同じ理由でS4に含まれる。
   ('family_board_reactions_social_toggle_guard'),
+  -- [2026-09-27追加・実測して判明。80.9章の設計部見込み「S4は±0」を訂正]
+  -- family_deletion_codes_before_write（家族を削除するための確認コード、
+  -- 要件定義書07-42章、スキーマ設計.sql 80.2章）。他のBEFORE INSERT/UPDATE
+  -- トリガー関数（family_member_pins_before_write等）と同じくSECURITY
+  -- DEFINERではないため、本プロジェクトの既知の挙動（34.5章）により新規
+  -- 関数作成時にauthenticatedへEXECUTE権限が自動付与される。明示的な
+  -- REVOKEは行っていない（既存の同種トリガー関数と同じ扱い）ため、この
+  -- 一覧にも追加する。設計部/成果物/スキーマ設計.sql 80章冒頭は「新しい
+  -- SQL関数は作らない」としていたが、トリガー関数自体は関数であり
+  -- （member_goals_before_write等・89〜149行目の教訓と同じパターン）、
+  -- ローカルDockerで実測してS4が99→100に増えることを確認した
+  -- （開発部/成果物/実装メモ.md 311章）。
+  ('family_deletion_codes_before_write'),
   ('family_drawings_before_insert'),('family_invite_lookup'),
   ('family_invites_before_insert'),('family_invites_before_update'),
   ('family_member_pins_before_write'),('family_members_before_update'),('family_tree_seasons_bump'),
@@ -1368,7 +1414,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数99件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数100件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);

@@ -58,12 +58,22 @@
  * 落とした完全一致）を新たに必須で受け取る。一致しなければ
  * 400 family_name_mismatch を返し、何も実行しない（決定17の3段目の
  * サーバ側照合。API仕様.md 24.5章）。
+ *
+ * ---- [2026-09-27変更・後方非互換・要件定義書07-42章、スキーマ設計.sql
+ * 80.5章、API仕様.md 36.2章] ----
+ * delete_familyモードは deletion_code（6桁文字列）を新たに必須で受け取る。
+ * confirm_family_nameの照合より先に検証する（弱い関門〈家族名〉より先に
+ * 強い関門〈メールのコード〉を確認する。80.5章手順1〜2）。
+ * family_deletion_codes: _shared/deletionCode.ts の
+ * verifyFamilyDeletionCode() 経由でSELECT/UPDATE（default-denyテーブル、
+ * service_role経由でのみアクセス可能）。
  */
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabaseAdmin.ts";
 import { env } from "../_shared/env.ts";
 import { resolveFamilyMemberCaller, ParentAuthError } from "../_shared/parentAuth.ts";
+import { verifyFamilyDeletionCode, DeletionCodeVerifyError } from "../_shared/deletionCode.ts";
 
 Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflight(req);
@@ -243,6 +253,21 @@ Deno.serve(async (req: Request) => {
   // Function実装」に課題として記録し、設計部の確認を仰ぐ。
   if (!caller.isOwner || memberId !== caller.memberId || !target.is_owner) {
     return jsonResponse({ error: "forbidden" }, 403);
+  }
+
+  // [2026-09-27追加・要件定義書07-42章、スキーマ設計.sql 80.5章]
+  // deletion_code（保護者のメールに送った6桁の確認コード）の検証。
+  // confirm_family_nameより先に検証する（80.5章手順1「弱い関門〈家族名〉
+  // より先に強い関門〈コード〉を確認する」）。
+  const deletionCode = typeof b?.deletion_code === "string" ? b.deletion_code : "";
+  try {
+    await verifyFamilyDeletionCode(admin, caller.memberId, deletionCode);
+  } catch (e) {
+    if (e instanceof DeletionCodeVerifyError) {
+      return jsonResponse({ error: e.code }, e.status);
+    }
+    console.error("remove-member: deletion code verify failed", { family_id: caller.familyId });
+    return jsonResponse({ error: "internal_error" }, 500);
   }
 
   // [2026-09-21追加・要件定義書07-33章 決定17、API仕様.md 24.5章]
