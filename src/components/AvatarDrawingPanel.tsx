@@ -30,8 +30,10 @@ import MemberAvatar from "./MemberAvatar";
 import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
+import DrawingToolPicker from "./DrawingToolPicker";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
+import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -98,6 +100,16 @@ export function AvatarDrawingPanel({
   const [lines, setLines] = useState<FamilyDrawingLine[]>(() => savedLineData?.lines ?? []);
   const [color, setColor] = useState<string>(theme.avatarDrawingPalette[0].value);
   const [strokeWidth, setStrokeWidth] = useState<number>(theme.defaultDrawingStrokeWidth);
+  /**
+   * [2026-09-26追加・実装メモ.md 309章、本部長依頼・軽微変更ルート] 家族の絵
+   * （`DrawingBoard.tsx`）と同じ道具切り替え（ペン／〇／△／□）をアバターにも
+   * 出す（依頼文4.「同じ部品を使っていれば、自然に出る」への回答：本画面は
+   * `DrawingBoard`を再利用せず`DrawingPalette`・`DrawingStrokeWidthPicker`を
+   * 直接呼ぶ独自構成のため自動では出ない。しかし色・太さの選択はこの画面にも
+   * 既にあり、同じ並びに道具ピッカーが無いと家族の絵と一貫しないため、
+   * `DrawingBoard.tsx`と同じ考え方で明示的に追加した）。
+   */
+  const [tool, setTool] = useState<DrawingTool>("pen");
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
   const isChildTone = tone === "child";
@@ -225,7 +237,14 @@ export function AvatarDrawingPanel({
         disabled={saving || atCapacity}
         zoomPickerDisabled={saving}
         onGestureActiveChange={onGestureActiveChange}
+        tool={tool}
       />
+
+      {/* [2026-09-26追加・実装メモ.md 309章] 家族の絵（DrawingBoard.tsx）と同じ並び
+          （道具→色→太さ）にする。 */}
+      <View style={styles.toolWrap}>
+        <DrawingToolPicker tone={tone} selected={tool} onSelect={setTool} disabled={saving} />
+      </View>
 
       <View style={styles.paletteWrap}>
         <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
@@ -279,6 +298,8 @@ const styles = StyleSheet.create({
   resetConfirmBlock: { alignItems: "center", gap: theme.spacing.s2 },
   resetConfirmActionText: { color: theme.colors.statusBlocking, textDecorationLine: "underline" },
   confirmRow: { flexDirection: "row", gap: theme.spacing.s4 },
+  // [2026-09-26追加・実装メモ.md 309章] 道具切り替え（ペン／〇／△／□）。
+  toolWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   strokeWidthWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   actionRow: { flexDirection: "row", marginTop: theme.spacing.s4, gap: theme.spacing.s3 },

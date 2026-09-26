@@ -28,10 +28,12 @@ import { DrawingThumbnail } from "./DrawingCanvas";
 import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
+import DrawingToolPicker from "./DrawingToolPicker";
 import { PRIZE_DOT_SIZE, prizeInnerSize } from "./FamilyTree";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import { fitDrawingLinesToCircle } from "@/lib/fitDrawingToCircle";
+import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "./NgWordWarningText";
@@ -141,6 +143,14 @@ export function DrawingBoard({
   // [2026-09-05追加] 線の太さ（21.5b節）。決定23: 既定値は「ふつう」＝4pt。
   // 色と同じく、ストロークの有無や選択中の色に関わらず常に3つとも選べる（常設）。
   const [strokeWidth, setStrokeWidth] = useState<number>(theme.defaultDrawingStrokeWidth);
+  /**
+   * [2026-09-26追加・実装メモ.md 309章、本部長依頼・軽微変更ルート] 現在選択中の
+   * 道具（ペン／〇／△／□）。既定は依頼文どおり"pen"。色・太さ（上のstate）と
+   * 同じ考え方で、`clearAll`・`undoLastStroke`・`startEdit`・保存成功のいずれでも
+   * リセットしない（1行決定・実装メモ309章参照: 色・太さが操作をまたいで保持
+   * されるのと同じ扱いにし、既存の画面の作りに合わせた）。
+   */
+  const [tool, setTool] = useState<DrawingTool>("pen");
   // [設計判断] 削除は取り消せない操作のため、app/parent/settings.tsxの家族削除と同じ
   // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認パターンを踏襲する
   // （Alert.alert等のネイティブダイアログはWeb版で挙動が不安定なため使わない）。
@@ -516,6 +526,7 @@ export function DrawingBoard({
             editingId={editingId}
             fitToCircleSignal={fitToCircleSignal}
             onGestureActiveChange={onCanvasGestureActiveChange}
+            tool={tool}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
@@ -545,6 +556,15 @@ export function DrawingBoard({
               />
             </View>
           )}
+
+          {/* [2026-09-26追加・実装メモ.md 309章、本部長依頼・軽微変更ルート]
+              道具切り替え（ペン／〇／△／□）。依頼文「色・太さを選ぶ道具の並びに
+              足す」のとおり、色パレットの直前（10色パレット・太さ選択と同じ並びの
+              先頭）に置く。無効化条件も色・太さと同じ`disabled={saving}`のみ
+              （`atCapacity`では無効化しない）。 */}
+          <View style={styles.toolWrap}>
+            <DrawingToolPicker tone={tone} selected={tool} onSelect={setTool} disabled={saving} />
+          </View>
 
           <View style={styles.paletteWrap}>
             <DrawingPalette selected={color} onSelect={setColor} disabled={saving} />
@@ -669,6 +689,9 @@ const styles = StyleSheet.create({
   // 「これだけ小さくなる」という情報を伝える（決定13）。
   treeMiniatureWrap: { marginTop: theme.spacing.s3, alignItems: "center", gap: theme.spacing.s1 },
   treeMiniatureText: { textAlign: "center" },
+  // [2026-09-26追加・実装メモ.md 309章] 道具切り替え（ペン／〇／△／□）。
+  // paletteWrapと同じ余白規則を踏襲する。
+  toolWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   // [2026-09-05追加] 線の太さ選択（21.5b節）。パレットの下・題名入力欄の上。
   strokeWidthWrap: { marginTop: theme.spacing.s4, alignItems: "center" },

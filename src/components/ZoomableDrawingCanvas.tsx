@@ -50,6 +50,7 @@ import {
   type DrawingZoomLevel,
 } from "@/lib/drawingZoomPan";
 import { hydrateIntroSeen, isIntroSeen, markIntroSeen } from "@/lib/introSeen";
+import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawingLine } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -126,6 +127,13 @@ interface ZoomableDrawingCanvasProps {
    * memberIdを渡すこと。「見た」の記録（`src/lib/introSeen.ts`）に使うキーの一部になる。
    */
   memberId: string;
+  /**
+   * [2026-09-26追加・実装メモ.md 309章、本部長依頼・軽微変更ルート] `DrawingCanvas`の
+   * 同名propをそのまま橋渡しする。未指定時は既定値`"pen"`（今までどおり自由な線のみ、
+   * `DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`のどちらも呼び出し側で道具ピッカーを
+   * 足すまでは実質未使用）。
+   */
+  tool?: DrawingTool;
 }
 
 export function ZoomableDrawingCanvas({
@@ -141,6 +149,7 @@ export function ZoomableDrawingCanvas({
   onGestureActiveChange,
   backgroundColor = theme.colors.neutralSurface,
   memberId,
+  tool = "pen",
 }: ZoomableDrawingCanvasProps) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
@@ -304,6 +313,7 @@ export function ZoomableDrawingCanvas({
             chromeless
             onPan={handlePan}
             onGestureActiveChange={onGestureActiveChange}
+            tool={tool}
           />
         </View>
       </View>

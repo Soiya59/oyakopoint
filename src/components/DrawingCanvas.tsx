@@ -18,6 +18,7 @@ import Svg, { Circle, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
 import { normalizeDrawingPoint, denormalizeDrawingPoint } from "@/lib/drawingCanvasCoords";
+import { shapeToPolyline, type DrawingTool } from "@/lib/drawingShapes";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -134,6 +135,18 @@ interface DrawingCanvasProps {
    * （`AvatarDrawingPanel.tsx`）には一切影響しない。
    */
   onGestureActiveChange?: (active: boolean) => void;
+  /**
+   * [2026-09-26追加・実装メモ.md 309章、本部長依頼・軽微変更ルート] 現在選択中の
+   * 道具。既定`"pen"`（自由な線、従来どおり）。`"circle"`／`"triangle"`／`"rect"`の
+   * ときは、なぞった始点・終点が作るバウンディングボックスの中に、その形の輪郭
+   * だけ（中は塗らない）を閉じた1本のポリラインとして描く（`src/lib/drawingShapes.ts`
+   * 参照）。指を動かしている間は`livePoints`を都度組み直してライブプレビューする
+   * （下記PanResponder参照）。**`simplifyPolyline`は形には適用しない**（間引くと
+   * 角が崩れるため、依頼文の指示どおり）。既存の呼び出し元（このpropを渡さない
+   * `DrawingBoard.tsx`旧来分・`AvatarDrawingPanel.tsx`）は既定値`"pen"`のまま、
+   * 見た目・挙動は一切変わらない。
+   */
+  tool?: DrawingTool;
 }
 
 export function DrawingCanvas({
@@ -147,6 +160,7 @@ export function DrawingCanvas({
   chromeless = false,
   onPan,
   onGestureActiveChange,
+  tool = "pen",
 }: DrawingCanvasProps) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
@@ -156,6 +170,11 @@ export function DrawingCanvas({
   // 選択中の太さも最新値をrefで参照する。
   const widthRef = useRef(strokeWidth);
   widthRef.current = strokeWidth;
+  // [2026-09-26追加・実装メモ.md 309章] colorRef・widthRefと同じ理由
+  // （PanResponderのクロージャは最新propsを直接読めないため）で、選択中の道具も
+  // refで参照する。
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const linesCountRef = useRef(lines.length);
@@ -178,6 +197,15 @@ export function DrawingCanvas({
   const sizeRef = useRef(size);
   sizeRef.current = size;
   const currentPointsRef = useRef<number[]>([]);
+  /**
+   * [2026-09-26追加・実装メモ.md 309章] `tool`が`"pen"`以外（形ツール）のときに
+   * 使う、なぞった始点・終点（0〜1000正規化座標）。`currentPointsRef`（ペン専用、
+   * 描いた全ての点を貯める）とは別に持つ。形は始点・終点の2点だけから
+   * `shapeToPolyline`で組み立て直すため、途中の点を貯める必要が無い。
+   * どちらも`null`＝「形の描きかけが無い」を表す。
+   */
+  const shapeStartRef = useRef<[number, number] | null>(null);
+  const shapeEndRef = useRef<[number, number] | null>(null);
   // [2026-09-17追加・47.3節決定9〜10] 最新のonPanをrefで参照する（colorRefと同じ理由）。
   const onPanRef = useRef(onPan);
   onPanRef.current = onPan;
@@ -221,6 +249,26 @@ export function DrawingCanvas({
   };
 
   const finishStroke = () => {
+    // [2026-09-26追加・実装メモ.md 309章] 形ツールは、ペンとは別の経路で確定する。
+    // `currentPointsRef`は形ツールのときは常に空のまま（下のPanResponder参照）
+    // なので、こちらを先に判定する。
+    if (toolRef.current !== "pen") {
+      const start = shapeStartRef.current;
+      const end = shapeEndRef.current;
+      shapeStartRef.current = null;
+      shapeEndRef.current = null;
+      setLivePoints([]);
+      if (!start || !end) return;
+      // なぞらずタップのみ（始点=終点）はshapeToPolylineが空配列を返す。
+      // DB側chk_family_drawings_line_data（33b章）と同じ「2要素未満は保存しない」
+      // 基準で弾く（ペンの1点タップと同じ扱い）。
+      const shapePoints = shapeToPolyline(toolRef.current, start[0], start[1], end[0], end[1]);
+      if (shapePoints.length < 2) return;
+      // [依頼文の指示どおり] simplifyPolyline（Douglas-Peucker型の間引き）は
+      // 形には適用しない。角が崩れるため。
+      onStrokeEnd({ c: colorRef.current, p: shapePoints, w: widthRef.current });
+      return;
+    }
     const pts = currentPointsRef.current;
     currentPointsRef.current = [];
     setLivePoints([]);
@@ -263,8 +311,18 @@ export function DrawingCanvas({
         if (disabledRef.current || linesCountRef.current >= theme.drawingLimits.maxLines) return;
         const { locationX, locationY } = evt.nativeEvent;
         const [nx, ny] = toNormalized(locationX, locationY);
-        currentPointsRef.current = [nx, ny];
-        setLivePoints([nx, ny]);
+        // [2026-09-26追加・実装メモ.md 309章] ツールごとに描きかけの持ち方が違う。
+        // 形ツールは始点だけを記録し（`currentPointsRef`には触れない）、指を
+        // まだ動かしていない段階では見せる形が無い（始点=終点はshapeToPolylineが
+        // 空配列を返す）ため、livePointsは空のままにする。
+        if (toolRef.current !== "pen") {
+          shapeStartRef.current = [nx, ny];
+          shapeEndRef.current = [nx, ny];
+          setLivePoints([]);
+        } else {
+          currentPointsRef.current = [nx, ny];
+          setLivePoints([nx, ny]);
+        }
       },
       onPanResponderMove: (evt) => {
         evt.preventDefault?.();
@@ -279,8 +337,12 @@ export function DrawingCanvas({
         //   初めてfalseに戻る（上のonPanResponderGrant参照）。
         const touches = evt.nativeEvent.touches;
         if (touches && touches.length >= 2) {
-          if (currentPointsRef.current.length > 0) {
+          // [2026-09-26変更・実装メモ.md 309章] ペンの描きかけ（currentPointsRef）
+          // だけでなく、形ツールの描きかけ（shapeStartRef/shapeEndRef）も同じく破棄する。
+          if (currentPointsRef.current.length > 0 || shapeStartRef.current !== null) {
             currentPointsRef.current = [];
+            shapeStartRef.current = null;
+            shapeEndRef.current = null;
             setLivePoints([]);
           }
           isPanningRef.current = true;
@@ -295,6 +357,29 @@ export function DrawingCanvas({
         if (isPanningRef.current) {
           // 2本→1本に減った（相方が先に離れた）。決定10のとおり、残った1本では
           // 描画を再開しない（このジェスチャーが終わるまで何もしない）。
+          return;
+        }
+        // [2026-09-26追加・実装メモ.md 309章] 形ツール（ペン以外）は、なぞった
+        // 「今の指の位置」を終点として、始点との間の形を毎回組み直してライブ
+        // プレビューする（依頼文「指を動かしている間は、形が伸び縮みして見える」）。
+        // 途中の点は貯めない（`currentPointsRef`には一切触れない）。
+        if (toolRef.current !== "pen") {
+          const start = shapeStartRef.current;
+          if (!start) return;
+          const { locationX, locationY } = evt.nativeEvent;
+          const [nx, ny] = toNormalized(locationX, locationY);
+          // ペンのMIN_POINT_DISTANCE_PX間引きと同じ考え方: 直前の終点から
+          // わずかしか動いていない移動イベントでは組み直さない（再描画の頻度を
+          // ペンと同程度に抑える。1ドラッグでmoveイベントは多数発火するため）。
+          const prevEnd = shapeEndRef.current;
+          if (prevEnd) {
+            const thresholdNormalized = (MIN_POINT_DISTANCE_PX / sizeRef.current) * 1000;
+            const dx = nx - prevEnd[0];
+            const dy = ny - prevEnd[1];
+            if (dx * dx + dy * dy < thresholdNormalized * thresholdNormalized) return;
+          }
+          shapeEndRef.current = [nx, ny];
+          setLivePoints(shapeToPolyline(toolRef.current, start[0], start[1], nx, ny));
           return;
         }
         const pts = currentPointsRef.current;
