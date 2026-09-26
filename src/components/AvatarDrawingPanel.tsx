@@ -110,6 +110,11 @@ export function AvatarDrawingPanel({
    * `DrawingBoard.tsx`と同じ考え方で明示的に追加した）。
    */
   const [tool, setTool] = useState<DrawingTool>("pen");
+  /**
+   * [2026-09-27追加・実装メモ.md 313章、本部長依頼・軽微変更ルート] 家族の絵
+   * （`DrawingBoard.tsx`）と同じ塗り切り替えをアバターにも出す。
+   */
+  const [filled, setFilled] = useState<boolean>(false);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
   const isChildTone = tone === "child";
@@ -238,12 +243,20 @@ export function AvatarDrawingPanel({
         zoomPickerDisabled={saving}
         onGestureActiveChange={onGestureActiveChange}
         tool={tool}
+        filled={filled}
       />
 
       {/* [2026-09-26追加・実装メモ.md 309章] 家族の絵（DrawingBoard.tsx）と同じ並び
           （道具→色→太さ）にする。 */}
       <View style={styles.toolWrap}>
-        <DrawingToolPicker tone={tone} selected={tool} onSelect={setTool} disabled={saving} />
+        <DrawingToolPicker
+          tone={tone}
+          selected={tool}
+          onSelect={setTool}
+          filled={filled}
+          onToggleFilled={() => setFilled((prev) => !prev)}
+          disabled={saving}
+        />
       </View>
 
       <View style={styles.paletteWrap}>

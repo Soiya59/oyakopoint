@@ -14,7 +14,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
-import Svg, { Circle, Polyline, Rect } from "react-native-svg";
+import Svg, { Circle, Polygon, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
 import { normalizeDrawingPoint, denormalizeDrawingPoint } from "@/lib/drawingCanvasCoords";
@@ -83,6 +83,69 @@ export function avatarLineDisplayStrokeWidth(size: number, w: number | undefined
   return 2;
 }
 
+/**
+ * [2026-09-27追加・実装メモ.md 313章、本部長依頼・軽微変更ルート] 1本の線を描くSVG要素。
+ * `line.f`（塗った形かどうか）で`<Polygon>`（塗り）と`<Polyline>`（線のみ、従来どおり）を
+ * 切り替える。`DrawingCanvas`本体・`DrawingThumbnail`・`MemberAvatar.tsx`の3箇所が
+ * ほぼ同じ描画ロジックを持っていた（`needsWhiteOutline`の重複実装）ため、ここへ1箇所に
+ * まとめる（`MemberAvatar.tsx`が既に`avatarLineDisplayStrokeWidth`・
+ * `pointsToPolylineString`をこのファイルから読み込んでいるのと同じ理由）。
+ *
+ * [線の太さ(w)の扱い・313章決定] 塗った形の縁には、選択中の太さ(`strokeWidth`)を
+ * そのまま使う。塗り色と縁の色が同じときは縁が見えないだけで実害は無く、
+ * 白色（`needsWhiteOutline`）のときだけ縁の色を`neutralTextPrimary`に変えて視認できる
+ * ようにする。これは既存の「白い線には縁取りを付ける」ロジック（`needsWhiteOutline`、
+ * 2026-09-11追加）と同じ考え方を、線1本の`<Polygon>`の`stroke`属性だけで実現したもの
+ * （`<Polyline>`版のような2重描画は不要）。
+ */
+export function DrawingLineShape({
+  color,
+  points,
+  strokeWidth,
+  filled,
+  needsWhiteOutline,
+}: {
+  color: string;
+  points: string;
+  strokeWidth: number;
+  filled?: boolean;
+  needsWhiteOutline: boolean;
+}) {
+  if (filled) {
+    return (
+      <Polygon
+        points={points}
+        fill={color}
+        stroke={needsWhiteOutline ? theme.colors.neutralTextPrimary : color}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+    );
+  }
+  return (
+    <>
+      {needsWhiteOutline && (
+        <Polyline
+          points={points}
+          fill="none"
+          stroke={theme.colors.neutralTextPrimary}
+          strokeWidth={strokeWidth + 1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      <Polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
+}
+
 interface DrawingCanvasProps {
   /** 直径（pt）。デザイントークン.md 1.9節「直径280pt」がデフォルト。 */
   size?: number;
@@ -147,6 +210,16 @@ interface DrawingCanvasProps {
    * 見た目・挙動は一切変わらない。
    */
   tool?: DrawingTool;
+  /**
+   * [2026-09-27追加・実装メモ.md 313章、本部長依頼・軽微変更ルート] `tool`が形
+   * （`"pen"`以外）のときに、その形の中を塗るかどうか。既定`false`（線だけ、従来
+   * どおり）。`tool==="pen"`のときは無視される（ペンには塗りの概念が無い）。
+   * ライブプレビュー（下記`livePoints`の描画）・確定した線（`onStrokeEnd`に渡す
+   * `FamilyDrawingLine.f`）の両方に使う。既存の呼び出し元（このpropを渡さない
+   * `DrawingBoard.tsx`旧来分・`AvatarDrawingPanel.tsx`旧来分）は既定値`false`のまま、
+   * 見た目・挙動は一切変わらない。
+   */
+  filled?: boolean;
 }
 
 export function DrawingCanvas({
@@ -161,6 +234,7 @@ export function DrawingCanvas({
   onPan,
   onGestureActiveChange,
   tool = "pen",
+  filled = false,
 }: DrawingCanvasProps) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
@@ -175,6 +249,10 @@ export function DrawingCanvas({
   // refで参照する。
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  // [2026-09-27追加・実装メモ.md 313章] toolRefと同じ理由（PanResponderのクロージャは
+  // 最新propsを直接読めないため）で、塗りの選択もrefで参照する。
+  const filledRef = useRef(filled);
+  filledRef.current = filled;
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const linesCountRef = useRef(lines.length);
@@ -266,7 +344,11 @@ export function DrawingCanvas({
       if (shapePoints.length < 2) return;
       // [依頼文の指示どおり] simplifyPolyline（Douglas-Peucker型の間引き）は
       // 形には適用しない。角が崩れるため。
-      onStrokeEnd({ c: colorRef.current, p: shapePoints, w: widthRef.current });
+      // [2026-09-27追加・実装メモ.md 313章] 塗りが選ばれているときだけ`f: true`を足す。
+      // `f: false`は書き込まない（`FamilyDrawingLine.f`のコメントと同じ最小化の考え方）。
+      const line: FamilyDrawingLine = { c: colorRef.current, p: shapePoints, w: widthRef.current };
+      if (filledRef.current) line.f = true;
+      onStrokeEnd(line);
       return;
     }
     const pts = currentPointsRef.current;
@@ -462,52 +544,29 @@ export function DrawingCanvas({
           // 既定（白）以外のときだけ付ける（既存の家族の絵の見た目は変えない）。
           const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
           return (
-            <React.Fragment key={idx}>
-              {needsWhiteOutline && (
-                <Polyline
-                  points={pointsToPolylineString(line.p, size)}
-                  fill="none"
-                  stroke={theme.colors.neutralTextPrimary}
-                  strokeWidth={displayStrokeWidth + 1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-              <Polyline
-                points={pointsToPolylineString(line.p, size)}
-                fill="none"
-                stroke={line.c}
-                // [2026-09-05変更] `line.w`（無ければ決定25のとおり4=ふつうへフォールバック）
-                // を使う。以前は固定4pt。
-                strokeWidth={displayStrokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </React.Fragment>
+            <DrawingLineShape
+              key={idx}
+              color={line.c}
+              points={pointsToPolylineString(line.p, size)}
+              // [2026-09-05変更] `line.w`（無ければ決定25のとおり4=ふつうへフォールバック）
+              // を使う。以前は固定4pt。
+              strokeWidth={displayStrokeWidth}
+              filled={line.f}
+              needsWhiteOutline={needsWhiteOutline}
+            />
           );
         })}
         {livePoints.length >= 2 && (
-          <>
-            {isCustomBackground && color === "#FFFFFF" && (
-              <Polyline
-                points={pointsToPolylineString(livePoints, size)}
-                fill="none"
-                stroke={theme.colors.neutralTextPrimary}
-                strokeWidth={strokeWidth + 1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-            <Polyline
-              points={pointsToPolylineString(livePoints, size)}
-              fill="none"
-              stroke={color}
-              // [2026-09-05変更] 描画中のライブプレビューも選択中の太さを反映する。
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
+          <DrawingLineShape
+            color={color}
+            points={pointsToPolylineString(livePoints, size)}
+            // [2026-09-05変更] 描画中のライブプレビューも選択中の太さを反映する。
+            strokeWidth={strokeWidth}
+            // [2026-09-27追加・実装メモ.md 313章] ペン選択中は`filled`propの値に
+            // 関わらず塗らない（`tool`が形のときだけ塗りを反映する）。
+            filled={tool !== "pen" && filled}
+            needsWhiteOutline={isCustomBackground && color === "#FFFFFF"}
+          />
         )}
       </Svg>
     </View>
@@ -540,26 +599,14 @@ export function DrawingThumbnail({
           const displayStrokeWidth = isCustomBackground ? avatarLineDisplayStrokeWidth(size, line.w) : 2;
           const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
           return (
-            <React.Fragment key={idx}>
-              {needsWhiteOutline && (
-                <Polyline
-                  points={pointsToPolylineString(line.p, size)}
-                  fill="none"
-                  stroke={theme.colors.neutralTextPrimary}
-                  strokeWidth={displayStrokeWidth + 1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-              <Polyline
-                points={pointsToPolylineString(line.p, size)}
-                fill="none"
-                stroke={line.c}
-                strokeWidth={displayStrokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </React.Fragment>
+            <DrawingLineShape
+              key={idx}
+              color={line.c}
+              points={pointsToPolylineString(line.p, size)}
+              strokeWidth={displayStrokeWidth}
+              filled={line.f}
+              needsWhiteOutline={needsWhiteOutline}
+            />
           );
         })}
       </Svg>

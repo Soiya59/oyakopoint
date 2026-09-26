@@ -25,15 +25,28 @@
  */
 import type { FamilyDrawingLine } from "@/types/domain";
 
-/** 線1本を`{"c": "...", "p": [...], "w": N}`（PostgreSQLのjsonb::text形式）へ直列化する。 */
+/**
+ * 線1本を`{"c": "...", "p": [...], "w": N, "f": true}`（PostgreSQLのjsonb::text形式）へ
+ * 直列化する。
+ * [2026-09-27追加・実装メモ.md 313章] 塗った形（`line.f`）のときだけ`"f": true`を
+ * 末尾に足す。PostgreSQLのjsonbはオブジェクトのキー挿入順をそのまま保持する
+ * （キーが重複しない限り）ため、実際に保存する線オブジェクト
+ * （`DrawingCanvas.tsx`の`finishStroke`が組み立てる`{c, p, w, f}`の順）と同じ順で
+ * 文字列化しないと、この見積もりだけが正しくても実際のDB上の直列化とは
+ * バイト数がずれてしまう（今回は末尾に足すだけなので合計バイト数は変わらないが、
+ * 念のため順序を揃えている）。`f: false`は保存時に一切書き込まないため
+ * （`FamilyDrawingLine.f`のコメント参照）、ここでの分岐も`line.f`の真偽値だけで
+ * 判定してよい。
+ */
 function pgJsonbLineText(line: FamilyDrawingLine): string {
   const parts = [`"c": ${JSON.stringify(line.c)}`, `"p": [${line.p.join(", ")}]`];
   if (line.w !== undefined) parts.push(`"w": ${line.w}`);
+  if (line.f) parts.push(`"f": true`);
   return `{${parts.join(", ")}}`;
 }
 
 /** {v:1, lines} 全体をPostgreSQLのjsonb::text形式で直列化する。 */
-function pgJsonbLineDataText(lines: FamilyDrawingLine[]): string {
+export function pgJsonbLineDataText(lines: FamilyDrawingLine[]): string {
   return `{"v": 1, "lines": [${lines.map(pgJsonbLineText).join(", ")}]}`;
 }
 

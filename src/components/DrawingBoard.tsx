@@ -151,6 +151,12 @@ export function DrawingBoard({
    * されるのと同じ扱いにし、既存の画面の作りに合わせた）。
    */
   const [tool, setTool] = useState<DrawingTool>("pen");
+  /**
+   * [2026-09-27追加・実装メモ.md 313章、本部長依頼・軽微変更ルート] 選んでいる形の
+   * 中を塗るかどうか。`tool`と同じ考え方（309章参照）で、`clearAll`・
+   * `undoLastStroke`・`startEdit`・保存成功のいずれでもリセットしない。
+   */
+  const [filled, setFilled] = useState<boolean>(false);
   // [設計判断] 削除は取り消せない操作のため、app/parent/settings.tsxの家族削除と同じ
   // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認パターンを踏襲する
   // （Alert.alert等のネイティブダイアログはWeb版で挙動が不安定なため使わない）。
@@ -527,6 +533,7 @@ export function DrawingBoard({
             fitToCircleSignal={fitToCircleSignal}
             onGestureActiveChange={onCanvasGestureActiveChange}
             tool={tool}
+            filled={filled}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
@@ -563,7 +570,14 @@ export function DrawingBoard({
               先頭）に置く。無効化条件も色・太さと同じ`disabled={saving}`のみ
               （`atCapacity`では無効化しない）。 */}
           <View style={styles.toolWrap}>
-            <DrawingToolPicker tone={tone} selected={tool} onSelect={setTool} disabled={saving} />
+            <DrawingToolPicker
+              tone={tone}
+              selected={tool}
+              onSelect={setTool}
+              filled={filled}
+              onToggleFilled={() => setFilled((prev) => !prev)}
+              disabled={saving}
+            />
           </View>
 
           <View style={styles.paletteWrap}>

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Polyline } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import theme from "@/theme/theme";
-import { avatarLineDisplayStrokeWidth, pointsToPolylineString } from "./DrawingCanvas";
+import { avatarLineDisplayStrokeWidth, DrawingLineShape, pointsToPolylineString } from "./DrawingCanvas";
 import type { FamilyDrawingLineData } from "@/types/domain";
 
 /**
@@ -49,6 +49,8 @@ interface MemberAvatarProps {
  * 〈枠線なし〉が27箇所すべてで変わってしまうため）。線の縁取り・太さのルールは
  * `DrawingCanvas.tsx`の`avatarLineDisplayStrokeWidth`・`pointsToPolylineString`を
  * 共有し、`DrawingThumbnail`と挙動をそろえる。
+ * [2026-09-27追加・実装メモ.md 313章] 線1本の実際の描画（塗り／線のみの切り替え含む）は
+ * `DrawingCanvas.tsx`の`DrawingLineShape`を共有する（`DrawingThumbnail`とも同じ部品）。
  */
 export function MemberAvatar({ name, color, size = 40, emoji, lineData, expandOnTap = false }: MemberAvatarProps) {
   const [expanded, setExpanded] = useState(false);
@@ -94,26 +96,14 @@ export function MemberAvatar({ name, color, size = 40, emoji, lineData, expandOn
             const points = pointsToPolylineString(line.p, circleSize);
             const needsWhiteOutline = line.c === "#FFFFFF";
             return (
-              <React.Fragment key={idx}>
-                {needsWhiteOutline && (
-                  <Polyline
-                    points={points}
-                    fill="none"
-                    stroke={theme.colors.neutralTextPrimary}
-                    strokeWidth={displayStrokeWidth + 1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                )}
-                <Polyline
-                  points={points}
-                  fill="none"
-                  stroke={line.c}
-                  strokeWidth={displayStrokeWidth}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </React.Fragment>
+              <DrawingLineShape
+                key={idx}
+                color={line.c}
+                points={points}
+                strokeWidth={displayStrokeWidth}
+                filled={line.f}
+                needsWhiteOutline={needsWhiteOutline}
+              />
             );
           })}
         </Svg>
