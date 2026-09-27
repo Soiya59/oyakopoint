@@ -12,14 +12,19 @@
  *   おり（node_modules/react-native-web/src/vendor/react-native/PanResponder確認済み）、
  *   Expo Web export（GitHub Pages配信）でもマウスドラッグでの描画が動作する。
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, View, ViewStyle } from "react-native";
 import Svg, { Circle, Polygon, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
 import { normalizeDrawingPoint, denormalizeDrawingPoint } from "@/lib/drawingCanvasCoords";
 import { isDrawingShapeTool, shapeToPolyline, type DrawingTool } from "@/lib/drawingShapes";
-import { findLineIndexAtPoint, translateLinePoints, type HitTestLine } from "@/lib/drawingLineMove";
+import {
+  findLineIndexAtPoint,
+  translateLinePoints,
+  rotateLinePoints,
+  type HitTestLine,
+} from "@/lib/drawingLineMove";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -46,8 +51,41 @@ import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
  * - 指2本操作（`ZoomableDrawingCanvas.tsx`のパン）とはぶつからない: 2本目の指が
  *   触れた瞬間、既存のパン判定（下記`touches.length >= 2`分岐）が“move”の
  *   つかみかけも他の道具の描きかけと同列に破棄する。
+ *
+ * [2026-09-27追加・実装メモ.md 316章、本部長依頼・軽微変更ルート「Aで！」承認済み]
+ * ✋に「選んで回す」を足す。
+ * - **選ぶ（タップ）と動かす（ドラッグ）は同じGrant/Releaseの中で区別する**:
+ *   指を置いた瞬間（Grant）にどの線をつかんだかは315章と同じ`findLineIndexAtPoint`で
+ *   決めるが、指を動かさずに離した（Release時に`moveCurrentPointsRef`が
+ *   `grab.origPoints`と1つも変わっていない）場合だけ、その線を「選択状態」にする
+ *   （`selectedIndex` state）。実際に動かした（ドラッグ）場合は315章までと同じ
+ *   平行移動のみ行い、選択状態は変えない（依頼文「軽くタップ（動かさずに離す）
+ *   すると…選ばれた状態になる」の「動かさずに」を素直に反映した）。
+ * - **選択を外す条件（依頼文の3つ）**: (1)何もない場所をつかむ・(2)道具を切り替える
+ *   （`tool !== "move"`になるuseEffect）・(3)別の線をつかむ、のいずれも
+ *   `onPanResponderGrant`の時点（つかんだ瞬間）で即座に選択を外す。「別の線を
+ *   ドラッグして動かす」ときも、つかんだ瞬間に前の選択は外れる。
+ * - **回転専用ボタン（↻）はこのファイルの外（`ZoomableDrawingCanvas.tsx`）が描く**:
+ *   拡大・パン中でも常にキャンバスの「窓」の隅に固定表示するため（内側の
+ *   拡大キャンバスの角に描くと、拡大・パン時にボタンごと視界の外へ出てしまう）。
+ *   このファイルは`forwardRef`で`rotateSelected()`を公開し（`DrawingCanvasHandle`）、
+ *   選択の有無は`onSelectionChange`で親へ通知するだけにする。
+ * - **丸め誤差を積み重ねない（依頼文の決定）**: 選んだ瞬間の座標を`rotateBaseRef`に
+ *   固定して保持し、↻を押すたびに角度を15度ずつ増やして「その固定座標から
+ *   毎回回し直す」（`rotateLinePoints`のファイル冒頭コメント参照）。選んだ線を
+ *   ドラッグで動かした場合は、動かした後の座標へ`rotateBaseRef`を張り直す
+ *   （動かす前の位置に戻って回り始めるのを防ぐ）。
+ * - **「ひとつ もどす」は1回分ずつ戻る**: 回転も315章の`onLineMove`をそのまま
+ *   呼ぶため、`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`の`preMoveLinesRef`
+ *   （「直前の`lines`を1つだけ保持する」実装、315章から無変更）が押すたびに
+ *   上書きされる。そのため↻を3回押して「ひとつ もどす」を押すと、3回分まとめて
+ *   ではなく直前の1回（15度）分だけ戻る。315章の1回のドラッグ移動と同じ
+ *   「1操作＝1回分」の粒度に自然にそろうため、`preMoveLinesRef`側は変更しなかった
+ *   （依頼文「既存の巻き戻しの作りに合う方を選ぶ」への回答）。
  */
 const MOVE_HIT_EXTRA_TOLERANCE_PX = 16;
+/** [2026-09-27追加・316章] ↻を1回押すたびに回す角度（統括決定「15度ずつ」）。 */
+const ROTATE_STEP_DEG = 15;
 
 /**
  * [2026-09-04対応・実装メモ126章] Web版（GitHub Pagesをモバイルブラウザで開く運用）で、
@@ -283,11 +321,34 @@ interface DrawingCanvasProps {
    * 差し替えること（`c`・`w`・`f`は変えない）。何もつかめなかった・つかんだが
    * 指を動かさなかった（実質移動していない）ときは呼ばれない。このpropを渡さない
    * 既存の呼び出し元には一切影響しない（`tool`が`"move"`にならない限り使われない）。
+   * [2026-09-27追加・実装メモ.md 316章]「選んで回す」の確定（↻ボタン、
+   * `DrawingCanvasHandle.rotateSelected`経由）も、平行移動と全く同じこの
+   * コールバックを呼ぶ（`p`を書き換えるだけの操作という点で同じため。呼び出し元
+   * 〈`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`〉の`onLineMove`実装は無改修）。
    */
   onLineMove?: (index: number, points: number[]) => void;
+  /**
+   * [2026-09-27追加・実装メモ.md 316章、本部長依頼・軽微変更ルート「Aで！」]
+   * ✋で選択中の線があるかどうかが変わるたびに呼ばれる（`true`＝選択あり・
+   * `false`＝選択なし）。呼び出し元（`ZoomableDrawingCanvas.tsx`）はこの値で
+   * ↻ボタンの表示・非表示を切り替える。このpropを渡さない呼び出し元には
+   * 一切影響しない。
+   */
+  onSelectionChange?: (hasSelection: boolean) => void;
 }
 
-export function DrawingCanvas({
+/**
+ * [2026-09-27追加・実装メモ.md 316章] `forwardRef`で公開する命令的API。
+ * 回転専用ボタン（↻）は拡大・パン時にも位置がずれないよう`ZoomableDrawingCanvas.tsx`
+ * 側（内側の拡大キャンバスの外）に描くため、実際に線を回す処理（選択状態・
+ * `rotateBaseRef`を持つこのファイルの内部）を親から呼び出せるようにする。
+ */
+export interface DrawingCanvasHandle {
+  /** ✋で選択中の線を15度（時計回り）回す。何も選択していなければ何もしない。 */
+  rotateSelected: () => void;
+}
+
+export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(function DrawingCanvas({
   size = theme.drawingLimits.canvasDiameter,
   color,
   strokeWidth,
@@ -301,7 +362,9 @@ export function DrawingCanvas({
   tool = "pen",
   filled = false,
   onLineMove,
-}: DrawingCanvasProps) {
+  onSelectionChange,
+}: DrawingCanvasProps,
+ref) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
   /**
@@ -386,6 +449,91 @@ export function DrawingCanvas({
   // [2026-09-27追加・315章] onPanRefと同じ理由で最新のonLineMoveをrefで参照する。
   const onLineMoveRef = useRef(onLineMove);
   onLineMoveRef.current = onLineMove;
+  /**
+   * [2026-09-27追加・実装メモ.md 316章]✋で「選択中」の線のindex。`null`＝選択なし。
+   * `movePreview`（ドラッグ中の一時的なライブプレビュー）とは別に持つ:
+   * こちらは指を離した後も（回転ボタンを押すまで）持続する状態のため。
+   */
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // PanResponderのクロージャは最新stateを直接読めないため、colorRef等と同じ理由でrefにする。
+  const selectedIndexRef = useRef<number | null>(null);
+  selectedIndexRef.current = selectedIndex;
+  /**
+   * [2026-09-27追加・実装メモ.md 316章] 選択中の線を回すための「固定された基準」。
+   * `index`＝選択中の`lines`内の位置、`basePoints`＝選んだ瞬間（またはドラッグで
+   * 動かした直後）の座標（このセッション中は不変）、`angle`＝これまでに回した
+   * 合計角度（15度刻み）。↻を押すたびに`rotateLinePoints(basePoints, angle+15)`を
+   * 計算する（`basePoints`自体は書き換えない）ことで、「前回の丸め済み結果を
+   * また丸める」ことによる誤差の積み重ねを避ける（`drawingLineMove.ts`の
+   * `rotateLinePoints`コメント参照）。`null`＝選択なし、または選択中の線を
+   * まだ一度も基準づけていない。
+   */
+  const rotateBaseRef = useRef<{ index: number; basePoints: number[]; angle: number } | null>(null);
+  // [2026-09-27追加・316章] onLineMoveRef等と同じ理由で最新のonSelectionChangeをrefで参照する。
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  // [2026-09-27追加・316章] 選択の有無が変わるたびに親へ通知する（依頼文「選んでいる間だけ
+  // ↻ボタンを出す」。`ZoomableDrawingCanvas.tsx`が拡大・パンの影響を受けない位置に
+  // ボタンを描くため、このファイルの外で判断できるようにする）。
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selectedIndex !== null);
+  }, [selectedIndex]);
+  // [2026-09-27追加・316章、依頼文「別の道具を選ぶと選択を外す」] toolが"move"で
+  // なくなった瞬間に選択・回転の基準をリセットする。
+  useEffect(() => {
+    if (tool !== "move") {
+      setSelectedIndex(null);
+      rotateBaseRef.current = null;
+    }
+  }, [tool]);
+  // [2026-09-27追加・316章] 「ひとつ もどす」の通常の1本戻す（`lines`の末尾を
+  // 削除する）等で選択中のindexが配列の範囲外になったら、選択を外す（保険。
+  // 316.4節参照）。
+  useEffect(() => {
+    if (selectedIndex !== null && selectedIndex >= lines.length) {
+      setSelectedIndex(null);
+      rotateBaseRef.current = null;
+    }
+  }, [lines.length, selectedIndex]);
+  /**
+   * [2026-09-27追加・実装メモ.md 316章] ↻ボタン（`ZoomableDrawingCanvas.tsx`が描く）
+   * から呼ばれる命令的API。`DrawingCanvasHandle`参照。
+   *
+   * [選択後に`lines`が外部要因で丸ごと変わった場合の保険] `rotateBaseRef`は
+   * `DrawingCanvas`の内部にあり、「まんなかに おおきく」（`DrawingBoard.tsx`のみ）
+   * ・「なおす」で別の絵を読み込む（`startEdit`）といった、このファイルの外で
+   * 起きる`lines`全体の書き換えを知らない。基準（`base.basePoints`）が今の
+   * `lines[index].p`と食い違っていたら、今の座標を新しい基準（角度0）として
+   * 立て直してから回す（食い違ったまま回すと、外部の変更を巻き戻すような
+   * 不自然な見た目——例えば拡大前の位置へ戻る——になってしまうため）。
+   */
+  useImperativeHandle(
+    ref,
+    () => ({
+      rotateSelected: () => {
+        const base = rotateBaseRef.current;
+        if (base === null) return;
+        const currentPoints = linesRef.current[base.index]?.p;
+        if (currentPoints === undefined) {
+          // 選択していた行そのものが無くなっている。選択ごと外す。
+          rotateBaseRef.current = null;
+          setSelectedIndex(null);
+          return;
+        }
+        const baseMatchesCurrent =
+          currentPoints.length === base.basePoints.length &&
+          currentPoints.every((v, i) => v === base.basePoints[i]);
+        const effectiveBase = baseMatchesCurrent
+          ? base
+          : { index: base.index, basePoints: currentPoints, angle: 0 };
+        const nextAngle = (effectiveBase.angle + ROTATE_STEP_DEG) % 360;
+        const rotated = rotateLinePoints(effectiveBase.basePoints, nextAngle);
+        rotateBaseRef.current = { ...effectiveBase, angle: nextAngle };
+        onLineMoveRef.current?.(effectiveBase.index, rotated);
+      },
+    }),
+    []
+  );
   // [2026-09-17追加・47.3節決定9〜10] 最新のonPanをrefで参照する（colorRefと同じ理由）。
   const onPanRef = useRef(onPan);
   onPanRef.current = onPan;
@@ -440,11 +588,32 @@ export function DrawingCanvas({
       moveCurrentPointsRef.current = null;
       setMovePreview(null);
       if (!grab || !finalPoints) return; // 何もつかめなかった＝何も起きない（依頼文どおり）。
-      // つかんだが指を動かさなかった（実質移動していない）場合はonLineMoveを呼ばない
-      // （「ひとつ もどす」の履歴を無駄に消費させないため）。
+      // [2026-09-27追加・実装メモ.md 316章] 動かした（moved）か、動かさずに離した
+      // （タップ＝選ぶ）かで分岐する。
       const moved = finalPoints.some((v, i) => v !== grab.origPoints[i]);
-      if (!moved) return;
-      onLineMoveRef.current?.(grab.index, finalPoints);
+      if (moved) {
+        onLineMoveRef.current?.(grab.index, finalPoints);
+        // [316章] 選択中の線をドラッグで動かした場合（Grantで選択を外していない＝
+        // 同じ線をつかんだ場合のみここに来る）、回転の基準（rotateBaseRef）を
+        // 動かした後の座標へ張り直す。動かす前の位置を基準にしたまま回すと、
+        // 回転のたびに動かす前の位置へ引き戻って見えてしまうため。
+        if (rotateBaseRef.current !== null && rotateBaseRef.current.index === grab.index) {
+          rotateBaseRef.current = { index: grab.index, basePoints: finalPoints, angle: 0 };
+        }
+        return;
+      }
+      // [316章] つかんだが動かさなかった＝タップ。依頼文「軽くタップ（動かさずに
+      // 離す）すると…選ばれた状態になる」のとおり、その線を選択状態にする。
+      // 既に選択中の線を再度タップした場合（rotateBaseRefのindexが一致）は、
+      // 積み上げてきた回転角度を無駄に0へ戻さないよう基準を張り直さない。
+      setSelectedIndex(grab.index);
+      if (rotateBaseRef.current === null || rotateBaseRef.current.index !== grab.index) {
+        rotateBaseRef.current = {
+          index: grab.index,
+          basePoints: linesRef.current[grab.index]?.p ?? grab.origPoints,
+          angle: 0,
+        };
+      }
       return;
     }
     // [2026-09-26追加・実装メモ.md 309章] 形ツールは、ペンとは別の経路で確定する。
@@ -539,15 +708,29 @@ export function DrawingCanvas({
           }));
           const idx = findLineIndexAtPoint(hitTestLines, nx, ny, extraToleranceNormalized);
           if (idx === null) {
-            // 何もつかめなかった＝何も起きない（依頼文どおり）。
+            // 何もつかめなかった＝何も起きない（つかむ操作としては、依頼文どおり）。
             moveGrabRef.current = null;
             moveCurrentPointsRef.current = null;
             setMovePreview(null);
+            // [2026-09-27追加・316章、依頼文「何もないところをタップすると選択を外す」]
+            // 何もない場所をつかんだ瞬間に、選択中の線があれば即座に外す。
+            if (selectedIndexRef.current !== null) {
+              setSelectedIndex(null);
+              rotateBaseRef.current = null;
+            }
           } else {
             const origPoints = linesRef.current[idx].p;
             moveGrabRef.current = { index: idx, startX: nx, startY: ny, lastX: nx, lastY: ny, origPoints };
             moveCurrentPointsRef.current = origPoints;
             setMovePreview({ index: idx, points: origPoints });
+            // [2026-09-27追加・316章、依頼文「別の線をつかむと選択を外す」] 今選んで
+            // いる線と違う線をつかんだら、つかんだ瞬間（ドラッグかタップかが
+            // 決まる前）に前の選択を即座に外す。同じ線を再びつかんだ場合は、
+            // 積み上げてきた回転の基準（rotateBaseRef）を保つため何もしない。
+            if (selectedIndexRef.current !== null && selectedIndexRef.current !== idx) {
+              setSelectedIndex(null);
+              rotateBaseRef.current = null;
+            }
           }
           return;
         }
@@ -753,6 +936,11 @@ export function DrawingCanvas({
               strokeWidth={displayStrokeWidth}
               filled={line.f}
               needsWhiteOutline={needsWhiteOutline}
+              // [2026-09-27追加・実装メモ.md 316章]✋で「選択中」の線は、つかんで
+              // ドラッグ中の`movePreview`と同じ薄い影（`highlighted`）を、指を
+              // 離した後も選択が続く間ずっと表示する（依頼文「選ばれている間は…
+              // 見た目を続ける」。315章の`highlighted`スタイルをそのまま流用）。
+              highlighted={selectedIndex === idx}
             />
           );
         })}
@@ -791,9 +979,12 @@ export function DrawingCanvas({
             );
           })()}
       </Svg>
+      {/* [2026-09-27追加・実装メモ.md 316章] 回転専用ボタン（↻）はここでは描かない。
+          `ZoomableDrawingCanvas.tsx`が`onSelectionChange`・`ref`（`rotateSelected`）
+          経由でこのファイルの外に描く（ファイル冒頭316章コメント参照）。 */}
     </View>
   );
-}
+});
 
 /**
  * コレクター棚等での小さい静止プレビュー用（非インタラクティブ）。上限到達時の自分の絵一覧に使う。

@@ -1,8 +1,15 @@
 /**
- * お絵かきの「うごかす」道具（✋、実装メモ.md 315章、本部長依頼・軽微変更ルート
- * 2026-09-27・統括承認済み「おすすめで！」）で使う純粋関数。UIにもDrawingCanvas.tsx
+ * お絵かきの「うごかす」道具（✋、実装メモ.md 315・316章、本部長依頼・軽微変更ルート
+ * 2026-09-27・統括承認済み「おすすめで！」「Aで！」）で使う純粋関数。UIにもDrawingCanvas.tsx
  * （react-native-svgに依存）にも依存しない形に切り出し、`node`単体実行で検証できる
  * ようにする（`src/lib/drawingShapes.ts`・`drawingCanvasCoords.ts`と同じ方針）。
+ *
+ * [2026-09-27追加・実装メモ.md 316章、本部長依頼「回す」機能] `rotateLinePoints`を
+ * このファイルへ追加した。「つかんで動かす（`translateLinePoints`）」と「つかんで
+ * 選び、回す（`rotateLinePoints`）」は同じ✋道具・同じ`onLineMove(index, points)`
+ * コールバック（`p`を書き換えるだけ）を共有する、ごく近い機能のため、別ファイルへは
+ * 分けなかった（依頼文「（または新しい`*.verify.ts`）」の選択として、既存ファイルへの
+ * 追加を選んだ理由）。
  *
  * [座標・太さの単位について]
  * この関数群が受け取る座標・太さの値は、呼び出し元（`DrawingCanvas.tsx`）側で
@@ -116,6 +123,64 @@ function clampNormalized(value: number): number {
 }
 
 /**
+ * [2026-09-27追加・実装メモ.md 316章、本部長依頼「回す」機能・統括決定「A案」]
+ * 線の全ての点を、外接矩形（バウンディングボックス）の中心のまわりに`angleDeg`度
+ * （時計回り、正の値）だけ回す。
+ *
+ * [中心の決め方] `translateLinePoints`・`drawingShapes.ts`の`shapeToPolyline`
+ * （丸・四角・三角のいずれも外接矩形の中心を基準に組み立てる）と同じ考え方で、
+ * 「その時点で渡された`points`の外接矩形の中心」を回転の中心とする。形そのものの
+ * 重心（面積の中心）ではなく外接矩形の中心なので、三角形のような非対称な形では
+ * 見た目の重心とわずかにずれるが、依頼文に厳密な定義の指定が無く、既存の関数群と
+ * 同じ基準に揃えるほうが一貫性がある。
+ *
+ * [時計回りの向き] このプロジェクトの正規化座標はSVGと同じくyが下向き（上端0・
+ * 下端1000）。この座標系で標準の回転行列
+ *   x' = cx + (x-cx)cosθ - (y-cy)sinθ
+ *   y' = cy + (x-cx)sinθ + (y-cy)cosθ
+ * に正のθ（時計回り側）を渡すと、見た目には時計回りに回る（SVGの`rotate()`
+ * 変換が正の角度で時計回りになるのと同じ理由。y軸が下向きのため、数学の教科書の
+ * 「反時計回りが正」がそのまま画面上では時計回りに見える）。
+ *
+ * [丸め誤差を積み重ねない・依頼文の決定] この関数は呼ばれるたびに、渡された
+ * `points`（呼び出し元は「選んだ瞬間の、まだ回していない元の座標」を毎回渡すこと）
+ * から回転をやり直す。前回の呼び出しの戻り値（既に整数へ丸め済み）を次の入力に
+ * 使わない設計を呼び出し元（`DrawingCanvas.tsx`の`rotateBaseRef`）が徹底することで、
+ * 「丸め→また丸め」を繰り返して形が少しずつ崩れることを防ぐ。この関数自体は
+ * 「一度だけ回す」計算にのみ責任を持つ（角度の累積・基準点の保持はこの関数の外、
+ * 呼び出し元の責務）。
+ *
+ * [キャンバスの外に出る扱い] 回転の結果は小数になり、外接矩形も0〜1000の外へ
+ * はみ出しうる。`translateLinePoints(rotated, 0, 0)`をそのまま呼ぶことで、
+ * 「形はつぶさず、外接矩形が0〜1000へ収まる範囲だけ形全体をずらしてから、
+ * 各座標を整数へ丸める」という315章と全く同じクランプ・丸めロジックを再利用する
+ * （dx=dy=0を渡しても、`translateLinePoints`内部の`cdx`/`cdy`計算が「はみ出た分だけ
+ * 押し戻す」量を自動的に算出するため、これだけで315章の「形ごと端で止まる」
+ * 挙動がそのまま手に入る）。
+ */
+export function rotateLinePoints(points: readonly number[], angleDeg: number): number[] {
+  if (points.length < 4) return [...points];
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < points.length; i += 2) {
+    minX = Math.min(minX, points[i]); maxX = Math.max(maxX, points[i]);
+    minY = Math.min(minY, points[i + 1]); maxY = Math.max(maxY, points[i + 1]);
+  }
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const rotated: number[] = new Array(points.length);
+  for (let i = 0; i < points.length; i += 2) {
+    const dx = points[i] - cx;
+    const dy = points[i + 1] - cy;
+    rotated[i] = cx + dx * cos - dy * sin;
+    rotated[i + 1] = cy + dx * sin + dy * cos;
+  }
+  return translateLinePoints(rotated, 0, 0);
+}
+
+/**
  * 線の全ての点を(dx,dy)だけ平行移動する。各座標を独立に0〜1000でクランプする。
  *
  * [キャンバスの外に出る扱い・依頼文の決定と理由]
@@ -126,6 +191,9 @@ function clampNormalized(value: number): number {
  * 動かした線だけ別の規則（例: 丸の半径で強制的に押し戻す）を持たせると、
  * ペンで直接キャンバスの四隅まで描いた場合と挙動が食い違ってしまうため、
  * ここでも同じ「各座標を独立に0〜1000へクランプするだけ」に揃えた。
+ *
+ * [2026-09-27追記・316章] `rotateLinePoints`が`dx=dy=0`でこの関数を呼び、
+ * 回転結果を0〜1000へ収める用途にも使っている（上記コメント参照）。
  */
 export function translateLinePoints(points: readonly number[], dx: number, dy: number): number[] {
   // [2026-09-27修正・本部長レビュー] 点ごとに0〜1000へ寄せると、端まで動かしたときに

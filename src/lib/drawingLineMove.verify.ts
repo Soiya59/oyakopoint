@@ -9,7 +9,7 @@
  *   npx tsc --noEmit --allowImportingTsExtensions src/lib/drawingLineMove.verify.ts
  * で個別に確認できる。
  */
-import { findLineIndexAtPoint, translateLinePoints, type HitTestLine } from "./drawingLineMove.ts";
+import { findLineIndexAtPoint, translateLinePoints, rotateLinePoints, type HitTestLine } from "./drawingLineMove.ts";
 
 let failed = 0;
 
@@ -111,6 +111,45 @@ function assert(label: string, condition: boolean): void {
   const result = translateLinePoints([0, 0], 2.6, -0.4);
   assert("結果は整数のまま", result.every((v) => Number.isInteger(v)));
   assertEqual("小数のdx/dyも四捨五入・0未満は0にクランプされる", result, [3, 0]);
+}
+
+// ---- 9. rotateLinePoints: 90度は時計回り（yが下向きの正規化座標での向きの確認） ----
+{
+  // 中心(500,500)の水平な線分[(400,500)-(600,500)]。90度時計回りに回すと、
+  // 「右（3時の位置）」が「下（6時の位置）」へ、「左（9時）」が「上（12時）」へ動く
+  // 垂直な線分になるはず（実装メモ316章のコメントで示した向きの根拠と対応）。
+  assertEqual(
+    "90度回すと、右向きの線が下向きの線になる（時計回り）",
+    rotateLinePoints([400, 500, 600, 500], 90),
+    [500, 400, 500, 600]
+  );
+}
+
+// ---- 10. rotateLinePoints: 360度回すと、ほぼ元の座標に戻る（浮動小数の丸め後は完全一致） ----
+{
+  assertEqual(
+    "360度回すと元の座標と一致する（キャンバス内に収まる形の場合）",
+    rotateLinePoints([100, 200, 900, 300, 500, 800], 360),
+    [100, 200, 900, 300, 500, 800]
+  );
+}
+
+// ---- 11. rotateLinePoints: はみ出す場合は315章と同じく形ごと端で止まる（つぶさない） ----
+{
+  // 上端いっぱいの水平線[(0,0)-(1000,0)]を、中心(500,0)のまわりに90度回すと、
+  // 数学的には(500,-500)-(500,500)という上へはみ出す垂直線になる。
+  // 315章のtranslateLinePointsと同じ「形ごとずらして収める」により、
+  // 下へ500ずらした(500,0)-(500,1000)（長さ1000を保ったまま）になるはず。
+  assertEqual(
+    "回した結果が端からはみ出すときは、形をつぶさず形全体をずらして収める",
+    rotateLinePoints([0, 0, 1000, 0], 90),
+    [500, 0, 500, 1000]
+  );
+}
+
+// ---- 12. rotateLinePoints: 点が1つだけ（2要素）の退化データはそのまま返す ----
+{
+  assertEqual("点が1つだけの線は回しても変わらない", rotateLinePoints([300, 400], 45), [300, 400]);
 }
 
 console.log("");

@@ -39,8 +39,8 @@
  * 47章・48章が守ってきた「指を動かしている最中は何も動かさない」原則と同じ）。
  */
 import React, { useEffect, useRef, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
-import DrawingCanvas from "./DrawingCanvas";
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
+import DrawingCanvas, { type DrawingCanvasHandle } from "./DrawingCanvas";
 import DrawingZoomPicker from "./DrawingZoomPicker";
 import theme from "@/theme/theme";
 import {
@@ -66,6 +66,20 @@ const PAN_INTRO_TEXT: Record<Tone, string> = {
   child: "ゆびを どうじに えに タッチして うごかすと、かきたい ぶぶんに えを うごかす ことが できるよ",
   parent: "絵は2本指でドラッグでき、描きたい部分に動かせます",
   supporter: "絵は2本指でドラッグでき、描きたい部分に動かせます",
+};
+
+/**
+ * [2026-09-27追加・実装メモ.md 316章、本部長依頼・軽微変更ルート「Aで！」]
+ * 回転ボタン（↻）のaccessibilityLabel。`DrawingToolPicker.tsx`の
+ * `TOOL_ACCESSIBILITY_LABELS`（うごかす／動かす）と同じ考え方で、子ども向けは
+ * 平仮名、保護者・みまもりメンバー向けは漢字（この2ロールは常に同一文言）。
+ * 画面には記号（↻）のみを表示し、文字ラベルは出さない（依頼文「子ども向けは
+ * 記号だけ」）。
+ */
+const ROTATE_BUTTON_LABEL: Record<Tone, string> = {
+  child: "まわす",
+  parent: "回す",
+  supporter: "回す",
 };
 
 interface ZoomableDrawingCanvasProps {
@@ -144,6 +158,8 @@ interface ZoomableDrawingCanvasProps {
    * `DrawingCanvas`の同名propをそのまま橋渡しする。ここでは何も加工しない
    * （拡大表示中の座標変換は`DrawingCanvas`側の`chromeless`内側キャンバスが
    * 常に担っており、`tool`・`filled`と同じ橋渡しの扱いでよい）。
+   * [2026-09-27追記・実装メモ.md 316章]「選んで回す」（↻ボタン、下記参照）の確定も
+   * このコールバックを同じく使う（`DrawingCanvas.tsx`側の説明参照）。
    */
   onLineMove?: (index: number, points: number[]) => void;
 }
@@ -173,6 +189,17 @@ export function ZoomableDrawingCanvas({
 
   const [zoom, setZoom] = useState<DrawingZoomLevel>(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  /**
+   * [2026-09-27追加・実装メモ.md 316章、本部長依頼・軽微変更ルート「Aで！」]
+   * ↻ボタン（回転）は、拡大・パンの影響を受けない「窓」側（このファイル）に
+   * 描く必要があるが、実際に線を回す処理（選択状態・回転の基準）は
+   * `DrawingCanvas.tsx`の内部にある（`findLineIndexAtPoint`等、`lines`を直接見る
+   * 既存の実装に相乗りするため）。`ref`で`DrawingCanvasHandle.rotateSelected`を
+   * 呼び出せるようにし、選択の有無は`onSelectionChange`で受け取る。
+   */
+  const canvasRef = useRef<DrawingCanvasHandle>(null);
+  const [hasSelection, setHasSelection] = useState(false);
 
   const resetZoom = () => {
     setZoom(1);
@@ -301,37 +328,65 @@ export function ZoomableDrawingCanvas({
     <View style={styles.measureWrap} onLayout={handleLayout}>
       <DrawingZoomPicker tone={tone} selected={zoom} onSelect={handleSelectZoom} disabled={zoomPickerDisabled} />
 
-      {/* 47.6節決定14: 外周の円形枠線・クリップは「窓」側にのみ持たせる。
-          窓のサイズは基準直径のまま固定し、中の拡大キャンバスだけが動く。 */}
-      <View
-        style={[
-          styles.window,
-          { width: baseDiameter, height: baseDiameter, borderRadius: baseDiameter / 2 },
-        ]}
-      >
+      {/* [2026-09-27追加・実装メモ.md 316章]「窓」と↻ボタンをまとめて相対配置の
+          コンテナに包む。↻ボタンは「窓」（拡大・パンの影響を受けない、常に
+          基準直径のまま固定される側）の隅に重ねる。窓の内側（`innerSize`・
+          `pan`で動く拡大キャンバス）に描くと、拡大・パン中にボタンごと画面外へ
+          出てしまうため、あえて窓の外側（このファイル）に置いた。 */}
+      <View style={styles.windowWrap}>
+        {/* 47.6節決定14: 外周の円形枠線・クリップは「窓」側にのみ持たせる。
+            窓のサイズは基準直径のまま固定し、中の拡大キャンバスだけが動く。 */}
         <View
-          style={{
-            width: innerSize,
-            height: innerSize,
-            transform: [{ translateX: pan.x }, { translateY: pan.y }],
-          }}
+          style={[
+            styles.window,
+            { width: baseDiameter, height: baseDiameter, borderRadius: baseDiameter / 2 },
+          ]}
         >
-          <DrawingCanvas
-            size={innerSize}
-            color={color}
-            strokeWidth={strokeWidth}
-            lines={lines}
-            onStrokeEnd={onStrokeEnd}
-            disabled={disabled}
-            backgroundColor={backgroundColor}
-            chromeless
-            onPan={handlePan}
-            onGestureActiveChange={onGestureActiveChange}
-            tool={tool}
-            filled={filled}
-            onLineMove={onLineMove}
-          />
+          <View
+            style={{
+              width: innerSize,
+              height: innerSize,
+              transform: [{ translateX: pan.x }, { translateY: pan.y }],
+            }}
+          >
+            <DrawingCanvas
+              ref={canvasRef}
+              size={innerSize}
+              color={color}
+              strokeWidth={strokeWidth}
+              lines={lines}
+              onStrokeEnd={onStrokeEnd}
+              disabled={disabled}
+              backgroundColor={backgroundColor}
+              chromeless
+              onPan={handlePan}
+              onGestureActiveChange={onGestureActiveChange}
+              tool={tool}
+              filled={filled}
+              onLineMove={onLineMove}
+              onSelectionChange={setHasSelection}
+            />
+          </View>
         </View>
+
+        {/* [2026-09-27追加・実装メモ.md 316章、本部長依頼・軽微変更ルート「Aで！」]
+            ↻（回す）ボタン。✋で線・形を選んでいる間だけ、窓の右上の隅に重ねて
+            出す（依頼文「レイアウトを押し下げない」。絶対配置のため行は増えない）。
+            押すたびに選択中の線を15度（時計回り）回す（`DrawingCanvas.tsx`の
+            `rotateSelected`を`ref`経由で呼ぶだけ）。既存の道具ボタンと同じ56dp前後
+            のタップ領域（`theme.drawingLimits.swatchSize`）にする。 */}
+        {tool === "move" && hasSelection && (
+          <Pressable
+            onPress={() => canvasRef.current?.rotateSelected()}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={ROTATE_BUTTON_LABEL[tone]}
+            hitSlop={8}
+            style={[styles.rotateButton, disabled && styles.rotateButtonDisabled]}
+          >
+            <Text style={styles.rotateButtonSymbol}>↻</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* [2026-09-18追加・主要画面ワイヤーフレーム.md 52.3節決定2・52.4節決定3]
@@ -351,6 +406,11 @@ const styles = StyleSheet.create({
   // width:"100%"にすることで、onLayoutの実測値がScreen.tsxのcontent幅
   // （パディングs4×2を引いた後の幅）とそのまま一致する（47.1節決定1）。
   measureWrap: { width: "100%", alignItems: "center" },
+  // [2026-09-27追加・実装メモ.md 316章] 「窓」と↻ボタンの絶対配置の基準になる
+  // コンテナ。`window`（`marginTop`込み）1つだけがふつうの配置の子のため、
+  // このViewの大きさ自体は`window`にそのまま揃う（ボタンは絶対配置のため
+  // 大きさに関与しない）。
+  windowWrap: { position: "relative", alignSelf: "center" },
   window: {
     marginTop: theme.spacing.s4,
     borderWidth: 2,
@@ -358,6 +418,33 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.neutralSurface,
     overflow: "hidden",
     alignSelf: "center",
+  },
+  // [2026-09-27追加・実装メモ.md 316章] ↻（回す）ボタン。`window`の右上の隅に
+  // 重ねる（`top`は`window`の`marginTop`と同じ値にして窓の上端に揃え、`right:0`で
+  // 窓の右端に揃える。円形キャンバスの角＝視覚的には円の外に半分はみ出す位置に
+  // なるが、「絵の上の隅に重ねて出す」という依頼文どおりのバッジ的な配置）。
+  // 既存の道具ボタン（`DrawingToolPicker.tsx`の`tap`）と同じ56dp四方のタップ領域。
+  rotateButton: {
+    position: "absolute",
+    top: theme.spacing.s4,
+    right: 0,
+    width: theme.drawingLimits.swatchSize,
+    height: theme.drawingLimits.swatchSize,
+    borderRadius: theme.drawingLimits.swatchSize / 2,
+    borderWidth: 2,
+    borderColor: theme.colors.brandPrimary,
+    backgroundColor: theme.colors.neutralSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    elevation: 10,
+  },
+  rotateButtonDisabled: { opacity: 0.4 },
+  // 子ども向けは記号のみ（依頼文どおり）。文字ラベルは持たせずaccessibilityLabelのみで補う。
+  rotateButtonSymbol: {
+    fontSize: 26,
+    lineHeight: 30,
+    color: theme.colors.brandPrimaryStrong,
   },
   // [2026-09-18追加・52.5節決定4] 新しい視覚要素は増やさない。`DrawingBoard.tsx`の
   // treeMiniatureText・sectionHintと同じ扱い（captionStyle相当・neutralTextSecondary・
