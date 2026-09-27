@@ -62,7 +62,8 @@ const MSG_NETWORK = GENERIC_ERROR_MESSAGE;
 const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
 // [2026-09-20新設・実装メモ.md 262章] サーバー側のゲートウェイ異常（status>=500）専用。
 // 今すぐの再試行ではなく少し時間を置くことを促す点がMSG_NETWORKと異なる。
-const MSG_SERVER_BUSY = "サーバーが混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+// [2026-09-27変更・ワイヤーフレーム67章] 「サーバー」は祖父母にも分かりにくいので「ただいま」に。
+const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
 const MSG_RESEND_RATE_LIMIT =
   "メールの送信回数が上限に達しました。しばらく時間をおいてからもう一度お試しください。";
 
@@ -206,7 +207,8 @@ export default function EmailCodeVerifyForm({ tone, email, onResend }: EmailCode
           （src/lib/authFailureRef.ts参照）。 */}
       {errorRef && (
         <Text style={[captionTypography, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
-          {errorRef}
+          {/* [2026-09-27・ワイヤーフレーム67章決定4] 何の文字列か分かるよう「目印」を添える。 */}
+          目印 {errorRef}
         </Text>
       )}
 
