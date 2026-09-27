@@ -157,6 +157,20 @@ export function DrawingBoard({
    * `undoLastStroke`・`startEdit`・保存成功のいずれでもリセットしない。
    */
   const [filled, setFilled] = useState<boolean>(false);
+  /**
+   * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+   * ✋（うごかす）で線を動かす直前の`lines`を1つだけ保持する。「ひとつ もどす」を
+   * 直後に押すと、動かす前の位置へ一括で戻す（依頼文「『ひとつもどす』で、動かす前の
+   * 位置に戻せる（動かす操作も1回分の操作として扱う）」）。仕組みは48章の
+   * 「まんなかに おおきく」用`preFitLinesRef`と全く同じ「1回だけ使える巻き戻し」
+   * パターンを踏襲した（`undoLastStroke`は`preMoveLinesRef`→`preFitLinesRef`→
+   * 通常の1本戻す、の順に見る）。新しい線を描く・ぜんぶけす・保存成功・編集開始・
+   * 「まんなかに おおきく」のいずれかが起きたら即座に破棄する（`preFitLinesRef`と
+   * 同じ箇所に破棄処理を追記した。両者は同時に有効にならない——常にどちらか一方を
+   * 破棄してからもう一方を張るため、`undoLastStroke`はこの2つを見る順序に関わらず
+   * 正しく動く）。
+   */
+  const preMoveLinesRef = useRef<FamilyDrawingLine[] | null>(null);
   // [設計判断] 削除は取り消せない操作のため、app/parent/settings.tsxの家族削除と同じ
   // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認パターンを踏襲する
   // （Alert.alert等のネイティブダイアログはWeb版で挙動が不安定なため使わない）。
@@ -272,6 +286,8 @@ export function DrawingBoard({
     // [2026-09-17追加・48.3節決定12-4] 新しい線を1本描き終えたら、「まんなかに
     // おおきく」の一括復元の権利は即座に失効する。
     preFitLinesRef.current = null;
+    // [2026-09-27追加・315章] 同じ理由で「うごかす」の一括復元の権利も失効する。
+    preMoveLinesRef.current = null;
     setLines((prev) => {
       if (prev.length >= theme.drawingLimits.maxLines) return prev;
       const totalPoints = prev.reduce((sum, l) => sum + l.p.length / 2, 0) + line.p.length / 2;
@@ -291,6 +307,8 @@ export function DrawingBoard({
   const clearAll = () => {
     // [2026-09-17追加・48.3節決定12-4]「ぜんぶけす」でも一括復元の権利は失効する。
     preFitLinesRef.current = null;
+    // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
+    preMoveLinesRef.current = null;
     setLines([]);
   };
 
@@ -303,6 +321,15 @@ export function DrawingBoard({
    *  この「ひとつ もどす」は変換前の`lines`へ一括で戻る（`preFitLinesRef`が有効な
    *  間だけ）。消費したら即座に破棄し、次からは通常どおり最後の1本を取り除く。 */
   const undoLastStroke = () => {
+    // [2026-09-27追加・315章]「うごかす」直後は、動かす前の位置へ一括で戻す
+    // （`preFitLinesRef`と同じ「1回だけ使える巻き戻し」。両者は同時に有効に
+    // ならないため、先にどちらを見ても結果は変わらない）。
+    if (preMoveLinesRef.current !== null) {
+      const restored = preMoveLinesRef.current;
+      preMoveLinesRef.current = null;
+      setLines(restored);
+      return;
+    }
     if (preFitLinesRef.current !== null) {
       const restored = preFitLinesRef.current;
       preFitLinesRef.current = null;
@@ -310,6 +337,34 @@ export function DrawingBoard({
       return;
     }
     setLines((prev) => prev.slice(0, -1));
+  };
+
+  /**
+   * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+   * ✋で線をつまんで動かし終えたとき（`DrawingCanvas`が指を離した瞬間に1回だけ
+   * 呼ぶ）に、`lines[index].p`を移動後の点へ差し替える。`c`・`w`・`f`はそのまま
+   * （`FamilyDrawingLine`のうち`p`だけを書き換える）。配列内の位置（z順）は
+   * 変えない——重なりの前後関係は「あとから描いた／なおしたか」ではなく
+   * 「どちらを上に描いたか」のままにしておくほうが直感的なため（依頼文には
+   * 明記が無いため、最も変更が小さい設計を選んだ）。
+   */
+  const onLineMove = (index: number, translatedPoints: number[]) => {
+    // 「まんなかに おおきく」の巻き戻しは、動かした後の状態を基準に戻ると
+    // 混乱するため、動かした瞬間に破棄する（`handleStrokeEnd`と同じ扱い）。
+    preFitLinesRef.current = null;
+    // 現在の`lines`（stateそのもの）を「動かす前」として保持する。
+    // `handleFitToCircle`の`preFitLinesRef.current = lines;`と同じ書き方
+    // （関数更新ではなくこのレンダーの`lines`をそのまま使う）。ドラッグ中は
+    // `DrawingCanvas`内部の`movePreview`（ローカルstate）だけが再描画され、
+    // この`DrawingBoard`自体は再レンダーされないため、指を離した瞬間に読む
+    // `lines`は「つかんだ瞬間から変わっていない、今の状態」と保証できる。
+    preMoveLinesRef.current = lines;
+    setLines((prev) => {
+      if (index < 0 || index >= prev.length) return prev; // 万一のズレに対する安全策。
+      const next = prev.slice();
+      next[index] = { ...next[index], p: translatedPoints };
+      return next;
+    });
   };
 
   /**
@@ -322,6 +377,8 @@ export function DrawingBoard({
   const startEdit = (drawing: FamilyDrawing) => {
     // [2026-09-17追加・48.3節決定12-4] 編集開始でも一括復元の権利は失効する。
     preFitLinesRef.current = null;
+    // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
+    preMoveLinesRef.current = null;
     setConfirmingDeleteId(null);
     setEditingId(drawing.id);
     setLines(drawing.line_data.lines);
@@ -357,6 +414,8 @@ export function DrawingBoard({
       if (ok) {
         // [2026-09-17追加・48.3節決定12-4] 保存成功でも一括復元の権利は失効する。
         preFitLinesRef.current = null;
+        // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
+        preMoveLinesRef.current = null;
         setLines([]);
         setEditingId(null);
         setTitle("");
@@ -366,6 +425,7 @@ export function DrawingBoard({
     const ok = await onSave({ v: 1, lines }, titleToSend);
     if (ok) {
       preFitLinesRef.current = null;
+      preMoveLinesRef.current = null;
       setLines([]);
       setTitle("");
     }
@@ -391,6 +451,9 @@ export function DrawingBoard({
       setFitBlockedMessage(fitToCircleBlockedText);
       return;
     }
+    // [2026-09-27追加・315章]「うごかす」の一括復元の権利は、変換後の状態を基準に
+    // 戻ると混乱するため失効させる（`onLineMove`が`preFitLinesRef`を失効させるのと対）。
+    preMoveLinesRef.current = null;
     preFitLinesRef.current = lines;
     setLines(result.lines);
     setFitToCircleSignal((n) => n + 1);
@@ -534,6 +597,7 @@ export function DrawingBoard({
             onGestureActiveChange={onCanvasGestureActiveChange}
             tool={tool}
             filled={filled}
+            onLineMove={onLineMove}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]

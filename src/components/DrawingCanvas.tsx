@@ -18,9 +18,36 @@ import Svg, { Circle, Polygon, Polyline, Rect } from "react-native-svg";
 import { simplifyPolyline } from "@/lib/simplifyPolyline";
 import { nextGestureActiveState } from "@/lib/gestureActiveNotifier";
 import { normalizeDrawingPoint, denormalizeDrawingPoint } from "@/lib/drawingCanvasCoords";
-import { shapeToPolyline, type DrawingTool } from "@/lib/drawingShapes";
+import { isDrawingShapeTool, shapeToPolyline, type DrawingTool } from "@/lib/drawingShapes";
+import { findLineIndexAtPoint, translateLinePoints, type HitTestLine } from "@/lib/drawingLineMove";
 import theme from "@/theme/theme";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
+
+/**
+ * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+ * ✋（`"move"`）道具。描いた線・形（塗った形も含む）を指1本でつまんで動かす。
+ * 309章（形ツール）・313章（塗り）と同じ`tool`propの分岐に相乗りするが、性質が
+ * 大きく異なるため実装は別立てにした:
+ * - ペン・形ツールは「これから新しい1本の線を作る」操作で、確定は`onStrokeEnd`
+ *   （配列へ追加）。
+ * - "move"は「既に確定済みの`lines[i]`を書き換える」操作のため、新しい
+ *   `onLineMove(index, translatedPoints)`コールバックを設け、`lines`配列の
+ *   どの行を・どう書き換えるかは呼び出し元（`DrawingBoard.tsx`・
+ *   `AvatarDrawingPanel.tsx`）に委ねる（`onStrokeEnd`の「新しい行を渡す」形と
+ *   非対称になるが、既存の行を特定のindexで上書きする操作を無理に
+ *   `onStrokeEnd`へ寄せるより素直なため）。
+ * - どの線をつかむか（`findLineIndexAtPoint`）・平行移動の計算（`translateLinePoints`）
+ *   はUIに依存しない純粋関数として`src/lib/drawingLineMove.ts`へ切り出し、
+ *   `drawingShapes.ts`・`drawingCanvasCoords.ts`と同じ方針でnode単体検証している
+ *   （`drawingLineMove.verify.ts`）。
+ * - 座標の変換（実ピクセル⇔0〜1000正規化）は、ペン・形と全く同じ
+ *   `normalizeDrawingPoint`／`toNormalized`をそのまま使う（依頼文「座標の変換は、
+ *   線を描くときと同じ計算を使う」）。
+ * - 指2本操作（`ZoomableDrawingCanvas.tsx`のパン）とはぶつからない: 2本目の指が
+ *   触れた瞬間、既存のパン判定（下記`touches.length >= 2`分岐）が“move”の
+ *   つかみかけも他の道具の描きかけと同列に破棄する。
+ */
+const MOVE_HIT_EXTRA_TOLERANCE_PX = 16;
 
 /**
  * [2026-09-04対応・実装メモ126章] Web版（GitHub Pagesをモバイルブラウザで開く運用）で、
@@ -104,26 +131,51 @@ export function DrawingLineShape({
   strokeWidth,
   filled,
   needsWhiteOutline,
+  highlighted,
 }: {
   color: string;
   points: string;
   strokeWidth: number;
   filled?: boolean;
   needsWhiteOutline: boolean;
+  /**
+   * [2026-09-27追加・実装メモ.md 315章] ✋（うごかす）でつかんでいる間、その線を
+   * 少し目立たせる（依頼文「つかんでいる間は、その線を少し目立たせる（例: 薄い影や
+   * 縁）」）。線・塗りの色や形に関わらず同じ見た目にするため、実際の線の下へ
+   * 半透明で少し太いPolylineを1本重ねるだけの実装にした（`needsWhiteOutline`の
+   * 「実線の縁取り」とは別物。色を問わず常に薄い暗色の影として見せたいため、
+   * 白選択時の縁取り色と共用せず独立した見た目にする）。
+   */
+  highlighted?: boolean;
 }) {
+  const halo = highlighted ? (
+    <Polyline
+      points={points}
+      fill="none"
+      stroke={theme.colors.neutralTextPrimary}
+      strokeOpacity={0.28}
+      strokeWidth={strokeWidth + 8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ) : null;
   if (filled) {
     return (
-      <Polygon
-        points={points}
-        fill={color}
-        stroke={needsWhiteOutline ? theme.colors.neutralTextPrimary : color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-      />
+      <>
+        {halo}
+        <Polygon
+          points={points}
+          fill={color}
+          stroke={needsWhiteOutline ? theme.colors.neutralTextPrimary : color}
+          strokeWidth={strokeWidth}
+          strokeLinejoin="round"
+        />
+      </>
     );
   }
   return (
     <>
+      {halo}
       {needsWhiteOutline && (
         <Polyline
           points={points}
@@ -208,6 +260,9 @@ interface DrawingCanvasProps {
    * 角が崩れるため、依頼文の指示どおり）。既存の呼び出し元（このpropを渡さない
    * `DrawingBoard.tsx`旧来分・`AvatarDrawingPanel.tsx`）は既定値`"pen"`のまま、
    * 見た目・挙動は一切変わらない。
+   * [2026-09-27追加・実装メモ.md 315章]`"move"`のときは、つかんだ既存の線を
+   * 平行移動する（下記`onLineMove`参照）。新しい線は作らないため`onStrokeEnd`は
+   * 呼ばれない。
    */
   tool?: DrawingTool;
   /**
@@ -217,9 +272,19 @@ interface DrawingCanvasProps {
    * ライブプレビュー（下記`livePoints`の描画）・確定した線（`onStrokeEnd`に渡す
    * `FamilyDrawingLine.f`）の両方に使う。既存の呼び出し元（このpropを渡さない
    * `DrawingBoard.tsx`旧来分・`AvatarDrawingPanel.tsx`旧来分）は既定値`false`のまま、
-   * 見た目・挙動は一切変わらない。
+   * 見た目・挙動は一切変わらない。`tool==="move"`のときも無視される。
    */
   filled?: boolean;
+  /**
+   * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+   * `tool==="move"`のとき、指を離した瞬間（つかんだ線を実際に動かせたときのみ）に
+   * 呼ばれる。`index`は`lines`配列内での位置、`points`は移動後の0〜1000正規化座標
+   * （`FamilyDrawingLine.p`と同じ形）。呼び出し元は`lines[index].p`をこの値へ
+   * 差し替えること（`c`・`w`・`f`は変えない）。何もつかめなかった・つかんだが
+   * 指を動かさなかった（実質移動していない）ときは呼ばれない。このpropを渡さない
+   * 既存の呼び出し元には一切影響しない（`tool`が`"move"`にならない限り使われない）。
+   */
+  onLineMove?: (index: number, points: number[]) => void;
 }
 
 export function DrawingCanvas({
@@ -235,9 +300,18 @@ export function DrawingCanvas({
   onGestureActiveChange,
   tool = "pen",
   filled = false,
+  onLineMove,
 }: DrawingCanvasProps) {
   const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
+  /**
+   * [2026-09-27追加・実装メモ.md 315章] ✋（うごかす）でつかんでいる線の
+   * ライブプレビュー。`{index, points}`＝`lines[index]`を動かしている最中の
+   * 表示用の点（0〜1000正規化座標、まだ確定していない）。`null`＝つかんでいない。
+   * `livePoints`（ペン・形専用、「新しい線の描きかけ」）とは別に持つ:
+   * "move"は既存の`lines[index]`を一時的に隠して、この値で置き換えて描くため。
+   */
+  const [movePreview, setMovePreview] = useState<{ index: number; points: number[] } | null>(null);
   const colorRef = useRef(color);
   colorRef.current = color;
   // [2026-09-05追加] colorRefと同じ理由（下記PanResponderのコメント参照）で、
@@ -284,6 +358,34 @@ export function DrawingCanvas({
    */
   const shapeStartRef = useRef<[number, number] | null>(null);
   const shapeEndRef = useRef<[number, number] | null>(null);
+  /**
+   * [2026-09-27追加・実装メモ.md 315章]"move"専用の描きかけの状態。
+   * `index`＝つかんだ`lines`内の位置、`startX/startY`＝つかんだ瞬間の正規化座標
+   * （平行移動量dx/dyの基準点）、`lastX/lastY`＝直近に反映した指の位置
+   * （`MIN_POINT_DISTANCE_PX`と同じ間引き判定に使う、下記PanResponder参照）、
+   * `origPoints`＝つかんだ瞬間の`lines[index].p`（このジェスチャー中は不変の
+   * 基準として使う。ジェスチャー中に他の操作で`lines`が書き換わることは無い
+   * ——`onStartShouldSetPanResponder`がこの部品をresponderにしている間、
+   * 他のUI操作は物理的に同時に押せないため）。`null`＝何もつかんでいない。
+   */
+  const moveGrabRef = useRef<{
+    index: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    origPoints: number[];
+  } | null>(null);
+  /** [2026-09-27追加・315章] 直近に計算した移動後の点（`finishStroke`の`move`分岐が
+   *  指を離した瞬間にこの値を`onLineMove`へ渡す）。`moveGrabRef`と同時に張り直す。 */
+  const moveCurrentPointsRef = useRef<number[] | null>(null);
+  // [2026-09-27追加・315章] ヒットテストは常に「今のlines配列」を見る必要があるため、
+  // colorRef等と同じ理由でrefにする（PanResponderのクロージャは最新propsを直接読めない）。
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  // [2026-09-27追加・315章] onPanRefと同じ理由で最新のonLineMoveをrefで参照する。
+  const onLineMoveRef = useRef(onLineMove);
+  onLineMoveRef.current = onLineMove;
   // [2026-09-17追加・47.3節決定9〜10] 最新のonPanをrefで参照する（colorRefと同じ理由）。
   const onPanRef = useRef(onPan);
   onPanRef.current = onPan;
@@ -327,10 +429,30 @@ export function DrawingCanvas({
   };
 
   const finishStroke = () => {
+    // [2026-09-27追加・実装メモ.md 315章]"move"は、ペン・形ツールのどちらとも
+    // 別の経路で確定する。新しい線を作らず既存の`lines[index]`を書き換えるだけ
+    // なので、`onStrokeEnd`ではなく`onLineMove`を呼ぶ。ツールごとの分岐の中で
+    // 最初に判定する（下のPanResponder Grant/Moveでも同じ順で判定している）。
+    if (toolRef.current === "move") {
+      const grab = moveGrabRef.current;
+      const finalPoints = moveCurrentPointsRef.current;
+      moveGrabRef.current = null;
+      moveCurrentPointsRef.current = null;
+      setMovePreview(null);
+      if (!grab || !finalPoints) return; // 何もつかめなかった＝何も起きない（依頼文どおり）。
+      // つかんだが指を動かさなかった（実質移動していない）場合はonLineMoveを呼ばない
+      // （「ひとつ もどす」の履歴を無駄に消費させないため）。
+      const moved = finalPoints.some((v, i) => v !== grab.origPoints[i]);
+      if (!moved) return;
+      onLineMoveRef.current?.(grab.index, finalPoints);
+      return;
+    }
     // [2026-09-26追加・実装メモ.md 309章] 形ツールは、ペンとは別の経路で確定する。
     // `currentPointsRef`は形ツールのときは常に空のまま（下のPanResponder参照）
     // なので、こちらを先に判定する。
-    if (toolRef.current !== "pen") {
+    // [2026-09-27変更・315章] 条件を`!== "pen"`から`isDrawingShapeTool(...)`へ
+    // 変更した。"move"が増えたことで「pen以外」が「形」と同義でなくなったため。
+    if (isDrawingShapeTool(toolRef.current)) {
       const start = shapeStartRef.current;
       const end = shapeEndRef.current;
       shapeStartRef.current = null;
@@ -367,8 +489,16 @@ export function DrawingCanvas({
 
   const panResponder = useRef(
     PanResponder.create({
+      // [2026-09-27変更・実装メモ.md 315章]"move"は既存の線をつかむだけで新しい線を
+      // 増やさないため、線数上限（`maxLines`）の判定を適用しない（線数上限ちょうどの
+      // ときにだけ「うごかす」まで巻き添えで使えなくなる、という筋の違うブロックを
+      // 避けるため）。呼び出し元が上限到達時に`disabled`ごと全体を無効化している
+      // 既存の運用（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`の`atCapacity`）は
+      // そのまま効くため、実際の見た目・挙動はほぼ変わらない（`disabledRef.current`
+      // の判定が先にあるため）。
       onStartShouldSetPanResponder: () =>
-        !disabledRef.current && linesCountRef.current < theme.drawingLimits.maxLines,
+        !disabledRef.current &&
+        (toolRef.current === "move" || linesCountRef.current < theme.drawingLimits.maxLines),
       onMoveShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderGrant: (evt) => {
         // [2026-09-17追加・実装メモ243章] Grantはこのキャンバスが responder に
@@ -390,14 +520,45 @@ export function DrawingCanvas({
         // 「移動モード」をクリアしておく（前回のジェスチャーの状態を持ち越さない）。
         isPanningRef.current = false;
         panCenterRef.current = null;
-        if (disabledRef.current || linesCountRef.current >= theme.drawingLimits.maxLines) return;
+        // [2026-09-27変更・315章]"move"は線数上限を見ない（上のonStartShouldSetPanResponder
+        // と同じ理由）ため、このブロックの中止条件からも同様に外す。
+        if (disabledRef.current || (toolRef.current !== "move" && linesCountRef.current >= theme.drawingLimits.maxLines))
+          return;
         const { locationX, locationY } = evt.nativeEvent;
         const [nx, ny] = toNormalized(locationX, locationY);
+        // [2026-09-27追加・実装メモ.md 315章]"move"は、指を置いた点に一番近い線を
+        // 探してつかむ（重なっていればあとから描いたもの優先、依頼文の決定）。
+        // 純粋関数`findLineIndexAtPoint`（node単体検証あり）にすべての判定を委ね、
+        // ここでは正規化座標・太さの単位変換だけを行う（ファイル冒頭コメント参照）。
+        if (toolRef.current === "move") {
+          const extraToleranceNormalized = (MOVE_HIT_EXTRA_TOLERANCE_PX / sizeRef.current) * 1000;
+          const hitTestLines: HitTestLine[] = linesRef.current.map((l) => ({
+            p: l.p,
+            filled: l.f,
+            halfWidth: ((l.w ?? theme.defaultDrawingStrokeWidth) / 2 / sizeRef.current) * 1000,
+          }));
+          const idx = findLineIndexAtPoint(hitTestLines, nx, ny, extraToleranceNormalized);
+          if (idx === null) {
+            // 何もつかめなかった＝何も起きない（依頼文どおり）。
+            moveGrabRef.current = null;
+            moveCurrentPointsRef.current = null;
+            setMovePreview(null);
+          } else {
+            const origPoints = linesRef.current[idx].p;
+            moveGrabRef.current = { index: idx, startX: nx, startY: ny, lastX: nx, lastY: ny, origPoints };
+            moveCurrentPointsRef.current = origPoints;
+            setMovePreview({ index: idx, points: origPoints });
+          }
+          return;
+        }
         // [2026-09-26追加・実装メモ.md 309章] ツールごとに描きかけの持ち方が違う。
         // 形ツールは始点だけを記録し（`currentPointsRef`には触れない）、指を
         // まだ動かしていない段階では見せる形が無い（始点=終点はshapeToPolylineが
         // 空配列を返す）ため、livePointsは空のままにする。
-        if (toolRef.current !== "pen") {
+        // [2026-09-27変更・315章] 条件を`!== "pen"`から`isDrawingShapeTool(...)`へ
+        // 変更した（"move"は既に上のブロックでreturn済みのため、ここに来るのは
+        // 「形」か「pen」のみ）。
+        if (isDrawingShapeTool(toolRef.current)) {
           shapeStartRef.current = [nx, ny];
           shapeEndRef.current = [nx, ny];
           setLivePoints([]);
@@ -427,6 +588,14 @@ export function DrawingCanvas({
             shapeEndRef.current = null;
             setLivePoints([]);
           }
+          // [2026-09-27追加・実装メモ.md 315章]"move"でつかみかけの線も同じく破棄する
+          // （依頼文「指2本で絵を動かす既存の操作とぶつからないこと」。つかんだ線は
+          // 元の位置のまま＝何も起きなかったことになる。`onLineMove`は呼ばれない）。
+          if (moveGrabRef.current !== null) {
+            moveGrabRef.current = null;
+            moveCurrentPointsRef.current = null;
+            setMovePreview(null);
+          }
           isPanningRef.current = true;
           const cx = (touches[0].pageX + touches[1].pageX) / 2;
           const cy = (touches[0].pageY + touches[1].pageY) / 2;
@@ -441,11 +610,38 @@ export function DrawingCanvas({
           // 描画を再開しない（このジェスチャーが終わるまで何もしない）。
           return;
         }
+        // [2026-09-27追加・実装メモ.md 315章]"move"は、つかんだ瞬間の点(startX,startY)
+        // から今の指の位置までの移動量(dx,dy)で、つかんだ線の全ての点を平行移動した
+        // ライブプレビューを都度作り直す（依頼文「座標の変換は、線を描くときと同じ
+        // 計算を使う」＝`toNormalized`のみ使い、平行移動そのものは純粋関数
+        // `translateLinePoints`に委ねる）。何もつかんでいなければ何もしない。
+        if (toolRef.current === "move") {
+          const grab = moveGrabRef.current;
+          if (!grab) return;
+          const { locationX, locationY } = evt.nativeEvent;
+          const [nx, ny] = toNormalized(locationX, locationY);
+          // ペン・形と同じ間引き判定（MIN_POINT_DISTANCE_PX）で再描画の頻度を抑える。
+          // dx/dyは間引き前の「直近に反映した位置」ではなく、常に`startX/startY`
+          // （つかんだ瞬間）からの累積移動量で計算する（間引きは再描画の頻度だけを
+          // 抑えるためのもので、移動量の基準をずらさないため）。
+          const thresholdNormalized = (MIN_POINT_DISTANCE_PX / sizeRef.current) * 1000;
+          const ldx = nx - grab.lastX;
+          const ldy = ny - grab.lastY;
+          if (ldx * ldx + ldy * ldy < thresholdNormalized * thresholdNormalized) return;
+          grab.lastX = nx;
+          grab.lastY = ny;
+          const translated = translateLinePoints(grab.origPoints, nx - grab.startX, ny - grab.startY);
+          moveCurrentPointsRef.current = translated;
+          setMovePreview({ index: grab.index, points: translated });
+          return;
+        }
         // [2026-09-26追加・実装メモ.md 309章] 形ツール（ペン以外）は、なぞった
         // 「今の指の位置」を終点として、始点との間の形を毎回組み直してライブ
         // プレビューする（依頼文「指を動かしている間は、形が伸び縮みして見える」）。
         // 途中の点は貯めない（`currentPointsRef`には一切触れない）。
-        if (toolRef.current !== "pen") {
+        // [2026-09-27変更・315章] 条件を`!== "pen"`から`isDrawingShapeTool(...)`へ
+        // 変更した（"move"は既に上のブロックでreturn済み）。
+        if (isDrawingShapeTool(toolRef.current)) {
           const start = shapeStartRef.current;
           if (!start) return;
           const { locationX, locationY } = evt.nativeEvent;
@@ -539,6 +735,10 @@ export function DrawingCanvas({
         {chromeless && <Rect x={0} y={0} width={size} height={size} fill={backgroundColor} />}
         <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={backgroundColor} />
         {lines.map((line, idx) => {
+          // [2026-09-27追加・実装メモ.md 315章]✋でつかんでいる最中の線は、ここでは
+          // 描かない（下の`movePreview`で、動かした後の位置に描き直す）。同時に
+          // 両方描くと「元の位置」と「動かしている最中の位置」が二重に見えてしまうため。
+          if (movePreview && movePreview.index === idx) return null;
           const displayStrokeWidth = line.w ?? theme.defaultDrawingStrokeWidth;
           // [2026-09-11追加・要件定義書07-27章決定18] 白い線のふち取りは、背景色が
           // 既定（白）以外のときだけ付ける（既存の家族の絵の見た目は変えない）。
@@ -568,6 +768,28 @@ export function DrawingCanvas({
             needsWhiteOutline={isCustomBackground && color === "#FFFFFF"}
           />
         )}
+        {/* [2026-09-27追加・実装メモ.md 315章]✋でつかんでいる線を、動かした後の
+            位置に描き直す。元の`lines[index]`の色・太さ・塗りをそのまま使い、
+            `highlighted`だけ足して「つかんでいる」ことが分かる薄い影を付ける
+            （依頼文「つかんだことが分かる見た目」）。他の線より必ず上（最後）に
+            描くことで、ドラッグ中は常に一番手前に見える。 */}
+        {movePreview &&
+          (() => {
+            const origLine = lines[movePreview.index];
+            if (!origLine) return null;
+            const displayStrokeWidth = origLine.w ?? theme.defaultDrawingStrokeWidth;
+            const needsWhiteOutline = isCustomBackground && origLine.c === "#FFFFFF";
+            return (
+              <DrawingLineShape
+                color={origLine.c}
+                points={pointsToPolylineString(movePreview.points, size)}
+                strokeWidth={displayStrokeWidth}
+                filled={origLine.f}
+                needsWhiteOutline={needsWhiteOutline}
+                highlighted
+              />
+            );
+          })()}
       </Svg>
     </View>
   );

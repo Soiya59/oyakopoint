@@ -25,11 +25,32 @@
  * 崩れる（依頼文の指示どおり、呼び出し元でも適用しないこと）。
  */
 
-/** 現在選択中の道具。"pen"＝自由な線（既定・従来どおり）。 */
-export type DrawingTool = "pen" | "circle" | "triangle" | "rect";
+/**
+ * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+ * `"move"`（つかんで動かす）を追加。形（circle/triangle/rect）とは異なり
+ * バウンディングボックスから輪郭を組み立てる対象ではない（既に描いた線・形を
+ * そのまま平行移動するだけ、`src/lib/drawingLineMove.ts`参照）ため、
+ * `shapeToPolyline`・`DRAWING_SHAPE_TOOLS`が指す「形」は従来どおり3種類のまま
+ * 別の型（`DrawingShapeTool`）に切り出す。`Exclude<DrawingTool, "pen">`の
+ * ままだと`"move"`もその型に含まれてしまい、`DrawingToolPicker.tsx`の
+ * `FILLED_SYMBOLS`（塗った形の記号、"move"には無い概念）等の網羅性が崩れるため。
+ */
+/** 現在選択中の道具。"pen"＝自由な線（既定・従来どおり）。"move"＝つかんで動かす。 */
+export type DrawingTool = "pen" | "circle" | "triangle" | "rect" | "move";
 
-/** "pen"を除いた3種類（道具ボタンの並び・DrawingCanvas.tsxの分岐で使う）。 */
-export const DRAWING_SHAPE_TOOLS: readonly Exclude<DrawingTool, "pen">[] = [
+/** バウンディングボックスから輪郭を組み立てる「形」の3種類。"pen"・"move"は含まない。 */
+export type DrawingShapeTool = "circle" | "triangle" | "rect";
+
+/**
+ * [2026-09-27追加・315章] `tool`が`DrawingShapeTool`（形の3種類）かどうかの型ガード。
+ * `DrawingToolPicker.tsx`・`DrawingCanvas.tsx`の「ペン／形／うごかす」の3分岐で使う。
+ */
+export function isDrawingShapeTool(tool: DrawingTool): tool is DrawingShapeTool {
+  return tool === "circle" || tool === "triangle" || tool === "rect";
+}
+
+/** 形の3種類（道具ボタンの並び・DrawingCanvas.tsxの分岐で使う）。"move"は含まない。 */
+export const DRAWING_SHAPE_TOOLS: readonly DrawingShapeTool[] = [
   "circle",
   "triangle",
   "rect",
@@ -53,7 +74,7 @@ function clampNormalized(value: number): number {
  * 選んだ形の輪郭を1本の閉じたポリラインとして組み立てる。
  */
 export function shapeToPolyline(
-  tool: Exclude<DrawingTool, "pen">,
+  tool: DrawingShapeTool,
   x0: number,
   y0: number,
   x1: number,

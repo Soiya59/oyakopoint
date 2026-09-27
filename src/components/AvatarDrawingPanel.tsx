@@ -22,7 +22,7 @@
  * を追加した。48章「まんなかに おおきく」ボタンはアバターには足さない
  * （`fitToCircleSignal`を渡さず既定値のまま使う）。
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
@@ -115,6 +115,13 @@ export function AvatarDrawingPanel({
    * （`DrawingBoard.tsx`）と同じ塗り切り替えをアバターにも出す。
    */
   const [filled, setFilled] = useState<boolean>(false);
+  /**
+   * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+   * ✋で線を動かす直前の`lines`を1つだけ保持する。`DrawingBoard.tsx`の
+   * `preMoveLinesRef`と同じ「1回だけ使える巻き戻し」パターン（この画面には
+   * 48章「まんなかに おおきく」＝`preFitLinesRef`が無いため、"move"用のみを持つ）。
+   */
+  const preMoveLinesRef = useRef<FamilyDrawingLine[] | null>(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
   const isChildTone = tone === "child";
@@ -161,6 +168,9 @@ export function AvatarDrawingPanel({
   const resetCancelLabel = "やめる";
 
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
+    // [2026-09-27追加・実装メモ.md 315章] 新しい線を描いたら「うごかす」の
+    // 一括復元の権利は失効する（DrawingBoard.tsxのhandleStrokeEndと同じ扱い）。
+    preMoveLinesRef.current = null;
     setLines((prev) => {
       if (prev.length >= theme.avatarDrawingLimits.maxLines) return prev;
       const newTotalPoints = prev.reduce((sum, l) => sum + l.p.length / 2, 0) + line.p.length / 2;
@@ -171,15 +181,46 @@ export function AvatarDrawingPanel({
     });
   };
 
-  const clearAll = () => setLines([]);
-  const undoLastStroke = () => setLines((prev) => prev.slice(0, -1));
+  const clearAll = () => {
+    preMoveLinesRef.current = null;
+    setLines([]);
+  };
+  const undoLastStroke = () => {
+    // [2026-09-27追加・315章]「うごかす」直後は、動かす前の位置へ一括で戻す
+    // （DrawingBoard.tsxのundoLastStrokeと同じ「1回だけ使える巻き戻し」）。
+    if (preMoveLinesRef.current !== null) {
+      const restored = preMoveLinesRef.current;
+      preMoveLinesRef.current = null;
+      setLines(restored);
+      return;
+    }
+    setLines((prev) => prev.slice(0, -1));
+  };
+
+  /**
+   * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+   * `DrawingBoard.tsx`の`onLineMove`と同じ考え方（コメント参照）。この画面には
+   * 編集モード・「まんなかに おおきく」が無い分、単純な作りにできる。
+   */
+  const onLineMove = (index: number, translatedPoints: number[]) => {
+    preMoveLinesRef.current = lines;
+    setLines((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const next = prev.slice();
+      next[index] = { ...next[index], p: translatedPoints };
+      return next;
+    });
+  };
 
   const handleSave = async () => {
     if (lines.length === 0) return;
     const ok = await onSave({ v: 1, lines });
     // [43.6節 状態一覧「保存成功」] キャンバスは空になり、「今のすがた」カードは
     // 呼び出し画面側がsavedLineDataを更新することで反映される。
-    if (ok) setLines([]);
+    if (ok) {
+      preMoveLinesRef.current = null;
+      setLines([]);
+    }
   };
 
   const requestReset = () => setIsConfirmingReset(true);
@@ -244,6 +285,7 @@ export function AvatarDrawingPanel({
         onGestureActiveChange={onGestureActiveChange}
         tool={tool}
         filled={filled}
+        onLineMove={onLineMove}
       />
 
       {/* [2026-09-26追加・実装メモ.md 309章] 家族の絵（DrawingBoard.tsx）と同じ並び

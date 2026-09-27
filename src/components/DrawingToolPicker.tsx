@@ -56,40 +56,61 @@
  * Textコンポーネントには実際のストローク（線画の二重描画）を描く手段が無いため、
  * `textShadow`で暗い縁のにじみを作る近似的な実装にした（SVGの二重Polyline描画
  * そのものは再現できない）。
+ *
+ * [2026-09-27追加・実装メモ.md 315章、本部長依頼・軽微変更ルート「うごかす」]
+ * 形の行（○／△／□）に✋（うごかす）を1つ足す。**行は増やさない**という統括決定
+ * のとおり、新しい行・新しいセクションは作らず、既存の`TOOL_ORDER`の末尾に
+ * `"move"`を足すだけにした（`styles.row`はそのまま、5個目のボタンが自然に並ぶ）。
+ * ✋には「塗る」概念が無いため、312〜314章で入れた「もう一度押すと塗り切替」
+ * ロジック（`handlePress`の`isDrawingShapeTool`判定）・`FILLED_SYMBOLS`・
+ * `ShapeIcon`（SVG図形）のいずれにも"move"を含めない。ペンと同じくTextへ
+ * Unicode記号（✋ U+270B）をそのまま描画する（314章冒頭のコメントどおり、
+ * このプロジェクトにアイコンライブラリが無いため）。314章でペン以外をSVG化した
+ * 理由は「□／■のような文字が塗り有無で大きさの作りが違って見える」ことへの
+ * 対処だったが、✋はもともと塗り切替が無く同一の絵文字を出し続けるだけなので、
+ * 大きさが揺れる問題自体が起きない。ペン（✏）も同じ理由でText描画のまま
+ * 残っている前例に揃えた。
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Polygon, Rect } from "react-native-svg";
 import theme from "@/theme/theme";
-import type { DrawingTool } from "@/lib/drawingShapes";
+import { isDrawingShapeTool, type DrawingShapeTool, type DrawingTool } from "@/lib/drawingShapes";
 import { hydrateIntroSeen, isIntroSeen, markIntroSeen } from "@/lib/introSeen";
 
 type Tone = "parent" | "child" | "supporter";
 
-const TOOL_ORDER: readonly DrawingTool[] = ["pen", "circle", "triangle", "rect"];
+// [2026-09-27追加・315章] "move"（✋）を末尾に足す。行は増やさず、既存の並びの
+// 5個目として追加する（依頼文「行は増やしたくない」）。
+const TOOL_ORDER: readonly DrawingTool[] = ["pen", "circle", "triangle", "rect", "move"];
 
 const TOOL_SYMBOLS: Record<DrawingTool, string> = {
   pen: "✏",
   circle: "○",
   triangle: "△",
   rect: "□",
+  move: "✋",
 };
 
 /**
  * [2026-09-27追加・実装メモ.md 313章] 塗った形の記号（依頼文の指定どおり
- * ● U+25CF・▲ U+25B2・■ U+25A0）。`"pen"`には塗りの概念が無いため含まない。
+ * ● U+25CF・▲ U+25B2・■ U+25A0）。`"pen"`・`"move"`には塗りの概念が無いため
+ * 含まない（`DrawingShapeTool`＝形の3種類のみをキーに持つ）。
  */
-const FILLED_SYMBOLS: Record<Exclude<DrawingTool, "pen">, string> = {
+const FILLED_SYMBOLS: Record<DrawingShapeTool, string> = {
   circle: "●",
   triangle: "▲",
   rect: "■",
 };
 
-/** accessibilityLabel専用（画面には表示しない）。DrawingZoomPicker.tsxのZOOM_LABELSと同じ考え方。 */
+/** accessibilityLabel専用（画面には表示しない）。DrawingZoomPicker.tsxのZOOM_LABELSと同じ考え方。
+ *  [2026-09-27追加・315章]「うごかす」（✋）を追加。依頼文「アクセシビリティのラベルは
+ *  3ロールで言葉を合わせる（うごかす／動かす）」のとおり、保護者・みまもりメンバーは
+ *  同一の「動かす」を共有する（他の道具と同じく、この2ロールは常に同一文言）。 */
 const TOOL_ACCESSIBILITY_LABELS: Record<Tone, Record<DrawingTool, string>> = {
-  child: { pen: "ふで", circle: "まる", triangle: "さんかく", rect: "しかく" },
-  parent: { pen: "ペン", circle: "丸", triangle: "三角", rect: "四角" },
-  supporter: { pen: "ペン", circle: "丸", triangle: "三角", rect: "四角" },
+  child: { pen: "ふで", circle: "まる", triangle: "さんかく", rect: "しかく", move: "うごかす" },
+  parent: { pen: "ペン", circle: "丸", triangle: "三角", rect: "四角", move: "動かす" },
+  supporter: { pen: "ペン", circle: "丸", triangle: "三角", rect: "四角", move: "動かす" },
 };
 
 /**
@@ -121,7 +142,7 @@ const FIRST_SHAPE_HINT_DURATION_MS = 4000;
  * そろう。白を選んでいるときは、背景と同化しないよう暗い縁を付ける（DrawingCanvas.tsxの
  * needsWhiteOutlineと同じ考え方。314章ではtextShadowで近似していたが、図形なら本当の縁が描ける）。
  */
-function ShapeIcon({ shape, filled, color }: { shape: Exclude<DrawingTool, "pen">; filled: boolean; color: string }) {
+function ShapeIcon({ shape, filled, color }: { shape: DrawingShapeTool; filled: boolean; color: string }) {
   const S = 28;
   const sw = 2.2;
   const isWhite = color === "#FFFFFF";
@@ -194,13 +215,16 @@ export function DrawingToolPicker({
   );
 
   const handlePress = (t: DrawingTool) => {
-    // [314章決定1] 選んでいる形（ペン以外）をもう一度押したら、線／塗りの切り替え。
-    if (t !== "pen" && t === selected) {
+    // [314章決定1、2026-09-27・315章で"move"を対象外に拡張]
+    // 選んでいる形（circle/triangle/rect）をもう一度押したら、線／塗りの切り替え。
+    // "move"には塗りの概念が無いため、もう一度押しても選択し直すだけ（何も切り替わらない）。
+    if (isDrawingShapeTool(t) && t === selected) {
       onToggleFilled();
       return;
     }
     onSelect(t);
-    if (t !== "pen" && !isIntroSeen({ kind: "drawingFillToggle" }, memberId)) {
+    // [315章] 「もう一度押すと塗れる」の初回案内も、形の3種類にのみ出す（"move"には出さない）。
+    if (isDrawingShapeTool(t) && !isIntroSeen({ kind: "drawingFillToggle" }, memberId)) {
       void markIntroSeen({ kind: "drawingFillToggle" }, memberId);
       setHintVisible(true);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
@@ -212,7 +236,7 @@ export function DrawingToolPicker({
     <View style={styles.wrap}>
       <View style={styles.row}>
         {TOOL_ORDER.map((t) => {
-          const isSelectedShape = t !== "pen" && t === selected;
+          const isSelectedShape = isDrawingShapeTool(t) && t === selected;
           const symbol = isSelectedShape && filled ? FILLED_SYMBOLS[t] : TOOL_SYMBOLS[t];
           const label = isSelectedShape ? labels[t] + (filled ? fillSuffixes.filled : fillSuffixes.outline) : labels[t];
           return (
@@ -229,7 +253,9 @@ export function DrawingToolPicker({
                 disabled && styles.tapDisabled,
               ]}
             >
-              {t === "pen" ? (
+              {/* [315章] "move"（✋）はペンと同じくTextにUnicode記号を描くだけ（SVG化しない、
+                  ファイル冒頭コメント参照）。 */}
+              {t === "pen" || t === "move" ? (
                 <Text
                   style={[
                     styles.symbol,
@@ -263,9 +289,17 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
+    // [2026-09-27追加・315章] 5個目のボタン追加でこの行の必要幅が
+    // 56×5+12×4=328dpになった（10色パレット・DrawingPalette.tsxが既に採用している
+    // 312dp=56×5+8×4より少し広い）。既存の並び（4個・260dp）は今までどおり
+    // 1行に収まるが、念のため`flexWrap`を足し、極端に狭い画面でも折り返しで
+    // ボタンが画面外に切れて押せなくなることを防ぐ（新しい行を意図的に増やす
+    // ものではなく、収まらない場合だけの保険。DrawingPalette.tsxと同じ考え方）。
+    flexWrap: "wrap",
     justifyContent: "center",
     alignItems: "center",
     gap: theme.spacing.s3,
+    rowGap: theme.spacing.s2,
   },
   tap: {
     alignItems: "center",
