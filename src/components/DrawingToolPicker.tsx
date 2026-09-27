@@ -59,6 +59,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Svg, { Circle, Polygon, Rect } from "react-native-svg";
 import theme from "@/theme/theme";
 import type { DrawingTool } from "@/lib/drawingShapes";
 import { hydrateIntroSeen, isIntroSeen, markIntroSeen } from "@/lib/introSeen";
@@ -111,6 +112,31 @@ const FIRST_SHAPE_HINT_TEXT: Record<Tone, string> = {
 
 /** [2026-09-27追加・実装メモ.md 314章] 一時表示を消すまでの時間（ミリ秒）。 */
 const FIRST_SHAPE_HINT_DURATION_MS = 4000;
+
+/**
+ * [2026-09-27追加・統括の実機報告「しかくだけ、色ありにしたら小さくなる」]
+ * 形の記号を、文字（○△□●▲■）ではなく図形（SVG）で描く。□と■は別の文字で、
+ * フォントによって大きさの作りが違うため、塗りに切り替えると■だけ小さく見えて
+ * いた（○も△□より小さく見えていた）。図形で描けば、線と塗り、3つの形の大きさが
+ * そろう。白を選んでいるときは、背景と同化しないよう暗い縁を付ける（DrawingCanvas.tsxの
+ * needsWhiteOutlineと同じ考え方。314章ではtextShadowで近似していたが、図形なら本当の縁が描ける）。
+ */
+function ShapeIcon({ shape, filled, color }: { shape: Exclude<DrawingTool, "pen">; filled: boolean; color: string }) {
+  const S = 28;
+  const sw = 2.2;
+  const isWhite = color === "#FFFFFF";
+  const edge = isWhite ? theme.colors.neutralTextPrimary : color;
+  const fill = filled ? color : "none";
+  // 線でも塗りでも同じ太さの縁を付け、外側の大きさを完全にそろえる。
+  const common = { stroke: edge, strokeWidth: sw, fill };
+  return (
+    <Svg width={S} height={S} viewBox={`0 0 ${S} ${S}`}>
+      {shape === "circle" && <Circle cx={S / 2} cy={S / 2} r={S / 2 - sw} {...common} />}
+      {shape === "triangle" && <Polygon points={`${S / 2},${sw} ${S - sw},${S - sw} ${sw},${S - sw}`} strokeLinejoin="round" {...common} />}
+      {shape === "rect" && <Rect x={sw} y={sw} width={S - sw * 2} height={S - sw * 2} {...common} />}
+    </Svg>
+  );
+}
 
 interface DrawingToolPickerProps {
   tone: Tone;
@@ -203,15 +229,19 @@ export function DrawingToolPicker({
                 disabled && styles.tapDisabled,
               ]}
             >
-              <Text
-                style={[
-                  styles.symbol,
-                  { color },
-                  needsWhiteOutline && styles.symbolWhiteOutline,
-                ]}
-              >
-                {symbol}
-              </Text>
+              {t === "pen" ? (
+                <Text
+                  style={[
+                    styles.symbol,
+                    { color },
+                    needsWhiteOutline && styles.symbolWhiteOutline,
+                  ]}
+                >
+                  {symbol}
+                </Text>
+              ) : (
+                <ShapeIcon shape={t} filled={isSelectedShape && filled} color={color} />
+              )}
             </Pressable>
           );
         })}
@@ -261,9 +291,15 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
   },
+  // [2026-09-27修正・統括の実機報告「色のボタンの裏に出ていた」] 行の下に出すと、
+  // 後から並ぶ色のボタンが上に重なって隠れていた（あとの要素ほど上に描かれるため）。
+  // 行の上（キャンバスの下端側）に出す。キャンバスはこの部品より前に並ぶので隠れない。
+  // 念のため zIndex・elevation も付ける。
   hintWrap: {
     position: "absolute",
-    top: theme.drawingLimits.swatchSize + theme.spacing.s2,
+    bottom: theme.drawingLimits.swatchSize + theme.spacing.s2,
+    zIndex: 10,
+    elevation: 10,
     left: 0,
     right: 0,
     alignItems: "center",
