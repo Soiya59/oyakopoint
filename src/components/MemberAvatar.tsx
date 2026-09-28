@@ -94,7 +94,6 @@ export function MemberAvatar({ name, color, size = 40, emoji, lineData, expandOn
           {lineData!.lines.map((line, idx) => {
             const displayStrokeWidth = avatarLineDisplayStrokeWidth(circleSize, line.w);
             const points = pointsToPolylineString(line.p, circleSize);
-            const needsWhiteOutline = line.c === "#FFFFFF";
             return (
               <DrawingLineShape
                 key={idx}
@@ -102,7 +101,6 @@ export function MemberAvatar({ name, color, size = 40, emoji, lineData, expandOn
                 points={points}
                 strokeWidth={displayStrokeWidth}
                 filled={line.f}
-                needsWhiteOutline={needsWhiteOutline}
               />
             );
           })}

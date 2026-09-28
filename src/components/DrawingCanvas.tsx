@@ -157,32 +157,29 @@ export function avatarLineDisplayStrokeWidth(size: number, w: number | undefined
  * `pointsToPolylineString`をこのファイルから読み込んでいるのと同じ理由）。
  *
  * [線の太さ(w)の扱い・313章決定] 塗った形の縁には、選択中の太さ(`strokeWidth`)を
- * そのまま使う。塗り色と縁の色が同じときは縁が見えないだけで実害は無い。
- * 白色（`needsWhiteOutline`）のときは、既存の「白い線には縁取りを付ける」ロジック
- * （`needsWhiteOutline`、2026-09-11追加）と同じく、暗色を少し太く下に敷いて細い縁を
- * 見せる（2026-09-29改訂・324章。当初は縁の色そのものを暗色にしていたため太い黒枠に
- * 見えていた）。
+ * そのまま使う（縁も塗りと同じ色なので、縁は見えない）。
+ *
+ * [2026-09-29改訂・実装メモ.md 324章、統括判断「白はふちなしで」] 以前は背景色のある
+ * 絵で白い線・白い形に暗い縁取り（旧`needsWhiteOutline`、2026-09-11追加）を付けていた。
+ * 塗った白い形が太い黒枠つきに見えたこと（統括「白だけ枠に黒があるのなぜ？」）を受け、
+ * 白も他の色と同じく見たままの色で描くことにし、縁取りそのものを廃止した。
  */
 export function DrawingLineShape({
   color,
   points,
   strokeWidth,
   filled,
-  needsWhiteOutline,
   highlighted,
 }: {
   color: string;
   points: string;
   strokeWidth: number;
   filled?: boolean;
-  needsWhiteOutline: boolean;
   /**
    * [2026-09-27追加・実装メモ.md 315章] ✋（うごかす）でつかんでいる間、その線を
    * 少し目立たせる（依頼文「つかんでいる間は、その線を少し目立たせる（例: 薄い影や
    * 縁）」）。線・塗りの色や形に関わらず同じ見た目にするため、実際の線の下へ
-   * 半透明で少し太いPolylineを1本重ねるだけの実装にした（`needsWhiteOutline`の
-   * 「実線の縁取り」とは別物。色を問わず常に薄い暗色の影として見せたいため、
-   * 白選択時の縁取り色と共用せず独立した見た目にする）。
+   * 半透明で少し太いPolylineを1本重ねるだけの実装にした。
    */
   highlighted?: boolean;
 }) {
@@ -198,22 +195,9 @@ export function DrawingLineShape({
     />
   ) : null;
   if (filled) {
-    // [2026-09-29改訂・実装メモ.md 324章、統括指摘「白だけ枠に黒があるのはなぜ」]
-    // 以前は白のとき縁（太さ=strokeWidth）をまるごと暗色にしていたため、塗った白い形が
-    // 太い黒枠つきに見えていた。ペンの白い線（下の`<Polyline>`版）と同じく、
-    // 暗色を少し太く下に敷き、その上に白を重ねて細い縁だけが見えるようにする。
     return (
       <>
         {halo}
-        {needsWhiteOutline && (
-          <Polygon
-            points={points}
-            fill="none"
-            stroke={theme.colors.neutralTextPrimary}
-            strokeWidth={strokeWidth + 1.5}
-            strokeLinejoin="round"
-          />
-        )}
         <Polygon
           points={points}
           fill={color}
@@ -227,16 +211,6 @@ export function DrawingLineShape({
   return (
     <>
       {halo}
-      {needsWhiteOutline && (
-        <Polyline
-          points={points}
-          fill="none"
-          stroke={theme.colors.neutralTextPrimary}
-          strokeWidth={strokeWidth + 1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      )}
       <Polyline
         points={points}
         fill="none"
@@ -378,7 +352,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   onSelectionChange,
 }: DrawingCanvasProps,
 ref) {
-  const isCustomBackground = isCustomDrawingBackground(backgroundColor);
   const [livePoints, setLivePoints] = useState<number[]>([]);
   /**
    * [2026-09-27追加・実装メモ.md 315章] ✋（うごかす）でつかんでいる線の
@@ -938,7 +911,6 @@ ref) {
           const displayStrokeWidth = line.w ?? theme.defaultDrawingStrokeWidth;
           // [2026-09-11追加・要件定義書07-27章決定18] 白い線のふち取りは、背景色が
           // 既定（白）以外のときだけ付ける（既存の家族の絵の見た目は変えない）。
-          const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
           return (
             <DrawingLineShape
               key={idx}
@@ -948,7 +920,6 @@ ref) {
               // を使う。以前は固定4pt。
               strokeWidth={displayStrokeWidth}
               filled={line.f}
-              needsWhiteOutline={needsWhiteOutline}
               // [2026-09-27追加・実装メモ.md 316章]✋で「選択中」の線は、つかんで
               // ドラッグ中の`movePreview`と同じ薄い影（`highlighted`）を、指を
               // 離した後も選択が続く間ずっと表示する（依頼文「選ばれている間は…
@@ -966,7 +937,6 @@ ref) {
             // [2026-09-27追加・実装メモ.md 313章] ペン選択中は`filled`propの値に
             // 関わらず塗らない（`tool`が形のときだけ塗りを反映する）。
             filled={tool !== "pen" && filled}
-            needsWhiteOutline={isCustomBackground && color === "#FFFFFF"}
           />
         )}
         {/* [2026-09-27追加・実装メモ.md 315章]✋でつかんでいる線を、動かした後の
@@ -979,14 +949,12 @@ ref) {
             const origLine = lines[movePreview.index];
             if (!origLine) return null;
             const displayStrokeWidth = origLine.w ?? theme.defaultDrawingStrokeWidth;
-            const needsWhiteOutline = isCustomBackground && origLine.c === "#FFFFFF";
             return (
               <DrawingLineShape
                 color={origLine.c}
                 points={pointsToPolylineString(movePreview.points, size)}
                 strokeWidth={displayStrokeWidth}
                 filled={origLine.f}
-                needsWhiteOutline={needsWhiteOutline}
                 highlighted
               />
             );
@@ -1023,7 +991,6 @@ export function DrawingThumbnail({
         <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={backgroundColor} />
         {lineData.lines.map((line, idx) => {
           const displayStrokeWidth = isCustomBackground ? avatarLineDisplayStrokeWidth(size, line.w) : 2;
-          const needsWhiteOutline = isCustomBackground && line.c === "#FFFFFF";
           return (
             <DrawingLineShape
               key={idx}
@@ -1031,7 +998,6 @@ export function DrawingThumbnail({
               points={pointsToPolylineString(line.p, size)}
               strokeWidth={displayStrokeWidth}
               filled={line.f}
-              needsWhiteOutline={needsWhiteOutline}
             />
           );
         })}
