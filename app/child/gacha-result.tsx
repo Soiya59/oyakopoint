@@ -22,6 +22,12 @@ import type { GachaPrizeKind } from "@/types/domain";
  * 取得が完了しdetailが表示できる状態になったとき）に1回だけ鳴らす（統括決定）。
  * 家族の絵の2段階開示演出（上記）が始まる前の、結果が確定した瞬間に鳴らす
  * （開示演出自体には手を加えない）。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * 家族の絵の「＋ひとこと」を押した先の遷移をここで担う。C26（コレクションだな）へ
+ * `openDrawingId`（絵のid）・`openComment=1`を付けて`push`する（`replace`ではない。
+ * 戻るとこの結果画面に戻れる）。C26側がこのパラメータを拾い、該当の絵を自動で開いて
+ * コメント欄も開いた状態にする。
  */
 export default function ChildGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -62,6 +68,9 @@ export default function ChildGachaResultScreen() {
           result={detail}
           onDecorate={() => router.push({ pathname: "/child/tree-decorate", params: { drawId: drawId ?? "" } })}
           onGoToShelf={() => router.replace("/child/collector-shelf")}
+          onCommentDrawing={(drawingId) =>
+            router.push({ pathname: "/child/collector-shelf", params: { openDrawingId: drawingId, openComment: "1" } })
+          }
         />
       )}
     </Screen>

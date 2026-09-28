@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, Text } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import CollectorShelfPanel, { ALL_MEMBERS_ID } from "@/components/CollectorShelfPanel";
 import theme from "@/theme/theme";
@@ -18,11 +18,16 @@ import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useH
  *
  * P31と同一構成（演出は控えめのまま据え置く、1.7節）。CollectorShelfPanel
  * （3ロール共通）にロジックを集約する。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * S16（ガチャ結果）の「＋コメント」から`openDrawingId`・`openComment=1`を
+ * 受け取り、CollectorShelfPanelへそのまま渡す（P31と同じ扱い）。
  */
 export default function SupporterCollectorShelfScreen() {
   const { state } = useAppData();
   const familyId = state.family.id;
   const myId = state.activeParentMemberId;
+  const { openDrawingId, openComment } = useLocalSearchParams<{ openDrawingId?: string; openComment?: string }>();
   const { loadState: collectedLoadState, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
   const { loadState: pastSeasonsLoadState, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
   const {
@@ -83,6 +88,8 @@ export default function SupporterCollectorShelfScreen() {
       <CollectorShelfPanel
         tone="supporter"
         scrollViewRef={scrollRef}
+        autoOpenDrawingId={openDrawingId || undefined}
+        autoOpenComment={openComment === "1"}
         collectedLoadState={collectedLoadState}
         collectedItems={collectedItems}
         onRetryCollected={reloadCollected}

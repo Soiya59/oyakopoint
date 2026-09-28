@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, Text } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import CollectorShelfPanel, { ALL_MEMBERS_ID } from "@/components/CollectorShelfPanel";
 import theme from "@/theme/theme";
@@ -21,11 +21,16 @@ import { useFamilyHabitFigureGrants, useMyHabitFigureGrants } from "@/hooks/useH
  * P31/S19と同一構成で、CollectorShelfPanel（3ロール共通）にロジックを集約する。
  * [2026-09-21改訂・主要画面ワイヤーフレーム.md 58.5a節決定3] 「バッジ」区分は
  * コレクター棚から削除した（絵が無く集めるものでもないため）。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * C22（ガチャ結果）の「＋ひとこと」から`openDrawingId`・`openComment=1`を
+ * 受け取り、CollectorShelfPanelへそのまま渡す（自動で開く処理自体はPanel側）。
  */
 export default function ChildCollectorShelfScreen() {
   const { state } = useAppData();
   const familyId = state.family.id;
   const myId = state.activeChildMemberId;
+  const { openDrawingId, openComment } = useLocalSearchParams<{ openDrawingId?: string; openComment?: string }>();
   const { loadState: collectedLoadState, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
   const { loadState: pastSeasonsLoadState, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
   const {
@@ -81,6 +86,8 @@ export default function ChildCollectorShelfScreen() {
       <CollectorShelfPanel
         tone="child"
         scrollViewRef={scrollRef}
+        autoOpenDrawingId={openDrawingId || undefined}
+        autoOpenComment={openComment === "1"}
         collectedLoadState={collectedLoadState}
         collectedItems={collectedItems}
         onRetryCollected={reloadCollected}

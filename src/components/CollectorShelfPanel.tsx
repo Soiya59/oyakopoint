@@ -29,7 +29,7 @@
  * 「過去の木」: シーズンごとの家族の木を、その月に飾られた景品・自由配置ステッカーが
  *   乗った状態のまま再現表示する。読み取り専用（タップ操作を持たない）。
  */
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
@@ -153,6 +153,19 @@ export interface CollectorShelfPanelProps {
 
   /** いま操作中の自分自身のmember_id（メンバー選択チップの「自分」表記・操作導線の出し分けに使う）。 */
   myMemberId: string;
+
+  /**
+   * [2026-09-28新設・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+   * ガチャ結果画面（P28/C22/S16）の「＋コメント」からの深リンク。渡されたIDの
+   * 絵が「集めたもの」（既定の「全員」ビュー、`selectedMemberId`は常に
+   * `ALL_MEMBERS_ID`で開始するため）に見つかり次第、その絵の拡大表示を自動で
+   * 開く。`autoOpenComment`がtrueなら、開いた瞬間からコメント入力欄も使える
+   * 状態にする（`DrawingEngagementSection`の`initialComposing`）。一致する絵が
+   * 見つからない場合・`social_interactions_enabled=false`の場合は何もしない
+   * （コメント欄自体がその状態では描画されないため、静かに無視される）。
+   */
+  autoOpenDrawingId?: string;
+  autoOpenComment?: boolean;
 
   // [2026-09-08新設・主要画面ワイヤーフレーム.md 32.0a節決定19〜22]
   // 「集めたもの」区画内のメンバー選択チップ。ALL_MEMBERS_IDが「全員」（既定）。
@@ -498,7 +511,20 @@ function buildShelfEntries(items: CollectedGachaDraw[]): { key: string; item: Co
  * 目的の一部であるため、今回に限り「モーダルを増やさない」方針よりも
  * 「既存の操作感に揃える」ことを優先し、方針を上書きする。
  */
-function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: CollectedGachaDraw[]; myMemberId: string }) {
+function ShelfItemsGrid({
+  tone,
+  items,
+  myMemberId,
+  autoOpenDrawingId,
+  autoOpenComment,
+}: {
+  tone: Tone;
+  items: CollectedGachaDraw[];
+  myMemberId: string;
+  /** [2026-09-28新設・実装メモ320章] ガチャ結果画面の「＋コメント」からの深リンク。 */
+  autoOpenDrawingId?: string;
+  autoOpenComment?: boolean;
+}) {
   const isChild = tone === "child";
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
@@ -508,7 +534,27 @@ function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: Collec
   const shelfEntries = useMemo(() => buildShelfEntries(items), [items]);
   const selectedEntry = shelfEntries.find((e) => e.key === selectedItemId) ?? null;
   const selectedItem = selectedEntry?.item ?? null;
-  const closeDetail = () => setSelectedItemId(null);
+
+  // [2026-09-28新設・実装メモ320章] 深リンクの自動オープンは一度だけ行う
+  // （このrefが一度trueになった後は、再度`items`が更新されても発火しない）。
+  // `autoOpenCommentActive`は「今まさに深リンクで開いた」ことを示すフラグで、
+  // 閉じたら消す（同じ絵を後から手動で開き直したときにコメント欄が勝手に
+  // 開かないようにするため）。
+  const autoOpenAppliedRef = useRef(false);
+  const [autoOpenCommentActive, setAutoOpenCommentActive] = useState(false);
+  useEffect(() => {
+    if (!autoOpenDrawingId || autoOpenAppliedRef.current) return;
+    const match = shelfEntries.find((e) => e.item.drawing?.drawingId === autoOpenDrawingId);
+    if (!match) return;
+    autoOpenAppliedRef.current = true;
+    setSelectedItemId(match.key);
+    if (autoOpenComment) setAutoOpenCommentActive(true);
+  }, [autoOpenDrawingId, autoOpenComment, shelfEntries]);
+
+  const closeDetail = () => {
+    setSelectedItemId(null);
+    setAutoOpenCommentActive(false);
+  };
 
   if (shelfEntries.length === 0) return null;
 
@@ -645,6 +691,10 @@ function ShelfItemsGrid({ tone, items, myMemberId }: { tone: Tone; items: Collec
                       artistMemberId={selectedItem.drawing.artistId}
                       myMemberId={myMemberId}
                       socialInteractionsEnabled={state.family.social_interactions_enabled}
+                      // [2026-09-28新設・実装メモ320章] ガチャ結果画面の「＋コメント」から
+                      // 深リンクで開かれた場合のみtrue（`autoOpenCommentActive`はclose時に
+                      // falseへ戻るため、以後の手動オープンには影響しない）。
+                      initialComposing={autoOpenCommentActive && selectedItem.drawing.drawingId === autoOpenDrawingId}
                     />
                   </Pressable>
                 </>
@@ -792,6 +842,8 @@ export function CollectorShelfPanel({
   onExpandSeason,
   members,
   myMemberId,
+  autoOpenDrawingId,
+  autoOpenComment,
   selectedMemberId,
   onSelectMember,
   stickersLoadState,
@@ -1046,7 +1098,13 @@ export function CollectorShelfPanel({
                       空状態のときは既存の絵文字中心の空状態表示（上の分岐）を
                       崩さないよう、件数がある時だけ出す。 */}
                   <Text style={styles.sectionHeading}>{collectedLabel}</Text>
-                  <ShelfItemsGrid tone={tone} items={collectedItems} myMemberId={myMemberId} />
+                  <ShelfItemsGrid
+                    tone={tone}
+                    items={collectedItems}
+                    myMemberId={myMemberId}
+                    autoOpenDrawingId={autoOpenDrawingId}
+                    autoOpenComment={autoOpenComment}
+                  />
                 </>
               )}
 

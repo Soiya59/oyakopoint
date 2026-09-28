@@ -21,6 +21,15 @@
  * [コメント] 全ロール対称・自分自身の絵へのコメントも許可（6-1節）。削除は
  * 65.1節（本人5分以内／保護者は本人以外いつでも）。やりとりトグルの対象
  * （6-6節、falseの間はこの区画の入力欄・一覧を丸ごと隠す。スタンプは残す）。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * ガチャ結果画面（P28/C22/S16）の「＋コメント」からの深リンク用に
+ * `initialComposing`を追加した。渡さない限り（既存の呼び出し元は全て未指定）
+ * 従来と1ピクセルも変わらない。ガチャ結果画面自体のスタンプ表示は本コンポーネントを
+ * 再利用せず、`GachaResultView.tsx`側に同じ`family_drawing_reactions`・
+ * `toggle_family_drawing_reaction_stamp`を使う専用の小さな行を新設した
+ * （こちらはコメント一覧・入力欄を持たず、押すとこの画面へ遷移させるだけの
+ * ため。理由: 293章の当たり判定の作り込みが重く、崩さないため触れなかった）。
  */
 import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -97,6 +106,15 @@ export interface DrawingEngagementSectionProps {
   myMemberId: string;
   /** [07-38章6-6節] やりとりトグル。falseの間はコメント区画（入力欄・一覧）を丸ごと隠す。スタンプは残す。 */
   socialInteractionsEnabled: boolean;
+  /**
+   * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+   * ガチャ結果画面（P28/C22/S16）の「＋コメント」から深リンクで開かれた場合、
+   * 開いた瞬間からコメント入力欄が使える状態にする（統括「コメント欄にすぐ
+   * 入る」）。trueのときだけ初期状態を「入力中」にし、入力欄にautoFocusする。
+   * 未指定（false）時は従来どおり「＋ひとこと」を押すまで閉じたまま
+   * （既存の呼び出し元には一切影響しない）。
+   */
+  initialComposing?: boolean;
 }
 
 export function DrawingEngagementSection({
@@ -105,6 +123,7 @@ export function DrawingEngagementSection({
   artistMemberId,
   myMemberId,
   socialInteractionsEnabled,
+  initialComposing,
 }: DrawingEngagementSectionProps) {
   const { client } = useSession();
   // [2026-09-23追加・要件定義書07-32章 決定7の段階3・決定11〜14、実装メモ.md
@@ -174,7 +193,7 @@ export function DrawingEngagementSection({
   );
 
   // --- コメント ---
-  const [composing, setComposing] = useState(false);
+  const [composing, setComposing] = useState(!!initialComposing);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -343,6 +362,10 @@ export function DrawingEngagementSection({
                 multiline
                 maxLength={200}
                 style={styles.textArea}
+                // [2026-09-28追加・実装メモ320章] ガチャ結果画面の「＋コメント」から
+                // 深リンクで開かれたときだけ自動フォーカス（統括「コメント欄にすぐ
+                // 入る」）。通常の「＋ひとこと」タップでは従来どおりフォーカスしない。
+                autoFocus={!!initialComposing}
               />
               {ngGuard.blocked && <NgWordWarningText tone={tone} />}
               {sendError && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{sendError}</Text>}

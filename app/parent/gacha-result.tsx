@@ -23,6 +23,11 @@ import type { GachaPrizeKind } from "@/types/domain";
  * app/child/gacha-result.tsx（C22）と全く同じタイミング（`loadState`が
  * `"ready"`になり`detail`が揃った瞬間）に1回だけ鳴らす。二重発火防止も
  * 同じくuseRefで行う。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * 家族の絵の「＋コメント」を押した先の遷移をここで担う。C22（app/child/
+ * gacha-result.tsx）と同じ考え方（`openDrawingId`・`openComment=1`を付けて
+ * P31（コレクション）へpush）。
  */
 export default function ParentGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -63,6 +68,9 @@ export default function ParentGachaResultScreen() {
           result={detail}
           onDecorate={() => router.push({ pathname: "/parent/tree-decorate", params: { drawId: drawId ?? "" } })}
           onGoToShelf={() => router.replace("/parent/collector-shelf")}
+          onCommentDrawing={(drawingId) =>
+            router.push({ pathname: "/parent/collector-shelf", params: { openDrawingId: drawingId, openComment: "1" } })
+          }
         />
       )}
     </Screen>

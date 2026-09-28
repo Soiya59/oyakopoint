@@ -19,6 +19,9 @@ import type { GachaPrizeKind } from "@/types/domain";
  * [2026-09-16追加・やること.md 2-3「効果音」保護者・みまもりへの拡張]
  * app/parent/gacha-result.tsx（P28）・app/child/gacha-result.tsx（C22）と
  * 同じタイミング・同じ二重発火防止（useRef）で鳴らす。
+ *
+ * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
+ * 家族の絵の「＋コメント」を押した先の遷移をここで担う。P28・C22と同じ考え方。
  */
 export default function SupporterGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -59,6 +62,9 @@ export default function SupporterGachaResultScreen() {
           result={detail}
           onDecorate={() => router.push({ pathname: "/supporter/tree-decorate", params: { drawId: drawId ?? "" } })}
           onGoToShelf={() => router.replace("/supporter/collector-shelf")}
+          onCommentDrawing={(drawingId) =>
+            router.push({ pathname: "/supporter/collector-shelf", params: { openDrawingId: drawingId, openComment: "1" } })
+          }
         />
       )}
     </Screen>
