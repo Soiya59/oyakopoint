@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
@@ -19,7 +19,13 @@ import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM } from "@/lib/nfc.shared";
  * オンボーディング導線（P2〜P6・C1）を案内する。
  */
 export default function WelcomeScreen() {
-  const { status } = useSession();
+  const { status, refreshParentMember } = useSession();
+  // [2026-09-29追加・本部長差し戻し（軽微変更ルート）、実装メモ.md 322章]
+  // status==="parentUnreachable"の「もう一度」ボタン用。押してから読み直しが
+  // 終わるまで無反応に見える（最大で数秒、fetchParentMemberWithRetryのリトライ分）
+  // ため、連打防止も兼ねてボタンを無効化しつつスピナーを出す
+  // （src/components/EmailCodeVerifyForm.tsxの`verifying`と同じ流儀）。
+  const [retryingConnection, setRetryingConnection] = useState(false);
   // [2026-09-13追加・実装メモ.md 213章] 閉じた状態からNFCタグ／URLで起動した場合、
   // expo-router内部の起動時URL解決（150msのレース、詳細はsrc/lib/pendingNfcLink.tsx）が
   // コールドスタート時に負けることがあり、その場合このP1（ようこそ画面）が
@@ -57,6 +63,46 @@ export default function WelcomeScreen() {
       router.replace("/child/home");
     }
   }, [status, pendingNfcResolved, takePendingNfcLink]);
+
+  // [2026-09-29追加・本部長差し戻し（軽微変更ルート）、実装メモ.md 322章]
+  // status==="parentUnreachable"（保護者としてログイン済みだが、
+  // family_membersへの問い合わせが自動再試行後も失敗し、手元に同じ利用者の
+  // 家族情報が無い状態。src/lib/session.tsxのコメント参照）専用の画面。
+  // 「家族をつくる」「招待コードで参加」「アカウントを削除する」のどの導線も
+  // 出さない（本当に家族が無いと確定していないため。統括の依頼どおり）。
+  // 「もう一度」はrefreshParentMember()を呼び直すだけで、成功すれば
+  // status===「parent」等へ自然に進む（上のuseEffectがそのまま遷移させる）。
+  if (status === "parentUnreachable") {
+    return (
+      <Screen tone="parent">
+        <View style={{ alignItems: "center", marginTop: theme.spacing.s8 }}>
+          <Text style={{ fontSize: 48 }}>📶</Text>
+          <Text style={[theme.typography.parentTitle, { marginTop: theme.spacing.s3, textAlign: "center" }]}>
+            通信がうまくいきませんでした
+          </Text>
+          <Text
+            style={[
+              theme.typography.parentBody,
+              { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary, textAlign: "center" },
+            ]}
+          >
+            電波のよいところで、もう一度お試しください。
+          </Text>
+        </View>
+        <AppButton
+          label={retryingConnection ? "たしかめています…" : "もう一度"}
+          loading={retryingConnection}
+          disabled={retryingConnection}
+          style={{ marginTop: theme.spacing.s8 }}
+          onPress={() => {
+            if (retryingConnection) return;
+            setRetryingConnection(true);
+            void refreshParentMember().finally(() => setRetryingConnection(false));
+          }}
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen tone="parent">

@@ -15,8 +15,21 @@
  * status の意味:
  * - "loading": 起動直後、SecureStore/Supabase Authセッションの復元中。
  * - "signedOut": どちらの認証状態も無い（P1/C1へ誘導する）。
- * - "parentNoFamily": 保護者としてSupabase Authにログイン済みだが、
- *   family_membersにまだ行が無い（家族作成/参加が未完了。P4/P5へ誘導する）。
+ * - "parentNoFamily": 保護者としてSupabase Authにログイン済みで、
+ *   family_membersへの問い合わせにも成功したが、行が無い（家族作成/参加が
+ *   未完了。P4/P5・家族作成/削除の導線へ誘導する）。**問い合わせが失敗した
+ *   場合はこのstatusにはしない**（下記"parentUnreachable"参照。2026-09-29
+ *   実装メモ.md 322章。以前はエラー時も`null`を返しこの状態に丸めていたため、
+ *   一過性の通信断で保護者が誤って家族作成・アカウント削除の画面に落ちる
+ *   不具合があった）。
+ * - "parentUnreachable": 保護者としてSupabase Authにログイン済みだが、
+ *   family_membersへの問い合わせが（自動再試行後も）失敗し、かつ手元に
+ *   同じ利用者の家族情報が無い（起動直後等）。「つながりませんでした」＋
+ *   「もう一度」の再試行画面（P1）へ誘導する。家族作成・参加・アカウント
+ *   削除の導線はこのstatusでは出さない（parentNoFamilyと違い、本当に家族が
+ *   無いと確定していないため）。エラーだが手元に同じ利用者の家族情報が
+ *   既にある場合（トークン自動更新時等）はこのstatusにはならず、現在の
+ *   status・parentMemberをそのまま保つ（parentMemberResolution.ts参照）。
  * - "parent": 保護者としてログイン済み・家族に所属済み。
  * - "supporter": みまもりメンバー（要件定義書07-7章）としてログイン済み・家族に
  *   所属済み。認証方式は保護者と全く同じマジックリンク方式（06章・07-7章
@@ -34,8 +47,16 @@ import {
   saveChildSession,
 } from "./childSession";
 import type { FamilyMember } from "@/types/domain";
+import { resolveParentMemberFetch } from "./parentMemberResolution";
 
-export type SessionStatus = "loading" | "signedOut" | "parentNoFamily" | "parent" | "supporter" | "child";
+export type SessionStatus =
+  | "loading"
+  | "signedOut"
+  | "parentNoFamily"
+  | "parentUnreachable"
+  | "parent"
+  | "supporter"
+  | "child";
 
 interface SessionContextValue {
   status: SessionStatus;
@@ -47,7 +68,9 @@ interface SessionContextValue {
   childSession: ChildSessionInfo | null;
   /** create_family_with_owner / join_family_with_invite_code 実行後、または
    *  6桁コードでの保護者ログイン（verifyEmailOtp）成功後に呼び、parentMemberを
-   *  再取得してstatusを進める（"parent"/"supporter"/"parentNoFamily"/"signedOut"）。
+   *  再取得してstatusを進める（"parent"/"supporter"/"parentNoFamily"/"signedOut"/
+   *  "parentUnreachable"。最後の1つは2026-09-29追加・実装メモ.md 322章。
+   *  問い合わせが自動再試行後も失敗し、手元に同じ利用者の家族情報が無い場合）。
    *  こどもセッションが残っていれば先に破棄する（実装参照）。 */
   refreshParentMember: () => Promise<void>;
   /** child-login成功後に呼び、SecureStoreへ保存しつつ子どもセッションへ切り替える。 */
@@ -76,26 +99,64 @@ const SessionContext = createContext<SessionContextValue | null>(null);
  * 等）、ユーザーが実機で「招待の送信がRLSエラーになる」という形で発見した。
  * `.eq("is_active", true)`を追加し、退会済みアカウントは`fetchParentMember`の
  * 時点で「見つからない」（→ status: "parentNoFamily"）として扱うようにした。
+ *
+ * [2026-09-29変更・本部長差し戻し（軽微変更ルート）、実装メモ.md 322章]
+ * 戻り値を`FamilyMember | null`（見つからない場合とエラーの場合が区別できない）
+ * から、3値を区別する`ParentMemberFetchResult`に変更した。統括が実機
+ * （Android、早朝5:39・トークン自動更新のタイミング）で、通信エラー時にも
+ * `null`が返り「家族なし」（parentNoFamily＝家族作成・アカウント削除の
+ * 導線がある画面）に丸められてしまう不具合を発見したため。この関数自体は
+ * 1回だけ問い合わせる（リトライはfetchParentMemberWithRetryが担う）。
  */
-async function fetchParentMember(userId: string): Promise<FamilyMember | null> {
-  const { data, error } = await supabase
-    .from("family_members")
-    .select("*")
-    .eq("auth_user_id", userId)
-    .in("role", ["parent", "supporter"])
-    .eq("is_active", true)
-    .maybeSingle();
-  if (error) {
-    console.error("session: family_members lookup failed", error);
-    return null;
+type ParentMemberFetchResult =
+  | { outcome: "found"; member: FamilyMember }
+  | { outcome: "notFound" }
+  | { outcome: "error" };
+
+async function fetchParentMemberOnce(userId: string): Promise<ParentMemberFetchResult> {
+  try {
+    const { data, error } = await supabase
+      .from("family_members")
+      .select("*")
+      .eq("auth_user_id", userId)
+      .in("role", ["parent", "supporter"])
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) {
+      console.error("session: family_members lookup failed", error);
+      return { outcome: "error" };
+    }
+    return data ? { outcome: "found", member: data as FamilyMember } : { outcome: "notFound" };
+  } catch (e) {
+    // [2026-09-29追加] supabase-jsが例外を投げるケース（真の通信断等）も
+    // 「エラー」として同じ経路で扱う。ここで捕まえないと、呼び出し元の
+    // async関数が未捕捉のrejectionで止まり、statusが更新されないまま
+    // "loading"に固まる（白画面より一段マシだが、再試行の機会も失う）。
+    console.error("session: family_members lookup threw", e);
+    return { outcome: "error" };
   }
-  return (data as FamilyMember | null) ?? null;
 }
 
-/** member.role からSessionStatusを決める（fetchParentMemberの結果があるとき）。 */
-function statusForMember(member: FamilyMember | null): SessionStatus {
-  if (!member) return "parentNoFamily";
-  return member.role === "supporter" ? "supporter" : "parent";
+/**
+ * [2026-09-29新設・実装メモ.md 322章] エラー時のみ、短い間隔をあけて
+ * 自動的に読み直す（計3回、1秒・2秒あけて。統括の依頼どおり）。
+ * "found"/"notFound"（問い合わせ自体は成功）はリトライせず即座に返す。
+ */
+const FETCH_PARENT_MEMBER_RETRY_DELAYS_MS = [1000, 2000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchParentMemberWithRetry(userId: string): Promise<ParentMemberFetchResult> {
+  for (let attempt = 0; attempt <= FETCH_PARENT_MEMBER_RETRY_DELAYS_MS.length; attempt += 1) {
+    const result = await fetchParentMemberOnce(userId);
+    if (result.outcome !== "error") return result;
+    if (attempt < FETCH_PARENT_MEMBER_RETRY_DELAYS_MS.length) {
+      await sleep(FETCH_PARENT_MEMBER_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  return { outcome: "error" };
 }
 
 /**
@@ -150,6 +211,20 @@ function createDisabledChildClient(): SupabaseClient {
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
+  /**
+   * [2026-09-29新設・実装メモ.md 322章] `status`の最新値を同期的に参照できる
+   * ref。`applyParentMemberOutcome`（`useCallback`の依存配列が空で、`status`を
+   * 直接読むとマウント時の古い値に固定されてしまう）から、「今まさに画面に
+   * 出ている`status`が"loading"（＝まだ何も確定した状態を表示していない）
+   * かどうか」を判定するために使う。`updateStatus`を通して`setStatus`と
+   * 必ず同じタイミングで更新する（`childSessionRef`と同じ設計、上のコメント
+   * 参照）。
+   */
+  const statusRef = useRef<SessionStatus>("loading");
+  const updateStatus = useCallback((next: SessionStatus) => {
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [parentMember, setParentMember] = useState<FamilyMember | null>(null);
   const [childSession, setChildSessionState] = useState<ChildSessionInfo | null>(null);
@@ -162,6 +237,67 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // 一過性クラッシュの真因。実装メモ.md 31章「続報」参照）。childSessionの最新値を
   // 同期的に参照できるrefを用意し、非同期ストレージ読み取りへの依存を無くす。
   const childSessionRef = useRef<ChildSessionInfo | null>(null);
+
+  /**
+   * [2026-09-29新設・本部長差し戻し（軽微変更ルート）、実装メモ.md 322章]
+   * 直近に確認できた「この利用者は家族に所属している」の情報（found時の
+   * parentMember）。エラー時に「手元に同じ利用者の家族情報が既にあるか」
+   * （hasHeldState、src/lib/parentMemberResolution.ts）を判定するために使う。
+   * found時に更新し、notFound（本当に家族なし）・signedOut（明示的な
+   * ログアウト・未ログイン）のときはnullへ戻す。エラー時（"keep"・
+   * "unreachable"のいずれも）は変更しない——"keep"はこの値をそのまま今回も
+   * 有効とみなすため、"unreachable"はそもそもこの値がnull（またはuserが別人）
+   * だったからこそ辿り着いた分岐のため。
+   */
+  const parentMemberRef = useRef<{ userId: string; member: FamilyMember } | null>(null);
+
+  /**
+   * [2026-09-29新設・実装メモ.md 322章] fetchParentMemberWithRetry() の結果を
+   * status・parentMember・parentMemberRefへ反映する共通処理。起動時の復元・
+   * onAuthStateChange・refreshParentMemberの3箇所全てがこれを通ることで、
+   * 「エラー時に家族なし扱いへ丸めない」判定（parentMemberResolution.ts）を
+   * 一箇所に保つ。呼び出し前に`setAuthUser(user)`を呼ぶのは呼び出し元の責務
+   * （この関数はauthUser状態そのものには触れない。3箇所とも既にuserを
+   * 別途setAuthUserしているため、ここでは重複させない）。
+   */
+  const applyParentMemberOutcome = useCallback((user: User, result: ParentMemberFetchResult) => {
+    // [2026-09-29追加] `statusRef.current !== "loading"`も併せて要求する。
+    // `refreshParentMember`は`clearChildOnly()`の直後（＝status を明示的に
+    // "loading"にした直後）に呼ばれることがあり、その場合`parentMemberRef`が
+    // （子どもモードに入る前の）古い情報を指したままでも、今まさに画面上は
+    // 何も確定した状態を表示していない。ここで"keep"にしてしまうと、
+    // statusが"loading"のまま二度と進まなくなる（全画面スピナーで固まる）
+    // ため、"loading"のときは「手元に情報がある」とはみなさない。
+    const hasHeldState =
+      statusRef.current !== "loading" &&
+      parentMemberRef.current !== null &&
+      parentMemberRef.current.userId === user.id;
+    const action = resolveParentMemberFetch(result.outcome, hasHeldState);
+    if (action === "keep") {
+      // [本題] status・parentMemberに一切触れない。トークン自動更新直後などの
+      // 一過性エラーで、既に確定していた保護者/みまもりの状態を「家族なし」
+      // （parentNoFamily＝家族作成・アカウント削除の導線がある画面）へ
+      // 落とさないための分岐（統括が実機で踏んだ不具合の本体）。
+      return;
+    }
+    if (action === "unreachable") {
+      parentMemberRef.current = null;
+      setParentMember(null);
+      updateStatus("parentUnreachable");
+      return;
+    }
+    if (action === "notFound") {
+      parentMemberRef.current = null;
+      setParentMember(null);
+      updateStatus("parentNoFamily");
+      return;
+    }
+    // action === "found"
+    const member = (result as Extract<ParentMemberFetchResult, { outcome: "found" }>).member;
+    parentMemberRef.current = { userId: user.id, member };
+    setParentMember(member);
+    updateStatus(member.role === "supporter" ? "supporter" : "parent");
+  }, [updateStatus]);
 
   /**
    * 子どもセッションを終了する（状態のみ。保護者への復帰は呼び出し元の責務）。
@@ -204,8 +340,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await clearChildSession();
     setChildSessionState(null);
     setChildClient(null);
-    setStatus("loading");
-  }, []);
+    updateStatus("loading");
+  }, [updateStatus]);
 
   /**
    * [2026-09-17追加・やること.md 4-36 症状2] 呼び出し元は3箇所。
@@ -235,14 +371,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const user = data.session?.user ?? null;
     setAuthUser(user);
     if (!user) {
+      parentMemberRef.current = null;
       setParentMember(null);
-      setStatus("signedOut");
+      updateStatus("signedOut");
       return;
     }
-    const member = await fetchParentMember(user.id);
-    setParentMember(member);
-    setStatus(statusForMember(member));
-  }, [clearChildOnly]);
+    // [2026-09-29変更・実装メモ.md 322章] 1回の問い合わせ（fetchParentMember）を
+    // やめ、エラー時のみ自動で数回読み直す（fetchParentMemberWithRetry）。結果の
+    // 反映はapplyParentMemberOutcomeへ一本化した（上記コメント参照）。
+    const result = await fetchParentMemberWithRetry(user.id);
+    applyParentMemberOutcome(user, result);
+  }, [clearChildOnly, applyParentMemberOutcome, updateStatus]);
 
   useEffect(() => {
     let mounted = true;
@@ -252,7 +391,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         // .env未設定環境向けフォールバック。この場合、画面はsrc/data/store.tsxの
         // モックデータ層を使う（isSupabaseConfigured()を直接参照する側の設計は
         // 変更していない）。SessionProviderはsignedOut相当のまま何もしない。
-        if (mounted) setStatus("signedOut");
+        if (mounted) updateStatus("signedOut");
         return;
       }
 
@@ -262,7 +401,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         childSessionRef.current = restoredChild;
         setChildSessionState(restoredChild);
         setChildClient(createChildDataClient(supabaseUrl, supabaseAnonKey, restoredChild.accessToken));
-        setStatus("child");
+        updateStatus("child");
         return;
       }
 
@@ -271,12 +410,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const user = data.session?.user ?? null;
       setAuthUser(user);
       if (user) {
-        const member = await fetchParentMember(user.id);
+        // [2026-09-29変更・実装メモ.md 322章] 起動直後は「手元に何もない」
+        // ケースの本命（parentMemberRef.currentはこの時点で必ずnull）。
+        // エラー時のみ自動で数回読み直し（fetchParentMemberWithRetry）、
+        // それでも読めなければ"parentUnreachable"（再試行画面）になる
+        // （applyParentMemberOutcome参照。"parentNoFamily"＝家族作成/
+        // アカウント削除の導線がある画面へは丸めない）。
+        const result = await fetchParentMemberWithRetry(user.id);
         if (!mounted) return;
-        setParentMember(member);
-        setStatus(statusForMember(member));
+        applyParentMemberOutcome(user, result);
       } else {
-        setStatus("signedOut");
+        updateStatus("signedOut");
       }
     })();
 
@@ -314,12 +458,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const user = session?.user ?? null;
       setAuthUser(user);
       if (user) {
-        const member = await fetchParentMember(user.id);
-        setParentMember(member);
-        setStatus(statusForMember(member));
+        // [2026-09-29変更・実装メモ.md 322章] このコールバックはトークン自動
+        // 更新（TOKEN_REFRESHED）でも毎回走る。統括が実機（Android、早朝5:39）
+        // で踏んだ不具合はここが真因だった——通信がまだ整っていない状態で
+        // 問い合わせが失敗し、以前は無条件で"parentNoFamily"（家族作成/
+        // アカウント削除の導線がある画面）に丸めていた。エラー時のみ自動で
+        // 数回読み直し、それでも読めなければ、既に同じ利用者の家族情報を
+        // 持っている場合（hasHeldState）は現状維持（applyParentMemberOutcome
+        // の"keep"分岐）にする。
+        const result = await fetchParentMemberWithRetry(user.id);
+        if (!mounted) return;
+        applyParentMemberOutcome(user, result);
       } else {
+        parentMemberRef.current = null;
         setParentMember(null);
-        setStatus("signedOut");
+        updateStatus("signedOut");
       }
     });
 
@@ -327,7 +480,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [applyParentMemberOutcome, updateStatus]);
 
   const loginChild = useCallback(async (info: ChildSessionInfo) => {
     // refはストレージ書き込み・状態伝播を待たず即座に更新する
@@ -336,8 +489,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await saveChildSession(info);
     setChildSessionState(info);
     setChildClient(createChildDataClient(supabaseUrl, supabaseAnonKey, info.accessToken));
-    setStatus("child");
-  }, []);
+    updateStatus("child");
+  }, [updateStatus]);
 
   /**
    * 子どもセッションを終了したあと、保護者への復帰まで行う（`clearChildOnly`は
@@ -371,17 +524,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
       // 既定は従来どおり。子ども同士の切り替え（次のPIN入力までの一時的な未ログイン）や、
       // 期限切れセッションの後始末では、保護者へ復帰させてはいけない。
-      setStatus("signedOut");
+      updateStatus("signedOut");
     },
-    [clearChildOnly, refreshParentMember]
+    [clearChildOnly, refreshParentMember, updateStatus]
   );
 
   const logoutParent = useCallback(async () => {
     await supabase.auth.signOut();
+    parentMemberRef.current = null;
     setAuthUser(null);
     setParentMember(null);
-    setStatus("signedOut");
-  }, []);
+    updateStatus("signedOut");
+  }, [updateStatus]);
 
   /**
    * [2026-09-17変更・やること.md 4-36 症状2、本部長レビューで再修正]

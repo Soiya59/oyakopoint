@@ -29,6 +29,10 @@ import { PostConsentGuideScreen, TermsConsentModal, useTermsConsentGate, usePost
  *   家族作成/参加への案内を、それ以外なら通常のログイン導線（家族をつくる／
  *   招待コードで参加／こどもモードで使う）を出す。どちらの画面も家族名を表示
  *   しないため、この経路では空欄は発生しない。
+ * - `status === "parentUnreachable"`（2026-09-29追加・実装メモ.md 322章）も
+ *   同じく`"/"`へ戻す。トップ画面が「つながりませんでした」＋「もう一度」の
+ *   再試行画面を出す（家族作成・削除の導線は出さない。session.tsxのコメント
+ *   参照）。
  * - `status === "supporter"` / `"child"` で保護者パスに来た場合は、それぞれ
  *   自分のホームへ送る（誤って自分のロールと違う画面に留まらせないため）。
  *
@@ -47,7 +51,7 @@ export default function ParentLayout() {
   const { status, client, parentMember } = useSession();
 
   const redirectTo: string | null =
-    status === "signedOut" || status === "parentNoFamily"
+    status === "signedOut" || status === "parentNoFamily" || status === "parentUnreachable"
       ? "/"
       : status === "supporter"
       ? "/supporter/family"

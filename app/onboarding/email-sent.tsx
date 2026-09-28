@@ -53,6 +53,11 @@ export default function EmailSentScreen() {
       router.replace("/child/home");
     } else if (status === "parentNoFamily") {
       router.replace(intent === "join" ? "/onboarding/join-family" : "/onboarding/create-family");
+    } else if (status === "parentUnreachable") {
+      // [2026-09-29追加・実装メモ.md 322章] family_membersへの問い合わせが
+      // 自動再試行後も失敗した場合。P1（"/"）の「つながりませんでした」＋
+      // 「もう一度」の再試行画面へ引き継ぐ（家族作成へは決め打ちしない）。
+      router.replace("/");
     }
   }, [status, intent]);
 

@@ -17,6 +17,9 @@ import { PostConsentGuideScreen, TermsConsentModal, useTermsConsentGate, usePost
  * - `status === "loading"` の間はリダイレクトしない（`app/parent/_layout.tsx`の
  *   コメント参照。判定前に飛ばすと正常なログイン済み利用者まで弾いてしまう）。
  * - `status === "signedOut"` / `"parentNoFamily"` は `"/"`（P1トップ画面）へ戻す。
+ * - `status === "parentUnreachable"`（2026-09-29追加・実装メモ.md 322章）も
+ *   同じく`"/"`へ戻す（`app/parent/_layout.tsx`と同じ理由。session.tsxのコメント
+ *   参照）。
  * - `status === "parent"` / `"child"` でみまもりパスに来た場合は、それぞれ自分の
  *   ホームへ送る。
  *
@@ -31,7 +34,7 @@ export default function SupporterLayout() {
   const { status, client, parentMember } = useSession();
 
   const redirectTo: string | null =
-    status === "signedOut" || status === "parentNoFamily"
+    status === "signedOut" || status === "parentNoFamily" || status === "parentUnreachable"
       ? "/"
       : status === "parent"
       ? "/parent"

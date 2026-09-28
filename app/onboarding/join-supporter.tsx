@@ -50,13 +50,31 @@ import { authSendErrorText } from "@/lib/authSendError";
  * ログインの画面と同じ考え方で、行動が変わるもの（電波・混み合い）だけ
  * 文言を分け、原因を追うための「目印」を小さく添える。この画面はS0専用で
  * 子ども向けの分岐は無い（67.3節決定5の対象外＝常に目印を出してよい）。
+ *
+ * [2026-09-29追加・本部長差し戻し（軽微変更ルート）、開発部/成果物/実装メモ.md
+ * 322章] `status === "parentUnreachable"`（コード認証は成功したが、直後の
+ * `family_members`問い合わせが自動再試行後も失敗した状態。src/lib/session.tsxの
+ * コメント参照）専用の分岐を追加した。以前はこの分岐が無く、下の
+ * `emailSent`分岐（`EmailCodeVerifyForm`）がそのまま描画され続けていたため、
+ * `EmailCodeVerifyForm`内部の`verifying`（コード確認成功後は意図的にfalseへ
+ * 戻さない設計）が真のまま、「たしかめています…」の表示で止まって見えていた
+ * （データ破壊や誤操作は起きないが、原因不明のまま進めなくなる）。
  */
 const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
 const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+// [2026-09-29追加・実装メモ.md 322章] APIエラーオブジェクトから作る
+// `formatPgFailureRef`等とは別物（session.tsx側の再試行はPostgrestErrorを
+// 呼び出し元に返さないため）。固定の目印文字列にして、他の「目印」表示と
+// 同じ場所・同じ見た目で出す。
+const REF_PARENT_UNREACHABLE = "session-unreachable";
 
 export default function JoinSupporterScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
-  const { status } = useSession();
+  const { status, refreshParentMember } = useSession();
+  // [2026-09-29追加・実装メモ.md 322章] 「もう一度」ボタン用。押してから
+  // 読み直しが終わるまで無反応に見えるため、連打防止も兼ねてボタンを
+  // 無効化しつつスピナーを出す（app/index.tsxの`retryingConnection`と同じ流儀）。
+  const [retryingConnection, setRetryingConnection] = useState(false);
 
   const [previewState, setPreviewState] = useState<"loading" | "ready" | "error">("loading");
   const [familyName, setFamilyName] = useState("");
@@ -239,7 +257,35 @@ export default function JoinSupporterScreen() {
         </Text>
       </Card>
 
-      {status === "parentNoFamily" ? (
+      {status === "parentUnreachable" ? (
+        // [2026-09-29追加・実装メモ.md 322章] コード認証は成功したが、直後の
+        // family_members問い合わせが自動再試行後も失敗した状態。
+        // 「たしかめています…」で止めず、他の失敗表示（previewError等）と
+        // 同じ流儀（メッセージ＋目印＋再試行ボタン）で出す。
+        <View style={{ marginTop: theme.spacing.s6 }}>
+          <Text style={theme.typography.supporterBody}>{MSG_OFFLINE}</Text>
+          <Text
+            style={[
+              theme.typography.supporterCaption,
+              { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary },
+            ]}
+          >
+            目印 {REF_PARENT_UNREACHABLE}
+          </Text>
+          <AppButton
+            tone="supporter"
+            label={retryingConnection ? "たしかめています…" : "もう一度"}
+            loading={retryingConnection}
+            disabled={retryingConnection}
+            style={{ marginTop: theme.spacing.s6 }}
+            onPress={() => {
+              if (retryingConnection) return;
+              setRetryingConnection(true);
+              void refreshParentMember().finally(() => setRetryingConnection(false));
+            }}
+          />
+        </View>
+      ) : status === "parentNoFamily" ? (
         <>
           <InviteVisibilityConsent role="supporter" checked={consentChecked} onChange={setConsentChecked} />
 

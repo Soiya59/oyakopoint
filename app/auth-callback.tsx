@@ -59,6 +59,12 @@ export default function AuthCallbackScreen() {
       // [2026-08-22追加] みまもりメンバーが既存アカウントで再ログインした場合
       // （例: ログアウト後に再度マジックリンクを踏んだ等）。
       router.replace("/supporter/family");
+    } else if (status === "parentUnreachable") {
+      // [2026-09-29追加・実装メモ.md 322章] family_membersへの問い合わせが
+      // 自動再試行後も失敗した場合。P1（"/"）へ差し戻し、P1の
+      // 「つながりませんでした」＋「もう一度」の再試行画面へ引き継ぐ
+      // （src/lib/session.tsxのコメント参照。家族作成へは決め打ちしない）。
+      router.replace("/");
     } else if (status === "parentNoFamily") {
       if (intent === "join-supporter" && token) {
         // [2026-08-22追加] S0「招待プレビュー・参加確認」へ。認証は完了済みだが

@@ -67,11 +67,12 @@ export default function ChildLayout() {
   const staleSession = Boolean(state.activeChildMemberId) && !me;
   // NFCの2画面は、いずれかのロール（子ども・保護者・みまもりメンバー）でログイン
   // 済みでありさえすれば通す。未ログイン（"signedOut"）・家族未所属
-  // （"parentNoFamily"）・復元中（"loading"）のときだけトップへ戻す
+  // （"parentNoFamily"）・つながらない（"parentUnreachable"、2026-09-29追加・
+  // 実装メモ.md 322章）・復元中（"loading"）のときだけトップへ戻す
   // （report_chore_completion_by_nfc_tag()自体がログイン必須のため、ここで弾いても
   // 弾かなくてもRPC側で最終的に拒否されるが、画面が空のまま固まるのを避ける）。
   const notChildSession = isNfcPath
-    ? status === "signedOut" || status === "parentNoFamily"
+    ? status === "signedOut" || status === "parentNoFamily" || status === "parentUnreachable"
     : status !== "child";
   const shouldRedirect = staleSession || notChildSession;
 
