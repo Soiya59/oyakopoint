@@ -62,6 +62,12 @@ type ShortcutItem = { emoji: string; label: string; path: string };
  * ポップアップと同じ取得元）をそのまま出し、0回のときは回数を出さず固定文言に
  * する（`weeklyReviewCardCountLabel`、カード自体は消さない）。押すと
  * クエストタブと同じ`ChildWeeklyReviewModal`が開く（新しい画面は作らない）。
+ *
+ * [2026-09-29改訂・実装メモ.md 328章、本部長依頼・軽微変更ルート（統括の奥さんの
+ * Android実機で発見）] タイルのラベル（`tileLabel`）が2行に折り返していた
+ * （「🗄️ コレクション」、文字の大きさの設定〈fontScale〉が大きい端末で発生）。
+ * `numberOfLines={1}`＋`adjustsFontSizeToFit`＋`minimumFontScale`を足し、
+ * 1行のまま入りきらないときだけ文字を縮める（`DrawingZoomPicker.tsx`と同じ考え方）。
  */
 export default function ChildSelfTabScreen() {
   const { state, memberPoints, fullLedger, memberAvatars } = useAppData();
@@ -176,7 +182,14 @@ export default function ChildSelfTabScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={[theme.typography.childBody, styles.tileLabel]}>{s.label}</Text>
+            <Text
+              style={[theme.typography.childBody, styles.tileLabel]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {s.label}
+            </Text>
           </Pressable>
         ))}
       </View>

@@ -19,6 +19,16 @@
  * 配置する。ラベル・プレースホルダ・カウンター表示の有無はtoneで書き分ける
  * （決定12〜14）。送信直前に前後の空白をトリムし、トリム後0文字なら`null`として
  * 送る（決定15、DrawingBoard内で行う）。
+ *
+ * [2026-09-29改訂・実装メモ.md 328章、本部長依頼・軽微変更ルート] 「ひとつ もどす／
+ * ぜんぶけす／保存する」の行（`actionRow`）を点検し、文字の大きさの設定（fontScale）
+ * が大きい端末で崩れないよう、「ひとつ もどす」「ぜんぶけす」に`flexShrink: 1`
+ * （`styles.actionButtonShrink`）を足した。RNの`flexShrink`既定値は0（縮まない）で、
+ * 2ボタンがflexを持たないまま内容量に応じて広がり続けると、行全体が画面外へ
+ * はみ出す・`saveButton`（flex:1）が潰れる恐れがあったため。3ボタンとも
+ * `AppButton`の`numberOfLines={1}`・`adjustsFontSizeToFit`（`DrawingZoomPicker.tsx`
+ * と同じ新設props）も渡し、縮んでも文字は1行のまま縮小する。通常の文字サイズでは
+ * いずれも効かず見た目は変わらない。
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -748,6 +758,10 @@ export function DrawingBoard({
             variant="secondary"
             onPress={undoLastStroke}
             disabled={saving || lines.length === 0}
+            style={styles.actionButtonShrink}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
           />
           {/* [2026-09-29変更・実装メモ.md 327章、本部長依頼・軽微変更ルート、
               統括承認済み] 326章では✋で選択中に「これをけす」へ差し替えて
@@ -760,6 +774,10 @@ export function DrawingBoard({
             variant="secondary"
             onPress={clearAll}
             disabled={saving || lines.length === 0}
+            style={styles.actionButtonShrink}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
           />
           <AppButton
             label={saveLabel}
@@ -768,6 +786,9 @@ export function DrawingBoard({
             disabled={saving || lines.length === 0}
             onPress={handleSave}
             style={styles.saveButton}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
           />
         </View>
       )}
@@ -856,6 +877,12 @@ const styles = StyleSheet.create({
   thumbCaption: { maxWidth: 72, textAlign: "center" },
   actionRow: { flexDirection: "row", marginTop: theme.spacing.s4, gap: theme.spacing.s3 },
   saveButton: { flex: 1 },
+  // [2026-09-29追加・実装メモ.md 328章、本部長依頼・軽微変更ルート] 「ひとつ もどす」・
+  // 「ぜんぶけす」はflexを持たず内容量に応じた幅のまま（既定でRNのflexShrinkは0＝
+  // 縮まない）。文字の大きさの設定（fontScale）が大きい端末では2ボタン分の幅だけで
+  // 行の幅を超え、`saveButton`（flex:1）が潰れる・行全体が画面外へはみ出す恐れが
+  // あったため、縮められるようにする。通常の文字サイズでは効かず見た目は変わらない。
+  actionButtonShrink: { flexShrink: 1 },
   limitCard: { alignItems: "center", backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
   // [2026-09-01追加] 編集モード中の案内カード。limitCardと同系色にして
   // 「通常の新規作成とは違う状態」であることを示す。

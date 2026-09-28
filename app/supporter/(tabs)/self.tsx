@@ -41,6 +41,12 @@ import { useGachaProgress } from "@/hooks/useGacha";
  * 先週の自分の完了報告回数（`useWeeklyReview`の`data.yourWeeklyTotal`）を
  * そのまま出し、0回のときは回数を出さず固定文言にする（保護者と同じ考え方）。
  * 押すと従来どおり`/supporter/weekly-review`へ遷移する（画面自体は変更していない）。
+ *
+ * [2026-09-29改訂・実装メモ.md 328章、本部長依頼・軽微変更ルート（統括の奥さんの
+ * Android実機で発見・文字の大きさの設定〈fontScale〉が大きい端末が原因）] タイルの
+ * ラベル（`tileLabel`）に`numberOfLines`（`\n`を含む「感謝\nポイント」だけ2行、
+ * それ以外は1行）＋`adjustsFontSizeToFit`＋`minimumFontScale`を足した
+ * （`app/parent/(tabs)/self.tsx`と同じ考え方）。
  */
 export default function SupporterSelfScreen() {
   const { state, memberPoints, memberAvatars } = useAppData();
@@ -161,7 +167,14 @@ export default function SupporterSelfScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={[theme.typography.supporterBody, styles.tileLabel]}>{s.label}</Text>
+            <Text
+              style={[theme.typography.supporterBody, styles.tileLabel]}
+              numberOfLines={s.label.includes("\n") ? 2 : 1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {s.label}
+            </Text>
           </Pressable>
         ))}
       </View>

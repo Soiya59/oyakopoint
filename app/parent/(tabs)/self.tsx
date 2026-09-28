@@ -46,6 +46,15 @@ type ShortcutItem = { emoji: string; label: string; path: string; labelSize?: nu
  * そのまま出し、0回のときは回数を出さず固定文言にする
  * （`weeklyReviewCardCountLabel`、カード自体は消さない）。押すと従来どおり
  * `/parent/weekly-review`へ遷移する（画面自体は変更していない）。
+ *
+ * [2026-09-29改訂・実装メモ.md 328章、本部長依頼・軽微変更ルート（統括の奥さんの
+ * Android実機で発見・文字の大きさの設定〈fontScale〉が大きい端末が原因）] タイルの
+ * ラベル（`tileLabel`）に`numberOfLines`（`\n`を含む「感謝\nポイント」だけ2行、
+ * それ以外は1行）＋`adjustsFontSizeToFit`＋`minimumFontScale`を足した。「コレクション」
+ * の`labelSize: 12`・「感謝\nポイント」の明示的な改行は、通常の文字サイズでの
+ * 見た目を変えないためそのまま残す（4列・75px幅で通常サイズでは収まらないための
+ * 既存の作り込み、90〜98行目コメント参照）。文字が大きい・画面が狭いときだけ
+ * 追加でさらに縮む（`app/child/(tabs)/self.tsx`と同じ考え方）。
  */
 export default function ParentSelfTabScreen() {
   const { state, memberPoints, memberAvatars } = useAppData();
@@ -170,7 +179,12 @@ export default function ParentSelfTabScreen() {
             <View style={styles.tileEmojiCircle}>
               <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
             </View>
-            <Text style={[theme.typography.parentBody, styles.tileLabel, s.labelSize ? { fontSize: s.labelSize } : null]}>
+            <Text
+              style={[theme.typography.parentBody, styles.tileLabel, s.labelSize ? { fontSize: s.labelSize } : null]}
+              numberOfLines={s.label.includes("\n") ? 2 : 1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
               {s.label}
             </Text>
           </Pressable>

@@ -11,6 +11,24 @@
  * みまもりメンバー48pt）を満たす。無効化条件は`disabled={saving}`のみとし、上限到達
  * （`atCapacity`）では無効化しない（すでに描いた絵を拡大して見返す・「ひとつ もどす」の
  * 後に続きを描くために拡大したままにする、といった操作を妨げないため）。
+ *
+ * [2026-09-29改訂・実装メモ.md 328章、本部長依頼・軽微変更ルート（統括の奥さんの
+ * Android実機で発見）] 行の`alignSelf: "center"`はコンテンツ幅（3ボタン分の
+ * 自然な幅）でしか収まらず、文字の大きさの設定（fontScale）が大きい端末や
+ * 画面の狭いAndroidでは3ボタン合計の幅が画面より広くなり、中央寄せのまま
+ * 左端の「ふつう」が画面外へはみ出して切れていた（`alignSelf: "center"`だと
+ * 親〈`measureWrap`、幅100%〉に収まる保証が無いため）。
+ * 直し方: 行に`maxWidth: "100%"`を足して行自体が親の幅を超えないようにし、
+ * 各ボタンに`flexShrink: 1`を足して縮められるようにした（RNの`flexShrink`の
+ * 既定値はWebのCSSと異なり`0`＝縮まないため、明示しないと縮まらない）。
+ * 通常の文字サイズでは3ボタンの自然な幅が画面に収まるため`maxWidth`は効かず、
+ * 見た目は変わらない（大人の「標準／2倍／3倍」表示も現状のまま）。文字が
+ * 大きい・画面が狭いときだけ行が縮み、ボタンも詰まる。
+ * ラベルは`numberOfLines={1}`＋`adjustsFontSizeToFit`＋`minimumFontScale`で
+ * 1行を保ったまま、ボタンが縮んで入りきらない場合だけ文字を縮小する
+ * （Android・iOS・webのいずれもReact Native標準機能で動く。RN 0.85時点で
+ * Androidも対応済み、`node_modules/react-native/ReactAndroid/src/main/java/
+ * com/facebook/react/views/text/ReactTextView.java`で確認）。
  */
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -64,7 +82,14 @@ export function DrawingZoomPicker({ tone, selected, onSelect, disabled = false }
             disabled && styles.buttonDisabled,
           ]}
         >
-          <Text style={[textStyle, styles.label]}>{labels[z]}</Text>
+          <Text
+            style={[textStyle, styles.label]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {labels[z]}
+          </Text>
         </Pressable>
       ))}
     </View>
@@ -77,9 +102,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     alignSelf: "center",
+    // [2026-09-29追加・328章] 親（measureWrap、幅100%）を超えないようにする保険。
+    // 通常の文字サイズでは3ボタンの自然な幅が画面に収まるため効かない。
+    maxWidth: "100%",
     gap: theme.spacing.s3,
   },
   button: {
+    // [2026-09-29追加・328章] 既定では縮まない（RNのflexShrink既定値は0）ため
+    // 明示する。paddingHorizontalはそのままなので、通常の文字サイズでは
+    // 見た目に影響しない。
+    flexShrink: 1,
     paddingHorizontal: theme.spacing.s3,
     alignItems: "center",
     justifyContent: "center",

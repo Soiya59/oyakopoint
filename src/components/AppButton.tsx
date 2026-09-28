@@ -14,6 +14,16 @@ interface AppButtonProps {
   loading?: boolean;
   fullWidth?: boolean;
   style?: ViewStyle;
+  /**
+   * [2026-09-29追加・実装メモ.md 328章、本部長依頼・軽微変更ルート]
+   * ラベルの折り返し・縮小を制御する。3つとも省略時は今までどおり
+   * （制限なし・縮小なし）で、既存の呼び出し元の見た目は一切変わらない。
+   * 横に並べて縮む可能性がある行（例: `DrawingBoard.tsx`の「ひとつ もどす／
+   * ぜんぶけす／保存する」）でのみ明示的に指定する。
+   */
+  numberOfLines?: number;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
 }
 
 /**
@@ -34,6 +44,9 @@ export function AppButton({
   loading,
   fullWidth,
   style,
+  numberOfLines,
+  adjustsFontSizeToFit,
+  minimumFontScale,
 }: AppButtonProps) {
   const isChild = tone === "child";
   // [2026-08-22追加] tone="supporter"（デザイントークン.md 1.7節）。primaryボタンは
@@ -92,6 +105,9 @@ export function AppButton({
               : theme.typography.parentBodyMedium,
             { color: textColor, textAlign: "center" },
           ]}
+          numberOfLines={numberOfLines}
+          adjustsFontSizeToFit={adjustsFontSizeToFit}
+          minimumFontScale={minimumFontScale}
         >
           {label}
         </Text>
