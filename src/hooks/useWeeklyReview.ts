@@ -84,7 +84,16 @@ export function useWeeklyReviewCardVisible(): boolean {
   return hasAtLeastOneConfirmedPastWeek(familyCreationWeekStart, lastWeekStart);
 }
 
-export function useWeeklyReview() {
+/**
+ * [2026-09-29追加・実装メモ325章] `targetMemberId`は保護者・みまもりが
+ * 子どものふりかえりを見る画面（`ChildWeeklyReviewEntry.tsx`）専用の引数。
+ * 渡さない既存の呼び出し（子ども自身・保護者/みまもり自身のふりかえり画面）は
+ * 挙動を一切変えない（下の`??`により従来どおり自分のmemberIdを使う）。
+ * `family_id = current_family_id()`で絞るRLS（`chore_completions_select_scoped`・
+ * `habit_cards_select_same_family`）は同じ家族の保護者・みまもりにも読めるため、
+ * DB側の変更は不要（本部長確認済み）。
+ */
+export function useWeeklyReview(targetMemberId?: string) {
   const { client } = useSession();
   const { state } = useAppData();
   const familyId = state.family.id;
@@ -92,7 +101,7 @@ export function useWeeklyReview() {
   // 行だけに絞って取得する（72.4章）。子どもなら`activeChildMemberId`、保護者・
   // みまもりメンバーなら`activeParentMemberId`（`src/data/store.tsx`
   // `activeMemberId`と同じ解決パターン、508行目コメント参照）。
-  const myMemberId = state.activeChildMemberId || state.activeParentMemberId;
+  const myMemberId = targetMemberId ?? (state.activeChildMemberId || state.activeParentMemberId);
   const [loadState, setLoadState] = useState<WeeklyReviewLoadState>("loading");
   const [data, setData] = useState<WeeklyReviewData | null>(null);
 

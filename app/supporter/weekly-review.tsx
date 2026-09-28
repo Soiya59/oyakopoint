@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import WeeklyReviewPanel from "@/components/WeeklyReviewPanel";
+import ChildWeeklyReviewEntry from "@/components/ChildWeeklyReviewEntry";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useWeeklyReview } from "@/hooks/useWeeklyReview";
@@ -15,6 +16,9 @@ import { useHabitFigureCatalog } from "@/hooks/useHabitCards";
  *
  * app/parent/weekly-review.tsx（P43）と同一設計の複製（49.0節「役割ごとに
  * P38・S26の番号を持つが、同一設計の複製」と同じ考え方）。
+ *
+ * [2026-09-29追加・本部長依頼、実装メモ325章] 画面下の「子どものふりかえりを
+ * 見る」入口（`ChildWeeklyReviewEntry`）もP43と同一設計の複製。
  */
 export default function SupporterWeeklyReviewScreen() {
   const { state } = useAppData();
@@ -34,6 +38,8 @@ export default function SupporterWeeklyReviewScreen() {
         habitFigureCatalog={catalog}
         onRetry={reload}
       />
+
+      <ChildWeeklyReviewEntry tone="supporter" chores={state.chores} habitFigureCatalog={catalog} />
     </Screen>
   );
 }

@@ -24,6 +24,14 @@
  * [文言について] カードの具体的な文言はUIUXデザイン部の判断に委ねられている
  * （要件定義書07-35章7節）。本コンポーネントの文言は開発部の仮置きであり、
  * 本部長の画面確認を経て調整の余地がある（開発部/成果物/実装メモ.md参照）。
+ *
+ * [2026-09-29追加・実装メモ325章] `subjectName`は保護者・みまもりが子どもの
+ * ふりかえりを見る画面（`ChildWeeklyReviewEntry.tsx`）専用のprops。渡すと
+ * 「あなたは」「あなたが」の主語を「◯◯さんは」「◯◯さんが」に差し替える
+ * （見ているのが本人ではなく保護者・みまもりのため、二人称のままだと文法上
+ * おかしくなる）。数字・項目・並び順は一切変えない（本部長依頼の指示どおり）。
+ * 渡さない既存の呼び出し（子ども自身のモーダル・保護者/みまもり自身の画面）は
+ * `undefined`のままなので表示は一切変わらない。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -57,14 +65,17 @@ export interface WeeklyReviewPanelProps {
   chores: Chore[];
   habitFigureCatalog: HabitFigureCatalogItem[];
   onRetry: () => void;
+  /** 保護者・みまもりが子どものふりかえりを見るときだけ渡す（上のコメント参照）。 */
+  subjectName?: string;
 }
 
-export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCatalog, onRetry }: WeeklyReviewPanelProps) {
+export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCatalog, onRetry, subjectName }: WeeklyReviewPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
   const bodyMediumStyle = bodyMediumStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const countLabel = isChild ? "かい" : "回";
+  const subjectPrefix = subjectName ? `${subjectName}さん` : "あなた";
 
   if (loadState === "loading") return <SkeletonList count={4} />;
   if (loadState === "error") {
@@ -91,7 +102,7 @@ export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCa
           <Text style={bodyStyle}>
             {isChild
               ? `せんしゅう ${data.yourWeeklyTotal}かい やったよ`
-              : `あなたは先週${data.yourWeeklyTotal}回、完了報告をしました`}
+              : `${subjectPrefix}は先週${data.yourWeeklyTotal}回、完了報告をしました`}
           </Text>
         </Card>
       )}
@@ -102,7 +113,7 @@ export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCa
           （元データ自体が実施回数1件以上の行のみのため）。 */}
       {data.topChores.top.length > 0 && (
         <Card tone={tone}>
-          <Text style={bodyMediumStyle}>{isChild ? "じぶんが よく やった クエスト" : "あなたがよく行ったクエスト"}</Text>
+          <Text style={bodyMediumStyle}>{isChild ? "じぶんが よく やった クエスト" : `${subjectPrefix}がよく行ったクエスト`}</Text>
           <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s1 }}>
             {data.topChores.top.map((entry) => {
               const chore = chores.find((c) => c.id === entry.choreId);
