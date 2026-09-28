@@ -199,7 +199,7 @@ export default function ChildHomeScreen() {
           {recentSelfCompletions.map((c) => (
             <View key={c.id} style={styles.recentRow}>
               <View style={styles.recentRowMain}>
-                <Text style={theme.typography.childBody}>
+                <Text style={[theme.typography.childBody, { flexShrink: 1 }]}>
                   {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
                 </Text>
                 <Pressable

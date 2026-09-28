@@ -71,7 +71,7 @@ export const ChildCompletionCard = React.memo(function ChildCompletionCard({
           />
           <Text style={theme.typography.childBody}>{member?.display_name}</Text>
           <Text style={{ flex: 1 }} />
-          <Text style={theme.typography.childBody}>
+          <Text style={[theme.typography.childBody, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {c.chore_emoji} {c.chore_title}
           </Text>
         </View>

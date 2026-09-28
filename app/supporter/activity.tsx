@@ -109,7 +109,7 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
           <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={32} lineData={memberAvatarLineData} expandOnTap />
           <Text style={theme.typography.supporterBodyMedium}>{member?.display_name}</Text>
           <Text style={{ flex: 1 }} />
-          <Text style={theme.typography.supporterBodyMedium}>
+          <Text style={[theme.typography.supporterBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                 のため何も添えない。 */}
             {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}

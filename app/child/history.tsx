@@ -161,7 +161,7 @@ export default function ChildHistoryScreen() {
                   <View key={c.id} style={styles.row}>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <Text style={theme.typography.childBody}>
+                        <Text style={[theme.typography.childBody, { flexShrink: 1 }]}>
                           {isRoutine ? "🔄 " : ""}
                           {c.chore_emoji} {c.chore_title}
                           {isRoutine ? "（つづけてる）" : ""}
