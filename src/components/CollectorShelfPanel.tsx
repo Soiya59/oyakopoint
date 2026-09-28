@@ -38,10 +38,8 @@ import { TreeStageVisual, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } fro
 import { MemberAvatar } from "./MemberAvatar";
 import { HabitFigureCircleIcon } from "./StickerIcon";
 import AndroidKeyboardAvoidingPadding from "./AndroidKeyboardAvoidingPadding";
-import CircleFrame from "./CircleFrame";
 import DrawingEngagementSection from "./DrawingEngagementSection";
 import FigureIcon, { hasFigureImage } from "./FigureIcon";
-import FigureFrame from "./FigureFrame";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
 import { useCompletedHabitCards, useHabitFigureCatalog } from "@/hooks/useHabitCards";
@@ -97,11 +95,12 @@ const stickerRarityLabel: Record<StickerRarity, { child: string; parent: string 
 /**
  * [2026-09-25追記・実装メモ303.x章・本部長差し戻し「フィギュアの上にうさぎだけでも
  * よいよ」] 「全員」ビューの図鑑グリッド（`FamilyMedalSection`）は1行が1種類・
- * 4列が銅→銀→金→クリスタルの固定順のため、段階はマスの位置と枠の色
- * （`habitCardCellColors`／`FigureFrame`の枠色）で分かる。キャプションに段階名まで
- * 重ねると折り返して2行になる（例:「カブトムシ 銅」）ため、ここでは種類名だけを
- * 返す。個別ビュー（`StickerShelfSection`）・拡大表示は種類が固定順で並ばないため、
- * 引き続き`stickerEntryLabel`（種類名＋段階名）を使う。
+ * 4列が銅→銀→金→クリスタルの固定順のため、段階はマスの位置で分かる
+ * （未所有は`habitCardCellColors`で塗った「？」カードで区別。2026-09-28実装メモ319章
+ * ・枠〈FigureFrame〉を廃止したため所有済みマスの枠色による区別は無くなった）。
+ * キャプションに段階名まで重ねると折り返して2行になる（例:「カブトムシ 銅」）ため、
+ * ここでは種類名だけを返す。個別ビュー（`StickerShelfSection`）・拡大表示は種類が
+ * 固定順で並ばないため、引き続き`stickerEntryLabel`（種類名＋段階名）を使う。
  */
 function stickerKindOnlyLabel(tone: Tone, shape: StickerShape): string {
   return tone === "child" ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent;
@@ -293,29 +292,23 @@ function computeExpandedImageSize(windowWidth: number, windowHeight: number): nu
 }
 
 /**
- * [2026-09-23追加・統括の実機指摘「銅のメダルの拡大表示が小さい」] 拡大表示で、
- * 枠（`FigureFrame`／`CircleFrame`）の中に置く絵の一辺。どちらの枠も中の絵を
- * 枠の約62%で描く設計だが、2026-09-23までは渡す数値そのものがずれていた
- * （フィギュア＝枠220・絵136、メダル＝枠160・絵90）。07-34章でメダルとフィギュアの
- * 枠の形を入れ替えた際に大きさを揃えないまま残ったもの。枠の大きさは
- * `ExpandedItemModal`が渡す`imageSize`（絵と同じ160〜320pt）に統一し、
- * 中の絵はこの関数で決める。
+ * [2026-09-28削除・統括依頼（本部長経由）「フィギュアとメダルを囲む五角形・丸の枠を
+ * なくして、そのぶん絵を大きく出す」・開発部/成果物/実装メモ.md 319章]
+ * 旧`DETAIL_INNER_RATIO`（0.75）・`MEDAL_DETAIL_INNER_RATIO`（0.94）・
+ * `detailIconSizeFor()`は、拡大表示で枠（`FigureFrame`／`CircleFrame`）の中に
+ * 絵をどれだけの比率で入れるかを決めていた（2026-09-23追加）。コレクション・
+ * ショップ・購入結果の一覧グリッド／拡大表示から枠そのものを廃止したため、
+ * 「枠に対する絵の比率」という考え方自体が不要になった。絵は
+ * `ExpandedItemModal`が渡す`imageSize`（160〜320pt）をそのまま`FigureIcon`／
+ * `HabitFigureCircleIcon`の`size`に渡し、枠いっぱいまで大きく表示する
+ * （「？」カード`UnknownCatalogCard`も同じく`imageSize`をそのまま使っており、
+ * 揃え方は変わらない）。
  *
- * [2026-09-23追記・統括の実機確認「いい感じです。ただ、フィギュアとメダルはもう少し
- * 大きくてもよいかも」] 枠の中の余白が広かったため、拡大表示のときだけ比率を
- * 0.62→0.75（約2割大きく）に上げた。枠の部品の既定値（0.62）は変えていないので、
- * 一覧のサムネイル・木の飾りは変わらない。
+ * **木に飾ったときの丸い縁（誰が飾ったかを示す色付きリング）は対象外。**
+ * `FamilyTree.tsx`の`FreeStickerView`／`FreeHabitFigureView`、
+ * `TreeStickerDragCanvas.tsx`・`TreeHabitFigureDragCanvas.tsx`のドラッグ中
+ * マーカーは、統括の依頼どおり`FigureFrame`／`CircleFrame`のまま変更していない。
  */
-const DETAIL_INNER_RATIO = 0.75;
-/**
- * [2026-09-23追記・統括「メダルは丸いから、ほとんど白い空白はいらないと思う。
- * メダルの中にいるので、ウサギはさらに小さく見える」] メダルは丸い枠の中に丸い
- * コインが入る形なので、フィギュア（五角形の枠。上に向かって細くなるため余白が要る）
- * と同じ比率では余白が大きすぎた。しかも絵柄（うさぎ）はコインの内側にさらに
- * 小さく描かれているため、コインを枠いっぱいまで大きくする。細い縁だけ残す。
- */
-const MEDAL_DETAIL_INNER_RATIO = 0.94;
-const detailIconSizeFor = (frameSize: number, ratio: number = DETAIL_INNER_RATIO) => Math.round(frameSize * ratio);
 
 /**
  * [2026-09-23切り出し・統括の実機要望「メダルとフィギュアも下に表示じゃなくて、
@@ -1519,11 +1512,10 @@ function StickerShelfSection({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-                      （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-                  <FigureFrame size={48}>
-                    <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
-                  </FigureFrame>
+                  {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+                      枠（FigureFrame）を外し、絵をマスいっぱいまで大きく出す
+                      （旧: 枠48pt・絵24pt → 絵48ptのみ、見た目の大きさはおよそ2倍）。 */}
+                  <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={48} />
                   <Text style={[captionStyle, styles.gridCaption]}>
                     {stickerEntryLabel(tone, entry.shape, entry.rarity)}
                     {entry.owned.length > 1 ? ` ×${entry.owned.length}` : ""}
@@ -1615,12 +1607,10 @@ function StickerDetailCard({
 
   return (
     <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
-      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章] 枠
+          （FigureFrame）を外し、絵を`imageSize`いっぱいまで大きく出す。 */}
       <Pressable onPress={() => {}}>
-        <FigureFrame size={imageSize} innerRatio={DETAIL_INNER_RATIO}>
-          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
-        </FigureFrame>
+        <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={imageSize} />
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
@@ -1867,11 +1857,10 @@ function FamilyMedalSection({
                     <UnknownCatalogCard size={48} tier={entry.rarity} />
                   ) : (
                     <>
-                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-                          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
-                      <FigureFrame size={48}>
-                        <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={24} />
-                      </FigureFrame>
+                      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+                          枠（FigureFrame）を外し、絵をマスいっぱいまで大きく出す
+                          （「？」カード`UnknownCatalogCard`と同じ48ptに揃える）。 */}
+                      <FigureIcon figureKey={figureKeyOfSticker(entry.shape, entry.rarity)} kindEmoji={stickerShapeFallbackEmoji[entry.shape]} size={48} />
                       {entry.owned.length > 1 && (
                         <Text style={[captionStyle, styles.gridCaption]}>×{entry.owned.length}</Text>
                       )}
@@ -1947,12 +1936,10 @@ function FamilyStickerDetailCard({
 
   return (
     <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
-      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog
-          （入れ替え後「フィギュア」）はFigureFrame＋FigureIconで表示する。 */}
+      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章] 枠
+          （FigureFrame）を外し、絵を`imageSize`いっぱいまで大きく出す。 */}
       <Pressable onPress={() => {}}>
-        <FigureFrame size={imageSize} innerRatio={DETAIL_INNER_RATIO}>
-          <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={detailIconSizeFor(imageSize)} />
-        </FigureFrame>
+        <FigureIcon figureKey={figureKeyOfSticker(shape, rarity)} kindEmoji={stickerShapeFallbackEmoji[shape]} size={imageSize} />
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         <Text style={[bodyMediumStyle, styles.detailDrawingCenterText]}>{stickerEntryLabel(tone, shape, rarity)}</Text>
@@ -2129,9 +2116,9 @@ function HabitFigureShelfSection({
 
       {loadState === "ready" && totalOwned > 0 && (
         <>
-          {/* [決定3-②] フィギュアの五角形枠と混同しないよう、円形の枠（CircleFrame）で
-              表示する。[2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
-              入れ替え前はFigureFrame（五角形）だったが、円形へ差し替えた。 */}
+          {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+              一覧グリッドの丸い枠（CircleFrame）を外し、絵をマスいっぱいまで
+              大きく出す。 */}
           <View style={styles.grid}>
             {entries.map((entry) => {
               const selected = entry.key === selectedKey;
@@ -2143,11 +2130,7 @@ function HabitFigureShelfSection({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-                      （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-                  <CircleFrame size={48} ringColor={null}>
-                    <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-                  </CircleFrame>
+                  <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={48} />
                   <Text style={[captionStyle, styles.gridCaption]}>
                     {/* [2026-09-25改訂・実装メモ303.x章] 種類名＋段階名（フィギュアの
                         stickerEntryLabelと同じ書式）。個別ビューは種類が固定順で
@@ -2217,12 +2200,10 @@ function HabitFigureDetailCard({
 
   return (
     <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
-      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章] 丸い枠
+          （CircleFrame）を外し、絵を`imageSize`いっぱいまで大きく出す。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null} innerRatio={MEDAL_DETAIL_INNER_RATIO}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize, MEDAL_DETAIL_INNER_RATIO)} />
-        </CircleFrame>
+        <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={imageSize} />
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         {/* [2026-09-25改訂・実装メモ303.x章] 拡大表示は「全員」ビューの図鑑グリッドと
@@ -2367,11 +2348,10 @@ function FamilyHabitFigureSection({
                     <UnknownCatalogCard size={48} tier={entry.tier} />
                   ) : (
                     <>
-                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-                          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
-                      <CircleFrame size={48} ringColor={null}>
-                        <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={24} />
-                      </CircleFrame>
+                      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+                          丸い枠（CircleFrame）を外し、絵をマスいっぱいまで大きく出す
+                          （「？」カード`UnknownCatalogCard`と同じ48ptに揃える）。 */}
+                      <HabitFigureCircleIcon figureKey={entry.figureKey} kindEmoji={entry.kindEmoji} size={48} />
                       {entry.owned.length > 1 && (
                         <Text style={[captionStyle, styles.gridCaption]}>×{entry.owned.length}</Text>
                       )}
@@ -2437,12 +2417,10 @@ function FamilyHabitFigureDetailCard({
 
   return (
     <Pressable style={styles.detailDrawingWrap} onPress={onClose}>
-      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] habit_figure_catalog
-          （入れ替え後「メダル」）はCircleFrame＋HabitFigureCircleIconで表示する。 */}
+      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章] 丸い枠
+          （CircleFrame）を外し、絵を`imageSize`いっぱいまで大きく出す。 */}
       <Pressable onPress={() => {}}>
-        <CircleFrame size={imageSize} ringColor={null} innerRatio={MEDAL_DETAIL_INNER_RATIO}>
-          <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={detailIconSizeFor(imageSize, MEDAL_DETAIL_INNER_RATIO)} />
-        </CircleFrame>
+        <HabitFigureCircleIcon figureKey={figureKey} kindEmoji={kindEmoji} size={imageSize} />
       </Pressable>
       <View style={styles.detailDrawingTextWrap}>
         {/* [2026-09-25改訂・実装メモ303.x章] 拡大表示は種類名＋段階名（フィギュアと

@@ -42,7 +42,6 @@ import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
-import FigureFrame from "./FigureFrame";
 import FigureIcon, { hasFigureImage } from "./FigureIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
@@ -311,16 +310,14 @@ export function StickerShopPanel({
                       style={[styles.cell, tone === "child" && styles.cellChild, disabled && styles.cellDisabled]}
                       accessibilityRole="button"
                     >
-                      {/* [2026-09-21改訂・要件定義書07-34章、62.5節「結線の入れ替え」]
-                          sticker_catalog（入れ替え後「フィギュア」）はFigureFrame＋
-                          FigureIconで表示する。StickerIcon・円形の枠は使わない。 */}
-                      <FigureFrame size={32}>
-                        <FigureIcon
-                          figureKey={figureKeyOfSticker(item.shape, item.rarity)}
-                          kindEmoji={stickerShapeFallbackEmoji[item.shape]}
-                          size={16}
-                        />
-                      </FigureFrame>
+                      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+                          五角形の枠（FigureFrame）を外し、絵をマスいっぱいまで大きく出す
+                          （旧: 枠32pt・絵16pt → 絵32ptのみ、見た目の大きさはおよそ2倍）。 */}
+                      <FigureIcon
+                        figureKey={figureKeyOfSticker(item.shape, item.rarity)}
+                        kindEmoji={stickerShapeFallbackEmoji[item.shape]}
+                        size={32}
+                      />
                       <Text style={[captionStyle, styles.cellRarity]}>
                         {isChild ? rarityLabel[item.rarity].child : rarityLabel[item.rarity].parent}
                       </Text>
@@ -363,14 +360,15 @@ export function StickerShopPanel({
                 <View style={{ alignItems: "center" }}>
                   {/* [149章] 購入確認モーダルはこのコンポーネントの中で唯一ステッカーを
                       拡大表示する箇所。[2026-09-21改訂・要件定義書07-34章] FigureIconは
-                      画像を1枚しか持たないため`highRes`は無い（FigureIcon.tsx参照）。 */}
-                  <FigureFrame size={180}>
-                    <FigureIcon
-                      figureKey={figureKeyOfSticker(selected.shape, selected.rarity)}
-                      kindEmoji={stickerShapeFallbackEmoji[selected.shape]}
-                      size={112}
-                    />
-                  </FigureFrame>
+                      画像を1枚しか持たないため`highRes`は無い（FigureIcon.tsx参照）。
+                      [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+                      五角形の枠（FigureFrame）を外し、絵を180ptいっぱいまで大きく出す
+                      （旧: 枠180pt・絵112pt → 絵180ptのみ）。 */}
+                  <FigureIcon
+                    figureKey={figureKeyOfSticker(selected.shape, selected.rarity)}
+                    kindEmoji={stickerShapeFallbackEmoji[selected.shape]}
+                    size={180}
+                  />
                 </View>
                 <Text style={[bodyMediumStyle, styles.modalTitle]}>{selected.display_name}</Text>
                 {/* [2026-09-08追加・本部長／軽微変更ルート] ポイントが足りないメダルも

@@ -18,7 +18,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
-import FigureFrame from "./FigureFrame";
 import FigureIcon from "./FigureIcon";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerCatalogItem } from "@/types/domain";
@@ -48,11 +47,10 @@ export function StickerPurchaseResultView({ tone, item, onDecorate, onGoToShelf 
 
   return (
     <View style={styles.container}>
-      {/* [2026-09-21改訂・要件定義書07-34章、62.5節] sticker_catalog（入れ替え後
-          「フィギュア」）はFigureFrame＋FigureIconで表示する。62.2節#8。 */}
-      <FigureFrame size={180}>
-        <FigureIcon figureKey={figureKeyOfSticker(item.shape, item.rarity)} kindEmoji={stickerShapeFallbackEmoji[item.shape]} size={112} />
-      </FigureFrame>
+      {/* [2026-09-28改訂・統括依頼「枠をなくして絵を大きく」・実装メモ319章]
+          五角形の枠（FigureFrame）を外し、絵を180ptいっぱいまで大きく出す
+          （旧: 枠180pt・絵112pt → 絵180ptのみ）。 */}
+      <FigureIcon figureKey={figureKeyOfSticker(item.shape, item.rarity)} kindEmoji={stickerShapeFallbackEmoji[item.shape]} size={180} />
       <Text style={headlineStyle}>{isChild ? "⭐ かったよ！" : "購入しました"}</Text>
       <Text style={[bodyStyle, styles.itemName]}>「{item.display_name}」</Text>
       <Text style={[bodyStyle, styles.shelfNote]}>
