@@ -18,6 +18,7 @@ import {
   sumCompletionCountsThroughWeek,
   sumWeeklyChoreCounts,
   summarizeWeeklyChoreCounts,
+  weeklyReviewCardCountLabel,
 } from "./weeklyReviewDisplay.ts";
 
 let failed = 0;
@@ -127,6 +128,14 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
   assertEqual("作成週=先週の開始週 → 確定した先週がある(true)", hasAtLeastOneConfirmedPastWeek("2026-09-07", "2026-09-07"), true);
   assertEqual("作成週が先週より後 → まだ確定した先週が無い(false)", hasAtLeastOneConfirmedPastWeek("2026-09-14", "2026-09-07"), false);
   assertEqual("作成週が先週より前 → 確定した先週がある(true)", hasAtLeastOneConfirmedPastWeek("2026-08-01", "2026-09-07"), true);
+}
+
+// ---- weeklyReviewCardCountLabel（2026-09-29新設・じぶんタブの薄型カード） ----
+{
+  assertEqual("子ども・1回以上は回数を出す", weeklyReviewCardCountLabel(3, "child"), "せんしゅう 3かい やったよ");
+  assertEqual("子ども・0回は回数を出さず固定文言", weeklyReviewCardCountLabel(0, "child"), "せんしゅうの ふりかえり");
+  assertEqual("大人・1回以上は回数を出す", weeklyReviewCardCountLabel(5, "adult"), "先週 5回");
+  assertEqual("大人・0回は回数を出さず固定文言", weeklyReviewCardCountLabel(0, "adult"), "先週のふりかえり");
 }
 
 console.log("");

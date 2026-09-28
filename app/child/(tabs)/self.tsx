@@ -7,9 +7,12 @@ import ChildTabHeader from "@/components/ChildTabHeader";
 import TabIntroBubble from "@/components/TabIntroBubble";
 import HabitCardStrip from "@/components/HabitCardStrip";
 import ChildHabitCardModal from "@/components/ChildHabitCardModal";
+import ChildWeeklyReviewModal from "@/components/ChildWeeklyReviewModal";
+import WeeklyReviewSlimCard from "@/components/WeeklyReviewSlimCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 
@@ -50,6 +53,15 @@ type ShortcutItem = { emoji: string; label: string; path: string };
  * と「つうちょう」（C8、`/child/points`）をタイル一覧の末尾に追加した。
  * かぞくタブ（`app/child/(tabs)/family.tsx`）側の「💌 ありがとうをおくる」ボタンは
  * 削除せず、じぶん・かぞく両方に入口を残す（統括の意図した重複、36.5.5節D3）。
+ *
+ * [2026-09-29追加・本部長依頼、実装メモ.md 321章] 「じぶんのポイント」カードの
+ * すぐ下に「先週のふりかえり」の細い1行カード（`WeeklyReviewSlimCard`）を
+ * 新設した。統括「こどもがこれだけがんばったねという感じで、自己肯定感を
+ * 上げる目的も含んでいた」への対応。先週の自分の完了報告回数
+ * （`useWeeklyReview`の`data.yourWeeklyTotal`、クエストタブの週の初め
+ * ポップアップと同じ取得元）をそのまま出し、0回のときは回数を出さず固定文言に
+ * する（`weeklyReviewCardCountLabel`、カード自体は消さない）。押すと
+ * クエストタブと同じ`ChildWeeklyReviewModal`が開く（新しい画面は作らない）。
  */
 export default function ChildSelfTabScreen() {
   const { state, memberPoints, fullLedger, memberAvatars } = useAppData();
@@ -65,6 +77,14 @@ export default function ChildSelfTabScreen() {
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
   const { loadState: habitCardsLoadState, card: habitCard, totalCount: habitCardTotalCount, reload: reloadHabitCards } = useActiveHabitCard(me.id);
   const [habitCardModalVisible, setHabitCardModalVisible] = useState(false);
+
+  // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」の細い1行カード。
+  // カードを出すかどうかはクエストタブ・旧かぞくタブと同じ判定
+  // （`useWeeklyReviewCardVisible`）。回数はクエストタブのポップアップと
+  // 同じ`useWeeklyReview`から取る（新しい問い合わせは増やさない）。
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
+  const { data: weeklyReviewData } = useWeeklyReview();
+  const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
 
   const shortcuts: ShortcutItem[] = [
     { emoji: "🎁", label: "ごほうび", path: "/child/rewards" },
@@ -120,6 +140,14 @@ export default function ChildSelfTabScreen() {
         </Card>
       </Pressable>
 
+      {weeklyReviewCardVisible && (
+        <WeeklyReviewSlimCard
+          tone="child"
+          count={weeklyReviewData?.yourWeeklyTotal ?? null}
+          onPress={() => setWeeklyReviewVisible(true)}
+        />
+      )}
+
       <HabitCardStrip
         tone="child"
         loadState={habitCardsLoadState}
@@ -138,6 +166,8 @@ export default function ChildSelfTabScreen() {
         chores={state.chores}
         catalog={habitFigureCatalog}
       />
+
+      <ChildWeeklyReviewModal visible={weeklyReviewVisible} onClose={() => setWeeklyReviewVisible(false)} />
 
       <Text style={[theme.typography.childBody, styles.sectionHeading]}>じぶんのこと</Text>
       <View style={styles.grid}>

@@ -8,9 +8,11 @@ import TabIntroBubble from "@/components/TabIntroBubble";
 import MemberAvatar from "@/components/MemberAvatar";
 import MyPointsCard from "@/components/MyPointsCard";
 import HabitCardStrip from "@/components/HabitCardStrip";
+import WeeklyReviewSlimCard from "@/components/WeeklyReviewSlimCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -35,6 +37,15 @@ type ShortcutItem = { emoji: string; label: string; path: string; labelSize?: nu
  * クエスト・ごほうび・感謝ポイント・お絵かきが「じぶんのこと」列、コレクション・きろくが
  * 「家族のこと」列に分かれていたが、両者を1列にまとめて統合した（35章の保護者「じぶん」
  * 区画は元々1列のタイル構成のため、列を分ける理由が無くなった）。
+ *
+ * [2026-09-29追加・本部長依頼、実装メモ.md 321章] 「じぶんのポイント」カード
+ * （`MyPointsCard`）のすぐ下に「先週のふりかえり」の細い1行カード
+ * （`WeeklyReviewSlimCard`）を新設した。旧「かぞく」タブ（`(tabs)/index.tsx`）
+ * にあった同名カードはここへ移した（二重に出さないため向こうは削除済み）。
+ * 先週の自分の完了報告回数（`useWeeklyReview`の`data.yourWeeklyTotal`）を
+ * そのまま出し、0回のときは回数を出さず固定文言にする
+ * （`weeklyReviewCardCountLabel`、カード自体は消さない）。押すと従来どおり
+ * `/parent/weekly-review`へ遷移する（画面自体は変更していない）。
  */
 export default function ParentSelfTabScreen() {
   const { state, memberPoints, memberAvatars } = useAppData();
@@ -57,6 +68,13 @@ export default function ParentSelfTabScreen() {
     totalCount: habitCardTotalCount,
     reload: reloadHabitCards,
   } = useActiveHabitCard(state.activeParentMemberId);
+
+  // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」の細い1行カード。
+  // カードを出すかどうかは旧「かぞく」タブと同じ判定（`useWeeklyReviewCardVisible`）。
+  // 回数は`/parent/weekly-review`と同じ`useWeeklyReview`から取る（新しい
+  // 問い合わせは増やさない）。
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
+  const { data: weeklyReviewData } = useWeeklyReview();
 
   // [2026-09-11並び替え・統括指示] 並びは統括の指定どおり
   // クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく→通帳。
@@ -118,6 +136,14 @@ export default function ParentSelfTabScreen() {
       )}
 
       <MyPointsCard tone="parent" points={myPoints} onPress={() => router.push("/parent/points")} />
+
+      {weeklyReviewCardVisible && (
+        <WeeklyReviewSlimCard
+          tone="parent"
+          count={weeklyReviewData?.yourWeeklyTotal ?? null}
+          onPress={() => router.push("/parent/weekly-review")}
+        />
+      )}
 
       <HabitCardStrip
         tone="parent"

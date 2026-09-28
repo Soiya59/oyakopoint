@@ -12,7 +12,6 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
-import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 
 /**
  * かぞく区画の入口（保護者。旧P7ホームの「まとめ」要素のうち家族向けの部分を吸収）
@@ -54,11 +53,6 @@ import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
  */
 export default function ParentFamilyTabScreen() {
   const { state, memberAvatars } = useAppData();
-
-  // [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
-  // 60.1節決定1] 家族作成から最初の暦週がまだ終わっていない間はカード自体を出さない
-  // （60.3節決定5）。
-  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
 
   const { loadState: cardLoadState, card } = useFamilyHomeCard(state.family.id);
   const cardMessage =
@@ -194,19 +188,9 @@ export default function ParentFamilyTabScreen() {
         </Pressable>
       )}
 
-      {/* [2026-09-21追加・要件定義書07-35章「振り返る機会」、主要画面ワイヤーフレーム.md
-          60.1節決定1・60.2節決定3] 📮かぞくのけいじばんカードの直後に隣接配置。
-          表側には数字を一切出さない（決定3、タップ先の専用画面にのみ数字が現れる）。 */}
-      {weeklyReviewCardVisible && (
-        <Pressable onPress={() => router.push("/parent/weekly-review")}>
-          <Card style={{ marginTop: theme.spacing.s4 }}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={theme.typography.parentBodyMedium}>先週のふりかえり</Text>
-              <Text style={theme.typography.parentBodyMedium}>›</Text>
-            </View>
-          </Card>
-        </Pressable>
-      )}
+      {/* [2026-09-29削除・本部長依頼、実装メモ321章] 「先週のふりかえり」カードは
+          「じぶん」タブ（`app/parent/(tabs)/self.tsx`）へ移した。このタブから
+          出すと二重になるため置かない。 */}
 
       {/* [2026-09-22廃止・統括判断] 「いまの目標」カード（07-36章）はここにあったが、
           統括の判断により画面の導線を外した。理由は要件定義書07-36章の廃止の記録を

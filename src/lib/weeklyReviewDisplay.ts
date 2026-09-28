@@ -78,6 +78,28 @@ export function sumWeeklyChoreCounts(rows: WeeklyChoreCountRow[]): number {
   return rows.reduce((sum, r) => sum + r.completion_count, 0);
 }
 
+// ---- 「じぶん」タブの薄型カードの文言（2026-09-29新設・本部長依頼、実装メモ321章） ----
+
+/**
+ * 「じぶん」タブの「じぶんのポイント」カード直下に置く1行カード
+ * （`src/components/WeeklyReviewSlimCard.tsx`）の文言。`yourWeeklyTotal`
+ * （`sumWeeklyChoreCounts`の戻り値と同じ、項目「あなたは先週◯回」）を
+ * そのまま出す。**0回のときは回数を出さず「せんしゅうの ふりかえり」
+ * （大人は「先週のふりかえり」）にする**——統括「なくなってしまったのか
+ * わからないと思ったから」（カード自体は消さない。押せば0回でも同じ画面/
+ * ポップアップが開く）。絵文字（📅）・チェブロン（›）は呼び出し側
+ * （WeeklyReviewSlimCard）が別のTextとして添えるため、本関数の戻り値には
+ * 含めない。
+ */
+export type WeeklyReviewCardTone = "child" | "adult";
+
+export function weeklyReviewCardCountLabel(count: number, tone: WeeklyReviewCardTone): string {
+  if (count > 0) {
+    return tone === "child" ? `せんしゅう ${count}かい やったよ` : `先週 ${count}回`;
+  }
+  return tone === "child" ? "せんしゅうの ふりかえり" : "先週のふりかえり";
+}
+
 // ---- 項目「家族の木の段階」（60.4a節決定13により並び順は最後の項目に変更、中身は無改訂） ----
 
 /**

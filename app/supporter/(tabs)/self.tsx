@@ -7,9 +7,11 @@ import MemberAvatar from "@/components/MemberAvatar";
 import TabIntroBubble from "@/components/TabIntroBubble";
 import MyPointsCard from "@/components/MyPointsCard";
 import HabitCardStrip from "@/components/HabitCardStrip";
+import WeeklyReviewSlimCard from "@/components/WeeklyReviewSlimCard";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
+import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
@@ -31,6 +33,14 @@ import { useGachaProgress } from "@/hooks/useGacha";
  * 「かぞく」タブにあったコレクションのショートカットをここへ移設した
  * （タイルが並ぶ画面のほうが、小さなショートカットより見つけやすいという統括判断）。
  * 遷移先URL（`/supporter/collector-shelf`）・画面自体は変更していない。
+ *
+ * [2026-09-29追加・本部長依頼、実装メモ.md 321章] 「じぶんのポイント」カード
+ * （`MyPointsCard`）のすぐ下に「先週のふりかえり」の細い1行カード
+ * （`WeeklyReviewSlimCard`）を新設した。旧「かぞく」タブ（`(tabs)/family.tsx`）
+ * にあった同名カードはここへ移した（二重に出さないため向こうは削除済み）。
+ * 先週の自分の完了報告回数（`useWeeklyReview`の`data.yourWeeklyTotal`）を
+ * そのまま出し、0回のときは回数を出さず固定文言にする（保護者と同じ考え方）。
+ * 押すと従来どおり`/supporter/weekly-review`へ遷移する（画面自体は変更していない）。
  */
 export default function SupporterSelfScreen() {
   const { state, memberPoints, memberAvatars } = useAppData();
@@ -53,6 +63,11 @@ export default function SupporterSelfScreen() {
     totalCount: habitCardTotalCount,
     reload: reloadHabitCards,
   } = useActiveHabitCard(state.activeParentMemberId);
+
+  // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」の細い1行カード。
+  // 保護者「じぶん」タブと同じ考え方（app/parent/(tabs)/self.tsx参照）。
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
+  const { data: weeklyReviewData } = useWeeklyReview();
 
   // [2026-09-11並び替え・統括指示] 保護者の「じぶん」タブと同じ並びにそろえた
   // （クエスト→ごほうび→メダル→お絵かき／コレクション→感謝ポイント→きろく）。
@@ -112,6 +127,14 @@ export default function SupporterSelfScreen() {
       )}
 
       <MyPointsCard tone="supporter" points={myPoints} memberId={state.activeParentMemberId} />
+
+      {weeklyReviewCardVisible && (
+        <WeeklyReviewSlimCard
+          tone="supporter"
+          count={weeklyReviewData?.yourWeeklyTotal ?? null}
+          onPress={() => router.push("/supporter/weekly-review")}
+        />
+      )}
 
       <HabitCardStrip
         tone="supporter"

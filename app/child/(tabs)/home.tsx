@@ -12,10 +12,21 @@ import { useAppData } from "@/data/store";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
-import { isWithinCancelWindow } from "@/lib/calendarDates";
+import { getCurrentJstWeekStart, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
+import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
+import ChildWeeklyReviewModal from "@/components/ChildWeeklyReviewModal";
+import { hydrateIntroSeen, isIntroSeen, subscribeIntroSeen } from "@/lib/introSeen";
+import {
+  getLastShownWeeklyReviewPopupWeek,
+  hydrateWeeklyReviewPopupSeen,
+  isWeeklyReviewPopupSeenHydrated,
+  markWeeklyReviewPopupShown,
+  subscribeWeeklyReviewPopupSeen,
+} from "@/lib/weeklyReviewPopupSeen";
+import { shouldAutoOpenWeeklyReviewPopup } from "@/lib/weeklyReviewPopupLogic";
 
 /**
  * クエストタブの入口（旧C5「やることリスト（ホーム）」、主要5画面のひとつ）
@@ -37,6 +48,27 @@ import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useCh
  *
  * 状態: 読み込み中・空・通常・上限到達（個別カード）・通信エラー を実装。
  * 上限到達カードは赤・グレーアウトにせず達成トーンで表現する（デザイントークン.md 1.4）。
+ *
+ * [2026-09-29追加→同日差し戻しで作り直し・本部長依頼、実装メモ.md 321章]
+ * 「先週のふりかえり」（要件定義書07-35章「振り返る機会」）の入口を、旧
+ * 「かぞく」タブ（`app/child/(tabs)/family.tsx`）からこのクエストタブへ
+ * 移した。統括「こどもがこれだけがんばったねという感じで、自己肯定感を
+ * 上げる目的も含んでいた。導線をよくしたい」。
+ *
+ * **カードは置かない。**当初は旧かぞくタブと同じ「押すと開くカード」を
+ * そのまま移設したが、本部長・統括が合意していたのは「週の初めに、最初の
+ * 画面でポップアップが自動で出る」ことだった（旧かぞくタブは押して開く
+ * カードしか持っていなかったため、依頼文の前提が誤っていた）。クエストタブの
+ * 最上部にカードが増えると最初の画面が詰まるため、条件がそろえば
+ * `ChildWeeklyReviewModal`を自動で1回だけ開く方式にした（判定は
+ * `src/lib/weeklyReviewPopupLogic.ts`の`shouldAutoOpenWeeklyReviewPopup`
+ * 〈純粋関数、`node`で検証済み〉。「出した週」の記録は
+ * `src/lib/weeklyReviewPopupSeen.ts`〈`introSeen.ts`・`lastSeen.ts`と同じ
+ * AsyncStorageの流儀、子どもメンバーごとに分けて保存〉）。モーダルの中身
+ * （`ChildWeeklyReviewModal`）・カードを出すかどうかの家族単位の判定
+ * （`useWeeklyReviewCardVisible`）はいずれも無改訂。「じぶん」タブ
+ * （`app/child/(tabs)/self.tsx`）には回数つきの薄型カードを別途新設して
+ * あり、こちらは変更していない（0回の週はそちらから見られる）。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -106,6 +138,58 @@ export default function ChildHomeScreen() {
   const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
   const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
+
+  // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」週の初めの自動
+  // ポップアップ。モーダルの中身・家族単位の表示可否判定は旧かぞくタブと無改訂。
+  // 回数（3条件のひとつ）はクエストタブ単独の新しい問い合わせ（じぶんタブと同じ
+  // `useWeeklyReview`、画面ごとに個別取得する既存パターンに揃えた）。
+  const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
+  const weeklyReviewCardVisible = useWeeklyReviewCardVisible();
+  const { data: weeklyReviewData } = useWeeklyReview();
+  const weeklyReviewIntroSurface = { kind: "tab" as const, tabKey: "child.home" };
+  // [2026-09-29追加] `introSeen.ts`・`weeklyReviewPopupSeen.ts`はいずれも
+  // モジュール外のメモリキャッシュを正として持つ（TabIntroBubble.tsxと同じ
+  // 構成）。値そのものはReactのstateではないため、購読して変化のたびに
+  // `weeklyReviewPopupTick`を更新し、下の判定effectの依存配列に含めることで
+  // 「はじめての案内を閉じた」「端末の記録を読み込み終えた」直後に再判定させる。
+  const [weeklyReviewPopupTick, setWeeklyReviewPopupTick] = useState(0);
+  useEffect(() => {
+    const unsubIntro = subscribeIntroSeen(() => setWeeklyReviewPopupTick((n) => n + 1));
+    const unsubPopupSeen = subscribeWeeklyReviewPopupSeen(() => setWeeklyReviewPopupTick((n) => n + 1));
+    return () => {
+      unsubIntro();
+      unsubPopupSeen();
+    };
+  }, []);
+  useEffect(() => {
+    void hydrateIntroSeen(weeklyReviewIntroSurface, me.id);
+    void hydrateWeeklyReviewPopupSeen(me.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.id]);
+  useEffect(() => {
+    if (weeklyReviewVisible) return;
+    if (!me.id) return;
+    // 端末の記録を読み込み終えるまでは判定しない（読み込み前に誤って開いて
+    // しまうと、直後に「実はもう今週出していた」と分かっても閉じ直せないため）。
+    if (!isWeeklyReviewPopupSeenHydrated(me.id)) return;
+    const shouldOpen = shouldAutoOpenWeeklyReviewPopup({
+      cardVisible: weeklyReviewCardVisible,
+      yourWeeklyTotal: weeklyReviewData?.yourWeeklyTotal ?? null,
+      currentWeekStart: getCurrentJstWeekStart(),
+      lastShownWeekStart: getLastShownWeeklyReviewPopupWeek(me.id),
+      // このタブの「はじめての案内」（TabIntroBubble）が表示中の間は重ねない
+      // （出した週の記録は更新しないため、次にこのタブを開いたときにもう一度
+      // 判定される＝「次の機会に回す」）。
+      introBubbleShowing: !isIntroSeen(weeklyReviewIntroSurface, me.id),
+    });
+    if (shouldOpen) {
+      setWeeklyReviewVisible(true);
+      // 閉じた時点ではなく、出した時点で記録する（依頼文どおり。開いた直後に
+      // 即座に閉じても、同じ週にもう一度は自動で開かない）。
+      void markWeeklyReviewPopupShown(me.id, getCurrentJstWeekStart());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.id, weeklyReviewCardVisible, weeklyReviewData, weeklyReviewVisible, weeklyReviewPopupTick]);
 
   const handleCancelRecentCompletion = async (completionId: string) => {
     setCancelingCompletionId(completionId);
@@ -184,6 +268,12 @@ export default function ChildHomeScreen() {
         memberId={state.activeChildMemberId}
         text="👋 きょう やること だよ。おわったら ボタン！"
       />
+
+      {/* [2026-09-29差し戻しで撤去・実装メモ.md 321章] 当初ここに「押すと開く
+          カード」を置いていたが、本部長差し戻しにより撤去した（カードを増やすと
+          最初の画面が詰まるため）。代わりに、条件がそろえば`ChildWeeklyReviewModal`
+          を自動で1回だけ開く（画面末尾の判定effect・モーダル参照）。表側には何も
+          置かない。 */}
 
       <View style={styles.pointsRow}>
         <Text style={theme.typography.childHeadline}>🌟 いま {myPoints}pt</Text>
@@ -397,6 +487,8 @@ export default function ChildHomeScreen() {
           );
         })()}
       </View>
+
+      <ChildWeeklyReviewModal visible={weeklyReviewVisible} onClose={() => setWeeklyReviewVisible(false)} />
     </Screen>
   );
 }
