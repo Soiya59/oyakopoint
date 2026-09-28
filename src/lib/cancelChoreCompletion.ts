@@ -14,6 +14,13 @@ import { GENERIC_ERROR_MESSAGE, GENERIC_ERROR_MESSAGE_CHILD } from "@/lib/errorM
 
 export type CancelTone = "parent" | "child" | "supporter";
 
+// [2026-09-27追加・ワイヤーフレーム67章決定7順位4] ログインの画面
+// （src/components/EmailCodeVerifyForm.tsx）と同じ言い回し。行動が変わる
+// 失敗（電波・混み合い）だけ文言を分ける。子ども向け（tone === "child"）は
+// 67.3節決定6により変更しない（従来どおりGENERIC_ERROR_MESSAGE_CHILDのまま）。
+const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
+const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+
 /** 28.1節「3ロールの文言・トーン一覧」。 */
 export const CANCEL_LABEL: Record<CancelTone, string> = {
   parent: "取消",
@@ -48,6 +55,14 @@ export const CANCEL_SUCCESS_TEXT: Record<CancelTone, string> = {
  * 申し送り事項として実装メモ.md 120章に記録する。
  */
 export function cancelCompletionErrorText(tone: CancelTone, error: ApiError): string {
+  // [2026-09-27追加・ワイヤーフレーム67章決定7順位4] fetch自体が失敗した場合
+  // （postgrest-jsはstatus: 0を返す。gratitudeSendErrorText・
+  // describeChoreReportFailureと同じ判定根拠）。checkViolation等の具体的な
+  // codeより先に判定してよい（通信断のときはcode自体が空文字になり、
+  // PG_ERRCODEのいずれとも一致しないため）。
+  if (error.status === 0) {
+    return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : MSG_OFFLINE;
+  }
   if (error.code === PG_ERRCODE.checkViolation) {
     if (error.message.includes("ガチャ") || error.message.includes("木の色丸")) {
       return tone === "child" ? "ガチャを ひいたあとは、とりけせないよ" : "ガチャを引いたあとは、取り消せません";
@@ -71,6 +86,12 @@ export function cancelCompletionErrorText(tone: CancelTone, error: ApiError): st
     // UI側で対象ロールにのみ取消導線を出していれば通常は発生しない想定
     // （API仕様.md 11章）。
     return tone === "child" ? "できなかったよ" : "この操作はできません";
+  }
+  // [2026-09-27追加・ワイヤーフレーム67章決定7順位4] サーバー側のゲートウェイ
+  // 異常（500番台）。上のcheckViolation等の分岐に一致しない、原因を特定
+  // できないPostgrestError全般が対象。
+  if (typeof error.status === "number" && error.status >= 500) {
+    return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : MSG_SERVER_BUSY;
   }
   return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
 }

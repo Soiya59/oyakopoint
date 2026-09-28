@@ -16,6 +16,7 @@ import {
   CANCEL_SUCCESS_TEXT,
   cancelCompletionErrorText,
 } from "@/lib/cancelChoreCompletion";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
@@ -105,7 +106,11 @@ export default function ParentMyChoresScreen() {
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
-  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位4] `ref`（原因追跡用の識別子、
+  // 個人情報を含まない）を追加。
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string; ref: string } | null>(
+    null
+  );
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
 
   // 新設ブロックに現れるのは常に自分自身の報告のみのため、確認ダイアログは挟まず
@@ -116,7 +121,11 @@ export default function ParentMyChoresScreen() {
     const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
     setCancelingCompletionId(null);
     if (!result.ok) {
-      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
+      setCancelRowError({
+        id: completionId,
+        message: cancelCompletionErrorText("parent", result.error),
+        ref: formatPgFailureRef(result.error),
+      });
       return;
     }
     // [2026-09-19追加・56.4章申し送り] 取消直後は累計回数も減るため、この画面が
@@ -167,9 +176,14 @@ export default function ParentMyChoresScreen() {
                 </Pressable>
               </View>
               {cancelRowError?.id === c.id && (
-                <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>
-                  {cancelRowError.message}
-                </Text>
+                <>
+                  <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>
+                    {cancelRowError.message}
+                  </Text>
+                  <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+                    目印 {cancelRowError.ref}
+                  </Text>
+                </>
               )}
             </Card>
           ))}

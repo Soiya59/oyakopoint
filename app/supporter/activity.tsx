@@ -14,6 +14,7 @@ import { useAppData } from "@/data/store";
 import { useMarkSeen } from "@/hooks/useLastSeen";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
@@ -73,6 +74,9 @@ type SupporterCompletionRowProps = {
   myId: string;
   isCanceling: boolean;
   cancelErrorMessage?: string;
+  // [2026-09-27新設・ワイヤーフレーム67章決定7順位4] 原因追跡用の識別子
+  // （個人情報を含まない）。
+  cancelErrorRef?: string;
   onOpenDetail: (c: ChoreCompletion) => void;
   onCancelTap: (completionId: string) => void;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
@@ -86,6 +90,7 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
   myId,
   isCanceling,
   cancelErrorMessage,
+  cancelErrorRef,
   onOpenDetail,
   onCancelTap,
   onSendStamp,
@@ -133,6 +138,11 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
         {cancelErrorMessage && (
           <Text style={[theme.typography.supporterCaption, styles.cancelRowError]}>{cancelErrorMessage}</Text>
         )}
+        {cancelErrorRef && (
+          <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
+            目印 {cancelErrorRef}
+          </Text>
+        )}
         {!isOwnCard && (
           <View style={styles.stampRow}>
             {theme.stampDefinitions.map((s) => {
@@ -179,7 +189,11 @@ export default function SupporterActivityScreen() {
   // 主要画面ワイヤーフレーム.md 28.6節。みまもりメンバーは自分の報告のみ取り消せ、
   // 確認ダイアログは無い（常に本人操作のため。28.0節決定5）。
   const [cancelingId, setCancelingId] = useState<string | null>(null);
-  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位4] `ref`（原因追跡用の識別子、
+  // 個人情報を含まない）を追加。
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string; ref: string } | null>(
+    null
+  );
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
 
   const myId = state.activeParentMemberId;
@@ -254,7 +268,11 @@ export default function SupporterActivityScreen() {
       const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
       setCancelingId(null);
       if (!result.ok) {
-        setCancelRowError({ id: completionId, message: cancelCompletionErrorText("supporter", result.error) });
+        setCancelRowError({
+          id: completionId,
+          message: cancelCompletionErrorText("supporter", result.error),
+          ref: formatPgFailureRef(result.error),
+        });
         return;
       }
       setCancelFlashMessage(CANCEL_SUCCESS_TEXT.supporter);
@@ -330,6 +348,7 @@ export default function SupporterActivityScreen() {
         myId={myId}
         isCanceling={cancelingId === c.id}
         cancelErrorMessage={cancelRowError?.id === c.id ? cancelRowError.message : undefined}
+        cancelErrorRef={cancelRowError?.id === c.id ? cancelRowError.ref : undefined}
         onOpenDetail={openDetail}
         onCancelTap={handleCancelTap}
         onSendStamp={sendStamp}

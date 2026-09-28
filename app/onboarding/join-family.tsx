@@ -5,6 +5,8 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { inviteLookup } from "@/data/api";
+import { formatEdgeFailureRef } from "@/lib/edgeFailureRef";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 
 /**
  * P5 招待コード入力（保護者として参加）
@@ -14,20 +16,42 @@ import { inviteLookup } from "@/data/api";
  * `family_name` と `children`（ニックネーム＋アバター色）のみを返し、保護者メンバーの
  * 一覧は返さない（個人情報最小化方針、4章参照）。そのためP6のプレビューは
  * 家族名＋子どもの一覧のみで構成する（保護者一覧は表示しない）。
+ *
+ * [2026-09-27変更・ワイヤーフレーム67章決定7順位3] 以前は「招待コードが見つから
+ * ない」以外の失敗をすべて`res.error.message`（Edge Functionの生の文言）を
+ * そのまま表示していた。ログインの画面（EmailCodeVerifyForm.tsx、実装メモ262章）
+ * と同じ考え方で、行動が変わるもの（電波・混み合い）だけ文言を分け、原因を
+ * 追うための「目印」を小さく添える。この画面は保護者（P5）専用で子ども向けの
+ * 分岐は無い（67.3節決定5の対象外＝常に目印を出してよい）。
  */
+const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
+const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+
 export default function JoinFamilyScreen() {
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorRef, setErrorRef] = useState<string | null>(null);
 
   const submit = async () => {
     if (!code.trim()) return;
     setChecking(true);
     setErrorMessage(null);
+    setErrorRef(null);
     const res = await inviteLookup(code.trim());
     setChecking(false);
     if (!res.ok) {
-      setErrorMessage(res.error.code === "invite_code_not_found" ? "招待コードが見つかりませんでした" : res.error.message);
+      const e = res.error;
+      setErrorMessage(
+        e.code === "invite_code_not_found"
+          ? "招待コードが見つかりませんでした"
+          : e.code === "network_error"
+          ? MSG_OFFLINE
+          : typeof e.status === "number" && e.status >= 500
+          ? MSG_SERVER_BUSY
+          : GENERIC_ERROR_MESSAGE
+      );
+      setErrorRef(formatEdgeFailureRef(e));
       return;
     }
     router.push({
@@ -66,6 +90,11 @@ export default function JoinFamilyScreen() {
 
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
+      )}
+      {errorRef && (
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          目印 {errorRef}
+        </Text>
       )}
 
       <AppButton

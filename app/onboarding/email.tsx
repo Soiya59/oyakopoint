@@ -5,7 +5,8 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
-import { AUTH_ERRCODE, signInWithEmail, signInWithPassword } from "@/data/api";
+import { signInWithEmail, signInWithPassword } from "@/data/api";
+import { authSendErrorText } from "@/lib/authSendError";
 import { formatAuthFailureRef } from "@/lib/authFailureRef";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
@@ -25,11 +26,6 @@ const REVIEW_LOGIN_ERROR_MESSAGE =
  * （元々ここと同一の文言だった）。
  */
 const REVIEW_LOGIN_NETWORK_ERROR_MESSAGE = GENERIC_ERROR_MESSAGE;
-// [2026-09-27新設・ワイヤーフレーム67章] コード送信の失敗の文言（EmailCodeVerifyForm.tsxと同じ言い回し）。
-const SEND_MSG_RATE_LIMIT = "メールの送信回数が上限に達しました。しばらく時間をおいてからもう一度お試しください。";
-const SEND_MSG_INVALID_EMAIL = "メールアドレスの形を確かめてください。";
-const SEND_MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
-const SEND_MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
 
 /**
  * P2 メールアドレス入力
@@ -77,17 +73,7 @@ export default function EmailInputScreen() {
       // 実装メモ262章）と同じ考え方で、行動が変わるものだけ文言を分け、ほかはやさしい
       // 1文にまとめ、原因を追うための「目印」を小さく添える。
       const e = res.error;
-      setErrorMessage(
-        e.status === 429 || e.code === AUTH_ERRCODE.overEmailSendRateLimit || e.code === AUTH_ERRCODE.overRequestRateLimit
-          ? SEND_MSG_RATE_LIMIT
-          : e.code === "email_address_invalid" || e.code === "validation_failed"
-          ? SEND_MSG_INVALID_EMAIL
-          : e.code === AUTH_ERRCODE.retryableFetch && e.status === 0
-          ? SEND_MSG_OFFLINE
-          : e.code === AUTH_ERRCODE.retryableFetch
-          ? SEND_MSG_SERVER_BUSY
-          : GENERIC_ERROR_MESSAGE
-      );
+      setErrorMessage(authSendErrorText(e));
       setErrorRef(formatAuthFailureRef(e));
       return;
     }

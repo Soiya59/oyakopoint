@@ -10,6 +10,9 @@ import theme from "@/theme/theme";
 import { acceptFamilyInvite, familyInviteLookup, signInWithEmail, PG_ERRCODE } from "@/data/api";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
 import { useSession } from "@/lib/session";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
+import { formatAuthFailureRef } from "@/lib/authFailureRef";
+import { authSendErrorText } from "@/lib/authSendError";
 
 /**
  * S0 招待プレビュー・参加確認（みまもりメンバー）
@@ -40,7 +43,17 @@ import { useSession } from "@/lib/session";
  * を使ったコード入力状態に置き換えた。認証成功後は`status`が"parentNoFamily"に変わり、
  * 画面遷移せずこのコンポーネントが再レンダリングされ、下の`status === "parentNoFamily"`
  * 分岐がそのまま表示される（設計部10.3章）。
+ *
+ * [2026-09-27変更・ワイヤーフレーム67章決定7順位3] familyInviteLookup・
+ * acceptFamilyInviteの失敗は、以前は個別の想定エラー以外をすべて
+ * `res.error.message`（PostgrestErrorの生の文言）のまま表示していた。
+ * ログインの画面と同じ考え方で、行動が変わるもの（電波・混み合い）だけ
+ * 文言を分け、原因を追うための「目印」を小さく添える。この画面はS0専用で
+ * 子ども向けの分岐は無い（67.3節決定5の対象外＝常に目印を出してよい）。
  */
+const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
+const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+
 export default function JoinSupporterScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
   const { status } = useSession();
@@ -48,16 +61,23 @@ export default function JoinSupporterScreen() {
   const [previewState, setPreviewState] = useState<"loading" | "ready" | "error">("loading");
   const [familyName, setFamilyName] = useState("");
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // [2026-09-27新設・ワイヤーフレーム67章決定7順位3] 原因追跡用の識別子
+  // （個人情報を含まない）。
+  const [previewErrorRef, setPreviewErrorRef] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailErrorRef, setEmailErrorRef] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // [2026-09-27新設・ワイヤーフレーム67章決定7順位3] 原因追跡用の識別子
+  // （個人情報を含まない）。
+  const [submitErrorRef, setSubmitErrorRef] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -71,9 +91,17 @@ export default function JoinSupporterScreen() {
       if (!mounted) return;
       if (!res.ok) {
         setPreviewState("error");
+        const e = res.error;
         setPreviewError(
-          res.error.code === "no_data_found" ? "招待が見つかりませんでした" : res.error.message
+          e.code === "no_data_found"
+            ? "招待が見つかりませんでした"
+            : e.status === 0
+            ? MSG_OFFLINE
+            : typeof e.status === "number" && e.status >= 500
+            ? MSG_SERVER_BUSY
+            : e.message
         );
+        setPreviewErrorRef(formatPgFailureRef(e));
         return;
       }
       if (res.data.status === "revoked") {
@@ -103,11 +131,14 @@ export default function JoinSupporterScreen() {
     if (!email.trim() || !token) return;
     setSendingEmail(true);
     setEmailError(null);
+    setEmailErrorRef(null);
     const redirectTo = buildAuthRedirectUrl("join-supporter", { token });
     const res = await signInWithEmail(email.trim(), redirectTo);
     setSendingEmail(false);
     if (!res.ok) {
-      setEmailError(res.error.message);
+      // [2026-09-27修正・実装メモ317章の申し送り] 英語の生の文言を出さない（authSendError.ts）。
+      setEmailError(authSendErrorText(res.error));
+      setEmailErrorRef(formatAuthFailureRef(res.error));
       return;
     }
     setEmailSent(true);
@@ -130,15 +161,21 @@ export default function JoinSupporterScreen() {
     if (!token || !displayName.trim() || !consentChecked) return;
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitErrorRef(null);
     const res = await acceptFamilyInvite(token, displayName.trim(), JOIN_CONSENT_VERSION);
     if (!res.ok) {
       setSubmitting(false);
+      const e = res.error;
       setSubmitError(
-        res.error.code === PG_ERRCODE.insufficientPrivilege
+        // [2026-09-27追加・ワイヤーフレーム67章決定7順位3] 通信断・サーバー混雑
+        // （ログインの画面と同じ言い回し）だけ先に切り分ける。
+        e.status === 0
+          ? MSG_OFFLINE
+          : e.code === PG_ERRCODE.insufficientPrivilege
           ? "この招待は別のメールアドレス宛てです。招待されたメールアドレスでログインし直してください"
-          : res.error.code === PG_ERRCODE.noDataFound
+          : e.code === PG_ERRCODE.noDataFound
           ? "招待が見つかりません"
-          : res.error.code === PG_ERRCODE.checkViolation
+          : e.code === PG_ERRCODE.checkViolation
           ? // check_violationは「招待がすでに確定・期限切れ」と「同意版数が
             // 古い」（スキーマ設計.sql 40.5章）の2種類がありSQLSTATEだけでは
             // 区別できないため、DB側のRAISE EXCEPTIONメッセージ本文で判別する。
@@ -147,11 +184,14 @@ export default function JoinSupporterScreen() {
             // PG_ERRCODE.checkViolation）と一致せず常にfalseだった（このthen節が
             // 一度も実行されず、常にelseのres.error.messageへ落ちていた）。今回
             // 3種類目のcheck_violation原因が増えたのを機に修正した。
-            res.error.message.includes("アプリが古い")
-            ? res.error.message
+            e.message.includes("アプリが古い")
+            ? e.message
             : "この招待はすでに確定済み、または有効期限が切れています"
-          : res.error.message
+          : typeof e.status === "number" && e.status >= 500
+          ? MSG_SERVER_BUSY
+          : e.message
       );
+      setSubmitErrorRef(formatPgFailureRef(e));
       return;
     }
     router.replace("/supporter/family");
@@ -170,6 +210,11 @@ export default function JoinSupporterScreen() {
       <Screen tone="supporter">
         <Text style={theme.typography.supporterTitle}>招待を確認できませんでした</Text>
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.neutralTextSecondary }}>{previewError}</Text>
+        {previewErrorRef && (
+          <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+            目印 {previewErrorRef}
+          </Text>
+        )}
         <AppButton
           tone="supporter"
           label="さいしょから やりなおす"
@@ -215,6 +260,11 @@ export default function JoinSupporterScreen() {
 
           {submitError && (
             <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{submitError}</Text>
+          )}
+          {submitErrorRef && (
+            <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+              目印 {submitErrorRef}
+            </Text>
           )}
 
           <AppButton
@@ -265,6 +315,11 @@ export default function JoinSupporterScreen() {
 
           {emailError && (
             <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{emailError}</Text>
+          )}
+          {emailErrorRef && (
+            <Text style={[theme.typography.supporterCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+              目印 {emailErrorRef}
+            </Text>
           )}
 
           <AppButton

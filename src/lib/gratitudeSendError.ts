@@ -19,7 +19,21 @@ import { GENERIC_ERROR_MESSAGE, GENERIC_ERROR_MESSAGE_CHILD } from "@/lib/errorM
 
 export type GratitudeTone = "parent" | "child" | "supporter";
 
+// [2026-09-27追加・ワイヤーフレーム67章決定7順位2] ログインの画面
+// （src/components/EmailCodeVerifyForm.tsx）と同じ言い回し。行動が変わる
+// 失敗（電波・混み合い）だけ文言を分ける。子ども向け（tone === "child"）は
+// 67.3節決定6により変更しない（従来どおりGENERIC_ERROR_MESSAGE_CHILDのまま）。
+const MSG_OFFLINE = "電波の状態が悪いようです。電波の良い場所で、もう一度お試しください。";
+const MSG_SERVER_BUSY = "ただいま混み合っているようです。少し時間をおいてから、もう一度お試しください。";
+
 export function gratitudeSendErrorText(tone: GratitudeTone, error: ApiError): string {
+  // [2026-09-27追加・ワイヤーフレーム67章決定7順位2] fetch自体が失敗した場合
+  // （postgrest-jsはstatus: 0を返す。src/data/api.tsのdescribeChoreReportFailure
+  // と同じ判定根拠）。checkViolation等の具体的なcodeより先に判定してよい
+  // （通信断のときはcode自体が空文字になり、PG_ERRCODEのいずれとも一致しないため）。
+  if (error.status === 0) {
+    return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : MSG_OFFLINE;
+  }
   if (error.code === PG_ERRCODE.checkViolation) {
     // 自己贈呈禁止（chk_gratitude_no_self_gift）はPostgresの素の制約違反メッセージ
     // （英語、制約名を含む）が返るため、専用の日本語文言に置き換える。宛先選択UIから
@@ -50,6 +64,13 @@ export function gratitudeSendErrorText(tone: GratitudeTone, error: ApiError): st
     // 利用者に一切見せない。48章の改訂によりロールを理由にした拒否は無くなったが、
     // 将来別の理由でRLSが働いた場合の保険として汎用の日本語文言に倒す。
     return tone === "child" ? "おくれなかったよ" : "この操作はできません";
+  }
+  // [2026-09-27追加・ワイヤーフレーム67章決定7順位2] サーバー側のゲートウェイ
+  // 異常（500番台）。上のcheckViolation等の分岐に一致しない、原因を特定
+  // できないPostgrestError全般が対象（describeChoreReportFailureの
+  // status>=500相当だが、こちらは上の具体的なcode判定を優先するため末尾に置く）。
+  if (typeof error.status === "number" && error.status >= 500) {
+    return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : MSG_SERVER_BUSY;
   }
   return tone === "child" ? GENERIC_ERROR_MESSAGE_CHILD : GENERIC_ERROR_MESSAGE;
 }

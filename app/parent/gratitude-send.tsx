@@ -9,6 +9,7 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchMyGratitudeGiveableBalance, sendGratitudePoints } from "@/data/api";
 import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
 
@@ -46,6 +47,10 @@ export default function ParentGratitudeSendScreen() {
   const [points, setPoints] = useState(1);
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-27新設・ワイヤーフレーム67章決定7順位2] 原因追跡用の識別子
+  // （個人情報を含まない）。保護者・みまもり画面のみ（決定5・6、子ども向け
+  // 画面 app/child/gratitude-send.tsx には出さない）。
+  const [errorRef, setErrorRef] = useState<string | null>(null);
   const ngGuard = useNgWordGuard();
 
   useEffect(() => {
@@ -66,6 +71,7 @@ export default function ParentGratitudeSendScreen() {
     if (ngGuard.guard(trimmedNote)) return;
     setScreenState("sending");
     setErrorMessage(null);
+    setErrorRef(null);
     const res = await sendGratitudePoints(client, {
       sender_id: myId,
       recipient_id: recipientId,
@@ -75,6 +81,7 @@ export default function ParentGratitudeSendScreen() {
     setScreenState("form");
     if (!res.ok) {
       setErrorMessage(gratitudeSendErrorText("parent", res.error));
+      setErrorRef(formatPgFailureRef(res.error));
       return;
     }
     const recipientName = state.members.find((m) => m.id === recipientId)?.display_name ?? "";
@@ -151,6 +158,12 @@ export default function ParentGratitudeSendScreen() {
 
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
+      )}
+      {/* [2026-09-27新設・ワイヤーフレーム67章決定4] 何の文字列か分かるよう「目印」を添える。 */}
+      {errorRef && (
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          目印 {errorRef}
+        </Text>
       )}
 
       <AppButton

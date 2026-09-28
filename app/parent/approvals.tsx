@@ -14,6 +14,7 @@ import { useAppData } from "@/data/store";
 import { useMarkSeen } from "@/hooks/useLastSeen";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
@@ -75,6 +76,9 @@ type CompletionRowProps = {
   myParentId: string;
   isCanceling: boolean;
   cancelErrorMessage?: string;
+  // [2026-09-27新設・ワイヤーフレーム67章決定7順位4] 原因追跡用の識別子
+  // （個人情報を含まない）。
+  cancelErrorRef?: string;
   onOpenDetail: (c: ChoreCompletion) => void;
   onCancelTap: (c: ChoreCompletion) => void;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
@@ -88,6 +92,7 @@ const CompletionRow = React.memo(function CompletionRow({
   myParentId,
   isCanceling,
   cancelErrorMessage,
+  cancelErrorRef,
   onOpenDetail,
   onCancelTap,
   onSendStamp,
@@ -163,6 +168,11 @@ const CompletionRow = React.memo(function CompletionRow({
         {cancelErrorMessage && (
           <Text style={[theme.typography.parentCaption, styles.cancelRowError]}>{cancelErrorMessage}</Text>
         )}
+        {cancelErrorRef && (
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>
+            目印 {cancelErrorRef}
+          </Text>
+        )}
         {/* カード上のクイックスタンプ。タップで即座にトグルRPCを呼ぶ（3.1章、
             2026-09-10改訂・実装メモ.md 157章）。自分自身の完了報告カードには
             表示しない。[2026-09-10改訂] 送信済み（sent）でもdisabledにしない。
@@ -219,7 +229,11 @@ export default function ApprovalsScreen() {
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.4節。
   const [cancelingId, setCancelingId] = useState<string | null>(null);
-  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位4] `ref`（原因追跡用の識別子、
+  // 個人情報を含まない）を追加。
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string; ref: string } | null>(
+    null
+  );
   const [cancelConfirmTarget, setCancelConfirmTarget] = useState<ChoreCompletion | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
 
@@ -308,7 +322,11 @@ export default function ApprovalsScreen() {
       const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
       setCancelingId(null);
       if (!result.ok) {
-        setCancelRowError({ id: completionId, message: cancelCompletionErrorText("parent", result.error) });
+        setCancelRowError({
+          id: completionId,
+          message: cancelCompletionErrorText("parent", result.error),
+          ref: formatPgFailureRef(result.error),
+        });
         return;
       }
       setCancelConfirmTarget(null);
@@ -394,6 +412,7 @@ export default function ApprovalsScreen() {
         myParentId={myParentId}
         isCanceling={cancelingId === c.id}
         cancelErrorMessage={cancelRowError?.id === c.id ? cancelRowError.message : undefined}
+        cancelErrorRef={cancelRowError?.id === c.id ? cancelRowError.ref : undefined}
         onOpenDetail={openDetail}
         onCancelTap={handleCancelTap}
         onSendStamp={sendStamp}
@@ -441,9 +460,14 @@ export default function ApprovalsScreen() {
                       取り消すと、たまったポイントや家族の木・ガチャの回数も1つ戻ります。元に戻せません。
                     </Text>
                     {cancelRowError?.id === cancelConfirmTarget.id && (
-                      <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
-                        {cancelRowError.message}
-                      </Text>
+                      <>
+                        <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
+                          {cancelRowError.message}
+                        </Text>
+                        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+                          目印 {cancelRowError.ref}
+                        </Text>
+                      </>
                     )}
                     <View style={styles.confirmButtonRow}>
                       <AppButton

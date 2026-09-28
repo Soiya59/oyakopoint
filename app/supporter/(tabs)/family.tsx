@@ -15,6 +15,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import { useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
@@ -75,7 +76,11 @@ export default function SupporterFamilyScreen() {
   const ngGuard = useNgWordGuard();
 
   const [cancelingId, setCancelingId] = useState<string | null>(null);
-  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位4] `ref`（原因追跡用の識別子、
+  // 個人情報を含まない）を追加。
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string; ref: string } | null>(
+    null
+  );
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
   const [, setCancelTick] = useState(0);
   useEffect(() => {
@@ -143,7 +148,11 @@ export default function SupporterFamilyScreen() {
     const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
     setCancelingId(null);
     if (!result.ok) {
-      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("supporter", result.error) });
+      setCancelRowError({
+        id: completionId,
+        message: cancelCompletionErrorText("supporter", result.error),
+        ref: formatPgFailureRef(result.error),
+      });
       return;
     }
     setCancelFlashMessage(CANCEL_SUCCESS_TEXT.supporter);
@@ -322,9 +331,14 @@ export default function SupporterFamilyScreen() {
                   )}
                 </View>
                 {cancelRowError?.id === c.id && (
-                  <Text style={[theme.typography.supporterCaption, styles.cancelRowError]}>
-                    {cancelRowError.message}
-                  </Text>
+                  <>
+                    <Text style={[theme.typography.supporterCaption, styles.cancelRowError]}>
+                      {cancelRowError.message}
+                    </Text>
+                    <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary }]}>
+                      目印 {cancelRowError.ref}
+                    </Text>
+                  </>
                 )}
                 {!isOwnCard && (
                   <View style={styles.stampRow}>

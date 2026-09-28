@@ -1214,8 +1214,13 @@ export async function cancelChoreCompletion(
   client: SupabaseClient,
   completionId: string
 ): Promise<ApiResult<{ completion_id: string; chore_id: string | null; chore_title: string; reported_by: string; points: number }>> {
-  const { data, error } = await client.rpc("cancel_chore_completion", { p_completion_id: completionId }).single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位4、実装メモ.md 317章]
+  // `status`（PostgRESTが返す実際のHTTPステータス）も受け取り、
+  // fromPostgrestErrorへ渡す。reportCompletion・sendGratitudePointsと同じ変更。
+  // 以前はstatus未指定のため、cancelCompletionErrorTextが通信断・サーバー混雑を
+  // 見分けられなかった（67.3節決定7の申し送りにあった「配線の変更」）。
+  const { data, error, status } = await client.rpc("cancel_chore_completion", { p_completion_id: completionId }).single();
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: data as { completion_id: string; chore_id: string | null; chore_title: string; reported_by: string; points: number },
@@ -1901,7 +1906,12 @@ export async function sendGratitudePoints(
   // 67.3章）。呼び出し元でtrim()した空文字はnullに寄せてから渡すこと。
   input: { sender_id: string; recipient_id: string; points: number; note: string | null }
 ): Promise<ApiResult<GratitudePoint>> {
-  const { data, error } = await client
+  // [2026-09-27変更・ワイヤーフレーム67章決定7順位2、実装メモ.md 317章]
+  // `status`（PostgRESTが返す実際のHTTPステータス）も受け取り、
+  // fromPostgrestErrorへ渡す。reportCompletion（上記）と同じ変更。以前は
+  // status未指定のためgratitudeSendErrorTextが通信断・サーバー混雑を
+  // 見分けられなかった。
+  const { data, error, status } = await client
     .from("gratitude_points")
     .insert({
       sender_id: input.sender_id,
@@ -1911,7 +1921,7 @@ export async function sendGratitudePoints(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as GratitudePoint };
 }
 

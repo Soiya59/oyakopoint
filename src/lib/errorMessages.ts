@@ -11,14 +11,17 @@
  *
  * [今回の対象外・意図的] `describeChoreReportFailure()`（src/data/api.ts、
  * 実装メモ.md 230.3章）が持つ「通信状態／権限拒否42501／ログイン切れ401／
- * その他」の4種類の出し分けは、`reportCompletion()`だけがPostgRESTの
- * HTTPステータスを呼び出し元へ渡しているために成立している（同ファイルの
- * `fromPostgrestError`のコメント参照）。`cancelChoreCompletion()`・感謝ポイント
- * 送信など他のRPC/PostgREST呼び出しはステータスを渡していないため、同じ
- * 出し分けをここへ移植しても「権限拒否」「ログイン切れ」の分岐には実際には
- * 到達しない（statusが常にundefinedのため）。出し分けそのものを広げるには
- * 呼び出し元の配線変更が必要で、これは「文言の統一（文字列の差し替え）」の
- * 範囲を超えるため今回は行っていない（実装メモ.md 244章に申し送りを記録）。
+ * その他」の4種類の出し分けは、`reportCompletion()`がPostgRESTのHTTP
+ * ステータスを呼び出し元へ渡しているために成立している（同ファイルの
+ * `fromPostgrestError`のコメント参照）。
+ * [2026-09-27訂正・ワイヤーフレーム67章決定7、実装メモ.md 317章]
+ * `cancelChoreCompletion()`・`sendGratitudePoints()`も、上記のことわりを書いた
+ * 当時（244章）はステータスを渡していなかったが、67章の対応でreportCompletion
+ * と同じくstatusを渡すようになった。`src/lib/cancelChoreCompletion.ts`の
+ * `cancelCompletionErrorText`・`src/lib/gratitudeSendError.ts`の
+ * `gratitudeSendErrorText`は、それぞれ「通信断（status===0）」「サーバー混雑
+ * （status>=500）」の2種類だけ本ファイルのGENERIC_ERROR_MESSAGEから分けている
+ * （「権限拒否」「ログイン切れ」相当の出し分けはまだ広げていない）。
  *
  * 3ロールの書き分け（子ども＝ひらがな多め、保護者・みまもり＝通常）は
  * 既存パターンを踏襲する。
