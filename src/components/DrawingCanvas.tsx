@@ -157,11 +157,11 @@ export function avatarLineDisplayStrokeWidth(size: number, w: number | undefined
  * `pointsToPolylineString`をこのファイルから読み込んでいるのと同じ理由）。
  *
  * [線の太さ(w)の扱い・313章決定] 塗った形の縁には、選択中の太さ(`strokeWidth`)を
- * そのまま使う。塗り色と縁の色が同じときは縁が見えないだけで実害は無く、
- * 白色（`needsWhiteOutline`）のときだけ縁の色を`neutralTextPrimary`に変えて視認できる
- * ようにする。これは既存の「白い線には縁取りを付ける」ロジック（`needsWhiteOutline`、
- * 2026-09-11追加）と同じ考え方を、線1本の`<Polygon>`の`stroke`属性だけで実現したもの
- * （`<Polyline>`版のような2重描画は不要）。
+ * そのまま使う。塗り色と縁の色が同じときは縁が見えないだけで実害は無い。
+ * 白色（`needsWhiteOutline`）のときは、既存の「白い線には縁取りを付ける」ロジック
+ * （`needsWhiteOutline`、2026-09-11追加）と同じく、暗色を少し太く下に敷いて細い縁を
+ * 見せる（2026-09-29改訂・324章。当初は縁の色そのものを暗色にしていたため太い黒枠に
+ * 見えていた）。
  */
 export function DrawingLineShape({
   color,
@@ -198,13 +198,26 @@ export function DrawingLineShape({
     />
   ) : null;
   if (filled) {
+    // [2026-09-29改訂・実装メモ.md 324章、統括指摘「白だけ枠に黒があるのはなぜ」]
+    // 以前は白のとき縁（太さ=strokeWidth）をまるごと暗色にしていたため、塗った白い形が
+    // 太い黒枠つきに見えていた。ペンの白い線（下の`<Polyline>`版）と同じく、
+    // 暗色を少し太く下に敷き、その上に白を重ねて細い縁だけが見えるようにする。
     return (
       <>
         {halo}
+        {needsWhiteOutline && (
+          <Polygon
+            points={points}
+            fill="none"
+            stroke={theme.colors.neutralTextPrimary}
+            strokeWidth={strokeWidth + 1.5}
+            strokeLinejoin="round"
+          />
+        )}
         <Polygon
           points={points}
           fill={color}
-          stroke={needsWhiteOutline ? theme.colors.neutralTextPrimary : color}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
         />
