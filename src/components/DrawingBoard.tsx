@@ -25,7 +25,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
 import { DrawingThumbnail } from "./DrawingCanvas";
-import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
+import ZoomableDrawingCanvas, { type ZoomableDrawingCanvasHandle } from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import DrawingToolPicker from "./DrawingToolPicker";
@@ -33,6 +33,7 @@ import { PRIZE_DOT_SIZE, prizeInnerSize } from "./FamilyTree";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import { fitDrawingLinesToCircle } from "@/lib/fitDrawingToCircle";
+import { removeLineAtIndex } from "@/lib/drawingLineMove";
 import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
@@ -171,6 +172,21 @@ export function DrawingBoard({
    * 正しく動く）。
    */
   const preMoveLinesRef = useRef<FamilyDrawingLine[] | null>(null);
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * ✋で選んでいる線・形があるかどうか。`ZoomableDrawingCanvas`の
+   * `onSelectionChange`（316章の`hasSelection`をそのまま橋渡ししたもの）を受けて
+   * 更新する。この値がtrueの間だけ、actionRowの「ぜんぶけす」ボタンを
+   * 「これをけす」に差し替える（依頼文「ボタンの行は増やさない」）。
+   */
+  const [hasSelection, setHasSelection] = useState(false);
+  /**
+   * [2026-09-29追加・実装メモ.md 326章]「これをけす」ボタンから
+   * `ZoomableDrawingCanvasHandle.deleteSelected()`を呼ぶための参照。↻ボタンが
+   * `DrawingCanvas`を直接refで持つのと同じ考え方（`ZoomableDrawingCanvas.tsx`
+   * 参照）。
+   */
+  const zoomableCanvasRef = useRef<ZoomableDrawingCanvasHandle>(null);
   // [設計判断] 削除は取り消せない操作のため、app/parent/settings.tsxの家族削除と同じ
   // 「1タップ目で確認表示→2タップ目で確定」の画面内2段階確認パターンを踏襲する
   // （Alert.alert等のネイティブダイアログはWeb版で挙動が不安定なため使わない）。
@@ -217,6 +233,17 @@ export function DrawingBoard({
   const isChildTone = tone === "child";
   const bodyStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
   const captionStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
+
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート、統括承認済み]
+   * ✋で何か選んでいる間だけ、「ぜんぶけす」ボタンをこの文言へ差し替える。
+   * 依頼文どおり「子どもにも読めるように、ひらがなの『これをけす』にする」。
+   * undoLabel・clearLabelのように3ロールで書き分けない
+   * （依頼文が単一のひらがな表記を明示しており、`undoLabel`・`clearLabel`と違い
+   * 呼び出し元の各drawing画面から文言を渡してもらう必要が無いため、
+   * このコンポーネント内で完結させた）。
+   */
+  const deleteSelectedLabel = "これをけす";
 
   // [2026-09-02追加] 21.0節決定12・13、21.5a節「3ロールの入力欄文言（確定版）」。
   const titleLabel = isChildTone ? "えの なまえ（にんい）" : "題名（任意）";
@@ -304,12 +331,57 @@ export function DrawingBoard({
     });
   };
 
+  /**
+   * [2026-09-29追加・実装メモ.md 326.6章対応、本部長差し戻し反映]
+   * ✋の選択状態を強制的に外す（`DrawingCanvas`内部の`selectedIndex`・
+   * `rotateBaseRef`を`ZoomableDrawingCanvasHandle.clearSelection()`経由で
+   * nullへ戻す）とともに、このコンポーネント側の`hasSelection`も即座にfalseへ
+   * 戻す。`onSelectionChange`が親へ届くのを待たず同期的に見た目を戻すための
+   * 明示呼び出し（届いたときにも同じfalseが来るだけなので二重に呼んでも無害）。
+   * 絵を読み込む・切り替える・保存する・ぜんぶけすのとき（別の絵・別の状態に
+   * `lines`が置き換わるとき）に呼ぶ。呼ばないと、選んでいた番号の線が新しい
+   * `lines`でも「選択中」のまま扱われ、「これをけす」ボタンが出たまま残って
+   * 誤って別の線を消してしまう恐れがある（326.6章で見送っていた不具合）。
+   */
+  const clearCanvasSelection = () => {
+    zoomableCanvasRef.current?.clearSelection();
+    setHasSelection(false);
+  };
+
   const clearAll = () => {
     // [2026-09-17追加・48.3節決定12-4]「ぜんぶけす」でも一括復元の権利は失効する。
     preFitLinesRef.current = null;
     // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
     preMoveLinesRef.current = null;
+    // [2026-09-29追加・326.6章対応] ✋の選択も外す（上記コメント参照）。
+    clearCanvasSelection();
     setLines([]);
+  };
+
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * `ZoomableDrawingCanvas`（`DrawingCanvas`の`deleteSelected`ref経由）から、
+   * ✋で選択中の1本のindexを受け取り実際に取り除く。`clearAll`と同様に
+   * 「まんなかに おおきく」の一括復元の権利は失効させる（削除後の状態を基準に
+   * 戻ると混乱するため、他の操作と同じ扱い）。
+   *
+   * [「ひとつ もどす」で元の位置（重なり順も同じ）に戻る] 削除の直前の`lines`
+   * （まだ削除前の状態）を`preMoveLinesRef`へ丸ごと保持してから1本を取り除く。
+   * 315章の「うごかす」と全く同じ「1回だけ使える巻き戻し」の仕組みをそのまま
+   * 再利用しているだけで、削除専用の新しい巻き戻しのrefは増やしていない。
+   */
+  const handleDeleteSelected = (index: number) => {
+    preFitLinesRef.current = null;
+    preMoveLinesRef.current = lines;
+    setLines((prev) => removeLineAtIndex(prev, index));
+  };
+
+  /** 「これをけす」ボタンの押下処理。実際の削除は`handleDeleteSelected`
+   *  （`onDeleteSelected`経由）が行う。ここでは`ZoomableDrawingCanvasHandle`に
+   *  「選択中の線を削除して」と伝えるだけ（↻ボタンが`rotateSelected()`を
+   *  呼ぶのと同じ役割分担）。 */
+  const handleDeleteSelectedPress = () => {
+    zoomableCanvasRef.current?.deleteSelected();
   };
 
   /** 直前の1本だけ取り消す。保存前のキャンバス上の操作なので、DBには一切触れない。
@@ -379,6 +451,9 @@ export function DrawingBoard({
     preFitLinesRef.current = null;
     // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
     preMoveLinesRef.current = null;
+    // [2026-09-29追加・326.6章対応、本部長差し戻し反映] 読み込む絵が変わるため、
+    // ✋の選択も外す（別の絵の同じ番号の線が「選択中」のまま残る不具合の対処）。
+    clearCanvasSelection();
     setConfirmingDeleteId(null);
     setEditingId(drawing.id);
     setLines(drawing.line_data.lines);
@@ -394,6 +469,8 @@ export function DrawingBoard({
 
   /** 編集を保存せずにやめる。読み込んだ内容はキャンバスから消え、元の絵はDB上そのまま残る。 */
   const cancelEdit = () => {
+    // [2026-09-29追加・326.6章対応] キャンバスが空に切り替わるため選択も外す。
+    clearCanvasSelection();
     setEditingId(null);
     setLines([]);
     setTitle("");
@@ -416,6 +493,8 @@ export function DrawingBoard({
         preFitLinesRef.current = null;
         // [2026-09-27追加・315章]「うごかす」の一括復元の権利も同様に失効する。
         preMoveLinesRef.current = null;
+        // [2026-09-29追加・326.6章対応] 保存成功でキャンバスが空になるため選択も外す。
+        clearCanvasSelection();
         setLines([]);
         setEditingId(null);
         setTitle("");
@@ -426,6 +505,7 @@ export function DrawingBoard({
     if (ok) {
       preFitLinesRef.current = null;
       preMoveLinesRef.current = null;
+      clearCanvasSelection();
       setLines([]);
       setTitle("");
     }
@@ -571,6 +651,7 @@ export function DrawingBoard({
               `translate`で配置する（47.3節決定8）。座標正規化・間引きロジックは
               `DrawingCanvas.tsx`側で一切変更していない（47.4節決定12）。 */}
           <ZoomableDrawingCanvas
+            ref={zoomableCanvasRef}
             tone={tone}
             memberId={memberId}
             color={color}
@@ -598,6 +679,9 @@ export function DrawingBoard({
             tool={tool}
             filled={filled}
             onLineMove={onLineMove}
+            // [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+            onSelectionChange={setHasSelection}
+            onDeleteSelected={handleDeleteSelected}
           />
 
           {/* [2026-09-17追加・主要画面ワイヤーフレーム.md 46.10〜46.14節 決定12〜16]
@@ -690,11 +774,17 @@ export function DrawingBoard({
             onPress={undoLastStroke}
             disabled={saving || lines.length === 0}
           />
+          {/* [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+              ✋で何か選んでいる間だけ「これをけす」（選択した1本だけ削除）に
+              差し替える。行・ボタンは増やさず、既存の「ぜんぶけす」ボタン
+              そのものを差し替える（依頼文「ボタンの行は増やさない」）。
+              消す操作だと分かるよう、色だけ`variant="danger"`（家族削除等の
+              既存の「消す」色）に変える（依頼文「色を少し変える程度ならよい」）。 */}
           <AppButton
-            label={clearLabel}
+            label={hasSelection ? deleteSelectedLabel : clearLabel}
             tone={tone}
-            variant="secondary"
-            onPress={clearAll}
+            variant={hasSelection ? "danger" : "secondary"}
+            onPress={hasSelection ? handleDeleteSelectedPress : clearAll}
             disabled={saving || lines.length === 0}
           />
           <AppButton

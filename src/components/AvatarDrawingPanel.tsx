@@ -27,12 +27,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
 import MemberAvatar from "./MemberAvatar";
-import ZoomableDrawingCanvas from "./ZoomableDrawingCanvas";
+import ZoomableDrawingCanvas, { type ZoomableDrawingCanvasHandle } from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import DrawingToolPicker from "./DrawingToolPicker";
 import theme from "@/theme/theme";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
+import { removeLineAtIndex } from "@/lib/drawingLineMove";
 import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 
@@ -122,6 +123,14 @@ export function AvatarDrawingPanel({
    * 48章「まんなかに おおきく」＝`preFitLinesRef`が無いため、"move"用のみを持つ）。
    */
   const preMoveLinesRef = useRef<FamilyDrawingLine[] | null>(null);
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * `DrawingBoard.tsx`の`hasSelection`・`zoomableCanvasRef`と全く同じ考え方
+   * （コメント参照）。この画面には編集モード・「まんなかに おおきく」が無い分、
+   * 単純な作りにできる。
+   */
+  const [hasSelection, setHasSelection] = useState(false);
+  const zoomableCanvasRef = useRef<ZoomableDrawingCanvasHandle>(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
   const isChildTone = tone === "child";
@@ -157,6 +166,12 @@ export function AvatarDrawingPanel({
   const saveLabel = isChildTone ? "これにする" : "保存する";
   const undoLabel = isChildTone ? "ひとつ もどす" : "ひとつ戻す";
   const clearLabel = isChildTone ? "ぜんぶ けす" : "ぜんぶけす";
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * `DrawingBoard.tsx`の`deleteSelectedLabel`と同じ（コメント参照）。3ロールで
+   * 書き分けない単一のひらがな表記。
+   */
+  const deleteSelectedLabel = "これをけす";
   const resetLabel = isChildTone ? "いろに もどす" : "色にもどす";
   // [43.5節 決定25]
   const resetConfirmText = isChildTone
@@ -181,10 +196,37 @@ export function AvatarDrawingPanel({
     });
   };
 
+  /**
+   * [2026-09-29追加・実装メモ.md 326.6章対応、本部長差し戻し反映]
+   * `DrawingBoard.tsx`の`clearCanvasSelection`と全く同じ考え方（コメント参照）。
+   */
+  const clearCanvasSelection = () => {
+    zoomableCanvasRef.current?.clearSelection();
+    setHasSelection(false);
+  };
+
   const clearAll = () => {
     preMoveLinesRef.current = null;
+    // [2026-09-29追加・326.6章対応] ✋の選択も外す。
+    clearCanvasSelection();
     setLines([]);
   };
+
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * `DrawingBoard.tsx`の`handleDeleteSelected`と全く同じ考え方（コメント参照）。
+   * 削除前の`lines`を`preMoveLinesRef`へ丸ごと保持してから1本を取り除くため、
+   * 「ひとつ もどす」を押すと元の位置（重なり順も同じ）へ戻る。
+   */
+  const handleDeleteSelected = (index: number) => {
+    preMoveLinesRef.current = lines;
+    setLines((prev) => removeLineAtIndex(prev, index));
+  };
+  /** 「これをけす」ボタンの押下処理。`DrawingBoard.tsx`と同じ役割分担。 */
+  const handleDeleteSelectedPress = () => {
+    zoomableCanvasRef.current?.deleteSelected();
+  };
+
   const undoLastStroke = () => {
     // [2026-09-27追加・315章]「うごかす」直後は、動かす前の位置へ一括で戻す
     // （DrawingBoard.tsxのundoLastStrokeと同じ「1回だけ使える巻き戻し」）。
@@ -219,6 +261,8 @@ export function AvatarDrawingPanel({
     // 呼び出し画面側がsavedLineDataを更新することで反映される。
     if (ok) {
       preMoveLinesRef.current = null;
+      // [2026-09-29追加・326.6章対応] 保存成功でキャンバスが空になるため選択も外す。
+      clearCanvasSelection();
       setLines([]);
     }
   };
@@ -273,6 +317,7 @@ export function AvatarDrawingPanel({
           倍率ボタンの無効化は`DrawingBoard.tsx`と同じく`saving`のみ（`atCapacity`では無効化
           しない。拡大して見返す・「ひとつ もどす」後に続きを描く操作を妨げないため）。 */}
       <ZoomableDrawingCanvas
+        ref={zoomableCanvasRef}
         tone={tone}
         memberId={memberId}
         backgroundColor={backgroundColor}
@@ -286,6 +331,9 @@ export function AvatarDrawingPanel({
         tool={tool}
         filled={filled}
         onLineMove={onLineMove}
+        // [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+        onSelectionChange={setHasSelection}
+        onDeleteSelected={handleDeleteSelected}
       />
 
       {/* [2026-09-26追加・実装メモ.md 309章] 家族の絵（DrawingBoard.tsx）と同じ並び
@@ -329,11 +377,13 @@ export function AvatarDrawingPanel({
           onPress={undoLastStroke}
           disabled={saving || lines.length === 0}
         />
+        {/* [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+            `DrawingBoard.tsx`と同じ差し替え。行・ボタンは増やさない。 */}
         <AppButton
-          label={clearLabel}
+          label={hasSelection ? deleteSelectedLabel : clearLabel}
           tone={tone}
-          variant="secondary"
-          onPress={clearAll}
+          variant={hasSelection ? "danger" : "secondary"}
+          onPress={hasSelection ? handleDeleteSelectedPress : clearAll}
           disabled={saving || lines.length === 0}
         />
         <AppButton

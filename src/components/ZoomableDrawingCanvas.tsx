@@ -38,7 +38,7 @@
  * 46-B見本・パレット・太さ選択の位置が詰まって画面が揺れるため（本部長差し戻し、
  * 47章・48章が守ってきた「指を動かしている最中は何も動かさない」原則と同じ）。
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import DrawingCanvas, { type DrawingCanvasHandle } from "./DrawingCanvas";
 import DrawingZoomPicker from "./DrawingZoomPicker";
@@ -162,25 +162,69 @@ interface ZoomableDrawingCanvasProps {
    * このコールバックを同じく使う（`DrawingCanvas.tsx`側の説明参照）。
    */
   onLineMove?: (index: number, points: number[]) => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * `DrawingCanvas`の同名propをそのまま橋渡しする。呼び出し元
+   * （`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）はこのコールバックの中で
+   * `lines`配列から該当indexを取り除く（`removeLineAtIndex`、
+   * `src/lib/drawingLineMove.ts`）。
+   */
+  onDeleteSelected?: (index: number) => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326章] ✋で選択中の線があるかどうかが変わる
+   * たびに呼ばれる。`DrawingCanvas`の`onSelectionChange`と同じ値をそのまま
+   * 橋渡しする（このファイル自身は↻ボタンの表示判定に`hasSelection`という
+   * 同じ値を内部でも使い続けるため、`setHasSelection`と併記して呼ぶ）。
+   * 呼び出し元はこの値で「ぜんぶけす」ボタンを「これをけす」に差し替えるか
+   * どうかを判断する。
+   */
+  onSelectionChange?: (hasSelection: boolean) => void;
 }
 
-export function ZoomableDrawingCanvas({
-  tone,
-  color,
-  strokeWidth,
-  lines,
-  onStrokeEnd,
-  disabled = false,
-  zoomPickerDisabled = false,
-  editingId = null,
-  fitToCircleSignal = 0,
-  onGestureActiveChange,
-  backgroundColor = theme.colors.neutralSurface,
-  memberId,
-  tool = "pen",
-  filled = false,
-  onLineMove,
-}: ZoomableDrawingCanvasProps) {
+/**
+ * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+ * `forwardRef`で公開する命令的API。「これをけす」ボタンは`DrawingBoard.tsx`・
+ * `AvatarDrawingPanel.tsx`のactionRow（このファイルの外）にあるため、実際に
+ * 選択中の線を削除する処理（`DrawingCanvas.tsx`の`DrawingCanvasHandle.deleteSelected`）
+ * を親から呼び出せるようにする。`rotateSelected`を↻ボタン（このファイルの中）が
+ * 直接`canvasRef`経由で呼んでいるのとは違い、削除ボタンはこのファイルの外にあるため、
+ * このファイル自身もforwardRefで1段中継する。
+ */
+export interface ZoomableDrawingCanvasHandle {
+  /** ✋で選択中の線を削除する。何も選択していなければ何もしない。 */
+  deleteSelected: () => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326.6章対応、本部長差し戻し反映] ✋で選択中の
+   * 状態を外部から強制的に外す（`DrawingCanvasHandle.clearSelection`への中継のみ）。
+   * 呼び出し元（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）が、絵を読み込む・
+   * 切り替える・保存する・ぜんぶけすの直前に呼ぶ。
+   */
+  clearSelection: () => void;
+}
+
+export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, ZoomableDrawingCanvasProps>(
+  function ZoomableDrawingCanvas(
+    {
+      tone,
+      color,
+      strokeWidth,
+      lines,
+      onStrokeEnd,
+      disabled = false,
+      zoomPickerDisabled = false,
+      editingId = null,
+      fitToCircleSignal = 0,
+      onGestureActiveChange,
+      backgroundColor = theme.colors.neutralSurface,
+      memberId,
+      tool = "pen",
+      filled = false,
+      onLineMove,
+      onDeleteSelected,
+      onSelectionChange,
+    }: ZoomableDrawingCanvasProps,
+    ref
+  ) {
   // 47.1節決定1: Screen.tsxのcontent幅（パディング済み）をonLayoutで実測する。
   // `Dimensions.get('window')`は使わない。初回描画前は旧来の固定直径280ptを仮置きする
   // （280は下限と同値のため、実測後にクランプしても値が飛ばない）。
@@ -200,6 +244,35 @@ export function ZoomableDrawingCanvas({
    */
   const canvasRef = useRef<DrawingCanvasHandle>(null);
   const [hasSelection, setHasSelection] = useState(false);
+  /**
+   * [2026-09-29追加・実装メモ.md 326章]「選択の有無」は元々↻ボタンの表示判定
+   * （内部の`hasSelection`）にしか使っていなかったが、「これをけす」ボタン
+   * （呼び出し元のactionRow）の判断にも同じ値が要る。`setHasSelection`
+   * （内部用）と`onSelectionChange`（親への橋渡し）の両方を呼ぶだけで、
+   * 「選択の決め方」自体は316章から一切変えていない。
+   */
+  const handleSelectionChange = (next: boolean) => {
+    setHasSelection(next);
+    onSelectionChange?.(next);
+  };
+  /**
+   * [2026-09-29追加・実装メモ.md 326章] 「これをけす」ボタン（`DrawingBoard.tsx`・
+   * `AvatarDrawingPanel.tsx`のactionRow）から`ref`経由で呼ばれる。↻ボタンが
+   * `canvasRef.current?.rotateSelected()`を直接呼ぶのと同じ考え方で、この
+   * ファイルは`DrawingCanvasHandle.deleteSelected`への中継だけを行う。
+   */
+  useImperativeHandle(
+    ref,
+    () => ({
+      deleteSelected: () => {
+        canvasRef.current?.deleteSelected();
+      },
+      clearSelection: () => {
+        canvasRef.current?.clearSelection();
+      },
+    }),
+    []
+  );
 
   const resetZoom = () => {
     setZoom(1);
@@ -364,7 +437,8 @@ export function ZoomableDrawingCanvas({
               tool={tool}
               filled={filled}
               onLineMove={onLineMove}
-              onSelectionChange={setHasSelection}
+              onSelectionChange={handleSelectionChange}
+              onDeleteSelected={onDeleteSelected}
             />
           </View>
         </View>
@@ -400,7 +474,8 @@ export function ZoomableDrawingCanvas({
       )}
     </View>
   );
-}
+  }
+);
 
 const styles = StyleSheet.create({
   // width:"100%"にすることで、onLayoutの実測値がScreen.tsxのcontent幅

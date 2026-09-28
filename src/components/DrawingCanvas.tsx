@@ -82,6 +82,28 @@ import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
  *   ではなく直前の1回（15度）分だけ戻る。315章の1回のドラッグ移動と同じ
  *   「1操作＝1回分」の粒度に自然にそろうため、`preMoveLinesRef`側は変更しなかった
  *   （依頼文「既存の巻き戻しの作りに合う方を選ぶ」への回答）。
+ *
+ * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート、統括承認済み]
+ * ✋で選んだ線・形を1つだけ削除できるようにする（「これをけす」）。
+ * - **ボタンの行は増やさない**（統括の既存の指示）。既存の「ぜんぶけす」ボタン
+ *   （`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`のactionRow）を、何か選んでいる
+ *   間だけ「これをけす」に差し替える（見た目・並び位置は変えない）。何をどう
+ *   差し替えるかはこのファイルの外（呼び出し元）の責務。このファイルは
+ *   「選択中の線を1本削除する」命令的API（`deleteSelected`、下記ref参照）と、
+ *   その実行結果（削除対象のindex、`onDeleteSelected`）を伝えるだけ。
+ * - **どの線が消えるか**: ✋で選択中（`selectedIndex`、316章）の線。選択の
+ *   決め方・選択が外れる条件は316章から一切変えていない。
+ * - **「ひとつ もどす」で元の位置（重なり順も同じ）に戻る**: 削除も316章の
+ *   回転と同じく、実際に`lines`配列を書き換えるのは呼び出し元
+ *   （`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）の責務。呼び出し元は削除の
+ *   直前に削除前の`lines`全体を`preMoveLinesRef`（315章と同じ「1回だけ使える
+ *   巻き戻し」）へ保持してから1本を取り除くため、「ひとつ もどす」を押すと
+ *   削除前の配列がそのまま（重なり順ごと）復元される。新しい巻き戻しの仕組みは
+ *   増やしていない。
+ * - **削除後は選択が外れる**: `deleteSelected`の中で`selectedIndex`・
+ *   `rotateBaseRef`を即座にnullへ戻す。呼び出し元の「これをけす」ボタンは
+ *   `onSelectionChange(false)`（既存の316章の仕組みがそのまま発火する）を受けて
+ *   「ぜんぶけす」表示へ自動的に戻る。
  */
 const MOVE_HIT_EXTRA_TOLERANCE_PX = 16;
 /** [2026-09-27追加・316章] ↻を1回押すたびに回す角度（統括決定「15度ずつ」）。 */
@@ -322,6 +344,16 @@ interface DrawingCanvasProps {
    * 一切影響しない。
    */
   onSelectionChange?: (hasSelection: boolean) => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * ✋で選択中の線を削除する（`DrawingCanvasHandle.deleteSelected`、下記ref経由）
+   * ときに呼ばれる。`index`は削除対象の`lines`配列内での位置。このファイルは
+   * `lines`配列そのものを持たない（親からpropsで受け取るだけ）ため、実際に
+   * `lines`から取り除く処理（`removeLineAtIndex`、`src/lib/drawingLineMove.ts`）は
+   * 呼び出し元（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）が行う。このpropを
+   * 渡さない呼び出し元には一切影響しない。
+   */
+  onDeleteSelected?: (index: number) => void;
 }
 
 /**
@@ -333,6 +365,25 @@ interface DrawingCanvasProps {
 export interface DrawingCanvasHandle {
   /** ✋で選択中の線を15度（時計回り）回す。何も選択していなければ何もしない。 */
   rotateSelected: () => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+   * ✋で選択中の線を削除する。何も選択していなければ何もしない。選択状態
+   * （`selectedIndex`・`rotateBaseRef`）はこの中で即座に外し、`onDeleteSelected`で
+   * 削除対象のindexだけを親へ伝える（実際に`lines`から取り除くのは親の責務、
+   * `rotateSelected`が`onLineMove`で親に書き換えを委ねるのと同じ考え方）。
+   */
+  deleteSelected: () => void;
+  /**
+   * [2026-09-29追加・実装メモ.md 326.6章対応、本部長差し戻し反映]
+   * ✋で選択中の状態を外部から強制的に外す（`selectedIndex`・`rotateBaseRef`を
+   * nullへ戻すだけ、`deleteSelected`と違い`onDeleteSelected`は呼ばない＝何も
+   * 削除しない）。呼び出し元（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）が、
+   * 絵を読み込む・切り替える・保存する・ぜんぶけすの直前に呼ぶことで、「別の絵の
+   * 同じ番号の線が選ばれたまま」（326.6章で見送っていた不具合）を防ぐ。
+   * 何も選択していなければ何もしない（`setSelectedIndex(null)`は同じ値への
+   * 再設定になり無害、`rotateBaseRef.current = null`も同様）。
+   */
+  clearSelection: () => void;
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(function DrawingCanvas({
@@ -350,6 +401,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   filled = false,
   onLineMove,
   onSelectionChange,
+  onDeleteSelected,
 }: DrawingCanvasProps,
 ref) {
   const [livePoints, setLivePoints] = useState<number[]>([]);
@@ -458,6 +510,9 @@ ref) {
   // [2026-09-27追加・316章] onLineMoveRef等と同じ理由で最新のonSelectionChangeをrefで参照する。
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
+  // [2026-09-29追加・326章] onLineMoveRef等と同じ理由で最新のonDeleteSelectedをrefで参照する。
+  const onDeleteSelectedRef = useRef(onDeleteSelected);
+  onDeleteSelectedRef.current = onDeleteSelected;
   // [2026-09-27追加・316章] 選択の有無が変わるたびに親へ通知する（依頼文「選んでいる間だけ
   // ↻ボタンを出す」。`ZoomableDrawingCanvas.tsx`が拡大・パンの影響を受けない位置に
   // ボタンを描くため、このファイルの外で判断できるようにする）。
@@ -516,6 +571,25 @@ ref) {
         const rotated = rotateLinePoints(effectiveBase.basePoints, nextAngle);
         rotateBaseRef.current = { ...effectiveBase, angle: nextAngle };
         onLineMoveRef.current?.(effectiveBase.index, rotated);
+      },
+      /**
+       * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+       * ↻（`rotateSelected`）と同じく`ZoomableDrawingCanvas.tsx`経由で
+       * `DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`から呼ばれる。選択状態は
+       * ここで即座に外す（削除後にindexがずれた状態のまま選択が残るのを防ぐ。
+       * `rotateBaseRef`も同時に外す＝`rotateSelected`が「選択していた行そのものが
+       * 無くなっている」場合に行う後始末と同じ状態にする）。
+       */
+      deleteSelected: () => {
+        const idx = selectedIndexRef.current;
+        if (idx === null) return;
+        setSelectedIndex(null);
+        rotateBaseRef.current = null;
+        onDeleteSelectedRef.current?.(idx);
+      },
+      clearSelection: () => {
+        setSelectedIndex(null);
+        rotateBaseRef.current = null;
       },
     }),
     []

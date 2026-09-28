@@ -195,6 +195,33 @@ export function rotateLinePoints(points: readonly number[], angleDeg: number): n
  * [2026-09-27追記・316章] `rotateLinePoints`が`dx=dy=0`でこの関数を呼び、
  * 回転結果を0〜1000へ収める用途にも使っている（上記コメント参照）。
  */
+/**
+ * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
+ * 指定した位置(`index`)の線を1本取り除いた新しい配列を返す。`index`が範囲外
+ * （選択が外れた後に呼ばれる等、想定外の状況への保険）のときは何もせず、元の
+ * 内容のコピーをそのまま返す。`lines`配列の他の要素の並び順（重なり順）は
+ * 変えない。
+ *
+ * [「元の位置（重なり順も同じ）に戻る」はこの関数の責務ではない] この関数は
+ * 「1本を取り除く」ことにだけ責任を持つ副作用の無い純粋関数。削除前の状態へ
+ * 一括で戻す（依頼文「消したあとに『ひとつ戻す』を押すと、元の位置に戻る」）
+ * 役目は、315章の`preMoveLinesRef`（「1回だけ使える巻き戻し」パターン、
+ * `DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）が既に担っている。削除の直前に
+ * 削除前の`lines`をまるごと1回だけ保持しておけば、「ひとつ もどす」の既存ロジックが
+ * そのまま復元してくれる（`findLineIndexAtPoint`等と同じく、UIに依存しない
+ * 判定・変形だけをこのファイルへ切り出す方針を踏襲した）。
+ *
+ * ジェネリックにしているのは、このファイルがドメイン型（`FamilyDrawingLine`）に
+ * 依存しない既存の方針（ファイル冒頭コメント「UIにもDrawingCanvas.tsxにも
+ * 依存しない形に切り出し」）を保つため。
+ */
+export function removeLineAtIndex<T>(lines: readonly T[], index: number): T[] {
+  if (!Number.isInteger(index) || index < 0 || index >= lines.length) return [...lines];
+  const out = lines.slice();
+  out.splice(index, 1);
+  return out;
+}
+
 export function translateLinePoints(points: readonly number[], dx: number, dy: number): number[] {
   // [2026-09-27修正・本部長レビュー] 点ごとに0〜1000へ寄せると、端まで動かしたときに
   // はみ出た点だけがつぶれて形が変わる（丸が平たくなる）。形ごと端で止まるよう、

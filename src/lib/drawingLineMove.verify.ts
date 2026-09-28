@@ -9,7 +9,13 @@
  *   npx tsc --noEmit --allowImportingTsExtensions src/lib/drawingLineMove.verify.ts
  * で個別に確認できる。
  */
-import { findLineIndexAtPoint, translateLinePoints, rotateLinePoints, type HitTestLine } from "./drawingLineMove.ts";
+import {
+  findLineIndexAtPoint,
+  translateLinePoints,
+  rotateLinePoints,
+  removeLineAtIndex,
+  type HitTestLine,
+} from "./drawingLineMove.ts";
 
 let failed = 0;
 
@@ -150,6 +156,32 @@ function assert(label: string, condition: boolean): void {
 // ---- 12. rotateLinePoints: 点が1つだけ（2要素）の退化データはそのまま返す ----
 {
   assertEqual("点が1つだけの線は回しても変わらない", rotateLinePoints([300, 400], 45), [300, 400]);
+}
+
+// ---- 13. removeLineAtIndex: 指定した位置の1本だけ取り除く、他の並び順は変えない ----
+{
+  assertEqual(
+    "真ん中の要素を取り除くと、残りは元の順序のまま詰まる",
+    removeLineAtIndex(["a", "b", "c"], 1),
+    ["a", "c"]
+  );
+  assertEqual("先頭を取り除く", removeLineAtIndex(["a", "b", "c"], 0), ["b", "c"]);
+  assertEqual("末尾を取り除く", removeLineAtIndex(["a", "b", "c"], 2), ["a", "b"]);
+}
+
+// ---- 14. removeLineAtIndex: 範囲外のindexは何もしない（元の内容のコピーを返す） ----
+{
+  assertEqual("負のindexは変更しない", removeLineAtIndex(["a", "b"], -1), ["a", "b"]);
+  assertEqual("配列長と同じindex（範囲外）は変更しない", removeLineAtIndex(["a", "b"], 2), ["a", "b"]);
+  assertEqual("空配列にindex 0を渡しても変更しない", removeLineAtIndex([], 0), []);
+  assertEqual("整数でないindexは変更しない", removeLineAtIndex(["a", "b"], 1.5), ["a", "b"]);
+}
+
+// ---- 15. removeLineAtIndex: 元の配列は書き換えない（副作用が無い） ----
+{
+  const original = ["a", "b", "c"];
+  removeLineAtIndex(original, 1);
+  assertEqual("元の配列はそのまま", original, ["a", "b", "c"]);
 }
 
 console.log("");
