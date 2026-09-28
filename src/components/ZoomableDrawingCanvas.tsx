@@ -82,6 +82,15 @@ const ROTATE_BUTTON_LABEL: Record<Tone, string> = {
   supporter: "回す",
 };
 
+/**
+ * [2026-09-29追加・実装メモ.md 327章、本部長依頼・軽微変更ルート、統括承認済み]
+ * 🗑（選んだものを消す）ボタンのaccessibilityLabel。依頼文が「えらんだものを けす」
+ * という単一の表記を明示しており、↻の`ROTATE_BUTTON_LABEL`と違い3ロールで
+ * 書き分けない（子ども向けの平仮名表記がそのまま大人にも自然に読めるため）。
+ * 画面には記号（🗑️）のみを表示し、文字ラベルは出さない（↻と同じ扱い）。
+ */
+const DELETE_SELECTED_BUTTON_LABEL = "えらんだものを けす";
+
 interface ZoomableDrawingCanvasProps {
   tone: Tone;
   color: string;
@@ -168,36 +177,32 @@ interface ZoomableDrawingCanvasProps {
    * （`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）はこのコールバックの中で
    * `lines`配列から該当indexを取り除く（`removeLineAtIndex`、
    * `src/lib/drawingLineMove.ts`）。
+   *
+   * [2026-09-29変更・実装メモ.md 327章] 削除ボタン（🗑）自体は326章時点の
+   * 「呼び出し元のactionRow」からこのファイル内部（↻と対になる窓の左上）へ
+   * 移った。このpropの役割（削除indexを実際の`lines`配列操作へつなぐ）自体は
+   * 変わっていない。
    */
   onDeleteSelected?: (index: number) => void;
-  /**
-   * [2026-09-29追加・実装メモ.md 326章] ✋で選択中の線があるかどうかが変わる
-   * たびに呼ばれる。`DrawingCanvas`の`onSelectionChange`と同じ値をそのまま
-   * 橋渡しする（このファイル自身は↻ボタンの表示判定に`hasSelection`という
-   * 同じ値を内部でも使い続けるため、`setHasSelection`と併記して呼ぶ）。
-   * 呼び出し元はこの値で「ぜんぶけす」ボタンを「これをけす」に差し替えるか
-   * どうかを判断する。
-   */
-  onSelectionChange?: (hasSelection: boolean) => void;
 }
 
 /**
  * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート「これをけす」]
- * `forwardRef`で公開する命令的API。「これをけす」ボタンは`DrawingBoard.tsx`・
- * `AvatarDrawingPanel.tsx`のactionRow（このファイルの外）にあるため、実際に
- * 選択中の線を削除する処理（`DrawingCanvas.tsx`の`DrawingCanvasHandle.deleteSelected`）
- * を親から呼び出せるようにする。`rotateSelected`を↻ボタン（このファイルの中）が
- * 直接`canvasRef`経由で呼んでいるのとは違い、削除ボタンはこのファイルの外にあるため、
- * このファイル自身もforwardRefで1段中継する。
+ * `forwardRef`で公開する命令的API。
+ *
+ * [2026-09-29変更・実装メモ.md 327章] 削除ボタン（🗑）が呼び出し元の
+ * actionRowからこのファイル内部（窓の左上、↻と対称）へ移ったため、
+ * `deleteSelected`（326章で追加した中継メソッド）は使う側が無くなり削除した。
+ * 今このファイルが呼び出し元へ公開している命令的APIは`clearSelection`のみ
+ * （絵を読み込む・切り替える・保存する・ぜんぶけすの直前に、選択状態を
+ * 強制的に外すために`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`が呼ぶ、
+ * 326.6章対応）。
  */
 export interface ZoomableDrawingCanvasHandle {
-  /** ✋で選択中の線を削除する。何も選択していなければ何もしない。 */
-  deleteSelected: () => void;
   /**
-   * [2026-09-29追加・実装メモ.md 326.6章対応、本部長差し戻し反映] ✋で選択中の
-   * 状態を外部から強制的に外す（`DrawingCanvasHandle.clearSelection`への中継のみ）。
-   * 呼び出し元（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）が、絵を読み込む・
-   * 切り替える・保存する・ぜんぶけすの直前に呼ぶ。
+   * ✋で選択中の状態を外部から強制的に外す（`DrawingCanvasHandle.clearSelection`
+   * への中継のみ）。呼び出し元が、絵を読み込む・切り替える・保存する・
+   * ぜんぶけすの直前に呼ぶ。
    */
   clearSelection: () => void;
 }
@@ -221,7 +226,6 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
       filled = false,
       onLineMove,
       onDeleteSelected,
-      onSelectionChange,
     }: ZoomableDrawingCanvasProps,
     ref
   ) {
@@ -245,28 +249,15 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
   const canvasRef = useRef<DrawingCanvasHandle>(null);
   const [hasSelection, setHasSelection] = useState(false);
   /**
-   * [2026-09-29追加・実装メモ.md 326章]「選択の有無」は元々↻ボタンの表示判定
-   * （内部の`hasSelection`）にしか使っていなかったが、「これをけす」ボタン
-   * （呼び出し元のactionRow）の判断にも同じ値が要る。`setHasSelection`
-   * （内部用）と`onSelectionChange`（親への橋渡し）の両方を呼ぶだけで、
-   * 「選択の決め方」自体は316章から一切変えていない。
-   */
-  const handleSelectionChange = (next: boolean) => {
-    setHasSelection(next);
-    onSelectionChange?.(next);
-  };
-  /**
-   * [2026-09-29追加・実装メモ.md 326章] 「これをけす」ボタン（`DrawingBoard.tsx`・
-   * `AvatarDrawingPanel.tsx`のactionRow）から`ref`経由で呼ばれる。↻ボタンが
-   * `canvasRef.current?.rotateSelected()`を直接呼ぶのと同じ考え方で、この
-   * ファイルは`DrawingCanvasHandle.deleteSelected`への中継だけを行う。
+   * [2026-09-29変更・実装メモ.md 327章] 326章では`onSelectionChange`で親へも
+   * 橋渡ししていたが、削除ボタン（🗑）がこのファイル内部（↻と同じ窓の隅）へ
+   * 移り、親（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）は選択の有無を
+   * 知る必要が無くなったため、橋渡しをやめて元の（316章時点の）単純な
+   * `setHasSelection`に戻した。「選択の決め方」自体は316章から一切変えていない。
    */
   useImperativeHandle(
     ref,
     () => ({
-      deleteSelected: () => {
-        canvasRef.current?.deleteSelected();
-      },
       clearSelection: () => {
         canvasRef.current?.clearSelection();
       },
@@ -437,7 +428,7 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
               tool={tool}
               filled={filled}
               onLineMove={onLineMove}
-              onSelectionChange={handleSelectionChange}
+              onSelectionChange={setHasSelection}
               onDeleteSelected={onDeleteSelected}
             />
           </View>
@@ -459,6 +450,26 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
             style={[styles.rotateButton, disabled && styles.rotateButtonDisabled]}
           >
             <Text style={styles.rotateButtonSymbol}>↻</Text>
+          </Pressable>
+        )}
+
+        {/* [2026-09-29追加・実装メモ.md 327章、本部長依頼・軽微変更ルート、統括承認済み]
+            🗑（選んだものを消す）ボタン。統括の実機報告「『これをけす』はボタンが
+            下にあって遠い」を受け、↻ボタンと左右対称（窓の左上）に置く。同じ大きさ・
+            同じ丸い見た目（`rotateButton`と共通のstyleを再利用し、位置とborderColorだけ
+            差し替える）。押すと選択中の線を1本削除する（`DrawingCanvas.tsx`の
+            `deleteSelected`を`ref`経由で呼ぶだけ。↻の`rotateSelected`呼び出しと
+            全く同じ役割分担）。 */}
+        {tool === "move" && hasSelection && (
+          <Pressable
+            onPress={() => canvasRef.current?.deleteSelected()}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={DELETE_SELECTED_BUTTON_LABEL}
+            hitSlop={8}
+            style={[styles.deleteSelectedButton, disabled && styles.rotateButtonDisabled]}
+          >
+            <Text style={styles.deleteSelectedButtonSymbol}>🗑️</Text>
           </Pressable>
         )}
       </View>
@@ -520,6 +531,30 @@ const styles = StyleSheet.create({
     fontSize: 26,
     lineHeight: 30,
     color: theme.colors.brandPrimaryStrong,
+  },
+  // [2026-09-29追加・実装メモ.md 327章] 🗑（選んだものを消す）ボタン。`rotateButton`と
+  // 同じ大きさ・同じ丸い見た目で、`right:0`を`left:0`に変えただけの左右対称配置。
+  // 縁の色だけ既存のdangerトークン（`AppButton.tsx`の`variant="danger"`と同じ
+  // `theme.colors.statusBlocking`）にして「消す操作」と分かるようにする。
+  deleteSelectedButton: {
+    position: "absolute",
+    top: theme.spacing.s4,
+    left: 0,
+    width: theme.drawingLimits.swatchSize,
+    height: theme.drawingLimits.swatchSize,
+    borderRadius: theme.drawingLimits.swatchSize / 2,
+    borderWidth: 2,
+    borderColor: theme.colors.statusBlocking,
+    backgroundColor: theme.colors.neutralSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    elevation: 10,
+  },
+  deleteSelectedButtonSymbol: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: theme.colors.statusBlocking,
   },
   // [2026-09-18追加・52.5節決定4] 新しい視覚要素は増やさない。`DrawingBoard.tsx`の
   // treeMiniatureText・sectionHintと同じ扱い（captionStyle相当・neutralTextSecondary・
