@@ -120,6 +120,11 @@ interface PushSoftAskContextValue {
   openManually: () => void;
 }
 
+/** 通知タップの保留を「もう解決しない」と判断してよい、ログイン済みのロールか。 */
+function isSignedInRole(status: SessionStatus): boolean {
+  return status === "parent" || status === "supporter" || status === "child";
+}
+
 const PushSoftAskContext = createContext<PushSoftAskContextValue | null>(null);
 
 /** ソフトアスクの対象ロールか（要件定義書07-37章3章・6-2節。子どもは対象外）。 */
@@ -240,6 +245,12 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
       if (route) {
         pendingRouteResolverRef.current = null;
         router.push(route as import("expo-router").Href);
+      } else if (isSignedInRole(statusRef.current)) {
+        // [2026-09-30・本部長レビュー、実装メモ335章] ログイン済みのロールで行き先が無い
+        // （例: 子ども向けの「おねがい」通知を保護者が押した）ときは、ここで諦める。
+        // 保留したままにすると、あとで別の人（子ども）がPINでログインした瞬間に、
+        // 押した覚えのない画面へ飛ばされるため。
+        pendingRouteResolverRef.current = null;
       }
     };
 
@@ -271,7 +282,11 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
     statusRef.current = status;
     if (!pendingRouteResolverRef.current) return;
     const route = pendingRouteResolverRef.current(status);
-    if (!route) return;
+    if (!route) {
+      // 上のhandleResponseと同じ理由。ログイン済みのロールで行き先が無ければ保留をやめる。
+      if (isSignedInRole(status)) pendingRouteResolverRef.current = null;
+      return;
+    }
     pendingRouteResolverRef.current = null;
     router.push(route as import("expo-router").Href);
   }, [status]);

@@ -18,6 +18,7 @@ import {
 } from "@/lib/cancelChoreCompletion";
 import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
+import { isHiddenRequestChore } from "@/lib/requestChore";
 import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 
 /**
@@ -87,6 +88,9 @@ export default function ParentMyChoresScreen() {
       // 直したがこの画面が漏れていた。ここは家族共有（family）のみを対象にする。
       c.scope === "family" &&
       (c.assigned_to === null || c.assigned_to === me?.id) &&
+      // [2026-09-30・本部長レビュー、実装メモ335章] 担当が外れた「おねがい」は、
+      // assigned_to が NULL になり上の条件を通ってしまう。子どものホームと同じく隠す。
+      !isHiddenRequestChore(c) &&
       !isOneOffFinished(c)
   );
 
