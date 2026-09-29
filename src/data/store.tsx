@@ -260,8 +260,10 @@ export interface DataContextValue {
   dispatch: (action: Action) => Promise<DispatchResult>;
   memberPoints: MemberPoints[];
   isChoreLimitReached: (chore: Chore, memberId: string) => boolean;
-  /** 単発（is_repeatable=false）のお手伝いが実施済みで役目を終えているか。isOneOffFinishedFor参照。 */
-  isOneOffFinished: (chore: Chore) => boolean;
+  // [2026-09-29削除・やること.md 4-58、API仕様.md 18.1節、実装メモ.md 330章]
+  // `isOneOffFinished`（単発クエストの完了判定）はここから外した。`state.completions`の全件
+  // 探索は1,000件超で古い記録が欠けると壊れるため、`useChoreCompletionTotals()`
+  // （src/hooks/useChoreCompletionTotals.ts）がDB側の集計`chore_completion_totals`で判定する。
   earnLedger: (memberId: string) => LedgerEntry[];
   spendLedger: (memberId: string) => LedgerEntry[];
   fullLedger: (memberId: string) => LedgerEntry[];
@@ -358,19 +360,23 @@ export function useAppData(): DataContextValue {
 // ============================================================
 
 /**
- * [2026-08-27追加・本部長] 「単発」（is_repeatable=false）のお手伝いが、誰かに1回実施された
- * ことで役目を終えているかどうか。
+ * [2026-08-27追加・本部長／2026-09-29改訂・やること.md 4-58] 「単発」（is_repeatable=false）の
+ * お手伝いが、すでに1回以上実施されているか（端末が今持っている完了報告だけを見る）。
  *
- * 単発のchoreには「終わり」という状態が無く、実施後も is_active=true のまま一覧に残り続けて
- * いた（本番でも4件すべてが完了済みのまま最長12日間並んでいた）。ユーザーから
- * 「単発が同じ感じで残り続けるので見にくい」との指摘を受けて追加した判定。
+ * ここは`isChoreLimitReachedFor`（1日の上限の事前判定）の単発の枝でだけ使う。
+ * 一覧から実施済みの単発を外す判定は、以前はこの関数（旧名`isOneOffFinishedFor`、
+ * `state.completions`の全件探索）が担っていたが、家族の完了報告が1,000件を超えて
+ * 古い記録が欠けると、完了済みの単発が一覧に再登場してもう一度実行できてしまう
+ * ため、DB側の集計`chore_completion_totals`で判定する形に移した
+ * （`src/lib/oneOffFinished.ts`・`src/hooks/useChoreCompletionTotals.ts`。
+ * スキーマ設計.sql 58.5章、API仕様.md 18.1節、実装メモ.md 330章）。
  *
- * DBは変更していない。chore_completionsは追記専用ログなので、この判定は「完了記録が1件でも
- * あるか」だけで決まり、記録を消さない限り勝手に元へ戻ることはない。
- * なお state.completions は期間で絞らず全件取得している（api.fetchCompletionsをsinceIso無しで
- * 呼んでいる）ため、何日前に完了したものでも正しく判定できる。
+ * この関数は事前判定（UXのための先回り）にすぎず、最終防衛線はDB側の
+ * `chore_completions_before_insert`トリガー（「すでに完了報告済みです」）である。
+ * `load()`初回取得の内部ページング（実装メモ330章）により`state.completions`は
+ * 1,000件を超えても欠けない（上限2万件）。
  */
-function isOneOffFinishedFor(completions: ChoreCompletion[], chore: Chore): boolean {
+function hasCompletionFor(completions: ChoreCompletion[], chore: Chore): boolean {
   if (chore.is_repeatable) return false;
   return completions.some((c) => c.chore_id === chore.id);
 }
@@ -380,7 +386,7 @@ function isChoreLimitReachedFor(completions: ChoreCompletion[], chore: Chore, me
   // （API仕様.md 3章「クライアントは上限超過時に返るエラーをハンドリングするだけでよい」）。
   // 最終防衛線はDB側であり、この関数はUXのための事前判定に過ぎない。
   if (!chore.is_repeatable) {
-    return isOneOffFinishedFor(completions, chore);
+    return hasCompletionFor(completions, chore);
   }
   if (chore.daily_limit == null) return false;
   const today = new Date().toDateString();
@@ -399,9 +405,10 @@ function isChoreLimitReachedFor(completions: ChoreCompletion[], chore: Chore, me
  * 以下の理由でどれも「古い記録を捨ててはいけない」依存先を持つ:
  * - 通帳（`app/parent/points.tsx`等の`fullLedger`が呼ぶ`buildLedgers().earnLedger`）は
  *   ページングも期間指定も無く、state.completionsの中身をそのまま全件表示する。
- * - `isOneOffFinishedFor`（このファイル222行目）は「単発クエストが過去に一度でも
- *   実施されたか」を判定するため、何日前の記録であっても消えてはならない
- *   （コメント〔217〜220行目〕のとおり）。
+ * - `hasCompletionFor`（旧`isOneOffFinishedFor`。このファイルの`isChoreLimitReachedFor`が
+ *   使う）は「単発クエストが過去に一度でも実施されたか」を判定するため、何日前の
+ *   記録であっても消えてはならない。一覧から実施済みの単発を外す判定のほうは
+ *   2026-09-29にDB側の集計へ移した（実装メモ330章）。
  * - `InboxPanel.tsx`の`myCompletions`（自分の完了報告へのリアクション検出）・
  *   各ロールの履歴画面（child・parent・supporter配下のhistory.tsx）の
  *   「選択した日の詳細一覧」も、
@@ -683,6 +690,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // 一括取得してキャッシュし、dailySummary()はこのキャッシュを同期フィルタする
     // （既存画面のdailySummary()呼び出しが同期関数である前提を崩さないための設計判断。
     // 実装メモ.md参照。データ量の多い実運用では期間ごとの都度フェッチへの見直しが必要）。
+    // [2026-09-29追記・やること.md 4-58、実装メモ330章] この400日窓の日別集計は、メンバー数×
+    // 日数で1,000行を超えうる（7人なら最大2,800行）ため、`api.fetchDailySummary`が総件数を
+    // 見て`.range()`で分けて取る（1,000行以内なら1リクエストのまま）。報告後・取消後の
+    // 再取得も同じ関数を使う。
     const windowStart = (() => {
       const d = new Date();
       d.setDate(d.getDate() - 400);
@@ -706,8 +717,13 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     //     trueになるまで発火しないため、background=trueのload()は必ず初回成功後）
     //     はstate.completionsが空であり、ここで絞ると絞った分より古い履歴が
     //     二度と手に入らなくなる。初回は必ず全件のまま。
+    //     [2026-09-29追記・やること.md 4-58、実装メモ330章] 「全件」はPostgRESTの
+    //     `max_rows`（1,000）で黙って切られていたため、`sinceIso`を渡さない呼び出し
+    //     （この初回）だけ、`api.fetchCompletions`が内部で総件数を見て`.range()`で
+    //     ページ分けして全件をそろえる（上限20ページ＝2万件。`src/lib/completionPaging.ts`）。
+    //     `sinceIso`つきの呼び出し（背景更新・報告後・取消後）は従来どおり1回で取る。
     // (3) 通帳（`app/parent/points.tsx`等の`fullLedger`）はページング無しでstate.
-    //     completionsを全件表示し、`isOneOffFinishedFor`（222行目）は単発クエストの
+    //     completionsを全件表示し、`hasCompletionFor`（旧`isOneOffFinishedFor`）は単発クエストの
     //     完了判定に全履歴を要る。この2つの依存先は変わらず「無期限の履歴」を
     //     要求するため、絞った窓で置き換えることは今後もしない。
     //
@@ -756,12 +772,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       api.fetchFamilyDrawingReactionsLog(client, familyId),
       api.fetchFamilyDrawingCommentsLog(client, familyId),
       api.fetchFamilyPublishedDrawings(client, familyId),
-      client
-        .from("chore_completion_daily_summary")
-        .select("*")
-        .eq("family_id", familyId)
-        .gte("activity_date", windowStart)
-        .lte("activity_date", today),
+      api.fetchDailySummary(client, familyId, windowStart, today),
       api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
       // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] 自分が
       // 非表示にしている相手の一覧。RLSが自分の行のみ返すため familyId 不要
@@ -820,7 +831,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       fail(publishedDrawingsRes.error.message);
       return;
     }
-    if (dailySummaryRes.error) {
+    if (!dailySummaryRes.ok) {
       fail(dailySummaryRes.error.message);
       return;
     }
@@ -892,7 +903,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       scheduledAnnouncements: scheduledAnnouncementsRes.data,
     });
     setMemberPoints(memberPointsRes.data);
-    setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
+    setDailySummaryRows(dailySummaryRes.data);
     if (!background) setLoading(false);
     setLoadedOnce(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1097,15 +1108,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       api.fetchCompletions(client, familyId, recentWindowStartIso),
       api.fetchReactions(client, familyId),
       api.fetchMemberPoints(client, familyId),
-      client
-        .from("chore_completion_daily_summary")
-        .select("*")
-        .eq("family_id", familyId)
-        .gte("activity_date", windowStart)
-        .lte("activity_date", today),
+      api.fetchDailySummary(client, familyId, windowStart, today),
     ]);
 
-    if (!completionsRes.ok || !reactionsRes.ok || !memberPointsRes.ok || dailySummaryRes.error) {
+    if (!completionsRes.ok || !reactionsRes.ok || !memberPointsRes.ok || !dailySummaryRes.ok) {
       await load();
       return;
     }
@@ -1128,7 +1134,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       };
     });
     setMemberPoints(memberPointsRes.data);
-    setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
+    setDailySummaryRows(dailySummaryRes.data);
   }, [familyId, session.client, load]);
 
   /**
@@ -1201,15 +1207,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     const [completionsRes, memberPointsRes, dailySummaryRes] = await Promise.all([
       api.fetchCompletions(client, familyId, recentWindowStartIso),
       api.fetchMemberPoints(client, familyId),
-      client
-        .from("chore_completion_daily_summary")
-        .select("*")
-        .eq("family_id", familyId)
-        .gte("activity_date", windowStart)
-        .lte("activity_date", today),
+      api.fetchDailySummary(client, familyId, windowStart, today),
     ]);
 
-    if (!completionsRes.ok || !memberPointsRes.ok || dailySummaryRes.error) {
+    if (!completionsRes.ok || !memberPointsRes.ok || !dailySummaryRes.ok) {
       await load();
       return;
     }
@@ -1222,7 +1223,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return { ...prev, completions: blankHiddenNoteById(mergedCompletions, "chore_completion_note", hiddenKeys) };
     });
     setMemberPoints(memberPointsRes.data);
-    setDailySummaryRows((dailySummaryRes.data ?? []) as DailySummaryEntry[]);
+    setDailySummaryRows(dailySummaryRes.data);
   }, [familyId, session.client, load]);
 
   /**
@@ -1557,7 +1558,6 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       dispatch,
       memberPoints,
       isChoreLimitReached: (chore, memberId) => isChoreLimitReachedFor(state.completions, chore, memberId),
-      isOneOffFinished: (chore) => isOneOffFinishedFor(state.completions, chore),
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>
@@ -1978,7 +1978,6 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       dispatch,
       memberPoints: computeMemberPoints(state),
       isChoreLimitReached: (chore, memberId) => isChoreLimitReachedFor(state.completions, chore, memberId),
-      isOneOffFinished: (chore) => isOneOffFinishedFor(state.completions, chore),
       ...ledgers,
       findChoreByTag,
       hasReactedWithStamp: (completionId, reactedBy, stampKey) =>

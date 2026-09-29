@@ -25,11 +25,12 @@ import {
  * ユーザーの指摘「単発が同じ感じで残り続けるので見にくい」への対応。
  * 単発のchoreには「終わり」という状態が無く、実施後も is_active=true のまま繰り返し系と
  * 同じ見た目で並び続けていた（本番でも単発4件すべてが完了済みのまま、最長12日間残っていた）。
- * 判定は src/data/store.tsx の isOneOffFinished に集約し、子どもホームと同じ基準を使う。
+ * 判定は useChoreCompletionTotals() の isOneOffFinished（DB側の集計 chore_completion_totals に
+ * 基づく。src/lib/oneOffFinished.ts）に集約し、子どもホームと同じ基準を使う。
  * DBは変更していないので、記録を消さない限りこの状態が勝手に戻ることはない。
  */
 export default function ChoresListScreen() {
-  const { state, isOneOffFinished } = useAppData();
+  const { state } = useAppData();
   const [finishedOpen, setFinishedOpen] = useState(false);
   // [2026-09-11削除・要件定義書07-26章決定5／主要画面ワイヤーフレーム.md 39.0節]
   // 「かぞくが登録」の折りたたみ（othersOpen、07-20章決定2）はP10については役目を
@@ -54,7 +55,12 @@ export default function ChoresListScreen() {
   // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
   // （56.4章決定56-6、N+1にしない）。この画面はマウント時の取得のみでよい
   // （P10自体は完了報告・取消を行わない画面のため）。
-  const { loadState: totalsLoadState, lookup: totalsLookup, entries: totalsEntries } = useChoreCompletionTotals();
+  const {
+    loadState: totalsLoadState,
+    lookup: totalsLookup,
+    entries: totalsEntries,
+    isOneOffFinished,
+  } = useChoreCompletionTotals();
   // [2026-09-20追加・要件定義書07-31章決定1、主要画面ワイヤーフレーム.md 53.11.9節5]
   // 担当「誰でも実行可」の行向け、chore_id単位の家族合計。totalsEntries（既存の
   // 家族ぶん取得）をクライアント側で合算するだけで、新しい問い合わせは発生しない。

@@ -46,8 +46,19 @@ import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useCh
  * よってもDB側で担保される。
  */
 export default function SupporterMyChoresScreen() {
-  const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
+  const { state, isChoreLimitReached, dispatch } = useAppData();
   const me = state.members.find((m) => m.id === state.activeParentMemberId);
+
+  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.3節]
+  // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
+  // （56.4章決定56-6、N+1にしない）。「かぞくのほかのみまもりメンバーの
+  // クエスト」（othersChores）には出さない（53.2.3節決定4）。
+  const {
+    loadState: totalsLoadState,
+    lookup: totalsLookup,
+    isOneOffFinished,
+    reload: reloadCompletionTotals,
+  } = useChoreCompletionTotals();
   // [2026-08-27修正・本部長] 実施済みの「単発」は除く（app/child/(tabs)/home.tsxと同じ理由）。
   // 自分の分も他の人の分も、役目を終えた単発は一覧から外す。
   // [2026-09-06改訂・07-18章] 'personal'（既存分）に加え'supporter_shared'（新規分）も
@@ -64,16 +75,6 @@ export default function SupporterMyChoresScreen() {
     return acc;
   }, {});
   const creatorOf = (id: string) => state.members.find((m) => m.id === id);
-
-  // [2026-09-19追加・やること.md 4-55、主要画面ワイヤーフレーム.md 53.2.3節]
-  // クエストごとの「これまで何回やったか」。家族ぶんをまとめて1回で取得する
-  // （56.4章決定56-6、N+1にしない）。「かぞくのほかのみまもりメンバーの
-  // クエスト」（othersChores）には出さない（53.2.3節決定4）。
-  const {
-    loadState: totalsLoadState,
-    lookup: totalsLookup,
-    reload: reloadCompletionTotals,
-  } = useChoreCompletionTotals();
 
   // [2026-09-06追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.11節・28.11.2節「さっきの記録」。決定9のとおり

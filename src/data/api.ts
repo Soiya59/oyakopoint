@@ -19,12 +19,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
+import {
+  COMPLETIONS_MAX_PAGES,
+  COMPLETIONS_PAGE_SIZE,
+  mergeCompletionPages,
+  planRemainingPages,
+  resolvePageSize,
+} from "@/lib/completionPaging";
 import type {
   AccountDeletionPreview,
   Category,
   Chore,
   ChoreCompletion,
   ChoreCompletionTotalEntry,
+  DailySummaryEntry,
   ChoreNfcTag,
   ChoreNfcTagWithMember,
   ChoreReaction,
@@ -1032,21 +1040,130 @@ export async function updateFamilyName(
  * API仕様.md 6章「獲得履歴」・6a章「日別実績」に対応。実施履歴カレンダー・通帳の両方が
  * 同じ完了報告一覧を参照するため、ここでまとめて取得する（chore_reactionsもネストする）。
  * `sinceIso` を指定すると reported_at >= sinceIso のみに絞る（無指定なら全件）。
+ *
+ * [2026-09-29追加・やること.md 4-58、スキーマ設計.sql 58.6章決定58-4・58-6、API仕様.md
+ * 18.1節、実装メモ.md 330章] `sinceIso`無し（＝`load()`の初回取得）のときだけ、
+ * PostgRESTの`max_rows`（1,000）で黙って切られないよう、`count: 'exact'`つきの最初の
+ * 1ページで総件数を見てから、残りを`.range()`で分けて`Promise.all`で並列に取る
+ * （上限20ページ＝2万件。超える分は古い側を取らない）。`sinceIso`つき（背景更新・
+ * 報告後・取消後の直近3日の取り直し、254章）は従来どおり1回で取る。
+ * 暫定策であり、通帳のDB側ページング（API仕様.md 18.2節、一般公開後）が入れば不要になる。
  */
 export async function fetchCompletions(
   client: SupabaseClient,
   familyId: string,
   sinceIso?: string
 ): Promise<ApiResult<ChoreCompletion[]>> {
-  let query = client
-    .from("chore_completions")
-    .select("*")
-    .eq("family_id", familyId)
-    .order("reported_at", { ascending: false });
-  if (sinceIso) query = query.gte("reported_at", sinceIso);
-  const { data, error } = await query;
-  if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: (data ?? []) as ChoreCompletion[] };
+  if (sinceIso) {
+    const { data, error } = await client
+      .from("chore_completions")
+      .select("*")
+      .eq("family_id", familyId)
+      .gte("reported_at", sinceIso)
+      .order("reported_at", { ascending: false });
+    if (error) return { ok: false, error: fromPostgrestError(error) };
+    return { ok: true, data: (data ?? []) as ChoreCompletion[] };
+  }
+
+  // ページの境目で並びが揺れないよう、reported_at降順に加えてidでも順序を固定する。
+  return fetchAllPages<ChoreCompletion>((from, to, withCount) =>
+    client
+      .from("chore_completions")
+      .select("*", withCount ? { count: "exact" } : undefined)
+      .eq("family_id", familyId)
+      .order("reported_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to)
+  );
+}
+
+/**
+ * [2026-09-29追加・やること.md 4-58、実装メモ.md 330章] 範囲指定（`.range()`）つきの問い合わせを
+ * 総件数（`count: 'exact'`）に従って複数ページに分けて取り、全行をそろえる共通処理。
+ * `fetchCompletions`（初回）と`fetchDailySummary`が使う。1ページで足りるとき（総件数が
+ * ページ幅以下）は、最初の1回だけで終わる（追加のリクエストを出さない）。
+ *
+ * `pageQuery(from, to, withCount)`は、`from`〜`to`（両端含む）の行を、決まった順序で返す
+ * 問い合わせを作る。`withCount`が真のときだけ`count: 'exact'`を付ける（最初の1回のみ）。
+ * 上限（`COMPLETIONS_MAX_PAGES`ページ）を超える分は、並びの先頭側だけを取る。
+ */
+async function fetchAllPages<T>(
+  pageQuery: (
+    from: number,
+    to: number,
+    withCount: boolean
+  ) => PromiseLike<{ data: unknown[] | null; error: { code?: string | null; message?: string } | null; count: number | null }>,
+  rowKey?: (row: T) => string
+): Promise<ApiResult<T[]>> {
+  const keyOf = rowKey ?? ((row: T) => (row as unknown as { id: string }).id);
+  const first = await pageQuery(0, COMPLETIONS_PAGE_SIZE - 1, true);
+  if (first.error) return { ok: false, error: fromPostgrestError(first.error) };
+  const firstRows = (first.data ?? []) as T[];
+
+  const total = first.count;
+  if (total === null || total === undefined) {
+    // 総件数が取れなかった（通常は起きない）。1ページ満たなければそれで全件。満たして
+    // いれば、まだあるかもしれないので、短いページが返る（または上限に達する）まで順に取る。
+    const pages: T[][] = [firstRows];
+    const size = firstRows.length;
+    let last = firstRows;
+    while (size >= COMPLETIONS_PAGE_SIZE && last.length === size && pages.length < COMPLETIONS_MAX_PAGES) {
+      const from = pages.length * size;
+      const next = await pageQuery(from, from + size - 1, false);
+      if (next.error) return { ok: false, error: fromPostgrestError(next.error) };
+      last = (next.data ?? []) as T[];
+      pages.push(last);
+    }
+    return { ok: true, data: mergeCompletionPages(pages, keyOf) };
+  }
+
+  const pageSize = resolvePageSize(COMPLETIONS_PAGE_SIZE, firstRows.length, total);
+  const plan = planRemainingPages(total, pageSize, COMPLETIONS_MAX_PAGES);
+  if (plan.truncated) {
+    console.warn(
+      `[fetchAllPages] 総件数が${total}件あり、上限（${COMPLETIONS_MAX_PAGES}ページ）を超えるため先頭側だけを読み込みました`
+    );
+  }
+  if (plan.ranges.length === 0) return { ok: true, data: firstRows };
+
+  const rest = await Promise.all(plan.ranges.map((r) => pageQuery(r.from, r.to, false)));
+  const pages: T[][] = [firstRows];
+  for (const page of rest) {
+    if (page.error) return { ok: false, error: fromPostgrestError(page.error) };
+    pages.push((page.data ?? []) as T[]);
+  }
+  return { ok: true, data: mergeCompletionPages(pages, keyOf) };
+}
+
+/**
+ * [2026-09-29追加・やること.md 4-58、スキーマ設計.sql 58.4章末尾の推奨、実装メモ.md 330章]
+ * 実施履歴カレンダー用の日別集計（`chore_completion_daily_summary`View）を、`family_id`と
+ * 日付の範囲（`fromDate`〜`toDate`、`YYYY-MM-DD`のJST日付）で取る。呼び出し条件は従来の
+ * `.eq('family_id').gte('activity_date').lte('activity_date')`と同じ。
+ * 行数は「メンバー数×日数」で、400日窓だと7人で最大2,800行になり、PostgRESTの`max_rows`
+ * （1,000）で先頭1,000行に切られていた（ローカル実測: 4人・約450日で1,602行）。
+ * そのため総件数を見て`.range()`で分けて取る（1,000行以内なら1リクエストのまま）。
+ * 並びは主キー相当（activity_date, member_id）の降順で、ページの境目が揺れない。
+ */
+export async function fetchDailySummary(
+  client: SupabaseClient,
+  familyId: string,
+  fromDate: string,
+  toDate: string
+): Promise<ApiResult<DailySummaryEntry[]>> {
+  return fetchAllPages<DailySummaryEntry>(
+    (from, to, withCount) =>
+      client
+        .from("chore_completion_daily_summary")
+        .select("*", withCount ? { count: "exact" } : undefined)
+        .eq("family_id", familyId)
+        .gte("activity_date", fromDate)
+        .lte("activity_date", toDate)
+        .order("activity_date", { ascending: false })
+        .order("member_id", { ascending: false })
+        .range(from, to),
+    (row) => `${row.activity_date}:${row.member_id}`
+  );
 }
 
 /**

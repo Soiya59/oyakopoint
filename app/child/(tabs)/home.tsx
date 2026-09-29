@@ -73,7 +73,7 @@ import { shouldAutoOpenWeeklyReviewPopup } from "@/lib/weeklyReviewPopupLogic";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ChildHomeScreen() {
-  const { state, memberPoints, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
+  const { state, memberPoints, isChoreLimitReached, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // [2026-08-23追加／2026-08-29削除] 家族の木ミニウィジェット（07-9章、20.6章決定7）で
   // 段階名のみを軽く添えていたが、ラベルを「木」固定にしたため段階名が不要になった。
@@ -97,6 +97,7 @@ export default function ChildHomeScreen() {
   const {
     loadState: totalsLoadState,
     lookup: totalsLookup,
+    isOneOffFinished,
     reload: reloadCompletionTotals,
   } = useChoreCompletionTotals();
   // [2026-09-20追加→2026-09-25撤去・やること.md 4-77] 担当「誰でも実行可」の行だけ

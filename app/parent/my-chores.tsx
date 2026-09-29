@@ -36,7 +36,7 @@ import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useCh
 type LoadState = "loading" | "error" | "ready";
 
 export default function ParentMyChoresScreen() {
-  const { state, isChoreLimitReached, isOneOffFinished, dispatch } = useAppData();
+  const { state, isChoreLimitReached, dispatch } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   // [2026-08-16] P20からの復帰時のみ一時的に表示する、控えめな確認表示（スナックバー）。
   // 主要画面ワイヤーフレーム.md 9.2章「送信成功時の表現（新規画面を作らない）」対応。
@@ -51,6 +51,7 @@ export default function ParentMyChoresScreen() {
   const {
     loadState: totalsLoadState,
     lookup: totalsLookup,
+    isOneOffFinished,
     reload: reloadCompletionTotals,
   } = useChoreCompletionTotals();
 

@@ -13,11 +13,12 @@
  * （`member_id`では絞らない。C5・P19・S5・P10の4画面共通の標準パターン）。
  * クエストごとに個別の問い合わせを飛ばさない（N+1にしない、56.4章「禁止事項」）。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { fetchChoreCompletionTotals } from "@/data/api";
-import type { ChoreCompletionTotalEntry } from "@/types/domain";
+import { buildCompletedChoreIdSet, isOneOffFinishedFor } from "@/lib/oneOffFinished";
+import type { Chore, ChoreCompletionTotalEntry } from "@/types/domain";
 
 export type ChoreCompletionTotalsLoadState = "loading" | "error" | "ready";
 
@@ -89,5 +90,22 @@ export function useChoreCompletionTotals() {
 
   const lookup = buildChoreCompletionTotalsLookup(entries);
 
-  return { loadState, entries, lookup, reload: load };
+  // [2026-09-29追加・やること.md 4-58、スキーマ設計.sql 58.5章決定58-3、API仕様.md
+  // 18.1節、実装メモ.md 330章] 単発クエストの「完了済みか」の判定。以前は
+  // `useAppData().isOneOffFinished`（`state.completions`の全件を探索）だったが、
+  // 家族の完了報告が1,000件を超えると古い記録が欠けて、完了済みの単発が一覧に
+  // 再登場していた。ここが取得している`chore_completion_totals`（DB側の生涯累計）
+  // から作った`chore_id`の集合で判定する。
+  // 端末が持つ`state.completions`は「完了済みと見なす側にだけ足す」補助として
+  // 併用する（完了報告の直後に集計を取り直す前でも一覧から消える／集計の取得が
+  // 終わるまでの間・失敗時に完了済みの単発が再登場しない）。詳細は
+  // `src/lib/oneOffFinished.ts`。
+  const totalsChoreIds = useMemo(() => buildCompletedChoreIdSet(entries), [entries]);
+  const localChoreIds = useMemo(() => new Set(state.completions.flatMap((c) => (c.chore_id ? [c.chore_id] : []))), [state.completions]);
+  const isOneOffFinished = useCallback(
+    (chore: Chore) => isOneOffFinishedFor(chore, totalsChoreIds, localChoreIds),
+    [totalsChoreIds, localChoreIds]
+  );
+
+  return { loadState, entries, lookup, isOneOffFinished, reload: load };
 }
