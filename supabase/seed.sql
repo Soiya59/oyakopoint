@@ -743,6 +743,32 @@ INSERT INTO join_consents (family_id, family_member_id, consent_version) VALUES
 
 
 -- ============================================================
+-- 23b. member_avatar_stocks（「まえのアバター」。2026-09-30追加・要件定義書07-44章、
+--      開発部/成果物/実装メモ.md 334章）
+-- ============================================================
+-- 表が0件だと、rls_checks.sqlのB-S1〜B-S3・A32が「何も見えない」を自明に満たして
+-- しまい、RLSが緩くても通る（設計部/成果物/スキーマ設計.sql 81.8章の前提1）。
+-- そのため各家族の子ども・保護者・みまもりに行を入れる。INSERT用のRLSポリシーは
+-- 一切無い（本番ではRPCだけが書く）が、本ファイルはpostgres権限で実行されるため
+-- 素のINSERTでよい。トリガーも無い。絵は1本の線だけの最小のもの（pの最初の値が
+-- 違えば別の絵）。家族A（代表ロールとして選ばれる側）の子どもには2枚、他は1枚。
+INSERT INTO member_avatar_stocks (member_id, family_id, line_data)
+SELECT (SELECT id FROM _seed_ids WHERE key = v.member_key),
+       (SELECT id FROM _seed_ids WHERE key = v.family_key),
+       jsonb_build_object('v', 1, 'lines', jsonb_build_array(
+         jsonb_build_object('c', '#2E2E2E', 'p', jsonb_build_array(v.x, 100, 200, 200))))
+FROM (VALUES
+  ('a_child',     'fam_a', 110),
+  ('a_child',     'fam_a', 111),
+  ('a_parent',    'fam_a', 120),
+  ('a_supporter', 'fam_a', 130),
+  ('b_child',     'fam_b', 140),
+  ('b_parent',    'fam_b', 150),
+  ('b_supporter', 'fam_b', 160)
+) AS v(member_key, family_key, x);
+
+
+-- ============================================================
 -- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);
@@ -766,7 +792,8 @@ SELECT
   (SELECT count(*) FROM family_tree_seasons fts WHERE fts.family_id = f.id) AS tree_seasons,
   (SELECT count(*) FROM weekly_family_digests wfd WHERE wfd.family_id = f.id) AS weekly_digests,
   (SELECT count(*) FROM chore_nfc_tags cnt WHERE cnt.family_id = f.id) AS chore_nfc_tags,
-  (SELECT count(*) FROM join_consents jc WHERE jc.family_id = f.id) AS join_consents
+  (SELECT count(*) FROM join_consents jc WHERE jc.family_id = f.id) AS join_consents,
+  (SELECT count(*) FROM member_avatar_stocks mas WHERE mas.family_id = f.id) AS member_avatar_stocks
 FROM families f
 ORDER BY f.created_at;
 

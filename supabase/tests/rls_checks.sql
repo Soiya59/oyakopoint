@@ -623,6 +623,21 @@
 -- 新設）は新しいテーブル・新しいSQL関数を1つも作らない（スキーマ設計.sql
 -- 79章冒頭）ため、S1〜S4のいずれにも変更は無い。
 --
+-- [2026-09-30追加・開発部] アバターの「まえのアバター」（要件定義書07-44章、設計部/
+-- 成果物/スキーマ設計.sql 81章、開発部/成果物/実装メモ.md 334章）に伴い、
+-- member_avatar_stocksテーブルを新設（supabase/migrations/20260930230000_member_avatar_
+-- stocks.sql）。S1（43→44）・S3（78→80本、`member_avatar_stocks_select_scoped`・
+-- `member_avatar_stocks_delete_scoped`を追加。INSERT・UPDATEのポリシーは意図的に
+-- 作らない）・S4（100→104件、`max_avatar_stock_per_member`・`save_member_avatar`・
+-- `restore_member_avatar_from_stock`・`reset_member_avatar`を追加）を更新した。
+-- **設計部の見込み（81章冒頭「S1 +1・S3 +2・S4 +4」）と実測が完全に一致した**
+-- （ローカルDockerで適用前に実測。S3のハッシュは実測値で、SELECTとDELETEの条件式が
+-- 同一のため同じ値になる）。A32（他家族の行が見えない）・B-S1〜B-S3（本人・みまもり・
+-- 保護者が見える行数が期待値と一致）を追加。B-S系は表が0件だと「何も見えない」が
+-- 自明に成立してしまうため、その場合はSKIPにする。seed.sqlに23b節を足して
+-- 各家族の子ども・保護者・みまもりに行を入れた（書き込み系のRPCの挙動はこの検査では
+-- 見ない。81.16章のV1〜V18を手動で実行し、実装メモ334章に結果を記録した）。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -707,8 +722,11 @@ GRANT INSERT ON _r TO authenticated;
 -- [2026-09-27再更新] 「家族を削除する」への確認コード（要件定義書07-42章、
 -- スキーマ設計.sql 80章）でfamily_deletion_codesを追加。42→43
 -- （ローカルDockerで実測。96.5章の遵守）。
+-- [2026-09-30再更新] 「まえのアバター」（要件定義書07-44章、スキーマ設計.sql
+-- 81章）でmember_avatar_stocksを追加。43→44（ローカルDockerで実測。96.5章の
+-- 遵守。設計部の見込み「S1 +1」と一致）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '43', count(*)::text, count(*) = 43
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '44', count(*)::text, count(*) = 44
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -986,6 +1004,15 @@ WITH expected(t, p, c, h) AS (VALUES
   -- 実測した。
   ('member_avatars','member_avatars_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('member_avatars','member_avatars_write_self_or_parent','ALL','17f6d38cb67dc4f94ec44da5105695c5'),
+  -- [2026-09-30追加] member_avatar_stocks（「まえのアバター」、要件定義書07-44章、
+  -- 設計部/成果物/スキーマ設計.sql 81.3章、開発部/成果物/実装メモ.md 334章）。
+  -- 読む・消せるのは本人または保護者（member_avatars_write_self_or_parentと同じ
+  -- 「family_id一致 AND（保護者 OR 本人）」の条件式）。SELECTとDELETEの条件式が
+  -- 文字通り同一のため、ハッシュも同じ値になる（ローカルDockerで実測して確認、
+  -- 手計算していない。96.5章の遵守）。INSERT・UPDATEのポリシーは意図的に作らない
+  -- （書き込みはSECURITY DEFINERのRPC 3本だけ）。
+  ('member_avatar_stocks','member_avatar_stocks_delete_scoped','DELETE','0d16fcb03c1fc204ffcd2476f5ab087d'),
+  ('member_avatar_stocks','member_avatar_stocks_select_scoped','SELECT','0d16fcb03c1fc204ffcd2476f5ab087d'),
   ('member_badges','member_badges_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   -- [2026-09-21追加] member_goals（自分で目標を決める、要件定義書07-36章、
   -- 設計部/成果物/スキーマ設計.sql 71章）。SELECTの条件式
@@ -1059,7 +1086,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー78本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー80本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -1401,7 +1428,21 @@ WITH expected(f) AS (VALUES
   ('family_board_comments_after_insert_notify'),
   ('chore_reactions_after_insert_notify'),
   ('family_drawing_comments_after_insert_notify'),
-  ('family_drawings_after_publish_notify')
+  ('family_drawings_after_publish_notify'),
+  -- [2026-09-30追加] 「まえのアバター」（要件定義書07-44章、設計部/成果物/
+  -- スキーマ設計.sql 81.3章・81.4章、開発部/成果物/実装メモ.md 334章）の4本。
+  -- 設計部の見込み「S4 +4」と実測が一致した。
+  -- ・save_member_avatar・restore_member_avatar_from_stock・reset_member_avatar:
+  --   SECURITY DEFINERであり、PUBLIC/anonから明示的にREVOKEしたうえで
+  --   authenticatedへ明示的にGRANTしている（子どものPINログインのJWTもroleは
+  --   authenticatedのため、権限判定は関数の中で行う）。
+  -- ・max_avatar_stock_per_member: LANGUAGE SQL・IMMUTABLEの定数関数で、
+  --   max_unpublished_drawings_per_member()と同じくREVOKEしていないため
+  --   authenticatedへEXECUTE権限が自動付与される（34.5章の既知の挙動）。
+  ('max_avatar_stock_per_member'),
+  ('save_member_avatar'),
+  ('restore_member_avatar_from_stock'),
+  ('reset_member_avatar')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1414,7 +1455,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数100件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数104件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1495,6 +1536,24 @@ SELECT set_config('t.supporter', (SELECT id::text FROM family_members WHERE role
 -- ローカルで踏んでから気づき、修正した。開発部/成果物/実装メモ.md 105章）。
 SELECT set_config('t.multi_family', ((SELECT count(*) FROM families) >= 2)::text, true);
 
+-- [2026-09-30追加・スキーマ設計.sql 81.8章、実装メモ.md 334章]「まえのアバター」
+-- （member_avatar_stocks）の「本来見えるべき行数」を、`SET LOCAL ROLE authenticated`の
+-- 前（管理者権限）で数えてGUCに保存する（ロール切り替え後はRLSがかかって数えられない
+-- ため。t.multi_familyと同じ流儀）。
+-- ・t.stock_rows: 表全体の行数。0件だと「何も見えない」が自明に成立してしまうため、
+--   0件の環境では下のB-S1〜B-S3をSKIPにする（PASSにしない）。seed.sqlの23b節が
+--   各家族の子ども・保護者・みまもりに行を入れている。
+-- ・t.parent_expected_stock_rows: 保護者は同じ家族の全員分（子ども・他の保護者・
+--   みまもり）が見える（統括の追加決定2。他家族は含めない）。
+SELECT set_config('t.stock_rows', (SELECT count(*) FROM member_avatar_stocks)::text, true);
+SELECT set_config('t.child_stock_rows',
+  (SELECT count(*) FROM member_avatar_stocks s WHERE s.member_id = nullif(current_setting('t.child', true), '')::uuid)::text, true);
+SELECT set_config('t.supporter_stock_rows',
+  (SELECT count(*) FROM member_avatar_stocks s WHERE s.member_id = nullif(current_setting('t.supporter', true), '')::uuid)::text, true);
+SELECT set_config('t.parent_expected_stock_rows',
+  (SELECT count(*) FROM member_avatar_stocks s
+    WHERE s.family_id = (SELECT p.family_id FROM family_members p WHERE p.id = nullif(current_setting('t.parent', true), '')::uuid))::text, true);
+
 
 -- ---------- 子どもの視点 ----------
 SET LOCAL ROLE authenticated;
@@ -1525,6 +1584,22 @@ INSERT INTO _r SELECT 'B層', 'B4 子ども: 家族の完了報告は見える�
   CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*)::text ELSE 'SKIP（ローカルにchildロールのメンバーが存在しない）' END,
   CASE WHEN current_setting('t.child', true) IS NOT NULL THEN count(*) > 0 ELSE NULL END
 FROM chore_completions;
+
+-- B-S1. [2026-09-30追加・スキーマ設計.sql 81.8章]「まえのアバター」は自分の分だけが
+--     見える。件数が期待値と**一致すること**の1本で、「他人の行が見えない」と
+--     「自分の行は見える」を同時に検査する（多すぎても少なすぎてもFAIL。ポリシーが
+--     厳しすぎて自分の分も見えなくなる事故も検出できる）。
+INSERT INTO _r SELECT 'B層', 'B-S1 子ども: まえのアバターは自分の分だけが見える',
+  coalesce(current_setting('t.child_stock_rows', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにchildが居ない、またはmember_avatar_stocksが0件。seed.sqlに行を足すこと）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.child_stock_rows', true), '')::int
+       ELSE NULL END
+FROM member_avatar_stocks;
 
 -- ------------------------------------------------------------
 -- A層（子どもロール分）: family_drawings / chore_completions / family_members は
@@ -1850,6 +1925,29 @@ INSERT INTO _r SELECT 'A層', 'A31 保護者: member_avatarsに他家族の行�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM member_avatars WHERE family_id <> current_family_id();
 
+-- [2026-09-30追加・スキーマ設計.sql 81.8章] A32 member_avatar_stocks（「まえのアバター」）。
+-- 家族またぎは、seedに別家族のstock行があって初めて意味を持つ（seed.sql 23b節）。
+INSERT INTO _r SELECT 'A層', 'A32 保護者: member_avatar_stocksに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM member_avatar_stocks WHERE family_id <> current_family_id();
+
+-- B-S3. [2026-09-30追加・スキーマ設計.sql 81.8章]「まえのアバター」は、保護者には同じ家族の
+--     全員分（子ども・他の保護者・みまもり）が見え、他家族の分は見えない（統括の追加決定2。
+--     今の絵を描き直せる範囲と同じ）。期待値は「同じ家族の全員分」だけで数えているため、
+--     他家族の行が漏れれば多すぎ、保護者の範囲が狭まれば少なすぎで、どちらもFAILする。
+INSERT INTO _r SELECT 'B層', 'B-S3 保護者: まえのアバターは同じ家族の全員分が見える（他家族は見えない）',
+  coalesce(current_setting('t.parent_expected_stock_rows', true), ''),
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにparentが居ない、またはmember_avatar_stocksが0件）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.parent_expected_stock_rows', true), '')::int
+       ELSE NULL END
+FROM member_avatar_stocks;
+
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
 -- （代表ロールが保護者のため）。二重に記録すると同じ検査が名前だけ変えて
@@ -1879,6 +1977,20 @@ FROM family_member_pins;
 INSERT INTO _r SELECT 'B層', 'B10 みまもり: 保護者として判定されない', 'false',
   CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN is_current_user_parent()::text ELSE 'SKIP（ローカルにsupporterロールのメンバーが存在しない）' END,
   CASE WHEN current_setting('t.supporter', true) IS NOT NULL THEN NOT is_current_user_parent() ELSE NULL END;
+
+-- B-S2. [2026-09-30追加・スキーマ設計.sql 81.8章]「まえのアバター」はみまもりにも
+--     自分の分だけが見える（件数が期待値と一致すること）。
+INSERT INTO _r SELECT 'B層', 'B-S2 みまもり: まえのアバターは自分の分だけが見える',
+  coalesce(current_setting('t.supporter_stock_rows', true), ''),
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにsupporterが居ない、またはmember_avatar_stocksが0件）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.stock_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.supporter_stock_rows', true), '')::int
+       ELSE NULL END
+FROM member_avatar_stocks;
 
 -- ------------------------------------------------------------
 -- A層（みまもりロール分）: 「特に重要な3テーブル」を重ねて検査する

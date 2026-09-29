@@ -4,12 +4,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AvatarDrawingPanel from "@/components/AvatarDrawingPanel";
-import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { useAvatarEditing } from "@/hooks/useAvatarEditing";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useSession } from "@/lib/session";
-import { deleteMemberAvatar, saveMemberAvatar } from "@/data/api";
-import type { FamilyDrawingLineData } from "@/types/domain";
 
 /**
  * P38 アバターを描く（保護者。本人操作・代理操作を同じ画面が扱う）
@@ -23,62 +20,23 @@ import type { FamilyDrawingLineData } from "@/types/domain";
  */
 export default function ParentMemberAvatarScreen() {
   const { memberId, displayName } = useLocalSearchParams<{ memberId: string; displayName: string }>();
-  const { state, memberAvatars, memberAvatarsLoaded, memberAvatarsError, refreshMemberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal } =
-    useAppData();
-  const { client } = useSession();
+  const { state, memberAvatars, memberAvatarsLoaded, memberAvatarsError, refreshMemberAvatars } = useAppData();
   const target = state.members.find((m) => m.id === memberId);
   const isProxy = memberId !== state.activeParentMemberId;
 
-  const [saving, setSaving] = useState(false);
-  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
-  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [resetting, setResetting] = useState(false);
-  const {
-    errorMessage: resetErrorMessage,
-    errorRef: resetErrorRef,
-    setErrorMessage: setResetErrorMessage,
-    showFailure: showResetFailure,
-  } = useFailureNotice("parent");
-  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  // [2026-09-30変更・実装メモ334章] 保存・色にもどす・「まえのアバター」の状態と通信は
+  // `useAvatarEditing`にまとめた（3画面が同じ挙動になるように。失敗の表示は331章の
+  // `useFailureNotice`＝原因別の文言＋目印を、フックの中で使っている）。
+  const editing = useAvatarEditing({
+    tone: "parent",
+    memberId: memberId,
+    displayName: target?.display_name ?? displayName ?? "",
+    isProxy: isProxy,
+  });
   // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
   // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
   // （お絵かき画面〈app/parent/drawing.tsx〉と同じ配線）。
   const [canvasGestureActive, setCanvasGestureActive] = useState(false);
-
-  const handleSave = async (lineData: FamilyDrawingLineData): Promise<boolean> => {
-    if (!memberId) return false;
-    setSaving(true);
-    setErrorMessage(null);
-    setSavedMessage(null);
-    const res = await saveMemberAvatar(client, memberId, lineData);
-    setSaving(false);
-    if (!res.ok) {
-      showFailure(res.error);
-      return false;
-    }
-    setMemberAvatarLocal(memberId, lineData);
-    setSavedMessage(isProxy ? `${displayName}さんのアバターを保存しました` : "アバターを保存しました");
-    setTimeout(() => setSavedMessage((prev) => (prev ? null : prev)), 4000);
-    return true;
-  };
-
-  const handleReset = async (): Promise<boolean> => {
-    if (!memberId) return false;
-    setResetting(true);
-    setResetErrorMessage(null);
-    setResetSuccessMessage(null);
-    const res = await deleteMemberAvatar(client, memberId);
-    setResetting(false);
-    if (!res.ok) {
-      showResetFailure(res.error);
-      return false;
-    }
-    clearMemberAvatarLocal(memberId);
-    setResetSuccessMessage("色にもどしました");
-    setTimeout(() => setResetSuccessMessage((prev) => (prev ? null : prev)), 4000);
-    return true;
-  };
 
   // 決定13: タイトルは対象で出し分ける。
   const title = isProxy ? `${displayName}さんのアバターを描く` : "アバターを描く";
@@ -148,16 +106,7 @@ export default function ParentMemberAvatarScreen() {
             displayName={target.display_name}
             backgroundColor={target.avatar_color ?? theme.colors.neutralBorder}
             savedLineData={memberAvatars[memberId] ?? null}
-            saving={saving}
-            errorMessage={errorMessage}
-            errorRef={errorRef}
-            savedMessage={savedMessage}
-            onSave={handleSave}
-            resetting={resetting}
-            resetErrorMessage={resetErrorMessage}
-            resetErrorRef={resetErrorRef}
-            resetSuccessMessage={resetSuccessMessage}
-            onReset={handleReset}
+            editing={editing}
             onGestureActiveChange={setCanvasGestureActive}
           />
         </View>

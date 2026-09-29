@@ -96,6 +96,12 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
   assertEqual("unknown_error＋502 → '502-unk'（HTML本文は目印に入れない）", formatPgFailureRef(error), "502-unk");
 }
 
+// ---- 11. [2026-09-30追加・実装メモ334章] 「まえのアバター」が3枚いっぱい（専用のSQLSTATE AV001。HTTPは400） ----
+{
+  const error: ApiError = { code: "AV001", message: "まえのアバターがいっぱいです（3枚）。いらない絵を消してから保存してください", status: 400 };
+  assertEqual("AV001 → '400-stockfull'", formatPgFailureRef(error), "400-stockfull");
+}
+
 console.log("");
 if (failed === 0) {
   console.log("全件OK");

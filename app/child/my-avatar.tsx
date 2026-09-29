@@ -3,12 +3,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AvatarDrawingPanel from "@/components/AvatarDrawingPanel";
-import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { useAvatarEditing } from "@/hooks/useAvatarEditing";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useSession } from "@/lib/session";
-import { deleteMemberAvatar, saveMemberAvatar } from "@/data/api";
-import type { FamilyDrawingLineData } from "@/types/domain";
 
 /**
  * C31 アバターを かく（子ども、本人のみ）
@@ -19,62 +16,23 @@ import type { FamilyDrawingLineData } from "@/types/domain";
  * 無く`memberId`パラメータも持たない（保護者用のP38〈`app/parent/member-avatar.tsx`〉との違い）。
  */
 export default function ChildMyAvatarScreen() {
-  const { state, memberAvatars, memberAvatarsLoaded, memberAvatarsError, refreshMemberAvatars, setMemberAvatarLocal, clearMemberAvatarLocal } =
-    useAppData();
-  const { client } = useSession();
+  const { state, memberAvatars, memberAvatarsLoaded, memberAvatarsError, refreshMemberAvatars } = useAppData();
   const myId = state.activeChildMemberId;
   const me = state.members.find((m) => m.id === myId);
 
-  const [saving, setSaving] = useState(false);
-  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
-  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("child");
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [resetting, setResetting] = useState(false);
-  const {
-    errorMessage: resetErrorMessage,
-    errorRef: resetErrorRef,
-    setErrorMessage: setResetErrorMessage,
-    showFailure: showResetFailure,
-  } = useFailureNotice("child");
-  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  // [2026-09-30変更・実装メモ334章] 保存・色にもどす・「まえのアバター」の状態と通信は
+  // `useAvatarEditing`にまとめた（3画面が同じ挙動になるように。失敗の表示は331章の
+  // `useFailureNotice`＝原因別の文言＋目印を、フックの中で使っている）。
+  const editing = useAvatarEditing({
+    tone: "child",
+    memberId: myId,
+    displayName: me?.display_name ?? "",
+    isProxy: false,
+  });
   // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
   // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
   // （お絵かき画面〈app/child/drawing.tsx〉と同じ配線）。
   const [canvasGestureActive, setCanvasGestureActive] = useState(false);
-
-  const handleSave = async (lineData: FamilyDrawingLineData): Promise<boolean> => {
-    setSaving(true);
-    setErrorMessage(null);
-    setSavedMessage(null);
-    const res = await saveMemberAvatar(client, myId, lineData);
-    setSaving(false);
-    if (!res.ok) {
-      showFailure(res.error);
-      return false;
-    }
-    // [スキーマ設計.sql 54.7章(b)] 保存成功後はローカルキャッシュだけ更新し、
-    // サーバーへの再取得は発生させない。
-    setMemberAvatarLocal(myId, lineData);
-    setSavedMessage("あたらしい すがたに なったよ！");
-    setTimeout(() => setSavedMessage((prev) => (prev ? null : prev)), 4000);
-    return true;
-  };
-
-  const handleReset = async (): Promise<boolean> => {
-    setResetting(true);
-    setResetErrorMessage(null);
-    setResetSuccessMessage(null);
-    const res = await deleteMemberAvatar(client, myId);
-    setResetting(false);
-    if (!res.ok) {
-      showResetFailure(res.error);
-      return false;
-    }
-    clearMemberAvatarLocal(myId);
-    setResetSuccessMessage("いろに もどしたよ");
-    setTimeout(() => setResetSuccessMessage((prev) => (prev ? null : prev)), 4000);
-    return true;
-  };
 
   return (
     <Screen
@@ -128,16 +86,7 @@ export default function ChildMyAvatarScreen() {
             displayName={me.display_name}
             backgroundColor={me.avatar_color ?? theme.colors.neutralBorder}
             savedLineData={memberAvatars[myId] ?? null}
-            saving={saving}
-            errorMessage={errorMessage}
-            errorRef={errorRef}
-            savedMessage={savedMessage}
-            onSave={handleSave}
-            resetting={resetting}
-            resetErrorMessage={resetErrorMessage}
-            resetErrorRef={resetErrorRef}
-            resetSuccessMessage={resetSuccessMessage}
-            onReset={handleReset}
+            editing={editing}
             onGestureActiveChange={setCanvasGestureActive}
           />
         </View>

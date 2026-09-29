@@ -309,6 +309,20 @@ export const avatarDrawingLimits = {
 // 備え、意図的に別名でexportする（43.8節）。
 export const avatarDrawingPalette = drawingPalette;
 
+// ---- 「まえのアバター」（アバターのストック、2026-09-30追加・要件定義書07-44章、
+// 主要画面ワイヤーフレーム.md 69.9節、スキーマ設計.sql 81章、開発部/成果物/実装メモ.md 334章） ----
+// **maxSlotsはDB側max_avatar_stock_per_member()（値3。マイグレーション
+// 20260930230000_member_avatar_stocks.sql）と必ず同じ値にする**（食い違うと、画面が
+// 空き枠を出しているのにDBがAV001で断る、またはその逆になる。自動の検査は無いため
+// 値を変えるときは両方を同じ変更で直す）。お絵かきのdrawingLimits.maxUnpublished（3）とは
+// 意図的に別の定義にする（片方だけ将来変えられるように。81.12章）。
+export const avatarStock = {
+  maxSlots: 3,
+  slotSize: 56, // 全ロール共通。tapTarget.childと同じ値
+  slotGap: 16, // spacing.s4
+  previewSize: 120,
+} as const;
+
 // ---- 線の太さ（3段階、2026-09-05追加、07-13-2章拡張） ----
 // 参照: デザイントークン.md「線の太さ（3段階）」・主要画面ワイヤーフレーム.md 21.5b節
 // 決定20（値）・決定22（表示用の見本）。値（2/4/7）はDB側is_valid_drawing_line_data()
@@ -559,6 +573,7 @@ export const theme = {
   drawingLimits,
   avatarDrawingLimits,
   avatarDrawingPalette,
+  avatarStock,
   drawingStrokeWidths,
   defaultDrawingStrokeWidth,
   drawingSimplifyTolerance,

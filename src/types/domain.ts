@@ -478,6 +478,36 @@ export interface FamilyDrawing {
 // 共通だが、検証関数（is_valid_avatar_line_data()）・許可パレットは別物
 // （スキーマ設計.sql 54.3章）。
 
+/**
+ * member_avatar_stocks テーブルの1行（「まえのアバター」1枚。要件定義書07-44章、
+ * スキーマ設計.sql 81章、API仕様.md 37章）。`select("id, member_id, line_data, stocked_at")`
+ * で取得する（family_idは含まない）。色（背景色）は持たない。表示するときの背景色は
+ * 持ち主の今のavatar_color（決定54-6・81.11章）。
+ */
+export interface MemberAvatarStockRow {
+  id: string;
+  member_id: string;
+  line_data: FamilyDrawingLineData;
+  stocked_at: string;
+}
+
+/**
+ * アバターのストックを動かすRPC3本の戻り値（JSONB。スキーマ設計.sql 81.4章）。
+ * `stock_count`は操作後の枚数、`stock_id`は新しくまえのアバターに入った行のid
+ * （入っていなければnull）。
+ * - save_member_avatar: created（初めて描いた）／unchanged（同じ絵）／stocked（今の絵を足した）
+ * - restore_member_avatar_from_stock: swapped（入れ替えた）／restored（今の絵が無かった）
+ * - reset_member_avatar: stocked（今の絵を足して外した）／nothing（今の絵が無かった）
+ */
+export interface MemberAvatarStockRpcResult<R extends string> {
+  result: R;
+  stock_id: string | null;
+  stock_count: number;
+}
+export type SaveMemberAvatarResult = MemberAvatarStockRpcResult<"created" | "unchanged" | "stocked">;
+export type RestoreMemberAvatarResult = MemberAvatarStockRpcResult<"swapped" | "restored">;
+export type ResetMemberAvatarResult = MemberAvatarStockRpcResult<"stocked" | "nothing">;
+
 /** member_avatars テーブルの1行。select("member_id, line_data, updated_at")で
  *  取得するため（スキーマ設計.sql 54.7章）family_idは含まない。 */
 export interface MemberAvatarRow {

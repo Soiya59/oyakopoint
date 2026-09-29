@@ -21,8 +21,15 @@
  * 実装メモ.md 235・245章）に置き換え、拡大表示（ふつう／おおきく／もっとおおきく）
  * を追加した。48章「まんなかに おおきく」ボタンはアバターには足さない
  * （`fitToCircleSignal`を渡さず既定値のまま使う）。
+ *
+ * [2026-09-30追加・要件定義書07-44章、主要画面ワイヤーフレーム.md 69章、実装メモ.md 334章]
+ * 「まえのアバター」（ストック3枚）を「今のすがた」カードの中に足した（欄そのものは
+ * `AvatarStockSection`）。保存・「色にもどす」・ストックの状態と通信は
+ * `useAvatarEditing`（`editing`prop）が持ち、この部品は画面の組み立てと、キャンバスの
+ * 扱い（決定7・13）だけを担う。3枚いっぱいのときは、保存ボタンを無効にして理由のカードを
+ * 出す（決定13）。**キャンバスの線は一切変えない・消さない**（描きかけを守る）。
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
@@ -32,11 +39,22 @@ import ZoomableDrawingCanvas, { type ZoomableDrawingCanvasHandle } from "./Zooma
 import DrawingPalette from "./DrawingPalette";
 import DrawingStrokeWidthPicker from "./DrawingStrokeWidthPicker";
 import DrawingToolPicker from "./DrawingToolPicker";
+import AvatarStockSection from "./AvatarStockSection";
 import theme from "@/theme/theme";
+import { useFlashMessage } from "@/hooks/useFlashMessage";
+import type { AvatarEditing } from "@/hooks/useAvatarEditing";
+import {
+  isAvatarResetBlocked,
+  isAvatarSaveBlocked,
+  isCanvasSameAsSaved,
+  shouldNoteDraftKept,
+  shouldReplaceCanvasAfterRestore,
+  shouldShowStockSection,
+} from "@/lib/avatarStock";
 import { estimateLineDataBytes, MIN_DRAWING_LINE_BYTES } from "@/lib/drawingLineDataBytes";
 import { removeLineAtIndex } from "@/lib/drawingLineMove";
 import type { DrawingTool } from "@/lib/drawingShapes";
-import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
+import type { FamilyDrawingLine, FamilyDrawingLineData, MemberAvatarStockRow } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -58,21 +76,13 @@ interface AvatarDrawingPanelProps {
   backgroundColor: string;
   /** 保存済みのアバター（`member_avatars`に行が無ければnull）。 */
   savedLineData: FamilyDrawingLineData | null;
-  saving: boolean;
-  errorMessage: string | null;
-  /** [2026-09-29追加・実装メモ331章] 保存失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
-  errorRef?: string | null;
-  /** 保存成功時に数秒だけ表示するメッセージ（表示・自動消去のタイミングは呼び出し画面側が管理する）。 */
-  savedMessage: string | null;
-  /** 保存（新規・なおすの両方、常に全置き換え）。成功したらtrueを返すこと（キャンバスをクリアするため）。 */
-  onSave: (lineData: FamilyDrawingLineData) => Promise<boolean>;
-  resetting: boolean;
-  resetErrorMessage: string | null;
-  /** [2026-09-29追加・実装メモ331章] 「色にもどす」失敗の「目印」。 */
-  resetErrorRef?: string | null;
-  resetSuccessMessage: string | null;
-  /** 「色にもどす」の確定。成功したらtrueを返すこと（確認表示を閉じるため）。 */
-  onReset: () => Promise<boolean>;
+  /**
+   * [2026-09-30追加・実装メモ.md 334章] 保存・「色にもどす」・「まえのアバター」の状態と
+   * 通信（`useAvatarEditing`の戻り値をそのまま渡す）。従来の`saving`・`errorMessage`・
+   * `onSave`・`resetting`・`onReset`等の個別propは、3画面で同じコードを3回書かないよう
+   * ここに集めた（意味は変えていない）。
+   */
+  editing: AvatarEditing;
   /**
    * [2026-09-18追加・やること.md 2-51、実装メモ.md 248章・243章] キャンバスに
    * 指が触れている間（ストローク中・2本指パン中の両方）trueで呼ばれる。
@@ -90,18 +100,35 @@ export function AvatarDrawingPanel({
   displayName,
   backgroundColor,
   savedLineData,
-  saving,
-  errorMessage,
-  errorRef,
-  savedMessage,
-  onSave,
-  resetting,
-  resetErrorMessage,
-  resetErrorRef,
-  resetSuccessMessage,
-  onReset,
+  editing,
   onGestureActiveChange,
 }: AvatarDrawingPanelProps) {
+  const {
+    text,
+    saving,
+    errorMessage,
+    errorRef,
+    savedMessage,
+    saveRefusedFull,
+    onSave,
+    resetting,
+    resetErrorMessage,
+    resetErrorRef,
+    resetSuccessMessage,
+    onReset,
+    stocks,
+    stocksStatus,
+    retryStocks,
+    highlightNewest,
+    restoring,
+    deleting,
+    stockActionErrorMessage,
+    stockActionErrorRef,
+    stockActionMessage,
+    clearStockActionError,
+    onRestoreStock,
+    onDeleteStock,
+  } = editing;
   // [決定28] 「なおす」の場合、画面を開いた時点で既存の絵をキャンバスへ読み込んだ
   // 状態にする。以後はprops(savedLineData)の変化に追従させない（「色にもどす」は
   // 描画中のキャンバスの内容には触れない、43.6節状態一覧の申し送りどおり）。
@@ -138,6 +165,15 @@ export function AvatarDrawingPanel({
    */
   const zoomableCanvasRef = useRef<ZoomableDrawingCanvasHandle>(null);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  /** 「色にもどす」がいっぱいで止まっているときに、リンクを押すと4秒出る理由の1行（決定16）。 */
+  const [resetBlockedNotice, flashResetBlocked] = useFlashMessage();
+  /** 戻したあと、描きかけのキャンバスを守ったことを知らせる一文（決定7）。 */
+  const [draftNote, flashDraftNote] = useFlashMessage();
+  // 戻す通信の間にキャンバスが変わっていないかを確かめるため、最新の`lines`を持つ。
+  const linesRef = useRef<FamilyDrawingLine[]>(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
 
   const isChildTone = tone === "child";
   const bodyStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
@@ -173,12 +209,8 @@ export function AvatarDrawingPanel({
   const undoLabel = isChildTone ? "ひとつ もどす" : "ひとつ戻す";
   const clearLabel = isChildTone ? "ぜんぶ けす" : "ぜんぶけす";
   const resetLabel = isChildTone ? "いろに もどす" : "色にもどす";
-  // [43.5節 決定25]
-  const resetConfirmText = isChildTone
-    ? "ほんとうに いろに もどす？　かいた えは きえて、まえの いろと もじに もどるよ"
-    : isProxy
-    ? `${displayName}さんの絵を消して、色にもどしますか？もどすと、この絵は消えます`
-    : "絵を消して、色にもどしますか？もどすと、この絵は消えます";
+  // [2026-09-30変更・69.5節 決定16] 「色にもどす」の確認・成功は、絵が消える前提（43.5節
+  // 決定25）から「まえのアバターに残る」前提の文言に変えた（`text.resetConfirm`）。
   const resetConfirmActionLabel = isChildTone ? "もどす" : "色にもどす";
   const resetCancelLabel = "やめる";
 
@@ -249,8 +281,26 @@ export function AvatarDrawingPanel({
     });
   };
 
+  const hasSavedAvatar = savedLineData !== null && savedLineData.lines.length > 0;
+  // 一覧を読めているときだけ枚数で判断する（読み込み中・失敗のときは止めない。DBが最終防衛線）。
+  const stockCount = stocksStatus === "ready" ? stocks.length : null;
+  const sameAsSaved = isCanvasSameAsSaved(lines, savedLineData);
+  // [69.3節 決定13] 3枚いっぱいで、今の絵があり、キャンバスに線があり、今の絵と違うとき、保存を止める。
+  const saveBlocked = isAvatarSaveBlocked({
+    stockCount,
+    maxSlots: theme.avatarStock.maxSlots,
+    hasSavedAvatar,
+    lineCount: lines.length,
+    sameAsSaved,
+  });
+  // DBが保存を断った（別の端末で先に3枚になっていた）ときも、同じ理由カードを出す。
+  const showFullCard = saveBlocked || saveRefusedFull;
+  // [69.3節 決定16] 3枚いっぱいで今の絵があるとき、「色にもどす」も止める。
+  const resetBlocked = isAvatarResetBlocked({ stockCount, maxSlots: theme.avatarStock.maxSlots, hasSavedAvatar });
+  const showStockSection = shouldShowStockSection({ hasSavedAvatar, stockCount: stocks.length, status: stocksStatus });
+
   const handleSave = async () => {
-    if (lines.length === 0) return;
+    if (lines.length === 0 || saveBlocked) return;
     const ok = await onSave({ v: 1, lines });
     // [43.6節 状態一覧「保存成功」] キャンバスは空になり、「今のすがた」カードは
     // 呼び出し画面側がsavedLineDataを更新することで反映される。
@@ -262,14 +312,48 @@ export function AvatarDrawingPanel({
     }
   };
 
-  const requestReset = () => setIsConfirmingReset(true);
+  const requestReset = () => {
+    if (resetBlocked) {
+      // 確認ではなく理由を出す（何も変わらない）。
+      flashResetBlocked(text.fullReasonReset);
+      return;
+    }
+    setIsConfirmingReset(true);
+  };
   const cancelReset = () => setIsConfirmingReset(false);
   const confirmReset = async () => {
-    const ok = await onReset();
-    if (ok) setIsConfirmingReset(false);
+    const outcome = await onReset();
+    if (outcome === "done") {
+      setIsConfirmingReset(false);
+    } else if (outcome === "full") {
+      // 別の端末で先に3枚になっていた。確認を閉じて、理由を出す（一覧は取り直し済み）。
+      setIsConfirmingReset(false);
+      flashResetBlocked(text.fullReasonReset);
+    }
   };
 
-  const hasSavedAvatar = savedLineData !== null && savedLineData.lines.length > 0;
+  /**
+   * 「これに もどす」（決定5・7）。キャンバスが今の絵のまま触っていない（線があり、今の絵と
+   * 同じ）ときだけ、戻した絵に差し替える。描き足した・消した、または空のときは触らない
+   * （描きかけは絶対に消さない）。触らなかった場合で線があれば、そのことを一文で知らせる。
+   * 戻す通信の間にキャンバスが変わっていたら、それも「触った」として差し替えない。
+   */
+  const handleRestoreStock = async (stock: MemberAvatarStockRow): Promise<boolean> => {
+    const linesBefore = lines;
+    const canReplace = shouldReplaceCanvasAfterRestore(lines, savedLineData);
+    const outcome = await onRestoreStock(stock);
+    if (outcome === "failed") return false;
+    if (outcome === "stale") return true;
+    const replaced = canReplace && linesRef.current === linesBefore;
+    if (replaced) {
+      preMoveLinesRef.current = null;
+      clearCanvasSelection();
+      setLines(stock.line_data.lines);
+    } else if (shouldNoteDraftKept(linesRef.current, false)) {
+      flashDraftNote(text.draftKept);
+    }
+    return true;
+  };
 
   return (
     <View>
@@ -279,18 +363,21 @@ export function AvatarDrawingPanel({
 
         {savedMessage && <Text style={[bodyStyle, styles.successText]}>{savedMessage}</Text>}
         {resetSuccessMessage && <Text style={[bodyStyle, styles.successText]}>{resetSuccessMessage}</Text>}
+        {stockActionMessage && <Text style={[bodyStyle, styles.successText]}>{stockActionMessage}</Text>}
+        {draftNote && <Text style={[bodyStyle, styles.successText]}>{draftNote}</Text>}
 
         {/* [43.5節 決定24] 「色にもどす」はこのカードの中にのみ置き、キャンバス直下の
             操作列（ひとつ戻す・ぜんぶけす・保存する）には置かない。 */}
         {hasSavedAvatar && !isConfirmingReset && (
           <Pressable onPress={requestReset} disabled={resetting} hitSlop={8}>
-            <Text style={[bodyStyle, styles.resetLinkText]}>{resetLabel}</Text>
+            <Text style={[bodyStyle, styles.resetLinkText, resetBlocked && styles.linkTextDisabled]}>{resetLabel}</Text>
           </Pressable>
         )}
+        {resetBlockedNotice && !isConfirmingReset && <Text style={[bodyStyle, styles.centerText]}>{resetBlockedNotice}</Text>}
 
         {isConfirmingReset && (
           <View style={styles.resetConfirmBlock}>
-            <Text style={bodyStyle}>{resetConfirmText}</Text>
+            <Text style={[bodyStyle, styles.centerText]}>{text.resetConfirm}</Text>
             {resetErrorMessage && <Text style={styles.error}>{resetErrorMessage}</Text>}
             {resetErrorMessage && <FailureRefText value={resetErrorRef} tone={tone} />}
             <View style={styles.confirmRow}>
@@ -304,6 +391,30 @@ export function AvatarDrawingPanel({
               </Pressable>
             </View>
           </View>
+        )}
+
+        {/* [2026-09-30追加・69章] 「まえのアバター」。今の絵がある、または1枚以上あるときだけ出す（決定4）。 */}
+        {showStockSection && (
+          <AvatarStockSection
+            tone={tone}
+            displayName={displayName}
+            backgroundColor={backgroundColor}
+            text={text}
+            stocks={stocks}
+            status={stocksStatus}
+            hasCurrentAvatar={hasSavedAvatar}
+            highlightNewest={highlightNewest}
+            slotsDisabled={saving}
+            restoring={restoring}
+            deleting={deleting}
+            actionErrorMessage={stockActionErrorMessage}
+            actionErrorRef={stockActionErrorRef}
+            onClearActionError={clearStockActionError}
+            onBeforeSelect={cancelReset}
+            onRestore={handleRestoreStock}
+            onDelete={onDeleteStock}
+            onRetry={retryStocks}
+          />
         )}
       </Card>
 
@@ -367,6 +478,15 @@ export function AvatarDrawingPanel({
         <Text style={[captionStyle, styles.nearCapacity]}>{nearCapacityText}</Text>
       ) : null}
 
+      {/* [2026-09-30追加・69.3節 決定13] 3枚いっぱいで保存できない理由。お絵かきの上限到達
+          （DrawingBoardのlimitCard）と同じ穏やかな見た目（赤・失敗トーンは使わない）。上限の案内と
+          同時に出るときは、その下（両方読める）。キャンバスは隠さない・触らない。 */}
+      {showFullCard && (
+        <Card tone={tone} style={styles.limitCard}>
+          <Text style={[bodyStyle, styles.centerText]}>{text.fullReasonSave}</Text>
+        </Card>
+      )}
+
       <View style={styles.actionRow}>
         <AppButton
           label={undoLabel}
@@ -395,7 +515,7 @@ export function AvatarDrawingPanel({
           label={saveLabel}
           tone={tone}
           loading={saving}
-          disabled={saving || lines.length === 0}
+          disabled={saving || lines.length === 0 || saveBlocked}
           onPress={handleSave}
           style={styles.actionButtonEqual}
           numberOfLines={2}
@@ -409,7 +529,17 @@ export function AvatarDrawingPanel({
 const styles = StyleSheet.create({
   sectionLabel: { marginBottom: theme.spacing.s2 },
   currentCard: { alignItems: "center", gap: theme.spacing.s2, marginBottom: theme.spacing.s4 },
-  successText: { color: theme.colors.brandPrimaryStrong },
+  successText: { color: theme.colors.brandPrimaryStrong, textAlign: "center" },
+  centerText: { textAlign: "center" },
+  // 「色にもどす」が止まっているとき（薄く表示。DrawingBoardのlinkTextDisabledと同じ）。
+  linkTextDisabled: { opacity: 0.4 },
+  // 3枚いっぱいで保存できない理由のカード（DrawingBoardのlimitCardと同じ見た目）。
+  limitCard: {
+    alignItems: "center",
+    marginTop: theme.spacing.s3,
+    backgroundColor: theme.colors.brandPrimarySoft,
+    borderColor: theme.colors.brandPrimary,
+  },
   resetLinkText: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
   resetConfirmBlock: { alignItems: "center", gap: theme.spacing.s2 },
   resetConfirmActionText: { color: theme.colors.statusBlocking, textDecorationLine: "underline" },

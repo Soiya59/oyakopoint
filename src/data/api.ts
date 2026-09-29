@@ -71,6 +71,7 @@ import type {
   HabitFigureGrantWithPlacement,
   HiddenContent,
   MemberAvatarRow,
+  MemberAvatarStockRow,
   MemberBadge,
   MemberBadgeProgress,
   MemberBlock,
@@ -78,9 +79,12 @@ import type {
   MemberPoints,
   OrnamentStickerPurchase,
   ReactionKind,
+  ResetMemberAvatarResult,
+  RestoreMemberAvatarResult,
   ReportChoreCompletionByNfcTagResult,
   Reward,
   RewardRedemption,
+  SaveMemberAvatarResult,
   ScheduledAnnouncement,
   ScheduledAnnouncementSlot,
   StampKey,
@@ -116,6 +120,14 @@ export const PG_ERRCODE = {
   uniqueViolation: "23505", // NFCタグ衝突・スタンプ重複・家族重複所属
   insufficientPrivilege: "42501", // [2026-08-16追記] 感謝ポイント取消でrevoked_at以外を変更しようとした場合も同一
   noDataFound: "P0002", // 招待コード無効（join_family_with_invite_code）
+  // [2026-09-30追加・要件定義書07-44章、スキーマ設計.sql 81.4章、API仕様.md 37.8章]
+  // 「まえのアバター」が3枚いっぱいのとき、save_member_avatar（今の絵があり新しい絵と
+  // 違う場合）・reset_member_avatar（今の絵がある場合）が返す専用のSQLSTATE。
+  // check_violation（23514）だと「絵のデータが不正」と区別できないため専用にした。
+  // 古い絵は自動では消えない。DBの上限（max_avatar_stock_per_member()）と
+  // theme.avatarStock.maxSlotsは必ず同じ値にすること。src/lib/pgFailureRef.tsの
+  // CODE_ALIASESにも同じ値を書き写している（値がずれたら両方直す）。
+  avatarStockFull: "AV001",
 } as const;
 
 /**
@@ -736,29 +748,105 @@ export async function fetchMemberAvatars(
 
 /**
  * アバターの絵を保存する（新規に描く・描き直すの両方、決定11〜12）。
- * `member_id`が`member_avatars`のPRIMARY KEYのため、`.upsert()`は
- * `INSERT ... ON CONFLICT (member_id) DO UPDATE`として動作する（54.7章）。
- * `family_id`は送らない（`member_avatars_before_write()`トリガーが対象
- * `member_id`の実際の所属家族へ必ず補正するため、54.2章）。
- * 権限は`member_avatars_write_self_or_parent`ポリシー（本人または保護者、
- * 54.5章）がそのまま担保する。
+ *
+ * [2026-09-30変更・要件定義書07-44章、スキーマ設計.sql 81.4章、API仕様.md 37.3章]
+ * 従来の`.upsert()`（前の絵が上書きでDBから消える）から、RPC `save_member_avatar`
+ * （1トランザクション）へ差し替えた。**関数名・引数は変えていない。**今の絵があり
+ * 新しい絵と違えば、今の絵を「まえのアバター」へ足してから新しい絵を今の絵にする。
+ * 戻り値の`result`: `created`（初めて描いた）／`unchanged`（今の絵と同じ。何も足さない）／
+ * `stocked`（今の絵をまえのアバターに足した）。「前の絵は残ったよ」は`stocked`のときだけ出す。
+ * まえのアバターが3枚いっぱいのときは`PG_ERRCODE.avatarStockFull`（AV001）で断られる
+ * （今の絵もストックも変化なし）。権限は本人または保護者（RPCの中で判定）。
  */
 export async function saveMemberAvatar(
   client: SupabaseClient,
   memberId: string,
   lineData: FamilyDrawingLineData
-): Promise<ApiResult<null>> {
-  const { error, status } = await client.from("member_avatars").upsert({ member_id: memberId, line_data: lineData });
+): Promise<ApiResult<SaveMemberAvatarResult>> {
+  const { data, error, status } = await client.rpc("save_member_avatar", {
+    p_member_id: memberId,
+    p_line_data: lineData,
+  });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as SaveMemberAvatarResult };
+}
+
+/**
+ * 「色にもどす」（決定5・決定20〜22）。
+ *
+ * [2026-09-30変更・要件定義書07-44章、API仕様.md 37.5章] 従来の`deleteMemberAvatar`
+ * （行のDELETE＝絵が消える）から、RPC `reset_member_avatar`へ置き換えた。今の絵は
+ * **必ず「まえのアバター」に入れてから**外す（`result: "stocked"`）。3枚いっぱいのときは
+ * 保存と同じく`AV001`で断られる。今の絵が既に無ければ何もせず`result: "nothing"`
+ * （エラーにならない）。
+ */
+export async function resetMemberAvatar(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<ResetMemberAvatarResult>> {
+  const { data, error, status } = await client.rpc("reset_member_avatar", { p_member_id: memberId });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as ResetMemberAvatarResult };
+}
+
+/**
+ * [旧・呼ばないこと] 今の絵の行を直接DELETEする。**「色にもどす」は`resetMemberAvatar`を
+ * 使うこと**（2026-09-30。この関数で消すと今の絵が「まえのアバター」に入らず、何も残さず
+ * 消えてしまう）。要件定義書07-44章・API仕様.md 37.10章の指示で、呼び出し元が無くなっても
+ * 削除せず残している。
+ */
+export async function deleteMemberAvatar(client: SupabaseClient, memberId: string): Promise<ApiResult<null>> {
+  const { error, status } = await client.from("member_avatars").delete().eq("member_id", memberId);
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
 /**
- * 「色にもどす」（決定5・決定20〜22）。行のDELETEで表す（54.2章・54.6章）。
- * 対象行が既に存在しない場合もエラーにはならない（削除0件のまま成功扱い）。
+ * [2026-09-30新設・要件定義書07-44章、API仕様.md 37.2章] 「まえのアバター」を1人分読む
+ * （新しい順・最大3行）。RLSが本人＋保護者（家族全員の分）に限定する。みまもり・子どもが
+ * 他人のmemberIdを指定した場合や他家族は、エラーにならず0行が返る。
+ *
+ * **読むのはアバターを描く画面（C31・P38・S26）を開いたときと、下のRPCが成功した直後だけ。**
+ * `store.tsx`の家族全員分のキャッシュ・`useBackgroundAutoRefresh`には載せない
+ * （スキーマ設計.sql 81.17章5）。`invite-lookup`（service_role）にはこの表を読ませない。
  */
-export async function deleteMemberAvatar(client: SupabaseClient, memberId: string): Promise<ApiResult<null>> {
-  const { error, status } = await client.from("member_avatars").delete().eq("member_id", memberId);
+export async function fetchMemberAvatarStocks(
+  client: SupabaseClient,
+  memberId: string
+): Promise<ApiResult<MemberAvatarStockRow[]>> {
+  const { data, error, status } = await client
+    .from("member_avatar_stocks")
+    .select("id, member_id, line_data, stocked_at")
+    .eq("member_id", memberId)
+    .order("stocked_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: (data ?? []) as MemberAvatarStockRow[] };
+}
+
+/**
+ * [2026-09-30新設・API仕様.md 37.4章]「これにもどす」（入れ替え）。対象のメンバーは
+ * ストックの行から決まる。今の絵があれば新しいidで「まえのアバター」に入り（`swapped`、
+ * 枚数は変わらないので3枚いっぱいでも使える）、無ければ1枚減る（`restored`）。
+ * **入れ替えのたびにidが変わる**ため、戻したあとは必ず一覧を取り直すこと。二度押し・
+ * 他の端末で先に処理された古いidは`no_data_found`（P0002）になる（呼び出し側は
+ * 「すでに戻した」として扱い、一覧と今の絵を再取得する。スキーマ設計.sql 81.17章7）。
+ */
+export async function restoreMemberAvatarFromStock(
+  client: SupabaseClient,
+  stockId: string
+): Promise<ApiResult<RestoreMemberAvatarResult>> {
+  const { data, error, status } = await client.rpc("restore_member_avatar_from_stock", { p_stock_id: stockId });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as RestoreMemberAvatarResult };
+}
+
+/**
+ * [2026-09-30新設・API仕様.md 37.6章] まえのアバターを1枚消す（クライアントの直接DELETE。
+ * RLSが本人＋保護者に限定する）。対象が既に無い場合も0件削除のまま成功（エラーにならない）。
+ * **今の絵を消す操作ではない**（今の絵を外すのは`resetMemberAvatar`）。
+ */
+export async function deleteMemberAvatarStock(client: SupabaseClient, stockId: string): Promise<ApiResult<null>> {
+  const { error, status } = await client.from("member_avatar_stocks").delete().eq("id", stockId);
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
