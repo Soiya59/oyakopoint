@@ -363,6 +363,9 @@ export function AvatarDrawingPanel({
           variant="secondary"
           onPress={undoLastStroke}
           disabled={saving || lines.length === 0}
+          style={styles.actionButtonEqual}
+          numberOfLines={2}
+          adjustsFontSizeToFit
         />
         {/* [2026-09-29変更・実装メモ.md 327章] 326章の差し替えをやめ、常に
             「ぜんぶけす」のまま（`DrawingBoard.tsx`と同じ）。削除の入口は
@@ -373,6 +376,9 @@ export function AvatarDrawingPanel({
           variant="secondary"
           onPress={clearAll}
           disabled={saving || lines.length === 0}
+          style={styles.actionButtonEqual}
+          numberOfLines={2}
+          adjustsFontSizeToFit
         />
         <AppButton
           label={saveLabel}
@@ -380,7 +386,9 @@ export function AvatarDrawingPanel({
           loading={saving}
           disabled={saving || lines.length === 0}
           onPress={handleSave}
-          style={styles.saveButton}
+          style={styles.actionButtonEqual}
+          numberOfLines={2}
+          adjustsFontSizeToFit
         />
       </View>
     </View>
@@ -400,7 +408,10 @@ const styles = StyleSheet.create({
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   strokeWidthWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   actionRow: { flexDirection: "row", marginTop: theme.spacing.s4, gap: theme.spacing.s3 },
-  saveButton: { flex: 1 },
+  // [2026-09-29・実装メモ.md 329章] 3ボタンを等分する（旧`saveButton`＝保存だけflex:1）。
+  // 文字の大きい端末で「ひとつ もどす」「ぜんぶけす」が幅を取りきり、保存ボタンが
+  // 潰れて文字が見えなくなるのを防ぐ（`DrawingBoard.tsx`と同じ直し方）。
+  actionButtonEqual: { flex: 1 },
   error: { marginTop: theme.spacing.s3, color: theme.colors.statusBlocking, textAlign: "center" },
   atCapacity: {
     marginTop: theme.spacing.s3,
