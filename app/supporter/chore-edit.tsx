@@ -29,6 +29,19 @@ import {
 import { useFailureNotice } from "@/hooks/useFailureNotice";
 import { describeApiFailure } from "@/lib/apiFailureDisplay";
 import FailureRefText from "@/components/FailureRefText";
+import {
+  EDITING_BANNER_CAPTION,
+  RENAME_CONFIRM_AS_NEW_HINT,
+  RENAME_CONFIRM_AS_NEW_LABEL,
+  RENAME_CONFIRM_AS_NEW_SAVING_LABEL,
+  RENAME_CONFIRM_CANCEL_LABEL,
+  RENAME_CONFIRM_KEEP_LABEL,
+  RENAME_CONFIRM_KEEP_SAVING_LABEL,
+  editingBannerText,
+  newRegistrationNotes,
+  renameConfirmMessage,
+  shouldConfirmChoreRename,
+} from "@/lib/choreRename";
 
 // [2026-09-01追加・実装メモ.md 108章] 要件定義書07-2章判断事項7「みまもりメンバー
 // 自身の自分専用クエストへのタグ発行」。当初は自分専用クエストのタグの持ち主が
@@ -105,6 +118,10 @@ export default function SupporterChoreEditScreen() {
   const [dailyLimitText, setDailyLimitText] = useState(chore?.daily_limit != null ? String(chore.daily_limit) : "");
 
   const [saving, setSaving] = useState(false);
+  // [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存するときだけ出す確認
+  // （app/parent/chore-edit.tsxと同じ。判定・文言は src/lib/choreRename.ts）。
+  const [confirmingRename, setConfirmingRename] = useState(false);
+  const [savingKind, setSavingKind] = useState<"update" | "createNew" | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // [2026-09-29変更・実装メモ331章] 失敗は生の文言でなく、原因に応じた文言＋目印（useFailureNotice）で出す。
@@ -238,9 +255,13 @@ export default function SupporterChoreEditScreen() {
     return null;
   };
 
-  const save = async () => {
+  // opts.skipRenameConfirm: 名前変更の確認で［変える］を押したあと。
+  // opts.asNew: 確認で［新しいクエストとして登録する］を押したとき。元のクエストは触らず、
+  // 画面の入力値で新しく1件登録する（新規登録と同じcreateSupporterSharedChore・同じvalidate）。
+  const save = async (opts?: { skipRenameConfirm?: boolean; asNew?: boolean }) => {
     const validationError = validate();
     if (validationError) {
+      setConfirmingRename(false);
       setErrorMessage(validationError);
       return;
     }
@@ -249,7 +270,15 @@ export default function SupporterChoreEditScreen() {
       return;
     }
     setErrorMessage(null);
+
+    // [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存するときだけ確認を出す。
+    if (chore && !opts?.skipRenameConfirm && !opts?.asNew && shouldConfirmChoreRename(chore.title, title)) {
+      setConfirmingRename(true);
+      return;
+    }
+
     setSaving(true);
+    setSavingKind(chore ? (opts?.asNew ? "createNew" : "update") : null);
 
     const input = {
       title: title.trim(),
@@ -261,12 +290,16 @@ export default function SupporterChoreEditScreen() {
 
     // 新規作成は常にscope='supporter_shared'（みまもり共通）。編集時は
     // updatePersonalChoreがどちらのscopeにもそのまま使える（既存の仕様）。
-    const res = chore
-      ? await updatePersonalChore(client, chore.id, input)
-      : await createSupporterSharedChore(client, state.family.id, input);
+    // 「新しいクエストとして登録する」（opts.asNew）は新規作成と同じ経路（常にsupporter_shared）。
+    const res =
+      chore && !opts?.asNew
+        ? await updatePersonalChore(client, chore.id, input)
+        : await createSupporterSharedChore(client, state.family.id, input);
 
     setSaving(false);
+    setSavingKind(null);
     if (!res.ok) {
+      setConfirmingRename(false);
       showFailure(res.error);
       return;
     }
@@ -298,9 +331,20 @@ export default function SupporterChoreEditScreen() {
 
   return (
     <Screen tone="supporter">
-      <Text style={theme.typography.supporterTitle}>
-        {chore ? `${chore.emoji ?? "🎯"} クエストを編集` : "クエストを新規登録"}
-      </Text>
+      {/* [2026-09-30変更・実装メモ336章] 編集画面の一番上に「◯◯を編集中」を出し、新しく
+          登録する画面と見分けやすくする（app/parent/chore-edit.tsxと同じ）。 */}
+      {chore ? (
+        <Card style={styles.editingBanner} tone="supporter">
+          <Text style={theme.typography.supporterTitle}>
+            {chore.emoji ?? "🎯"} {editingBannerText(chore.title)}
+          </Text>
+          <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            {EDITING_BANNER_CAPTION}
+          </Text>
+        </Card>
+      ) : (
+        <Text style={theme.typography.supporterTitle}>クエストを新規登録</Text>
+      )}
 
       {/* [2026-09-20新設・主要画面ワイヤーフレーム.md 54章決定9、開発部への申し送り
           54.11節5.] P11（app/parent/chore-edit.tsx）と同じ位置・同じ文言のプレフィル
@@ -316,7 +360,17 @@ export default function SupporterChoreEditScreen() {
       )}
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
-      <TextInput value={title} onChangeText={setTitle} placeholder="例：ウォーキング30分" maxLength={100} style={styles.input} />
+      <TextInput
+        value={title}
+        onChangeText={(t) => {
+          setTitle(t);
+          // 名前を打ち直したら、出ていた確認は引っ込める（確認の文言が古くならないように）。
+          setConfirmingRename(false);
+        }}
+        placeholder="例：ウォーキング30分"
+        maxLength={100}
+        style={styles.input}
+      />
 
       <Text style={[theme.typography.supporterBodyMedium, styles.fieldLabel]}>絵文字（任意）</Text>
       <TextInput
@@ -395,14 +449,60 @@ export default function SupporterChoreEditScreen() {
       )}
       <FailureRefText value={errorRef} tone="supporter" />
 
-      <AppButton
-        tone="supporter"
-        label={saving ? "保存中…" : "保存する"}
-        loading={saving}
-        disabled={saving || deleting}
-        style={{ marginTop: theme.spacing.s6 }}
-        onPress={save}
-      />
+      {/* [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存しようとしたときの確認。
+          保存ボタンのあった位置に出し、ボタンは縦に並べる（文字が大きい端末でも崩れない）。 */}
+      {chore && confirmingRename && (
+        <Card style={styles.renameConfirmCard} tone="supporter">
+          <Text style={theme.typography.supporterBodyMedium}>{renameConfirmMessage(chore.title, title)}</Text>
+          <Text style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 }]}>
+            {RENAME_CONFIRM_AS_NEW_HINT}
+          </Text>
+          {newRegistrationNotes({ isRepeatable, dailyLimitText, isPersonalScope: chore.scope === "personal" }).map((note) => (
+            <Text
+              key={note}
+              style={[theme.typography.supporterCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}
+            >
+              {note}
+            </Text>
+          ))}
+          <AppButton
+            tone="supporter"
+            label={savingKind === "update" ? RENAME_CONFIRM_KEEP_SAVING_LABEL : RENAME_CONFIRM_KEEP_LABEL}
+            loading={savingKind === "update"}
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s4 }}
+            onPress={() => save({ skipRenameConfirm: true })}
+          />
+          <AppButton
+            tone="supporter"
+            label={savingKind === "createNew" ? RENAME_CONFIRM_AS_NEW_SAVING_LABEL : RENAME_CONFIRM_AS_NEW_LABEL}
+            variant="secondary"
+            loading={savingKind === "createNew"}
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s2 }}
+            onPress={() => save({ asNew: true })}
+          />
+          <AppButton
+            tone="supporter"
+            label={RENAME_CONFIRM_CANCEL_LABEL}
+            variant="ghost"
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s2 }}
+            onPress={() => setConfirmingRename(false)}
+          />
+        </Card>
+      )}
+
+      {!confirmingRename && (
+        <AppButton
+          tone="supporter"
+          label={saving ? "保存中…" : "保存する"}
+          loading={saving}
+          disabled={saving || deleting}
+          style={{ marginTop: theme.spacing.s6 }}
+          onPress={() => save()}
+        />
+      )}
 
       {/* NFCタグ管理（要件定義書07-2章判断事項7、主要画面ワイヤーフレーム.md 7.6.2章）
           新規作成モード（choreがまだ存在しない）では対象のchore_idが無いため表示しない。
@@ -698,6 +798,14 @@ const styles = StyleSheet.create({
   // [2026-09-20追加・主要画面ワイヤーフレーム.md 54章決定9] P11の
   // styles.metaCard（marginTop: s4のみ）と同じ値。
   metaCard: { marginTop: theme.spacing.s4 },
+  // [2026-09-30追加・実装メモ336章] 「◯◯を編集中」の見出しCardと名前変更の確認Card。
+  // 既存のchipSelected（supporterAccent系）・アンバー（statusPending系）と同じ既存トークン。
+  editingBanner: { backgroundColor: theme.colors.supporterAccentSoft, borderColor: theme.colors.supporterAccent },
+  renameConfirmCard: {
+    marginTop: theme.spacing.s6,
+    backgroundColor: theme.colors.statusPendingSoft,
+    borderColor: theme.colors.statusPending,
+  },
   fieldLabel: { marginTop: theme.spacing.s4 },
   input: {
     marginTop: theme.spacing.s2,

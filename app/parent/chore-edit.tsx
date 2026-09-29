@@ -35,6 +35,19 @@ import { describeApiFailure } from "@/lib/apiFailureDisplay";
 import FailureRefText from "@/components/FailureRefText";
 import ChoreRequestEdit from "@/components/ChoreRequestEdit";
 import { isRequestChore } from "@/lib/requestChore";
+import {
+  EDITING_BANNER_CAPTION,
+  RENAME_CONFIRM_AS_NEW_HINT,
+  RENAME_CONFIRM_AS_NEW_LABEL,
+  RENAME_CONFIRM_AS_NEW_SAVING_LABEL,
+  RENAME_CONFIRM_CANCEL_LABEL,
+  RENAME_CONFIRM_KEEP_LABEL,
+  RENAME_CONFIRM_KEEP_SAVING_LABEL,
+  editingBannerText,
+  newRegistrationNotes,
+  renameConfirmMessage,
+  shouldConfirmChoreRename,
+} from "@/lib/choreRename";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -177,6 +190,11 @@ function ChoreEditFormScreen() {
   const [failedAssigneeIds, setFailedAssigneeIds] = useState<string[]>([]);
 
   const [saving, setSaving] = useState(false);
+  // [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存するときだけ出す確認
+  // （うっかり既存のクエストを書き換える事故の防止）。判定は src/lib/choreRename.ts。
+  // どちらのボタンを押したか（変える／新しいクエストとして登録する）で、保存中の表示を分ける。
+  const [confirmingRename, setConfirmingRename] = useState(false);
+  const [savingKind, setSavingKind] = useState<"update" | "createNew" | null>(null);
   // [2026-08-29追加・本部長／軽微変更ルート] クエストの削除。ユーザー要望
   // 「クエストの削除を可能とする」。完全削除（DELETE）だが完了履歴・ポイント・
   // 家族の木・通帳は残る（src/data/api.ts deleteChore のコメント参照）。
@@ -384,9 +402,13 @@ function ChoreEditFormScreen() {
     };
   };
 
-  const save = async () => {
+  // opts.skipRenameConfirm: 名前変更の確認で［変える］を押したあと（確認を重ねて出さない）。
+  // opts.asNew: 確認で［新しいクエストとして登録する］を押したとき。元のクエストは触らず、
+  // 画面に入っている値で新しく1件登録する（既存の新規登録と同じcreateChore・同じvalidate）。
+  const save = async (opts?: { skipRenameConfirm?: boolean; asNew?: boolean }) => {
     const validationError = validate();
     if (validationError) {
+      setConfirmingRename(false);
       setErrorMessage(validationError);
       return;
     }
@@ -401,12 +423,28 @@ function ChoreEditFormScreen() {
     }
     setErrorMessage(null);
 
+    // [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存するときだけ、
+    // 保存の前に確認を出す（名前を変えない修正・新規登録では出さない）。
+    if (chore && !opts?.skipRenameConfirm && !opts?.asNew && shouldConfirmChoreRename(chore.title, title)) {
+      setConfirmingRename(true);
+      return;
+    }
+
     // 編集モード: 単一選択（assignedTo）のまま、従来どおり1回だけ更新する。
     if (chore) {
       setSaving(true);
-      const res = await updateChore(client, chore.id, buildChoreInput(assignedTo));
+      setSavingKind(opts?.asNew ? "createNew" : "update");
+      // 「新しいクエストとして登録する」は、元のクエストを更新せず、既存の新規登録（下の
+      // 新規作成モード・1人選択時）と同じcreateChoreで、いまの入力値のまま1件登録する。
+      // 編集モードの担当は単一選択なので、複数担当の逐次保存（saveSequentially）は通らない。
+      // 無料版の登録数上限は現状コードにもDBにも無いため、既存の新規登録と同じく何も足していない。
+      const res = opts?.asNew
+        ? await createChore(client, state.family.id, buildChoreInput(assignedTo))
+        : await updateChore(client, chore.id, buildChoreInput(assignedTo));
       setSaving(false);
+      setSavingKind(null);
       if (!res.ok) {
+        setConfirmingRename(false);
         showFailure(res.error);
         return;
       }
@@ -501,9 +539,21 @@ function ChoreEditFormScreen() {
 
   return (
     <Screen tone="parent">
-      <Text style={theme.typography.parentTitle}>
-        {chore ? `${chore.emoji ?? "📝"} クエストを編集` : "クエストを新規登録"}
-      </Text>
+      {/* [2026-09-30変更・実装メモ336章] 編集画面の一番上に「◯◯を編集中」を出し、新しく
+          登録する画面と見分けやすくする（新規登録のときは従来どおりの見出しだけ）。
+          長い名前・大きい文字でも折り返して収まる（幅を固定しない）。 */}
+      {chore ? (
+        <Card style={styles.editingBanner} tone="parent">
+          <Text style={theme.typography.parentTitle}>
+            {chore.emoji ?? "📝"} {editingBannerText(chore.title)}
+          </Text>
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            {EDITING_BANNER_CAPTION}
+          </Text>
+        </Card>
+      ) : (
+        <Text style={theme.typography.parentTitle}>クエストを新規登録</Text>
+      )}
 
       {/* [2026-08-30追加] 登録者・最終編集者（要件定義書07-15章、主要画面ワイヤーフレーム.md
           24.2節決定4）。既存のnfcCardと同種のCardで軽く囲み、フォームより手前・目的文の
@@ -566,7 +616,11 @@ function ChoreEditFormScreen() {
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>タイトル（必須）</Text>
       <TextInput
         value={title}
-        onChangeText={setTitle}
+        onChangeText={(t) => {
+          setTitle(t);
+          // 名前を打ち直したら、出ていた確認は引っ込める（確認の文言が古くならないように）。
+          setConfirmingRename(false);
+        }}
         placeholder="例：お風呂そうじ"
         maxLength={100}
         style={styles.input}
@@ -763,7 +817,46 @@ function ChoreEditFormScreen() {
           39.3.3節決定14] 0人・1人選択時は「保存する」（変更なし）。2人以上選択時のみ
           「◯人ぶん保存する」に変える。保存結果（saveResult）が出ている間は、この
           ボタン自体を隠す（決定16。再度押すと成功済みメンバーの行を重複作成しうるため）。 */}
-      {!saveResult && (
+      {/* [2026-09-30追加・実装メモ336章] 既存のクエストの名前を変えて保存しようとしたときの確認。
+          保存ボタンのあった位置に出す（指の位置で気づけるように）。ボタンは縦に並べ、
+          文字が大きい端末でも1つずつ折り返して読める（328・329章）。 */}
+      {!saveResult && chore && confirmingRename && (
+        <Card style={styles.renameConfirmCard} tone="parent">
+          <Text style={theme.typography.parentBodyMedium}>{renameConfirmMessage(chore.title, title)}</Text>
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s2 }]}>
+            {RENAME_CONFIRM_AS_NEW_HINT}
+          </Text>
+          {newRegistrationNotes({ isRepeatable, dailyLimitText }).map((note) => (
+            <Text key={note} style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+              {note}
+            </Text>
+          ))}
+          <AppButton
+            label={savingKind === "update" ? RENAME_CONFIRM_KEEP_SAVING_LABEL : RENAME_CONFIRM_KEEP_LABEL}
+            loading={savingKind === "update"}
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s4 }}
+            onPress={() => save({ skipRenameConfirm: true })}
+          />
+          <AppButton
+            label={savingKind === "createNew" ? RENAME_CONFIRM_AS_NEW_SAVING_LABEL : RENAME_CONFIRM_AS_NEW_LABEL}
+            variant="secondary"
+            loading={savingKind === "createNew"}
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s2 }}
+            onPress={() => save({ asNew: true })}
+          />
+          <AppButton
+            label={RENAME_CONFIRM_CANCEL_LABEL}
+            variant="ghost"
+            disabled={saving}
+            style={{ marginTop: theme.spacing.s2 }}
+            onPress={() => setConfirmingRename(false)}
+          />
+        </Card>
+      )}
+
+      {!saveResult && !confirmingRename && (
         <AppButton
           label={
             !isEditMode && selectedAssignees.length >= 2
@@ -777,7 +870,7 @@ function ChoreEditFormScreen() {
           loading={saving}
           disabled={saving}
           style={{ marginTop: theme.spacing.s6 }}
-          onPress={save}
+          onPress={() => save()}
         />
       )}
 
@@ -1123,6 +1216,15 @@ const styles = StyleSheet.create({
   // [2026-08-30追加] 主要画面ワイヤーフレーム.md 24.2節決定4。nfcCardと同種の
   // Card枠（色は既定のneutralBorderのまま、強調色は使わない）。
   metaCard: { marginTop: theme.spacing.s4 },
+  // [2026-09-30追加・実装メモ336章] 「◯◯を編集中」の見出しCard。既存のchipSelectedと同じ
+  // brandPrimarySoft/brandPrimaryの組み合わせ（新しい色は足さない）。
+  editingBanner: { backgroundColor: theme.colors.brandPrimarySoft, borderColor: theme.colors.brandPrimary },
+  // 名前変更の確認Card。警告色（赤）は使わず、アンバー（partialFailCardと同じ既存トークン）にする。
+  renameConfirmCard: {
+    marginTop: theme.spacing.s6,
+    backgroundColor: theme.colors.statusPendingSoft,
+    borderColor: theme.colors.statusPending,
+  },
   metaLine: { marginTop: theme.spacing.s1 },
   fieldLabel: { marginTop: theme.spacing.s4 },
   input: {
