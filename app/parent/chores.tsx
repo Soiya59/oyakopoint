@@ -11,6 +11,8 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { Chore } from "@/types/domain";
 import { groupDuplicateRows, resolveAssigneeLabel } from "@/lib/groupDuplicateRows";
+import { isRequestChore, isRequestWithoutAssignee } from "@/lib/requestChore";
+import { requestListRightLabel } from "@/lib/requestChoreText";
 import {
   buildChoreCompletionFamilyTotalsLookup,
   keyChoreCompletionTotal,
@@ -28,6 +30,16 @@ import {
  * 判定は useChoreCompletionTotals() の isOneOffFinished（DB側の集計 chore_completion_totals に
  * 基づく。src/lib/oneOffFinished.ts）に集約し、子どもホームと同じ基準を使う。
  * DBは変更していないので、記録を消さない限りこの状態が勝手に戻ることはない。
+ *
+ * [2026-09-30追加・要件定義書07-43章決定13、主要画面ワイヤーフレーム.md 70.8節D15、実装メモ.md 335章]
+ * 「おねがい」（`chore.is_request`）の行は、右側を「おねがい・{担当}」（やってくれたあとは
+ * 「おねがい（済）・{担当}」）に置き換える。「0pt」「計◯回」「家族で計◯回」は出さない。行・列は
+ * 増やさない。「未対応のおねがい」の件数・一覧・経過日数・上限（3つまで）の説明は出さない
+ * （上限は頼むときにだけ説明する）。「同じ内容」の折りたたみの対象にしない（題名＋ptの完全一致で
+ * まとめる規則は、pt欄が無いおねがいには当たらない。複数の子に同じ題名で頼んだとき、誰に頼んだか
+ * が行ごとに見えるほうが大事）。担当が空のおねがい（担当だった子どもがいなくなった行）は、
+ * 「終わった単発のクエスト」の区分に「おねがい・担当なし」として並べる（開くと取り下げだけできる。
+ * 放っておくと消せない行が残るのを防ぐ）。
  */
 export default function ChoresListScreen() {
   const { state } = useAppData();
@@ -84,8 +96,9 @@ export default function ChoresListScreen() {
   // 中身は記録ではなくクエスト一覧である。クエストの話はクエスト管理に集める。
   // 表示条件は従来のタイルと同じ（画面一覧・遷移図.md P25「家族にみまもりメンバーが
   // 1人もいない場合は導線自体を表示しない」）。
-  const active = managed.filter((c) => !isOneOffFinished(c));
-  const finished = managed.filter((c) => isOneOffFinished(c));
+  // [2026-09-30追加・D15] 担当が空のおねがいは、終わっていなくても「終わった単発」の区分へ並べる。
+  const active = managed.filter((c) => !isOneOffFinished(c) && !isRequestWithoutAssignee(c));
+  const finished = managed.filter((c) => isOneOffFinished(c) || isRequestWithoutAssignee(c));
 
   // [2026-09-11削除・要件定義書07-26章決定1／主要画面ワイヤーフレーム.md 39.1.1節]
   // 「わたしが登録」「かぞくが登録」の2グループへの分割（mine/others）は廃止した。
@@ -128,6 +141,13 @@ export default function ChoresListScreen() {
     // 表示、決定11）。取得に失敗したときは回数の部分だけ出さない（53.7節）。
     const completionTotalSuffix =
       totalsLoadState === "error" ? "" : c.assigned_to !== null ? `・計${completionCountFor(c)}回` : `・家族で計${completionCountFor(c)}回`;
+    // [2026-09-30追加・D15] おねがいの行の右側。ポイント・回数は出さない。
+    const requestRightLabel = isRequestChore(c)
+      ? requestListRightLabel(
+          isOneOffFinished(c),
+          c.assigned_to ? state.members.find((m) => m.id === c.assigned_to)?.display_name ?? null : null
+        )
+      : null;
     return (
       <Pressable key={c.id} onPress={() => router.push({ pathname: "/parent/chore-edit", params: { id: c.id } })}>
         <Card
@@ -162,10 +182,14 @@ export default function ChoresListScreen() {
             {resolveRegistrantSuffix(c)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary, flexShrink: 0 }}>
-            {c.points}pt{" "}
-            {c.is_repeatable ? "" : dimmed ? "・単発（済）" : "・単発"}
-            {assigneeLabel ? `・${assigneeLabel}` : ""}
-            {completionTotalSuffix}
+            {requestRightLabel ?? (
+              <>
+                {c.points}pt{" "}
+                {c.is_repeatable ? "" : dimmed ? "・単発（済）" : "・単発"}
+                {assigneeLabel ? `・${assigneeLabel}` : ""}
+                {completionTotalSuffix}
+              </>
+            )}
           </Text>
         </Card>
       </Pressable>
@@ -178,7 +202,12 @@ export default function ChoresListScreen() {
   // 区分の内側だけでグルーピングする（区分をまたがない、38.2節）。グルーピング判定は
   // 名前・ポイントの完全一致（07-24章決定1）。
   const renderSection = (items: Chore[], dimmed: boolean, sectionKey: string) => {
-    const groups = groupDuplicateRows(items, (c) => `${c.title.trim()} ${c.points}`, state.members);
+    // [2026-09-30追加・D15] おねがいは「同じ内容」のまとめの対象にしない（idで必ず別々のキーにする）。
+    const groups = groupDuplicateRows(
+      items,
+      (c) => (isRequestChore(c) ? `request:${c.id}` : `${c.title.trim()} ${c.points}`),
+      state.members
+    );
     return groups.map((g) => {
       if (g.items.length < 2) {
         return renderRow(g.items[0], dimmed);

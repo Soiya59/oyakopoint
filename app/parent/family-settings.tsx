@@ -13,6 +13,7 @@ import { updateFamilyName, setMemberScheduledAnnouncementReceiveEnabled } from "
 import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
 import { useFailureNotice } from "@/hooks/useFailureNotice";
 import FailureRefText from "@/components/FailureRefText";
+import { NOTIFY_SWITCH_DESCRIPTION, NOTIFY_SWITCH_HEADING } from "@/lib/requestChoreText";
 
 // [2026-09-29追加・実装メモ331章] 設定の変更に失敗したときの一文（従来のまま）。電波・混み合い等のときだけ別の文言に入れ替わる。
 const SETTING_CHANGE_FAILED_MESSAGE = "変更できませんでした。もう一度お試しください。";
@@ -67,8 +68,8 @@ export default function FamilySettingsScreen() {
     useFailureNotice("parent");
 
   // [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
-  // 主要画面ワイヤーフレーム.md 63.1節] 通知トグル（やりとりトグルの直下に
-  // 1段インデントして従属配置）。
+  // 主要画面ワイヤーフレーム.md 63.1節] 通知トグル。[2026-09-30変更・70.5節D11] やりとりトグルの
+  // 従属配置をやめ、独立したCard「お知らせの通知（家族みんな共通）」にした。
   const [savingNotify, setSavingNotify] = useState(false);
   const [notifySuccess, setNotifySuccess] = useState(false);
   const { errorMessage: notifyError, errorRef: notifyErrorRef, setErrorMessage: setNotifyError, showFailure: showNotifyFailure } =
@@ -216,6 +217,59 @@ export default function FamilySettingsScreen() {
         )}
       </Card>
 
+      {/* [2026-09-30変更・統括の回答（Q2）案A・主要画面ワイヤーフレーム.md 70.5節D11、実装メモ.md 335章]
+          通知スイッチを、「文字の書き込み」Cardの中の従属配置（区切り線の下）から切り離し、
+          「メッセージ」Cardと「文字の書き込み」Cardの間の**独立したCard**にした。名前は
+          「書き込みの通知」から「お知らせの通知（家族みんな共通）」に広げた（おねがい・ありがとうの
+          ポイントの通知もこのスイッチに乗るため）。**やりとりスイッチが「止める」でも、このCardは
+          常に出す**（2026-09-25の「やりとりを止めるときは通知スイッチを隠す」〈実装メモ299章〉は、
+          このスイッチに限って戻した。おねがい・ありがとうの通知は、やりとりを止めていても起きる出来事
+          のため、見えない設定が動く状態を作らない）。DBは変わらない（もともと別の列・別のRPCで、
+          互いに連動しない）。既定は今までどおり「通知しない」（OSの許可は一度断られると聞き直せない
+          ため。家族が自分でオンにしない限り、おねがいのプッシュは鳴らない）。保存中・保存成功
+          「変更しました」・保存失敗・端末の状態行・ソフトアスクの出方は今までと同じ。 */}
+      <Card style={{ marginTop: theme.spacing.s4 }}>
+        <Text style={theme.typography.parentBodyMedium}>{NOTIFY_SWITCH_HEADING}</Text>
+        <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
+          {NOTIFY_SWITCH_DESCRIPTION}
+        </Text>
+        <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
+          <Pressable
+            onPress={() => setNotificationsEnabled(true)}
+            disabled={savingNotify}
+            style={[styles.chip, state.family.push_notifications_enabled && styles.chipSelected]}
+          >
+            <Text>通知する</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setNotificationsEnabled(false)}
+            disabled={savingNotify}
+            style={[styles.chip, !state.family.push_notifications_enabled && styles.chipSelected]}
+          >
+            <Text>通知しない</Text>
+          </Pressable>
+        </View>
+        {savingNotify && (
+          <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
+            保存中…
+          </Text>
+        )}
+        {notifySuccess && (
+          <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
+        )}
+        {notifyError && (
+          <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{notifyError}</Text>
+        )}
+        <FailureRefText value={notifyErrorRef} tone="parent" />
+        {/* [主要画面ワイヤーフレーム.md 63.5.1節・70.5節D11] 通知スイッチが「通知する」（または
+            「メッセージ」が有効）で、かつこの端末の状態が「行動が必要」なときだけ、再挑戦の導線を出す。
+            やりとりスイッチの値は条件に入れない（切り離したため）。 */}
+        <NotificationDeviceStatusRow
+          visible={state.family.push_notifications_enabled || hasActiveScheduledAnnouncement}
+          tone="parent"
+        />
+      </Card>
+
       <Card style={{ marginTop: theme.spacing.s4 }}>
         {/* [2026-09-25短縮・統括「記載が長く見にくい」・実装メモ299章] 子どもの
             画面での呼び名（かぞくのけいじばん／＋ひとこと）の説明は取扱説明書に
@@ -267,63 +321,6 @@ export default function FamilySettingsScreen() {
           </Pressable>
         )}
 
-        {/* [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
-            主要画面ワイヤーフレーム.md 63.1節] 通知トグル。やりとりトグルと
-            同じCardの中に、区切り線の下に従属配置する（決定1。新しいCardは
-            作らない・横並びの独立トグルとして置かない）。保存済みの値は保持する。
-            [2026-09-25変更・統括承認・実装メモ299章] やりとりトグルが「いまは
-            使わない」のときは、グレーアウトではなく行ごと隠す（決定4を変更）。
-            隠せば「お知らせも届きません」という説明が不要になり、短くなるため。 */}
-        <View>
-          {state.family.social_interactions_enabled && (
-            <>
-              <View style={styles.notifyDivider} />
-              <Text style={theme.typography.parentBodyMedium}>書き込みの通知（家族みんな共通）</Text>
-              <View style={[styles.chipRow, { marginTop: theme.spacing.s2 }]}>
-                <Pressable
-                  onPress={() => setNotificationsEnabled(true)}
-                  disabled={savingNotify}
-                  style={[styles.chip, state.family.push_notifications_enabled && styles.chipSelected]}
-                >
-                  <Text>通知する</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setNotificationsEnabled(false)}
-                  disabled={savingNotify}
-                  style={[styles.chip, !state.family.push_notifications_enabled && styles.chipSelected]}
-                >
-                  <Text>通知しない</Text>
-                </Pressable>
-              </View>
-            </>
-          )}
-          {savingNotify && (
-            <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary, marginTop: theme.spacing.s1 }]}>
-              保存中…
-            </Text>
-          )}
-          {notifySuccess && (
-            <Text style={{ color: theme.colors.brandPrimaryStrong, marginTop: theme.spacing.s1 }}>変更しました</Text>
-          )}
-          {notifyError && (
-            <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{notifyError}</Text>
-          )}
-          <FailureRefText value={notifyErrorRef} tone="parent" />
-          {/* [主要画面ワイヤーフレーム.md 63.5.1節] 通知トグルが「お知らせする」で、
-              かつこの端末の状態が「行動が必要」なときだけ、再挑戦の導線を出す。
-              [2026-09-22本部長の画面確認で追加] やりとりトグルがオフのときも
-              条件に入れる。オフの間は投稿自体が止まり通知は一切発生しないため、
-              チップだけグレーアウトしてこの行が押せるままだと、押しても何も
-              起きない導線が残ってしまう（決定4「やりとりがオフならグレー
-              アウト」の趣旨と食い違う）。 */}
-          <NotificationDeviceStatusRow
-            visible={
-              (state.family.push_notifications_enabled && state.family.social_interactions_enabled) ||
-              hasActiveScheduledAnnouncement
-            }
-            tone="parent"
-          />
-        </View>
       </Card>
     </Screen>
   );

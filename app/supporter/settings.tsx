@@ -88,13 +88,14 @@ export default function SupporterSettingsScreen() {
           保護者のみ。07-37章3章）。「この端末の状態」1行のみ、既存の
           ログアウト・家族から抜けるの並びより前（画面の上部）に置く。
           家族の通知トグルがオフのときは何も表示しない。 */}
-      {/* [2026-09-22本部長の画面確認で追加] P40と同じ理由で、やりとりトグルが
-          オフのときも表示しない（オフの間は投稿が止まり通知は発生しない）。 */}
+      {/* [2026-09-22本部長の画面確認で追加→2026-09-30変更・主要画面ワイヤーフレーム.md 70.5節D11、
+          実装メモ335章] 以前は「やりとりトグルがオフのときも表示しない」（オフの間は投稿が止まり通知は
+          発生しない、という前提）だったが、通知スイッチを「お知らせの通知（家族みんな共通）」に広げて
+          やりとりの設定から切り離した（おねがい・ありがとうのポイントの通知は、やりとりを止めていても
+          起きる）ため、やりとりトグルの値は条件に入れない。P40の端末の状態行と同じ条件
+          （通知スイッチが「通知する」、または「メッセージ」が有効）。 */}
       <NotificationDeviceStatusRow
-        visible={
-          (state.family.push_notifications_enabled && state.family.social_interactions_enabled) ||
-          hasActiveScheduledAnnouncement
-        }
+        visible={state.family.push_notifications_enabled || hasActiveScheduledAnnouncement}
         tone="supporter"
       />
 

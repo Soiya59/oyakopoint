@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
+import { buildRequestChoreIdSet, shouldShowCompletionPoints } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
@@ -127,6 +128,8 @@ export default function SupporterFamilyScreen() {
   const recentCompletions = completions.slice(0, 5);
 
   const memberOf = (id: string) => state.members.find((m) => m.id === id);
+  // [2026-09-30追加・70.9節D17] おねがいの完了報告は「+Npt」を出さない（印・ボタンは出さない）。
+  const requestChoreIds = buildRequestChoreIdSet(state.chores);
 
   const sendStamp = async (completionId: string, stampKey: StampKey) => {
     setReactionError(null);
@@ -299,7 +302,7 @@ export default function SupporterFamilyScreen() {
                   <Text style={[theme.typography.supporterBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
                     {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                         のため何も添えない。 */}
-                    {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
+                    {c.chore_emoji} {c.chore_title} {shouldShowCompletionPoints(c, requestChoreIds) ? `+${c.points}pt` : ""}
                   </Text>
                 </View>
                 <View style={[styles.cardMeta, styles.cardMetaRow]}>
@@ -387,7 +390,7 @@ export default function SupporterFamilyScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
                       {member?.display_name} さんから
-                      {detailTarget.points != null ? ` ・ +${detailTarget.points}pt` : ""}
+                      {shouldShowCompletionPoints(detailTarget, requestChoreIds) ? ` ・ +${detailTarget.points}pt` : ""}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
                       {formatDateTimeFullJp(detailTarget.reported_at)}

@@ -91,11 +91,14 @@ export default function ChildPointsScreen() {
                     {entry.emoji} {entry.label}
                   </Text>
                   <Text style={{ flex: 1 }} />
-                  <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
-                    {/* [2026-08-16改訂] "gratitude"（感謝ポイント受領分）もearnと同じ+表示にする */}
-                    {entry.kind === "spend" ? "-" : "+"}
-                    {entry.points}pt
-                  </Text>
+                  {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は「+Npt」を出さない（行そのものは残す）（`showPoints`はstore.tsxのbuildLedgersが決める） */}
+                  {entry.showPoints !== false && (
+                    <Text style={[theme.typography.childBody, { color: theme.colors.brandPrimaryStrong }]}>
+                      {/* [2026-08-16改訂] "gratitude"（感謝ポイント受領分）もearnと同じ+表示にする */}
+                      {entry.kind === "spend" ? "-" : "+"}
+                      {entry.points}pt
+                    </Text>
+                  )}
                   <Text style={[theme.typography.parentCaption, { marginLeft: theme.spacing.s2 }]}>
                     {/* [2026-09-25修正・実装メモ.md 302章] 端末のタイムゾーン依存を解消し、JST固定の共通関数に揃えた */}
                     {formatDateShort(toJstDateString(entry.occurredAt))}

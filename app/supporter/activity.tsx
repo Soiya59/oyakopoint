@@ -21,6 +21,7 @@ import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
+import { buildRequestChoreIdSet, isRequestCompletion, shouldShowCompletionPoints } from "@/lib/requestChore";
 
 /**
  * S2 完了報告一覧・リアクション（みまもりメンバービュー、全件）
@@ -79,6 +80,8 @@ type SupporterCompletionRowProps = {
   // [2026-09-27新設・ワイヤーフレーム67章決定7順位4] 原因追跡用の識別子
   // （個人情報を含まない）。
   cancelErrorRef?: string;
+  // [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は「+Npt」を出さない（行そのものは残す）。印・「ありがとうを贈る」は出さない（D17）。
+  isRequest: boolean;
   onOpenDetail: (c: ChoreCompletion) => void;
   onCancelTap: (completionId: string) => void;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
@@ -93,6 +96,7 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
   isCanceling,
   cancelErrorMessage,
   cancelErrorRef,
+  isRequest,
   onOpenDetail,
   onCancelTap,
   onSendStamp,
@@ -114,7 +118,7 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
           <Text style={[theme.typography.supporterBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                 のため何も添えない。 */}
-            {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
+            {c.chore_emoji} {c.chore_title} {c.points != null && !isRequest ? `+${c.points}pt` : ""}
           </Text>
         </View>
         <View style={[styles.cardMeta, styles.cardMetaRow]}>
@@ -242,6 +246,8 @@ export default function SupporterActivityScreen() {
   }, [completions]);
 
   const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
+  // [2026-09-30追加・70.9節D17] おねがいの完了報告は「+Npt」を出さない（印・ボタンは出さない）。
+  const requestChoreIds = useMemo(() => buildRequestChoreIdSet(state.chores), [state.chores]);
 
   // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
   // 取消、違うスタンプをタップすると切替になる（統括指示）。
@@ -347,6 +353,7 @@ export default function SupporterActivityScreen() {
     return (
       <SupporterCompletionRow
         completion={c}
+        isRequest={isRequestCompletion(c, requestChoreIds)}
         member={member}
         memberAvatarLineData={member ? memberAvatars[member.id] : undefined}
         myId={myId}
@@ -399,7 +406,7 @@ export default function SupporterActivityScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
                       {member?.display_name} さんから
-                      {detailTarget.points != null ? ` ・ +${detailTarget.points}pt` : ""}
+                      {shouldShowCompletionPoints(detailTarget, requestChoreIds) ? ` ・ +${detailTarget.points}pt` : ""}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
                       {formatDateTimeFullJp(detailTarget.reported_at)}

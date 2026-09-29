@@ -52,6 +52,7 @@ const CODE_ALIASES: Record<string, string> = {
   "42501": "rls", // PG_ERRCODE.insufficientPrivilege
   P0002: "notfound", // PG_ERRCODE.noDataFound
   AV001: "stockfull", // PG_ERRCODE.avatarStockFull（「まえのアバター」が3枚いっぱい。2026-09-30追加）
+  RQ001: "requestfull", // PG_ERRCODE.chore_request_limit（未完了のおねがいが3つ。2026-09-30追加）
   // familyInviteLookup()が0件時に自前で付ける独自code（P0002とは別表記だが同じ意味）
   no_data_found: "notfound",
   // fromPostgrestErrorがcodeの無いエラー（HTML等のJSONでない本文を返したゲートウェイ異常）に付ける既定値

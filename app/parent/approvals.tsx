@@ -19,6 +19,8 @@ import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/erro
 import { useFailureNotice } from "@/hooks/useFailureNotice";
 import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
+import { buildRequestChoreIdSet, isRequestCompletion, requestDraftNote, shouldShowCompletionPoints } from "@/lib/requestChore";
+import { APPROVAL_REQUEST_MARK, APPROVAL_THANKS_BUTTON_LABEL } from "@/lib/requestChoreText";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
 
@@ -45,6 +47,14 @@ import NgWordWarningText from "@/components/NgWordWarningText";
  * 原因が、通信ではなくこの画面の描画（1,000件で約1.3秒のDOMコミット＋ペイント）だったと
  * 実測で確認できたための変更。**見た目・操作・データの取得範囲は変えていない**
  * （表示件数を絞る・ページ分けする等の変更は含まない。255章参照）。
+ *
+ * [2026-09-30追加・要件定義書07-43章決定13・14、主要画面ワイヤーフレーム.md 70.6節D12・70.9節D16、
+ * 実装メモ.md 335章] 完了報告が「おねがい」（`chore_id`から引いた`chores.is_request`が真）のときだけ、
+ * (1)「+Npt」を出さない（行そのものは残す）、(2)日時の右に小さな札「💌 おねがい」、(3)スタンプ行の
+ * 下に「ありがとうを贈る」（スタンプと同格の見た目。贈っても・贈らなくても色・文字・印を変えない。
+ * 押すとP22の「ありがとうを贈る」タブを、相手＝やってくれた子・下書き＝「{題名}をやってくれた」で開く）。
+ * 保護者全員に出す。みまもりの画面（S2）には印もボタンも出さない（「+Npt」だけ外す）。
+ * 題名は完了報告に保存されている`chore_title`を使う（クエスト側を引き直さない）。
  *
  * ⚠️ **この画面はS2（`app/supporter/activity.tsx`）と写しの関係にある。片方だけ直さないこと。**
  * 見た目のトーン（parent/supporter）と取消の権限だけが違い、画面の骨組み・状態の持ち方・
@@ -81,7 +91,10 @@ type CompletionRowProps = {
   // [2026-09-27新設・ワイヤーフレーム67章決定7順位4] 原因追跡用の識別子
   // （個人情報を含まない）。
   cancelErrorRef?: string;
+  // [2026-09-30追加・D12・D16] おねがいの完了報告か（親が`state.chores`から引いて渡す）。
+  isRequest: boolean;
   onOpenDetail: (c: ChoreCompletion) => void;
+  onOpenThanks: (c: ChoreCompletion) => void;
   onCancelTap: (c: ChoreCompletion) => void;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
   hasReactedWithStamp: (completionId: string, reactedBy: string, stampKey: StampKey) => boolean;
@@ -95,7 +108,9 @@ const CompletionRow = React.memo(function CompletionRow({
   isCanceling,
   cancelErrorMessage,
   cancelErrorRef,
+  isRequest,
   onOpenDetail,
+  onOpenThanks,
   onCancelTap,
   onSendStamp,
   hasReactedWithStamp,
@@ -139,14 +154,23 @@ const CompletionRow = React.memo(function CompletionRow({
           <Text style={[theme.typography.parentBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                 のため何も添えない。 */}
-            {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
+            {c.chore_emoji} {c.chore_title} {c.points != null && !isRequest ? `+${c.points}pt` : ""}
           </Text>
         </View>
         <View style={[styles.cardMeta, styles.cardMetaRow]}>
-          <Text style={theme.typography.parentCaption}>
-            {formatDateTimeShort(c.reported_at)}{" "}
-            {isChildCard ? "とどいた" : "きろくした"}
-          </Text>
+          {/* [2026-09-30変更・D12] 日時の右に、おねがいの完了報告だけ小さな札を添える。折り返してよい
+              （取消リンクは右端のまま）。 */}
+          <View style={styles.metaLeft}>
+            <Text style={theme.typography.parentCaption}>
+              {formatDateTimeShort(c.reported_at)}{" "}
+              {isChildCard ? "とどいた" : "きろくした"}
+            </Text>
+            {isRequest && (
+              <View style={styles.requestMark}>
+                <Text style={styles.requestMarkText}>{APPROVAL_REQUEST_MARK}</Text>
+              </View>
+            )}
+          </View>
           {/* [2026-09-03追加] 28.4節。みまもりメンバーの完了報告（scope='personal'
               またはscope='supporter_shared'）には保護者の取消権限が無いため
               リンク自体を出さない。[2026-09-06追記・要件定義書07-18章決定2・3、
@@ -201,6 +225,22 @@ const CompletionRow = React.memo(function CompletionRow({
               <Text style={styles.commentLink}>＋コメント</Text>
             </Pressable>
           </View>
+        )}
+        {/* [2026-09-30追加・D12] おねがいの完了報告だけ。スタンプと同格の見た目（primaryにしない・
+            色を付けない・点滅しない・絵文字を付けない）。贈ったあとも押せる状態のまま、色・文字・
+            印を変えない（「贈った／贈っていない」はどこにも表示しない。上限が二重贈りを止める）。
+            文字は折り返してよい・幅を固定しない（328・329章）。 */}
+        {isRequest && (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onOpenThanks(c);
+            }}
+            style={styles.thanksButton}
+            accessibilityRole="button"
+          >
+            <Text style={[theme.typography.parentBodyMedium, styles.thanksButtonText]}>{APPROVAL_THANKS_BUTTON_LABEL}</Text>
+          </Pressable>
         )}
       </Card>
     </Pressable>
@@ -291,6 +331,20 @@ export default function ApprovalsScreen() {
   }, [completions]);
 
   const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
+
+  // [2026-09-30追加・D12・D16] おねがいの完了報告の判定（`chore_id`から引いた`chores.is_request`）。
+  // やってくれたおねがいは取り下げできない（DBも拒否）ため、通常は`chore_id`がNULLにならず常に判別できる。
+  const requestChoreIds = useMemo(() => buildRequestChoreIdSet(state.chores), [state.chores]);
+
+  // 「ありがとうを贈る」→ P22の「ありがとうを贈る」タブを、相手・下書き入りで開く（決定14・D13）。
+  // 開いたモーダルは先に閉じる（Modalは別の画面に重なって残るため）。
+  const openThanks = useCallback((c: ChoreCompletion) => {
+    setDetailTarget(null);
+    router.push({
+      pathname: "/parent/gratitude-send",
+      params: { to: c.reported_by, draft: requestDraftNote(c.chore_title), from: "approvals" },
+    });
+  }, []);
 
   // [2026-09-10改訂・実装メモ.md 157章] 送信済みのスタンプをもう一度タップすると
   // 取消、違うスタンプをタップすると切替になる（統括指示）。以前あった
@@ -417,7 +471,9 @@ export default function ApprovalsScreen() {
         isCanceling={cancelingId === c.id}
         cancelErrorMessage={cancelRowError?.id === c.id ? cancelRowError.message : undefined}
         cancelErrorRef={cancelRowError?.id === c.id ? cancelRowError.ref : undefined}
+        isRequest={isRequestCompletion(c, requestChoreIds)}
         onOpenDetail={openDetail}
+        onOpenThanks={openThanks}
         onCancelTap={handleCancelTap}
         onSendStamp={sendStamp}
         hasReactedWithStamp={hasReactedWithStamp}
@@ -458,7 +514,7 @@ export default function ApprovalsScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
                       {formatDateTimeFullJp(cancelConfirmTarget.reported_at)}
-                      {cancelConfirmTarget.points != null ? ` ・ +${cancelConfirmTarget.points}pt` : ""}
+                      {shouldShowCompletionPoints(cancelConfirmTarget, requestChoreIds) ? ` ・ +${cancelConfirmTarget.points}pt` : ""}
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
                       取り消すと、たまったポイントや家族の木・ガチャの回数も1つ戻ります。元に戻せません。
@@ -525,12 +581,19 @@ export default function ApprovalsScreen() {
                     </Text>
                     <Text style={{ marginTop: theme.spacing.s2 }}>
                       {member?.display_name} さんから
-                      {detailTarget.points != null ? ` ・ +${detailTarget.points}pt` : ""}
+                      {shouldShowCompletionPoints(detailTarget, requestChoreIds) ? ` ・ +${detailTarget.points}pt` : ""}
                     </Text>
-                    <Text style={{ marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }}>
-                      {formatDateTimeFullJp(detailTarget.reported_at)}{" "}
-                      {isChildCard ? "とどいた" : "きろくした"}
-                    </Text>
+                    <View style={styles.detailDateRow}>
+                      <Text style={{ color: theme.colors.neutralTextSecondary }}>
+                        {formatDateTimeFullJp(detailTarget.reported_at)}{" "}
+                        {isChildCard ? "とどいた" : "きろくした"}
+                      </Text>
+                      {isRequestCompletion(detailTarget, requestChoreIds) && (
+                        <View style={styles.requestMark}>
+                          <Text style={styles.requestMarkText}>{APPROVAL_REQUEST_MARK}</Text>
+                        </View>
+                      )}
+                    </View>
                     {detailTarget.note ? (
                       <Text style={{ marginTop: theme.spacing.s2 }}>ひとことメモ: {detailTarget.note}</Text>
                     ) : null}
@@ -578,6 +641,19 @@ export default function ApprovalsScreen() {
                             );
                           })}
                         </View>
+
+                        {/* [2026-09-30追加・D12] P9でも、スタンプ4つの直下（「ひとことおくる」の上）に同じボタン。 */}
+                        {isRequestCompletion(detailTarget, requestChoreIds) && (
+                          <Pressable
+                            onPress={() => openThanks(detailTarget)}
+                            style={[styles.thanksButton, { marginTop: theme.spacing.s3 }]}
+                            accessibilityRole="button"
+                          >
+                            <Text style={[theme.typography.parentBodyMedium, styles.thanksButtonText]}>
+                              {APPROVAL_THANKS_BUTTON_LABEL}
+                            </Text>
+                          </Pressable>
+                        )}
 
                         {/* [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面
                             ワイヤーフレーム.md 56.4節決定20] 保護者トグルがオフの
@@ -650,6 +726,33 @@ const styles = StyleSheet.create({
   // [2026-09-03追加] 28.4節。報告日時の右に取消リンクを置く。
   cardMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cancelLink: { color: theme.colors.neutralTextSecondary, textDecorationLine: "underline" },
+  // [2026-09-30追加・D12] 日時と札を並べ、足りなければ折り返す（取消リンクは右端のまま）。
+  metaLeft: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing.s2 },
+  detailDateRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing.s2, marginTop: theme.spacing.s1 },
+  // 札は白地（子どものカードの背景〈brandPrimarySoft〉の上でも読める）。幅を決めず、文字に合わせて広がる。
+  requestMark: {
+    paddingHorizontal: theme.spacing.s2,
+    paddingVertical: 2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.brandPrimary,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  requestMarkText: { fontSize: 12 },
+  // スタンプと同格（背景neutralBg・枠neutralBorder）。全幅・44dp以上・文字は折り返してよい。
+  thanksButton: {
+    marginTop: theme.spacing.s2,
+    minHeight: theme.tapTarget.parent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    backgroundColor: theme.colors.neutralBg,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+  },
+  thanksButtonText: { textAlign: "center" },
   cancelRowError: { marginTop: 2, color: theme.colors.statusBlocking },
   cancelFlash: { marginTop: theme.spacing.s3, textAlign: "center", color: theme.colors.neutralTextSecondary },
   confirmButtonRow: { flexDirection: "row", marginTop: theme.spacing.s3 },

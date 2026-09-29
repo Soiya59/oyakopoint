@@ -18,6 +18,13 @@ import FailureRefText from "@/components/FailureRefText";
 import { failureDetail } from "@/lib/apiFailureDisplay";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
+import {
+  buildRequestChoreIdSet,
+  isHiddenRequestChore,
+  isRequestChore,
+  requestBadgeText,
+  shouldShowCompletionPoints,
+} from "@/lib/requestChore";
 import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
 import ChildWeeklyReviewModal from "@/components/ChildWeeklyReviewModal";
 import { hydrateIntroSeen, isIntroSeen, subscribeIntroSeen } from "@/lib/introSeen";
@@ -50,6 +57,15 @@ import { shouldAutoOpenWeeklyReviewPopup } from "@/lib/weeklyReviewPopupLogic";
  *
  * 状態: 読み込み中・空・通常・上限到達（個別カード）・通信エラー を実装。
  * 上限到達カードは赤・グレーアウトにせず達成トーンで表現する（デザイントークン.md 1.4）。
+ *
+ * [2026-09-30追加・要件定義書07-43章決定11・13、主要画面ワイヤーフレーム.md 70.4節D6・D7、実装メモ.md 335章]
+ * 「おねがい」（`chore.is_request`）のカードは、下段を「+Npt」から印「{依頼者}から おねがい」に置き換える
+ * （専用セクションは作らない・並び順も変えない・カードの背景色も通常と同じ）。絵文字は💌固定（DBが決める）。
+ * 題名は行数を制限しない（20字までなので高さは有限）。「◯かい やったよ」と「★おきにいり」は出さない
+ * （1回きりのため）。印は`brandPrimarySoft`の淡い札で、2行に折り返してよい（文字が大きい端末でも切らない）。
+ * 動き・点滅・バッジの数・赤丸・タブアイコンへの印は付けない。押したときは通常のカードと同じ
+ * （`/child/report`へ`choreId`）。担当が空のおねがい（担当だった子どもがいなくなった行）は出さない。
+ * 「さっき とどけた ほうこく」でも、おねがいの完了は「+0pt」を出さない。
  *
  * [2026-09-29追加→同日差し戻しで作り直し・本部長依頼、実装メモ.md 321章]
  * 「先週のふりかえり」（要件定義書07-35章「振り返る機会」）の入口を、旧
@@ -133,6 +149,9 @@ export default function ChildHomeScreen() {
     const t = setInterval(() => setCancelTick((n) => n + 1), 10_000);
     return () => clearInterval(t);
   }, []);
+
+  // [2026-09-30追加・D7] おねがいの完了報告は「+0pt」を出さない（chore_idから引いたis_request）。
+  const requestChoreIds = buildRequestChoreIdSet(state.chores);
 
   const recentSelfCompletions = state.completions
     .filter((c) => c.reported_by === me.id && isWithinCancelWindow(c.reported_at))
@@ -248,6 +267,8 @@ export default function ChildHomeScreen() {
       // assigned_to が NULL のため、子どものやることリストにも混ざっていた。
       c.scope === "family" &&
       (c.assigned_to === null || c.assigned_to === me.id) &&
+      // [2026-09-30追加] 担当が空のおねがい（担当だった子どもがいなくなった行）はどの画面にも出さない。
+      !isHiddenRequestChore(c) &&
       !isOneOffFinished(c)
   );
 
@@ -298,7 +319,7 @@ export default function ChildHomeScreen() {
             <View key={c.id} style={styles.recentRow}>
               <View style={styles.recentRowMain}>
                 <Text style={[theme.typography.childBody, { flexShrink: 1 }]}>
-                  {c.chore_emoji} {c.chore_title} {c.points != null ? `+${c.points}pt` : ""}
+                  {c.chore_emoji} {c.chore_title} {shouldShowCompletionPoints(c, requestChoreIds) ? `+${c.points}pt` : ""}
                 </Text>
                 <Pressable
                   onPress={() => handleCancelRecentCompletion(c.id)}
@@ -368,7 +389,8 @@ export default function ChildHomeScreen() {
           const withDaily = chores.map((chore) => ({
             chore,
             done: isChoreLimitReached(chore, me.id),
-            isDaily: state.dailyFlaggedChoreIds.includes(chore.id),
+            // おねがいは1回きりのため「★おきにいり」の対象にしない（専用セクションにも入れない）。
+            isDaily: !isRequestChore(chore) && state.dailyFlaggedChoreIds.includes(chore.id),
           }));
           // [2026-09-08・統括指示] お気に入りは「★を押した順（新しいものが上）」で並べる。
           // state.dailyFlaggedChoreIds が created_at の降順で入っている（api.ts
@@ -407,7 +429,8 @@ export default function ChildHomeScreen() {
             chore: (typeof withDaily)[number]["chore"];
             done: boolean;
           }) => {
-            const isDaily = state.dailyFlaggedChoreIds.includes(chore.id);
+            const isRequest = isRequestChore(chore);
+            const isDaily = !isRequest && state.dailyFlaggedChoreIds.includes(chore.id);
             return (
               <View key={chore.id} style={[styles.card, done && styles.cardDone]}>
                 <Pressable
@@ -416,14 +439,21 @@ export default function ChildHomeScreen() {
                   style={styles.cardMain}
                 >
                   <Text style={styles.cardEmoji}>{chore.emoji}</Text>
+                  {/* [D6] おねがいの題名は行数を制限しない（20字までなので高さは有限）。 */}
                   <Text
                     style={[theme.typography.childBody, styles.cardTitle]}
-                    numberOfLines={2}
+                    numberOfLines={isRequest ? undefined : 2}
                     ellipsizeMode="tail"
                   >
                     {chore.title}
                   </Text>
-                  {done ? (
+                  {isRequest ? (
+                    // [D6] 下段は「+Npt」の代わりに、依頼者の印（淡い札）。「+0pt」は出さない。
+                    // 依頼者が分からないときだけ「おうちの ひとから おねがい」。2行に折り返してよい。
+                    <View style={styles.requestBadge}>
+                      <Text style={styles.requestBadgeText}>{requestBadgeText(chore.creator?.display_name)}</Text>
+                    </View>
+                  ) : done ? (
                     // [2026-08-27] 実施済みの「1回だけ」設定（is_repeatable=false）のchoreは
                     // 上のフィルタで一覧から外れるようになったため、ここへ来るのは
                     // 「くり返す」設定でその日の上限に達したものだけになった。
@@ -444,7 +474,8 @@ export default function ChildHomeScreen() {
                       行自体を出さない（53.6節決定7）。「✅ きろくずみ」の状態でも回数行は
                       消さない（今日やったか／これまで何回かは別の軸）。取得に失敗した
                       ときは回数の部分だけ出さない（53.7節、一覧全体は壊さない）。 */}
-                  {totalsLoadState !== "error" &&
+                  {!isRequest &&
+                    totalsLoadState !== "error" &&
                     (() => {
                       const count = totalsLookup[keyChoreCompletionTotal(chore.id, me.id)] ?? 0;
                       if (count === 0) return null;
@@ -455,6 +486,7 @@ export default function ChildHomeScreen() {
                       );
                     })()}
                 </Pressable>
+                {!isRequest && (
                 <Pressable
                   onPress={() => toggleDaily(chore.id, !isDaily)}
                   hitSlop={8}
@@ -467,6 +499,7 @@ export default function ChildHomeScreen() {
                     {isDaily ? "★おきにいり" : "★おきにいりにする"}
                   </Text>
                 </Pressable>
+                )}
               </View>
             );
           };
@@ -549,6 +582,18 @@ const styles = StyleSheet.create({
   // 文字サイズ（theme.typography.childBody）は変更しない。
   cardTitle: { marginTop: theme.spacing.s1, textAlign: "center" },
   pointLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
+  // [2026-09-30追加・70.4節D6] おねがいの印。角丸の小さな札（背景brandPrimarySoft・文字brandPrimaryStrong・
+  // 14px太字）。幅を決めず、文字に合わせて広がる。2行に折り返してよい。
+  requestBadge: {
+    marginTop: theme.spacing.s2,
+    alignSelf: "stretch",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.s2,
+    paddingVertical: theme.spacing.s1,
+    borderRadius: theme.radius.childXl,
+    backgroundColor: theme.colors.brandPrimarySoft,
+  },
+  requestBadgeText: { fontSize: 14, fontWeight: "700", textAlign: "center", color: theme.colors.brandPrimaryStrong },
   doneLabel: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, fontWeight: "700" },
   // [2026-09-19追加・主要画面ワイヤーフレーム.md 53.3節・53.7節] pointLabelと同じ役割の
   // captionスタイル。新しいデザイントークンは追加しない（既存のneutralTextSecondaryを流用）。

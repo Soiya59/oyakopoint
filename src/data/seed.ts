@@ -113,7 +113,8 @@ const MOCK_NFC_TOKENS = {
 // [2026-08-30追加] 要件定義書07-15章・スキーマ設計.sql 37章でChore型に
 // updated_by/updated_atが追加されたため、created_by/scopeと同じ理由で
 // モックシードにもデフォルト値（updated_by=null・updated_at=作成時刻と同一）を補完する。
-type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "updated_by" | "updated_at">;
+// [2026-09-30追加] is_request（おねがい）・created_atも同じ理由でモックシードに補完する。
+type LegacyChoreSeed = Omit<Chore, "created_by" | "scope" | "updated_by" | "updated_at" | "is_request" | "created_at">;
 
 export const seedChores: Chore[] = (
   [
@@ -195,6 +196,8 @@ export const seedChores: Chore[] = (
   scope: "family" as const,
   updated_by: null,
   updated_at: "2026-07-01T00:00:00+09:00",
+  is_request: false,
+  created_at: "2026-07-01T00:00:00+09:00",
 }));
 
 // [変更/大幅改訂] 2026-08-15改訂: 承認フロー廃止(スキーマ設計.sql 5章「[廃止]」)に伴い、

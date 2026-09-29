@@ -36,6 +36,16 @@
  * 公開通知は「誰が引いたか」を出さない設計（07-38章4-4節、きょうだい間の
  * 比較誘発を避ける）ため、`fromMemberId`をnullにしてアバター・「〜から」の
  * 行自体を出さない特別扱いにする。
+ *
+ * [2026-09-30追加・要件定義書07-43章決定12、主要画面ワイヤーフレーム.md 70.5節D9、実装メモ.md 335章]
+ * 「おねがい」の2種類を合流させる。新しい表は要らず、端末が持つ`chores`・`chore_completions`から
+ * 組み立てる（判定は`src/lib/requestChore.ts`の純粋関数）。
+ *  - 子ども（担当の本人）: 「{依頼者}から　💌 おねがいが とどいたよ」。**題名は載せない**（子どもは一覧で
+ *    題名を見られる。ベルにも並べると命令の響きが出やすい）。時刻はおねがいを作った時刻。やったあと・
+ *    取り下げたあとは消える。
+ *  - 依頼者の保護者（`created_by`の1人だけ）: 「{やってくれた子}から　✅ おねがいを やってくれました　
+ *    💌 {題名}」。他の保護者・みまもりには出ない。1分以内の取消（完了報告の削除）で消える。
+ * ベルの件数（`countRecentInbox`）にも数える。ベルの項目をタップして対象を開く導線は次フェーズ。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -45,6 +55,12 @@ import { EmptyState } from "./StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
+import {
+  requestArrivedForChild,
+  requestDoneForRequester,
+  type RequestInboxChore,
+} from "@/lib/requestChore";
+import { BELL_HEADLINE_REQUEST_ARRIVED, BELL_HEADLINE_REQUEST_DONE } from "@/lib/requestChoreText";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -82,7 +98,9 @@ export interface InboxPanelProps {
  */
 export function countRecentInbox(
   state: {
-    completions: { id: string; reported_by: string }[];
+    completions: { id: string; reported_by: string; chore_id: string | null; reported_at: string }[];
+    // [2026-09-30追加・D9] おねがいのベル（子ども＝届いた／依頼者＝やってくれた）の数え上げに使う。
+    chores: RequestInboxChore[];
     reactions: { completion_id: string; created_at: string }[];
     gratitude: { recipient_id: string; revoked_at: string | null; created_at: string }[];
     familyBoardReactions: {
@@ -130,7 +148,17 @@ export function countRecentInbox(
   const published = state.publishedDrawings.filter(
     (d) => d.artist_member_id === memberId && !!d.published_at && new Date(d.published_at).getTime() >= sinceMs
   ).length;
-  return reactions + gratitude + boardReactions + boardComments + drawingReactions + drawingComments + published;
+  // [2026-09-30追加・D9] おねがい。子どもは「自分が担当で、まだやっていないおねがいが作られた」、
+  // 依頼者は「自分が作ったおねがいが完了された」を数える（どちらも自分に該当しなければ0）。
+  const requestArrived = requestArrivedForChild(state.chores, state.completions, memberId).filter(
+    (x) => new Date(x.at).getTime() >= sinceMs
+  ).length;
+  const requestDone = requestDoneForRequester(state.chores, state.completions, memberId).filter(
+    (x) => new Date(x.at).getTime() >= sinceMs
+  ).length;
+  return (
+    reactions + gratitude + boardReactions + boardComments + drawingReactions + drawingComments + published + requestArrived + requestDone
+  );
 }
 
 /**
@@ -270,7 +298,33 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         choreLabel: d.title ? `「${d.title}」` : null,
       }));
 
+    // [2026-09-30追加・D9] おねがい（子ども向け「とどいたよ」・依頼者向け「やってくれました」）。
+    const fromRequestArrived: InboxItem[] = requestArrivedForChild(state.chores, state.completions, memberId).map(
+      ({ chore, at }) => ({
+        id: `request:${chore.id}`,
+        fromMemberId: chore.created_by,
+        at,
+        headline: BELL_HEADLINE_REQUEST_ARRIVED,
+        body: null,
+        choreLabel: null, // 題名は載せない
+      })
+    );
+    const fromRequestDone: InboxItem[] = requestDoneForRequester(state.chores, state.completions, memberId).map(
+      ({ completion, at }) => ({
+        id: `request_done:${completion.id}`,
+        fromMemberId: completion.reported_by,
+        at,
+        headline: BELL_HEADLINE_REQUEST_DONE,
+        body: null,
+        // 保護者は複数のおねがいを出していることがあるので、どれをやってくれたかを題名で示す。
+        // 題名は完了報告に保存されているchore_titleの複写（クエスト側を引き直さない）。
+        choreLabel: `💌 ${state.completions.find((c) => c.id === completion.id)?.chore_title ?? ""}`,
+      })
+    );
+
     return [
+      ...fromRequestArrived,
+      ...fromRequestDone,
       ...fromReactions,
       ...fromGratitude,
       ...fromBoardReactions,
@@ -283,6 +337,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
     memberId,
     isChild,
     state.completions,
+    state.chores,
     state.reactions,
     state.gratitude,
     state.familyBoardReactions,

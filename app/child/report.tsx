@@ -11,6 +11,7 @@ import FailureRefText from "@/components/FailureRefText";
 import { failureDetail } from "@/lib/apiFailureDisplay";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
+import { isRequestChore, requestBadgeText } from "@/lib/requestChore";
 
 /**
  * C6 完了報告（主要5画面のひとつ）
@@ -105,6 +106,9 @@ export default function ChildReportScreen() {
       params: {
         choreTitle: chore.title,
         points: String(chore.points),
+        // [2026-09-30追加・主要画面ワイヤーフレーム.md 70.4節D7] おねがいのときはC7で「+0pt」を出さない
+        // （判定はpointsの真偽ではなくis_requestで行う。"0"という文字列は真になり0ptが出てしまう）。
+        isRequest: isRequestChore(chore) ? "1" : "",
         completionId: result.completionId ?? "",
         choreId: chore.id,
         reportedAt: result.reportedAt ?? "",
@@ -169,8 +173,10 @@ export default function ChildReportScreen() {
         </Text>
       </View>
 
+      {/* [2026-09-30変更・D7] おねがいのときは見出しを「{依頼者}から おねがい」に差し替える（「できたら +0pt」を
+          出さない。「もらえるかも」の予告もしない）。2行に折り返してよい。ひとことメモ・とどけるは通常と同じ。 */}
       <Text style={[theme.typography.childHeadline, { textAlign: "center", marginTop: theme.spacing.s6 }]}>
-        できたら +{chore.points}pt
+        {isRequestChore(chore) ? requestBadgeText(chore.creator?.display_name) : `できたら +${chore.points}pt`}
       </Text>
 
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>ひとことメモ（にんい）</Text>

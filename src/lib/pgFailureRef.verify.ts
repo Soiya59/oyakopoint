@@ -102,6 +102,12 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
   assertEqual("AV001 → '400-stockfull'", formatPgFailureRef(error), "400-stockfull");
 }
 
+// ---- 12. [2026-09-30追加・実装メモ335章] 未完了のおねがいが3つ（専用のSQLSTATE RQ001。HTTPは400） ----
+{
+  const error: ApiError = { code: "RQ001", message: "この子への、まだ終わっていないおねがいがいっぱいです（3件まで）。やってくれたあと、または取り下げたあとで作れます", status: 400 };
+  assertEqual("RQ001 → '400-requestfull'", formatPgFailureRef(error), "400-requestfull");
+}
+
 console.log("");
 if (failed === 0) {
   console.log("全件OK");

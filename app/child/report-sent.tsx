@@ -15,6 +15,7 @@ import { cancelCompletionErrorText, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT 
 import { playSound, type SoundHandle } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
+import { requestReportSentTitle } from "@/lib/requestChoreText";
 
 /**
  * C7 報告完了（送信済み）
@@ -37,9 +38,10 @@ import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 type CancelState = "idle" | "processing" | "success" | "error" | "networkError";
 
 export default function ReportSentScreen() {
-  const { choreTitle, points, completionId, reportedAt } = useLocalSearchParams<{
+  const { choreTitle, points, completionId, reportedAt, isRequest } = useLocalSearchParams<{
     choreTitle?: string;
     points?: string;
+    isRequest?: string;
     completionId?: string;
     reportedAt?: string;
   }>();
@@ -159,7 +161,9 @@ export default function ReportSentScreen() {
               （NOT NULL）になったため、出し分けは不要。0ptのクエストも
               「+0ptとどいたよ！」とそのまま表示する（決定26「0を勧める作りには
               しない」であり、0の表示自体を隠す・特別扱いする必要はない）。 */}
-          {`「${choreTitle}」+${points}ptとどいたよ！`}
+          {/* [2026-09-30変更・主要画面ワイヤーフレーム.md 70.4節D7] おねがいの完了は「+0pt」を出さない
+              （「「題名」とどいたよ！」。紙吹雪は通常と同じ。「ありがとうがもらえるよ」の予告は足さない）。 */}
+          {isRequest ? requestReportSentTitle(choreTitle ?? "") : `「${choreTitle}」+${points}ptとどいたよ！`}
         </Text>
         <Text
           style={[

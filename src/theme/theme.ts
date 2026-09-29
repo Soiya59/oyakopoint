@@ -309,6 +309,25 @@ export const avatarDrawingLimits = {
 // 備え、意図的に別名でexportする（43.8節）。
 export const avatarDrawingPalette = drawingPalette;
 
+// ---- 「おねがい」（保護者から子どもへ。2026-09-30追加） ----
+// 参照: 要件定義書07-43章、設計部/成果物/スキーマ設計.sql 82章・API仕様.md 38章、
+// 主要画面ワイヤーフレーム.md 70章（D3・D5・D19）、開発部/成果物/実装メモ.md 335章。
+// maxOpenPerChild: 未完了のおねがいを子ども1人が持てる上限（統括決定2026-09-30）。
+// **DBの`max_open_requests_per_child()`（supabase/migrations/
+// 20261001010000_chore_requests_and_gratitude_push.sql）と必ず同じ値にする**
+// （自動の検査は無い。値を変えるときはDBの関数・rls_checks.sqlのC-R9・本定数を同じ
+// 変更で直す。お絵かきのmaxUnpublished・まえのアバターのmaxSlotsとは意図的に別の定義）。
+// titleMaxLength: 題名の上限（70.3節D3。DB側の100字は変えない）。
+// titleWarningThreshold: 残りがこの字数以下でカウンターをアンバーにする（お絵かきの題名と同じ規則）。
+// successDisplayMs: 保存後の「おねがいしました」を出す時間（70.3節D5）。
+export const requestLimit = {
+  maxOpenPerChild: 3,
+  titleMaxLength: 20,
+  titleWarningThreshold: 5,
+  successDisplayMs: 1500,
+} as const;
+
+
 // ---- 「まえのアバター」（アバターのストック、2026-09-30追加・要件定義書07-44章、
 // 主要画面ワイヤーフレーム.md 69.9節、スキーマ設計.sql 81章、開発部/成果物/実装メモ.md 334章） ----
 // **maxSlotsはDB側max_avatar_stock_per_member()（値3。マイグレーション
@@ -574,6 +593,7 @@ export const theme = {
   avatarDrawingLimits,
   avatarDrawingPalette,
   avatarStock,
+  requestLimit,
   drawingStrokeWidths,
   defaultDrawingStrokeWidth,
   drawingSimplifyTolerance,

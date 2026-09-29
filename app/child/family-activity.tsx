@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
+import { buildRequestChoreIdSet, shouldHideFromChildFamilyFeed } from "@/lib/requestChore";
 
 /**
  * C18 かぞくのがんばり（子ども・全件） — 完了報告一覧・スタンプ・ひとこと
@@ -66,13 +67,15 @@ export default function ChildFamilyActivityScreen() {
   // `.slice(0, 5)`をしないことだけ（55.3節決定8「件数だけが全件になる」）。
   // [2026-09-19・255章と同じ理由] 無関係な再レンダーのたびに家族の全履歴を
   // filter+sortし直さないようuseMemoにする。
-  const completions = useMemo(
-    () =>
-      [...state.completions]
-        .filter((c) => c.reported_by !== myId)
-        .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime()),
-    [state.completions, myId]
-  );
+  // [2026-09-30追加・主要画面ワイヤーフレーム.md 70.4節D8] おねがいの完了は並べない
+  // （かぞくタブと同じ。きょうだいを比べない）。`chore_id`がNULLは普通のものとして残す。
+  const completions = useMemo(() => {
+    const requestChoreIds = buildRequestChoreIdSet(state.chores);
+    return [...state.completions]
+      .filter((c) => c.reported_by !== myId)
+      .filter((c) => !shouldHideFromChildFamilyFeed(c, requestChoreIds))
+      .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
+  }, [state.completions, state.chores, myId]);
 
   // [2026-09-10改訂・実装メモ.md 157章] おくったスタンプをもういちど押すと取消、
   // ちがうスタンプを押すと切替になる。文言はかぞくタブと同一（55.5節）。

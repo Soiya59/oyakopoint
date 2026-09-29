@@ -22,6 +22,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { buildRequestChoreIdSet, isRequestCompletion } from "@/lib/requestChore";
 import type {
   Chore,
   ChoreCompletion,
@@ -459,6 +460,9 @@ function buildLedgers(state: State) {
   // 「0を勧める作りにしない」であり、0を隠す・特別扱いする要件ではない）。
   // シール帳の進捗はじぶんタブの帯・タップ先の画面（HabitCardStrip/
   // HabitCardBoard）で見る。
+  // [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16] おねがいの完了報告は行を残したまま
+  // ポイント欄だけ出さない（`showPoints: false`）。判定は`chore_id`から引いた`chores.is_request`。
+  const requestChoreIds = buildRequestChoreIdSet(state.chores);
   const earnLedger = (memberId: string): LedgerEntry[] =>
     state.completions
       .filter((c) => c.reported_by === memberId)
@@ -470,6 +474,7 @@ function buildLedgers(state: State) {
         points: c.points,
         occurredAt: c.reported_at,
         reactions: reactionsForCompletion(c.id),
+        showPoints: !isRequestCompletion(c, requestChoreIds),
       }));
 
   // reward_redemptions は reward_emoji のスナップショットを持たない設計

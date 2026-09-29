@@ -138,6 +138,18 @@ export interface Chore {
   // 記録される（`chores_before_write`トリガー）。一度も編集されていない行はNULL。
   updated_by: string | null;
   updated_at: string;
+  // [2026-09-30追加・要件定義書07-43章決定10、設計部/成果物/スキーマ設計.sql 82.3章、
+  // API仕様.md 38.3章、開発部/成果物/実装メモ.md 335章] 保護者が専用の入口（感謝ポイントの
+  // 画面P22の「おねがいする」）から作った「おねがい」ならtrue。通常のクエスト（1回だけ・
+  // 0ptを含む）は常にfalse。おねがいはポイント0・1回だけ・担当は子ども1人・家族共有・
+  // 絵文字💌固定で、作成後は題名以外を変えられない（DBが検証する）。
+  // `is_request`が真で`assigned_to`が空の行（担当だった子どもがいなくなった行）は、
+  // どの画面にも出さない（src/lib/requestChore.tsの`isHiddenRequestChore`）。
+  is_request: boolean;
+  // [2026-09-30追加・API仕様.md 38.3章、企画部決定18の6] おねがいを作った時刻。
+  // 子どものベル「おねがいが とどいたよ」の時刻に使う。`select("*")`で取得済みだった
+  // （型に無かっただけ）。
+  created_at: string;
   // 3c章のJOINクエリでのみ取得できる（fetchFamilyBundleが常にJOINするため
   // 実際にはstate.chores経由なら常に取得できる。個別にJOIN無しでfetchした
   // 場合はundefinedになりうる）。
@@ -341,6 +353,10 @@ export interface LedgerEntry {
   // なったため、nullも受け付ける（保護者トグルがオフの間に贈られた、
   // ひとこと無しの感謝）。
   note?: string | null;
+  // [新設・2026-09-30] 「+Npt」の欄を出すか（省略は出す）。おねがい（`chores.is_request`）の
+  // 完了報告は、行そのものは残したままポイント欄だけ出さない（主要画面ワイヤーフレーム.md 70.9節D16。
+  // 「やってくれた→ありがとう」の記録が同じ場所に並ぶよう、0ptの行を通帳から外さない）。
+  showPoints?: boolean;
 }
 
 // 実施履歴カレンダー（要件定義書07-3章、API仕様.md 6a章）の日別集計1行。

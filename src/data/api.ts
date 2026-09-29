@@ -128,6 +128,15 @@ export const PG_ERRCODE = {
   // theme.avatarStock.maxSlotsは必ず同じ値にすること。src/lib/pgFailureRef.tsの
   // CODE_ALIASESにも同じ値を書き写している（値がずれたら両方直す）。
   avatarStockFull: "AV001",
+  // [2026-09-30追加・要件定義書07-43章の統括の追加決定、スキーマ設計.sql 82.4a章、
+  // API仕様.md 38.2.1・38.7章] 「おねがい」（chores.is_request）を作るとき、その子どもの
+  // 未完了のおねがいがすでに上限（3つ）に達している場合にchores_request_guard()が返す
+  // 専用のSQLSTATE（HINT = 'chore_request_limit_reached'）。check_violation（形の違反）と
+  // 区別して「3つまで」の理由を出すために専用にした。DBの上限
+  // （max_open_requests_per_child()）とtheme.requestLimit.maxOpenPerChildは必ず同じ値に
+  // すること。src/lib/pgFailureRef.tsのCODE_ALIASESにも同じ値を書き写している
+  // （値がずれたら両方直す）。
+  chore_request_limit: "RQ001",
 } as const;
 
 /**
@@ -1768,6 +1777,69 @@ export async function updateChore(
       daily_limit: input.daily_limit,
       assigned_to: input.assigned_to,
     })
+    .eq("id", choreId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as Chore };
+}
+
+/**
+ * [2026-09-30新設・要件定義書07-43章決定9・10、設計部/成果物/スキーマ設計.sql 82.3〜82.4章、
+ * API仕様.md 38.2章、開発部/成果物/実装メモ.md 335章] 「おねがい」を1人の子どもに作る。
+ *
+ * **決定10の固定値（ポイント0・1回だけ・1日の上限なし・担当は子ども1人・カテゴリーなし・
+ * 絵文字💌・is_request=true）を必ず入れる、おねがいを作る唯一の経路**（入力は「だれに」と
+ * 「なにを」だけ。ポイント・繰り返しなどの入力欄は画面に存在しない）。DBは入れ忘れ・改ざんを
+ * すべて`check_violation`で拒否する（絵文字だけは💌に上書きする）。`scope`は送らない
+ * （既定'family'）。`created_by`はDBが`current_family_member_id()`で必ず上書きする。
+ *
+ * 複数の子どもを選んだときは、**子どもごとに別々に1回ずつ呼ぶ**（1人の失敗が他の人の成功を
+ * 巻き戻さない。API仕様.md 38.2章）。未完了のおねがいがすでに上限に達している子どもは
+ * `PG_ERRCODE.chore_request_limit`（RQ001）で断られる（ほかの子どもの分は作られる）。
+ * 作成が成功すると、DBトリガーが（家族の通知スイッチがONで、担当の子どもの端末が登録されて
+ * いれば）担当の子どもへ通知を1通送る。クライアントは何もしない。
+ */
+export async function createChoreRequest(
+  client: SupabaseClient,
+  familyId: string,
+  input: { title: string; assigned_to: string }
+): Promise<ApiResult<Chore>> {
+  const { data, error, status } = await client
+    .from("chores")
+    .insert({
+      family_id: familyId,
+      title: input.title,
+      points: 0,
+      is_repeatable: false,
+      daily_limit: null,
+      assigned_to: input.assigned_to,
+      category_id: null,
+      emoji: "💌", // 入れ忘れてもDBが💌に上書きする
+      is_request: true,
+    })
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as Chore };
+}
+
+/**
+ * [2026-09-30新設・API仕様.md 38.4章] おねがいの題名だけを直す。**`title`だけを送る専用の
+ * 関数**（既存の`updateChore`は全項目を送るのでおねがいには使わない。DBはおねがいの
+ * 題名・有効フラグ以外の変更を拒否する）。通知は再送されない。やってくれたあと（完了報告が
+ * 1件でもある）のおねがいはDBが拒否する（`insufficient_privilege`・HINT
+ * `chore_request_completed`）ので、画面はそのおねがいに編集の入口を出さない。
+ * 取り下げは既存の`deleteChore`（未完了のおねがいだけ）。
+ */
+export async function updateChoreRequestTitle(
+  client: SupabaseClient,
+  choreId: string,
+  title: string
+): Promise<ApiResult<Chore>> {
+  const { data, error, status } = await client
+    .from("chores")
+    .update({ title })
     .eq("id", choreId)
     .select("*")
     .single();

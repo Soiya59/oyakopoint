@@ -33,6 +33,8 @@ import {
 import { useFailureNotice } from "@/hooks/useFailureNotice";
 import { describeApiFailure } from "@/lib/apiFailureDisplay";
 import FailureRefText from "@/components/FailureRefText";
+import ChoreRequestEdit from "@/components/ChoreRequestEdit";
+import { isRequestChore } from "@/lib/requestChore";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -66,7 +68,7 @@ type NfcModalStep = "list" | "selectMember" | "writing" | "writeFailed" | "unsup
 // スキーマ設計.sql v2.0で削除されたため（画面一覧・遷移図.md P11「承認要否の設定項目は
 // 廃止」参照）。
 
-export default function ChoreEditScreen() {
+function ChoreEditFormScreen() {
   const { id, recId, copyFrom } = useLocalSearchParams<{ id?: string; recId?: string; copyFrom?: string }>();
   const { state, refresh } = useAppData();
   const { client } = useSession();
@@ -1101,6 +1103,20 @@ export default function ChoreEditScreen() {
       </Modal>
     </Screen>
   );
+}
+
+/**
+ * [2026-09-30追加・要件定義書07-43章決定13の2、主要画面ワイヤーフレーム.md 70.8節D15、実装メモ.md 335章]
+ * おねがい（`chore.is_request`）の行を開いたときは、P11は専用の簡素な表示（題名の編集と取り下げだけ。
+ * 済のおねがいは何も変えられない）になる。ポイント・繰り返し・担当・NFC・コピー・見本の欄は出さない。
+ * 通常のクエストは今までどおり`ChoreEditFormScreen`。
+ */
+export default function ChoreEditScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { state } = useAppData();
+  const chore = id ? state.chores.find((c) => c.id === id) : undefined;
+  if (chore && isRequestChore(chore)) return <ChoreRequestEdit choreId={chore.id} />;
+  return <ChoreEditFormScreen />;
 }
 
 const styles = StyleSheet.create({

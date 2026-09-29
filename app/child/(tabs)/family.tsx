@@ -16,6 +16,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
 import type { ChoreCompletion, StampKey } from "@/types/domain";
+import { buildRequestChoreIdSet, shouldHideFromChildFamilyFeed } from "@/lib/requestChore";
 
 /**
  * かぞく区画の入口（子ども。旧C18「かぞくのがんばり」に、旧C5が持っていた
@@ -87,8 +88,15 @@ export default function ChildFamilyTabScreen() {
   // [2026-09-09改訂・要件定義書07-23章決定1] 家族内の全員（保護者・みまもり
   // メンバー・他の子ども）の完了報告を対象にする。[決定2・自己リアクション禁止]
   // 自分自身の完了報告は`c.reported_by !== myId`で一覧から除外する。
+  // [2026-09-30追加・要件定義書07-43章決定17、主要画面ワイヤーフレーム.md 70.4節D8、API仕様.md 38.3章]
+  // **おねがいの完了は並べない**（きょうだいを比べない。「そらは頼まれた」「そらはやった」が、頼まれた本人
+  // 以外の子に見えるのを避ける）。完了報告の`chore_id`から引いた`chores.is_request`で絞る（表示側の絞り込みで
+  // 足りる。APIは変えない）。`chore_id`がNULLの完了報告は、おねがいではない普通のものとして残す。
+  // 自分のおねがいの記録は、自分の「きろく」・通帳で見られる。
+  const requestChoreIds = buildRequestChoreIdSet(state.chores);
   const reactableCompletions = [...state.completions]
     .filter((c) => c.reported_by !== myId)
+    .filter((c) => !shouldHideFromChildFamilyFeed(c, requestChoreIds))
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   // [2026-09-20追加・主要画面ワイヤーフレーム.md 55.1節決定2] `filter`（自分を除く）

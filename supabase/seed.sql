@@ -769,6 +769,60 @@ FROM (VALUES
 
 
 -- ============================================================
+-- 23c. chores.is_request（保護者から子どもへの「おねがい」。2026-09-30追加・要件定義書
+--      07-43章、開発部/成果物/実装メモ.md 335章、設計部/成果物/スキーマ設計.sql 82.14章）
+-- ============================================================
+-- 0件だと、rls_checks.sqlのB-R1・B-R2・A-R1・C-R8が「何も見えない／何も違反しない」を
+-- 自明に満たしてしまい、RLSが緩くても通る（82.14章の前提）。そのため各家族に
+-- 「やってくれた（完了報告あり）おねがい」1件と、家族Aにはさらに「未完了のおねがい」1件、
+-- 完了通知の記録（chore_request_done_notices）を入れる。
+-- ・chores_request_guard()（検証）は通常どおり通す（トリガーは無効化していない）。
+--   created_byはchores_before_write()がcurrent_family_member_id()で決めるため、
+--   INSERTの直前に保護者になりすます。
+-- ・家族トグル（push_notifications_enabled）は既定falseのままなので、通知は飛ばない。
+-- ・seedの家族構成（各家族に子ども1人）は変えない。82.14章は「担当が別々の子ども2人」と
+--   しているが、子どもを増やすと他の検査（代表ロールの選び方）に響くため、同じ子どもに
+--   未完了1・完了1を入れる形にした（未完了の上限3の範囲内）。
+-- ・chore_request_done_noticesにはINSERT用のポリシーが無い（default-deny）が、
+--   本ファイルはpostgres権限で実行されるため素のINSERTでよい。
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', (SELECT id::text FROM _seed_ids WHERE key = 'a_parent'))::text, false);
+
+WITH ins AS (
+  INSERT INTO chores (family_id, title, points, is_repeatable, scope, assigned_to, is_request)
+  VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_a'), 'テストおねがいA1(まどふき・済)', 0, false, 'family',
+          (SELECT id FROM _seed_ids WHERE key = 'a_child'), true)
+  RETURNING id
+)
+INSERT INTO _seed_ids SELECT 'a_request_done', id FROM ins;
+
+INSERT INTO chores (family_id, title, points, is_repeatable, scope, assigned_to, is_request)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_a'), 'テストおねがいA2(みずやり・未完了)', 0, false, 'family',
+        (SELECT id FROM _seed_ids WHERE key = 'a_child'), true);
+
+INSERT INTO chore_completions (chore_id, reported_by, note)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'a_request_done'), (SELECT id FROM _seed_ids WHERE key = 'a_child'), 'テスト完了A-おねがい');
+
+INSERT INTO chore_request_done_notices (chore_id, family_id)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'a_request_done'), (SELECT id FROM _seed_ids WHERE key = 'fam_a'));
+
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', (SELECT id::text FROM _seed_ids WHERE key = 'b_parent'))::text, false);
+
+WITH ins AS (
+  INSERT INTO chores (family_id, title, points, is_repeatable, scope, assigned_to, is_request)
+  VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_b'), 'テストおねがいB1(くつみがき・済)', 0, false, 'family',
+          (SELECT id FROM _seed_ids WHERE key = 'b_child'), true)
+  RETURNING id
+)
+INSERT INTO _seed_ids SELECT 'b_request_done', id FROM ins;
+
+INSERT INTO chore_completions (chore_id, reported_by, note)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done'), (SELECT id FROM _seed_ids WHERE key = 'b_child'), 'テスト完了B-おねがい');
+
+INSERT INTO chore_request_done_notices (chore_id, family_id)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done'), (SELECT id FROM _seed_ids WHERE key = 'fam_b'));
+
+
+-- ============================================================
 -- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);
@@ -793,7 +847,9 @@ SELECT
   (SELECT count(*) FROM weekly_family_digests wfd WHERE wfd.family_id = f.id) AS weekly_digests,
   (SELECT count(*) FROM chore_nfc_tags cnt WHERE cnt.family_id = f.id) AS chore_nfc_tags,
   (SELECT count(*) FROM join_consents jc WHERE jc.family_id = f.id) AS join_consents,
-  (SELECT count(*) FROM member_avatar_stocks mas WHERE mas.family_id = f.id) AS member_avatar_stocks
+  (SELECT count(*) FROM member_avatar_stocks mas WHERE mas.family_id = f.id) AS member_avatar_stocks,
+  (SELECT count(*) FROM chores c WHERE c.family_id = f.id AND c.is_request) AS chore_requests,
+  (SELECT count(*) FROM chore_request_done_notices crdn WHERE crdn.family_id = f.id) AS request_done_notices
 FROM families f
 ORDER BY f.created_at;
 

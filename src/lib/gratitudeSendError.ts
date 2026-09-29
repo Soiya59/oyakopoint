@@ -48,7 +48,13 @@ export function gratitudeSendErrorText(tone: GratitudeTone, error: ApiError): st
     // 判断を踏襲）。子ども向けはひらがな・やさしい語調に寄せた専用文言を返す
     // （`app/child/gratitude-send.tsx`が元々持っていた文言をそのまま踏襲）。
     if (error.message.includes("原資")) {
-      return tone === "child" ? "きょうは もう いっぱい おくったよ。また あした！" : error.message;
+      if (tone === "child") return "きょうは もう いっぱい おくったよ。また あした！";
+      // [2026-09-30変更・主要画面ワイヤーフレーム.md 70.7節D14、実装メモ335章] 保護者向けは、DBの
+      // 会計用語の文言（「…残り原資（◯pt）を超えています…」）をそのまま出さない。P22は通常この
+      // 前に残り0の案内カードへ切り替える（isGratitudeAllowanceConflict）ので、ここへ来るのは
+      // 念のための保険。みまもり向けは従来どおり（この画面の改修の対象外）。
+      if (tone === "parent") return "きょうは、もう贈れません。あした、また贈れます。";
+      return error.message;
     }
     return tone === "child" ? "おくれなかったよ" : "贈れませんでした";
   }

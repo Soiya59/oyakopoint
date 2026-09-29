@@ -46,6 +46,7 @@ import { useSession } from "@/lib/session";
 import type { SessionStatus } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "@/hooks/useBackgroundAutoRefresh";
+import { isRequestPushType, routeForRequestPushType } from "@/lib/requestChore";
 import {
   computeDeviceNotificationRowState,
   getOsPermissionStatus,
@@ -210,6 +211,17 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
         if (data.kind === "family_board_comment") return familyBoardRouteForStatus;
         if (data.kind === "chore_reaction_comment") return choreActivityRouteForStatus;
         if (data.kind === "family_drawing_comment") return collectorShelfRouteForStatus;
+      }
+      // [2026-09-30追加・要件定義書07-43章決定12・07-5章、主要画面ワイヤーフレーム.md 70.5節D10、
+      // 開発部/成果物/実装メモ.md 335章] おねがい・感謝ポイントの通知（`data.type`の3種）。
+      // タップ先はログイン中のロールで決め（`routeForRequestPushType`。`node`で検証済み）、決められない
+      // ときは何もしない（共有端末で保護者がログイン中のとき、子ども向けの画面へ勝手に飛ばさない）。
+      //  - chore_request（おねがいが届いた）: 子ども→子どものホーム。それ以外は移動しない。
+      //  - chore_request_done（やってくれた）: 保護者→完了報告一覧（P8）。それ以外は移動しない。
+      //  - gratitude_received（ありがとうが届いた）: 各ロールの「とどいたよ」。
+      if (isRequestPushType(data?.type)) {
+        const type = data?.type;
+        return (status) => routeForRequestPushType(type, status);
       }
       return null;
     };

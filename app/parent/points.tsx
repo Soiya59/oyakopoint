@@ -115,12 +115,15 @@ export default function ParentPointsScreen() {
                     <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                       {entry.emoji} {entry.label}
                     </Text>
-                    <Text style={theme.typography.parentBodyMedium}>
-                      {/* [2026-08-16改訂] "gratitude"（感謝ポイント受領分）もearnと同じ+表示にする
-                          （member_pointsに合算される「増えた」履歴のため。スキーマ設計.sql 14章）。 */}
-                      {entry.kind === "spend" ? "-" : "+"}
-                      {entry.points}pt
-                    </Text>
+                    {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は「+Npt」を出さない（行そのものは残す）（`showPoints`はstore.tsxのbuildLedgersが決める） */}
+                    {entry.showPoints !== false && (
+                      <Text style={theme.typography.parentBodyMedium}>
+                        {/* [2026-08-16改訂] "gratitude"（感謝ポイント受領分）もearnと同じ+表示にする
+                            （member_pointsに合算される「増えた」履歴のため。スキーマ設計.sql 14章）。 */}
+                        {entry.kind === "spend" ? "-" : "+"}
+                        {entry.points}pt
+                      </Text>
+                    )}
                   </View>
                   {/* [2026-08-16追加] 感謝ポイントの自由記述メモ（主要画面ワイヤーフレーム.md 4章
                       「送信者がそのまま書いた文章を編集・要約せずに表示する」）。 */}

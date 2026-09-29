@@ -134,7 +134,10 @@ export default function ParentGratitudeHubScreen() {
               label="ありがとうを贈る"
               style={{ marginTop: theme.spacing.s3 }}
               onPress={() => router.push("/parent/gratitude-send")}
-              disabled={balance <= 0}
+              // [2026-09-30変更・主要画面ワイヤーフレーム.md 70.2節D1、実装メモ335章] 残りが0でも
+              // 押せる。P22の上の切り替えから「おねがいする」タブへ入る唯一の入口のため、押せないと
+              // おねがいの入口を塞いでしまう（おねがいは感謝ポイントの1日の上限と関係がない）。
+              // 残り0のとき、P22は「ありがとうを贈る」タブに案内カードを出す。
             />
           </Card>
 

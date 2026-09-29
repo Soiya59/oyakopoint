@@ -638,6 +638,22 @@
 -- 各家族の子ども・保護者・みまもりに行を入れた（書き込み系のRPCの挙動はこの検査では
 -- 見ない。81.16章のV1〜V18を手動で実行し、実装メモ334章に結果を記録した）。
 --
+-- [2026-09-30追加・開発部] 保護者から子どもへの「おねがい」と感謝ポイントのプッシュ通知
+-- （要件定義書07-43章、設計部/成果物/スキーマ設計.sql 82章、開発部/成果物/実装メモ.md
+-- 335章、supabase/migrations/20261001010000_chore_requests_and_gratitude_push.sql）に伴い、
+-- chore_request_done_notices（default-deny。ポリシー0本）を新設。S1（44→45）・S2c新設
+-- （このテーブルのポリシー数0）・S3（80本のまま。ポリシーを1本も足さない）・S4（104→105件、
+-- 上限の定数関数`max_open_requests_per_child`のみ。残りの新関数6つはREVOKE済みで数えない）を
+-- 更新した。**設計部の見込み（82章冒頭「S1 +1・S2c新設・S3 ±0・S4 +1」）と実測が完全に
+-- 一致した**（ローカルDockerで適用前に実測。手計算していない）。C層にC-R1〜C-R10（列・
+-- ★担当必須のCHECKが無いこと・外部キー・トリガー・REVOKE・権限・上限の定数）、B層にB-R1
+-- （子ども・保護者は完了通知の記録を読めない）・B-R2（子どもは家族のおねがいの行が見える）、
+-- A層にA-R1（他家族のおねがいが見えない）を追加した。B-R系・A-R1・C-R8は0件だと自明に通る
+-- ため、seed.sqlの23c節でおねがいの行と記録を入れ、0件の環境ではSKIPにする。書き込み系の
+-- 挙動（形の検証・上限RQ001・やってくれたあとの変更不可・通知の宛先など）はこのファイルでは
+-- 見ない。82.15章のR1〜R30・L1〜L12・N1〜N18・E1〜E4を手動で実行し、実装メモ335章に
+-- 結果を記録した。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -725,8 +741,11 @@ GRANT INSERT ON _r TO authenticated;
 -- [2026-09-30再更新] 「まえのアバター」（要件定義書07-44章、スキーマ設計.sql
 -- 81章）でmember_avatar_stocksを追加。43→44（ローカルDockerで実測。96.5章の
 -- 遵守。設計部の見込み「S1 +1」と一致）。
+-- [2026-09-30再更新] 「おねがい」の完了通知の記録（設計部82章）でchore_request_done_notices
+-- を追加。44→45（ローカルDockerで実測。96.5章の遵守。設計部の見込み「S1 +1」と一致。
+-- chores.is_request列の追加は既存テーブルへのADD COLUMNのためS1には数えない）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '44', count(*)::text, count(*) = 44
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '45', count(*)::text, count(*) = 45
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -744,6 +763,14 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_member_pins
 INSERT INTO _r
 SELECT 'C層', 'S2b 確認コードテーブルのポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_deletion_codes';
+
+-- S2c. [2026-09-30追加・スキーマ設計.sql 82.14章] chore_request_done_notices（「おねがい」の
+--     完了通知を1つの依頼につき1通だけにするための記録）も、S2・S2bと同じdefault-deny
+--     パターン（RLSは有効・ポリシーは0本）。書き込みはSECURITY DEFINERのトリガー関数
+--     だけが行う。将来うっかりポリシーを1本足すと、家族が読める・書ける状態に変わる。
+INSERT INTO _r
+SELECT 'C層', 'S2c おねがいの完了通知の記録表のポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
+FROM pg_policies WHERE schemaname = 'public' AND tablename = 'chore_request_done_notices';
 
 -- S3. ポリシー52本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
@@ -1442,7 +1469,14 @@ WITH expected(f) AS (VALUES
   ('max_avatar_stock_per_member'),
   ('save_member_avatar'),
   ('restore_member_avatar_from_stock'),
-  ('reset_member_avatar')
+  ('reset_member_avatar'),
+  -- [2026-09-30追加・設計部82.3章・82.8章、実装メモ335章] max_open_requests_per_child:
+  -- 未完了のおねがいの上限（子ども1人につき3つ）の定数関数。LANGUAGE SQL・IMMUTABLEで
+  -- max_avatar_stock_per_member()と同じ扱い。chores_request_guard()（authenticatedの
+  -- INSERTで動く）の本文から呼ばれるため、REVOKEしない（本文中の別の関数は呼び出し元の
+  -- 実行権限が確認される。82.8章）。残りの新関数6つ（guard・宛先の組み立て2・通知の
+  -- トリガー関数3）はすべてREVOKE済みでここには入らない（C-R6が確認）。
+  ('max_open_requests_per_child')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1455,7 +1489,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数104件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数105件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1489,6 +1523,141 @@ SELECT 'C層', 'S5 publicの全テーブルにauthenticatedのSELECTがある',
        '不足0件',
        coalesce((SELECT string_agg(t, ' / ') FROM missing), '不足0件'),
        NOT EXISTS (SELECT 1 FROM missing);
+
+-- ------------------------------------------------------------
+-- C-R1〜C-R10. [2026-09-30追加・スキーマ設計.sql 82.14章] 「おねがい」（chores.is_request）の
+-- 静的検査（管理者権限。SELECTのみ）。書き込みの挙動そのもの（形の検証・RQ001・やってくれた
+-- あとの変更不可）は82.15章の手動検証で確認する。
+-- ------------------------------------------------------------
+-- C-R1 chores.is_requestがboolean・NOT NULL・既定false
+INSERT INTO _r
+SELECT 'C層', 'C-R1 chores.is_request（boolean・NOT NULL・既定false）', 'boolean / NO / false',
+  coalesce((SELECT col.data_type || ' / ' || col.is_nullable || ' / ' || coalesce(col.column_default, '(なし)')
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'chores' AND col.column_name = 'is_request'),
+           '列が無い'),
+  coalesce((SELECT col.data_type = 'boolean' AND col.is_nullable = 'NO' AND col.column_default = 'false'
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'chores' AND col.column_name = 'is_request'),
+           false);
+
+-- C-R2 ★「担当が必須」のCHECK制約が無いこと。assigned_toはON DELETE SET NULLなので、
+--      is_requestなら担当が必須のCHECKを足すと、子どもの削除・家族削除が失敗する。
+--      assigned_toとis_requestの両方を含むCHECK制約が存在しないことを見る。
+INSERT INTO _r
+SELECT 'C層', 'C-R2 assigned_toとis_requestを両方含むCHECK制約が無い', '0', count(*)::text, count(*) = 0
+FROM pg_constraint con
+WHERE con.conrelid = 'public.chores'::regclass AND con.contype = 'c'
+  AND pg_get_constraintdef(con.oid) ILIKE '%assigned_to%'
+  AND pg_get_constraintdef(con.oid) ILIKE '%is_request%';
+
+-- C-R3 chores.assigned_toの外部キーがON DELETE SET NULL（confdeltype='n'）のままであること
+INSERT INTO _r
+SELECT 'C層', 'C-R3 chores.assigned_toの外部キーはON DELETE SET NULL', 'n',
+  coalesce((SELECT con.confdeltype::text FROM pg_constraint con
+             WHERE con.conrelid = 'public.chores'::regclass AND con.contype = 'f'
+               AND con.conkey = ARRAY[(SELECT a.attnum FROM pg_attribute a
+                                        WHERE a.attrelid = 'public.chores'::regclass AND a.attname = 'assigned_to')]),
+           '外部キーが無い'),
+  coalesce((SELECT con.confdeltype = 'n' FROM pg_constraint con
+             WHERE con.conrelid = 'public.chores'::regclass AND con.contype = 'f'
+               AND con.conkey = ARRAY[(SELECT a.attnum FROM pg_attribute a
+                                        WHERE a.attrelid = 'public.chores'::regclass AND a.attname = 'assigned_to')]),
+           false);
+
+-- C-R4 形のCHECK制約が有効であること
+INSERT INTO _r
+SELECT 'C層', 'C-R4 chk_chores_request_shapeが有効', '1', count(*)::text, count(*) = 1
+FROM pg_constraint con
+WHERE con.conrelid = 'public.chores'::regclass AND con.conname = 'chk_chores_request_shape' AND con.convalidated;
+
+-- C-R5 おねがい・感謝ポイントの通知と検証のトリガー4本が存在し有効（tgenabled='O'）
+INSERT INTO _r
+SELECT 'C層', 'C-R5 おねがい・感謝ポイントの通知と検証のトリガー4本が有効', '4', count(*)::text, count(*) = 4
+FROM pg_trigger t
+WHERE NOT t.tgisinternal AND t.tgenabled = 'O'
+  AND t.tgname IN ('trg_chores_request_guard',
+                   'trg_chores_after_insert_notify_request',
+                   'trg_chore_completions_after_insert_notify_request_done',
+                   'trg_gratitude_points_after_insert_notify');
+
+-- C-R6 新関数6つがauthenticated・anonから実行できないこと（最小権限。has_function_privilegeは
+--      PUBLIC経由の権限も含めて判定する）
+INSERT INTO _r
+SELECT 'C層', 'C-R6 おねがい・感謝通知の新関数6つがクライアントから実行できない', '0', count(*)::text, count(*) = 0
+FROM (VALUES
+  ('public.chores_request_guard()'),
+  ('public.chore_request_notification_payload(text,uuid)'),
+  ('public.chores_after_insert_notify_request()'),
+  ('public.chore_completions_after_insert_notify_request_done()'),
+  ('public.gratitude_notification_payload(uuid)'),
+  ('public.gratitude_points_after_insert_notify()')
+) v(sig)
+WHERE has_function_privilege('authenticated', v.sig, 'EXECUTE')
+   OR has_function_privilege('anon', v.sig, 'EXECUTE');
+
+-- C-R7 chore_request_done_noticesの外部キーがすべてON DELETE CASCADEであること
+--      （家族削除・おねがいの取り下げを妨げない）
+INSERT INTO _r
+SELECT 'C層', 'C-R7 chore_request_done_noticesの外部キーはすべてON DELETE CASCADE', '0', count(*)::text, count(*) = 0
+FROM pg_constraint con
+WHERE con.conrelid = 'public.chore_request_done_notices'::regclass AND con.contype = 'f' AND con.confdeltype <> 'c';
+
+-- C-R7b [開発部追加] chore_request_done_noticesの権限: authenticatedはSELECTのみ（INSERT/
+--      UPDATE/DELETEが無い）・anonは何も無い（設計部82.5章）。Supabaseが自動で付ける全権限を
+--      migrationでREVOKEしていないと、ここがFAILする（実測で一度そうなっていた）。
+INSERT INTO _r
+SELECT 'C層', 'C-R7b chore_request_done_noticesの権限（authenticatedはSELECTのみ・anonは無し）', 'SELECTのみ / 無し',
+  CASE WHEN has_table_privilege('authenticated', 'public.chore_request_done_notices', 'SELECT')
+        AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'INSERT')
+        AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'UPDATE')
+        AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'DELETE')
+       THEN 'SELECTのみ' ELSE 'authenticatedの権限がずれている' END
+  || ' / ' ||
+  CASE WHEN NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'SELECT')
+        AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'INSERT')
+        AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'UPDATE')
+        AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'DELETE')
+       THEN '無し' ELSE 'anonに権限がある' END,
+  has_table_privilege('authenticated', 'public.chore_request_done_notices', 'SELECT')
+    AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'INSERT')
+    AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'UPDATE')
+    AND NOT has_table_privilege('authenticated', 'public.chore_request_done_notices', 'DELETE')
+    AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'SELECT')
+    AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'INSERT')
+    AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'UPDATE')
+    AND NOT has_table_privilege('anon', 'public.chore_request_done_notices', 'DELETE');
+
+-- C-R8 is_request行の形と担当のロールが正しいこと（データ整合。CHECKとトリガーが働いていれば
+--      0件のはずの事故検出）。0行の環境ではPASSにせずSKIP。
+INSERT INTO _r
+SELECT 'C層', 'C-R8 is_request行の形と担当のロールが正しい', '0',
+  CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN 'SKIP（is_request行が0件）'
+       ELSE count(*)::text END,
+  CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN NULL ELSE count(*) = 0 END
+FROM chores c
+WHERE c.is_request
+  AND (c.points <> 0 OR c.is_repeatable OR c.daily_limit IS NOT NULL OR c.scope <> 'family'
+       OR (c.assigned_to IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM family_members fm
+                           WHERE fm.id = c.assigned_to AND fm.family_id = c.family_id AND fm.role = 'child')));
+
+-- C-R9 未完了のおねがいの上限の定数関数が3を返すこと（アプリの`requestLimit.maxOpenPerChild`と
+--      1か所ずつで管理している。値を変える決定が出たら、この期待値とアプリの定数を同時に直す）
+INSERT INTO _r
+SELECT 'C層', 'C-R9 max_open_requests_per_child()が3', '3',
+  coalesce((SELECT public.max_open_requests_per_child()::text), '関数が無い'),
+  coalesce((SELECT public.max_open_requests_per_child() = 3), false);
+
+-- C-R10 検証トリガーがINSERT・UPDATE・DELETEのすべてをBEFORE ROWで見ていること
+--       （tgtype: ROW=1・BEFORE=2・INSERT=4・DELETE=8・UPDATE=16。期待値は1+2+4+8+16=31）。
+--       DELETEが抜けると「やってくれたあとの取り下げ不可」が無音で効かなくなる。
+INSERT INTO _r
+SELECT 'C層', 'C-R10 trg_chores_request_guardがBEFORE INSERT/UPDATE/DELETE（ROW）', '31',
+  coalesce((SELECT t.tgtype::int::text FROM pg_trigger t
+             WHERE t.tgrelid = 'public.chores'::regclass AND t.tgname = 'trg_chores_request_guard'), 'トリガーが無い'),
+  coalesce((SELECT t.tgtype::int = 31 FROM pg_trigger t
+             WHERE t.tgrelid = 'public.chores'::regclass AND t.tgname = 'trg_chores_request_guard'), false);
 
 
 -- ============================================================
@@ -1554,6 +1723,18 @@ SELECT set_config('t.parent_expected_stock_rows',
   (SELECT count(*) FROM member_avatar_stocks s
     WHERE s.family_id = (SELECT p.family_id FROM family_members p WHERE p.id = nullif(current_setting('t.parent', true), '')::uuid))::text, true);
 
+-- [2026-09-30追加・スキーマ設計.sql 82.14章]「おねがい」の「本来見えるべき行」の有無を、
+-- `SET LOCAL ROLE authenticated`の前（管理者権限）でGUCに保存する（ロール切り替え後は
+-- RLSがかかって数えられないため）。0件だと「何も見えない」が自明に成立してしまうため、
+-- 0件の環境ではB-R1・B-R2をSKIPにする（PASSにしない）。seed.sqlの23c節が入れている。
+-- ・t.notice_rows: chore_request_done_noticesの行数（default-denyなので誰にも見えないのが正しい）
+-- ・t.child_family_request_rows: 子どもと同じ家族のis_request=trueのchoresの行数
+--   （chores_select_scopedは家族全員に見せるので、子どもにも全部見えるのが正しい）
+SELECT set_config('t.notice_rows', (SELECT count(*) FROM chore_request_done_notices)::text, true);
+SELECT set_config('t.child_family_request_rows',
+  (SELECT count(*) FROM chores c
+    WHERE c.is_request AND c.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.child', true), '')::uuid))::text, true);
+
 
 -- ---------- 子どもの視点 ----------
 SET LOCAL ROLE authenticated;
@@ -1600,6 +1781,36 @@ INSERT INTO _r SELECT 'B層', 'B-S1 子ども: まえのアバターは自分の
        THEN count(*) = nullif(current_setting('t.child_stock_rows', true), '')::int
        ELSE NULL END
 FROM member_avatar_stocks;
+
+-- B-R1. [2026-09-30追加・スキーマ設計.sql 82.14章] 子ども: 完了通知の記録
+--     （chore_request_done_notices）は一切読めない。default-deny（ポリシー0本）なので0件が正しい。
+--     表が0件だと「読めない」が自明に成立するため、0件の環境ではSKIPにする。
+INSERT INTO _r SELECT 'B層', 'B-R1 子ども: おねがいの完了通知の記録が読めない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.notice_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにchildが居ない、またはnoticesが0件。seed.sqlの23c節に行を足すこと）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.notice_rows', true), '')::int > 0
+       THEN count(*) = 0
+       ELSE NULL END
+FROM chore_request_done_notices;
+
+-- B-R2. [2026-09-30追加・スキーマ設計.sql 82.14章] 子ども: 家族のおねがいの行が見える
+--     （過剰遮断でない）。choresのSELECTは家族全体で、おねがいだからといって新しく狭めて
+--     いない。期待値は「同じ家族のis_request=trueの行数」と**一致すること**（他家族の
+--     行が漏れれば多すぎ、過剰に遮断すれば少なすぎで、どちらもFAIL）。
+INSERT INTO _r SELECT 'B層', 'B-R2 子ども: 家族のおねがいの行が全部見える（過剰遮断でない）',
+  coalesce(current_setting('t.child_family_request_rows', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.child_family_request_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにchildが居ない、またはis_request行が0件。seed.sqlの23c節に行を足すこと）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.child_family_request_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.child_family_request_rows', true), '')::int
+       ELSE NULL END
+FROM chores WHERE is_request;
 
 -- ------------------------------------------------------------
 -- A層（子どもロール分）: family_drawings / chore_completions / family_members は
@@ -1932,6 +2143,15 @@ INSERT INTO _r SELECT 'A層', 'A32 保護者: member_avatar_stocksに他家族�
   CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
 FROM member_avatar_stocks WHERE family_id <> current_family_id();
 
+-- A-R1. [2026-09-30追加・スキーマ設計.sql 82.14章] 保護者: choresのis_request行に他家族の行が
+--     見えない。家族またぎは、seedに別家族のおねがいの行があって初めて意味を持つ
+--     （seed.sql 23c節）。chore_request_done_noticesはdefault-denyで自家族の行も見えない
+--     ため、A層の追加は不要（B-R1が担う）。
+INSERT INTO _r SELECT 'A層', 'A-R1 保護者: choresのis_request行に他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true' THEN count(*) = 0 ELSE NULL END
+FROM chores WHERE is_request AND family_id <> current_family_id();
+
 -- B-S3. [2026-09-30追加・スキーマ設計.sql 81.8章]「まえのアバター」は、保護者には同じ家族の
 --     全員分（子ども・他の保護者・みまもり）が見え、他家族の分は見えない（統括の追加決定2。
 --     今の絵を描き直せる範囲と同じ）。期待値は「同じ家族の全員分」だけで数えているため、
@@ -1947,6 +2167,18 @@ INSERT INTO _r SELECT 'B層', 'B-S3 保護者: まえのアバターは同じ家
        THEN count(*) = nullif(current_setting('t.parent_expected_stock_rows', true), '')::int
        ELSE NULL END
 FROM member_avatar_stocks;
+
+-- B-R1（保護者版）. 保護者でも、完了通知の記録は読めない（default-deny。0件が正しい）。
+INSERT INTO _r SELECT 'B層', 'B-R1 保護者: おねがいの完了通知の記録が読めない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.notice_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにparentが居ない、またはnoticesが0件。seed.sqlの23c節に行を足すこと）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.notice_rows', true), '')::int > 0
+       THEN count(*) = 0
+       ELSE NULL END
+FROM chore_request_done_notices;
 
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
