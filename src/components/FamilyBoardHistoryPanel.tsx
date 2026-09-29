@@ -34,16 +34,26 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
 import MemberAvatar from "./MemberAvatar";
+import FailureRefText from "./FailureRefText";
 import NgWordWarningText from "./NgWordWarningText";
 import { EmptyState, ErrorState, SkeletonList } from "./StatusViews";
 import { useAppData } from "@/data/store";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import { formatDateShort, formatDateTimeShort, formatTimeShort, toJstDateString } from "@/lib/calendarDates";
+import { actionableFailureMessage, type ApiFailureKind } from "@/lib/apiFailure";
 import theme from "@/theme/theme";
 import type { FamilyBoardCommentWithAuthor, FamilyBoardPostWithAuthor, FamilyBoardReactionWithReactor, StampKey } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
 type LoadState = "loading" | "error" | "ready";
+
+/**
+ * [2026-09-29追加・実装メモ331章] 失敗の「種類」と「目印」（src/hooks/useFamilyBoard.tsが
+ * src/lib/apiFailureDisplay.tsの`failureDetail`で付ける）。電波・混み合い・ログイン切れ・
+ * 権限拒否のときだけ保護者・みまもり向けの文言を差し替え、それ以外は従来の文言のまま。
+ * 目印は文言の下に小さく添える（子どもは「めじるし」）。
+ */
+type FailureInfo = { kind?: ApiFailureKind; ref?: string };
 
 const FIVE_MIN_MS = 5 * 60 * 1000;
 
@@ -73,7 +83,7 @@ export interface FamilyBoardHistoryPanelProps {
   /** 現在削除/取消のRPCが処理中の投稿ID（1件ずつのみ処理を許可する）。 */
   removingPostId: string | null;
   /** 直近の削除/取消アクションでエラーになった場合の{postId, message}。 */
-  actionError: { postId: string; message: string } | null;
+  actionError: ({ postId: string; message: string } & FailureInfo) | null;
   /** 削除/取消の実処理（RPC呼び出し）。「取消」「削除」いずれもこの1つを呼ぶ
    *  （権限判定はサーバー側のみが行うため、UI側は確認ダイアログの有無だけを分ける）。 */
   onRemovePost: (postId: string) => Promise<boolean>;
@@ -83,13 +93,13 @@ export interface FamilyBoardHistoryPanelProps {
   /** 現在送信中のリアクション（1件のみ許可。同じ投稿の他のスタンプは送信可能）。 */
   reactingReaction: { postId: string; stampKey: StampKey } | null;
   /** 直近のリアクション送信でエラーになった場合の{postId, message}。 */
-  reactionError: { postId: string; message: string } | null;
+  reactionError: ({ postId: string; message: string } & FailureInfo) | null;
   /** リアクション送信の実処理（INSERT呼び出し）。タップ即送信（確認ダイアログなし）。 */
   onReact: (postId: string, stampKey: StampKey) => Promise<boolean>;
   /** [2026-09-01追加・104章] 「だれが送ったか見る」を開いたときの遅延取得。 */
   onViewReactors: (
     postId: string
-  ) => Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string }>;
+  ) => Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | ({ ok: false; message: string } & FailureInfo)>;
 
   /**
    * [2026-09-23追加・要件定義書07-30章、UIUXデザイン部/成果物/主要画面
@@ -100,10 +110,10 @@ export interface FamilyBoardHistoryPanelProps {
    */
   commentsEnabled: boolean;
   sendingCommentPostId: string | null;
-  commentError: { postId: string; message: string } | null;
+  commentError: ({ postId: string; message: string } & FailureInfo) | null;
   onAddComment: (postId: string, commenterMemberId: string, body: string) => Promise<boolean>;
   deletingCommentId: string | null;
-  commentActionError: { commentId: string; message: string } | null;
+  commentActionError: ({ commentId: string; message: string } & FailureInfo) | null;
   onDeleteComment: (postId: string, commentId: string) => Promise<boolean>;
 }
 
@@ -337,6 +347,7 @@ export function FamilyBoardHistoryPanel({
   const [viewingReactorsId, setViewingReactorsId] = useState<string | null>(null);
   const [reactorsLoading, setReactorsLoading] = useState(false);
   const [reactorsError, setReactorsError] = useState<string | null>(null);
+  const [reactorsFailure, setReactorsFailure] = useState<FailureInfo>({});
   const [reactorsData, setReactorsData] = useState<FamilyBoardReactionWithReactor[]>([]);
 
   const isBlocked = remaining === 0;
@@ -363,11 +374,13 @@ export function FamilyBoardHistoryPanel({
     setViewingReactorsId(postId);
     setReactorsData([]);
     setReactorsError(null);
+    setReactorsFailure({});
     setReactorsLoading(true);
     const res = await onViewReactors(postId);
     setReactorsLoading(false);
     if (!res.ok) {
       setReactorsError(res.message);
+      setReactorsFailure({ kind: res.kind, ref: res.ref });
       return;
     }
     setReactorsData(res.data);
@@ -462,7 +475,8 @@ export function FamilyBoardHistoryPanel({
             // 3ロールいずれでも常にtrue（ロールによる非対称制限は無い）。
             const canReact = !isOwn;
             const isProcessing = removingPostId === post.id;
-            const rowError = actionError?.postId === post.id ? actionError.message : null;
+            const rowFailure = actionError?.postId === post.id ? actionError : null;
+            const rowError = rowFailure ? rowFailure.message : null;
             const isConfirming = confirmDeleteId === post.id;
 
             // [2026-09-01改訂・104章] `reactions`は家族全員分の反応
@@ -472,14 +486,16 @@ export function FamilyBoardHistoryPanel({
             const mineFor = (key: StampKey) => reactions.some((r) => r.stamp_key === key && r.reactor_member_id === myMemberId);
             const hasAnyReaction = reactions.length > 0;
             const isReactingThisPost = reactingReaction?.postId === post.id;
-            const reactRowError = reactionError?.postId === post.id ? reactionError.message : null;
+            const reactFailure = reactionError?.postId === post.id ? reactionError : null;
+            const reactRowError = reactFailure ? reactFailure.message : null;
             const isViewingReactors = viewingReactorsId === post.id;
 
             // [2026-09-23追加・要件定義書07-30章、65.2章] コメント。
             const comments = post.comments ?? [];
             const isComposingThisPost = composingPostId === post.id;
             const isSendingThisComment = sendingCommentPostId === post.id;
-            const commentRowError = commentError?.postId === post.id ? commentError.message : null;
+            const commentFailure = commentError?.postId === post.id ? commentError : null;
+            const commentRowError = commentFailure ? commentFailure.message : null;
 
             return (
               <Card key={post.id} tone={tone}>
@@ -622,9 +638,13 @@ export function FamilyBoardHistoryPanel({
                         {reactorsLoading ? (
                           <Text style={captionStyle}>{isChild ? "よみこみちゅう…" : "読み込み中…"}</Text>
                         ) : reactorsError ? (
-                          <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
-                            {isChild ? "うまく よみこめなかったよ" : "読み込みに失敗しました"}
-                          </Text>
+                          <>
+                            <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
+                              {(reactorsFailure.kind && actionableFailureMessage(reactorsFailure.kind, tone)) ||
+                                (isChild ? "うまく よみこめなかったよ" : "読み込みに失敗しました")}
+                            </Text>
+                            <FailureRefText value={reactorsFailure.ref} tone={tone} />
+                          </>
                         ) : (
                           <View style={{ gap: theme.spacing.s1 }}>
                             {reactorsData.map((r) => {
@@ -656,9 +676,10 @@ export function FamilyBoardHistoryPanel({
                       { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking },
                     ]}
                   >
-                    {actionErrorText(tone, rowError)}
+                    {(rowFailure?.kind && actionableFailureMessage(rowFailure.kind, tone)) || actionErrorText(tone, rowError)}
                   </Text>
                 )}
+                {rowError && !isConfirming && <FailureRefText value={rowFailure?.ref} tone={tone} />}
 
                 {reactRowError && !isConfirming && (
                   <Text
@@ -668,9 +689,11 @@ export function FamilyBoardHistoryPanel({
                       { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking },
                     ]}
                   >
-                    {reactionErrorText(tone, reactRowError)}
+                    {(reactFailure?.kind && actionableFailureMessage(reactFailure.kind, tone)) ||
+                      reactionErrorText(tone, reactRowError)}
                   </Text>
                 )}
+                {reactRowError && !isConfirming && <FailureRefText value={reactFailure?.ref} tone={tone} />}
 
                 {/* [2026-09-23新設・要件定義書07-30章、UIUXデザイン部/成果物/
                     主要画面ワイヤーフレーム.md 65.2章、やること.md 2-69]
@@ -688,7 +711,8 @@ export function FamilyBoardHistoryPanel({
                           const canDeleteComment = isParent && !isOwnComment;
                           const isDeletingThisComment = deletingCommentId === c.id;
                           const isConfirmingThisComment = confirmDeleteCommentId === c.id;
-                          const thisCommentError = commentActionError?.commentId === c.id ? commentActionError.message : null;
+                          const thisCommentFailure = commentActionError?.commentId === c.id ? commentActionError : null;
+                          const thisCommentError = thisCommentFailure ? thisCommentFailure.message : null;
                           return (
                             <View key={c.id}>
                               <Text style={bodyStyle}>
@@ -737,9 +761,11 @@ export function FamilyBoardHistoryPanel({
                               )}
                               {thisCommentError && (
                                 <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
-                                  {COMMENT_ALREADY_DELETED_TEXT[tone]}
+                                  {(thisCommentFailure?.kind && actionableFailureMessage(thisCommentFailure.kind, tone)) ||
+                                    COMMENT_ALREADY_DELETED_TEXT[tone]}
                                 </Text>
                               )}
+                              {thisCommentError && <FailureRefText value={thisCommentFailure?.ref} tone={tone} />}
                             </View>
                           );
                         })}
@@ -766,9 +792,11 @@ export function FamilyBoardHistoryPanel({
                         {ngGuard.blocked && <NgWordWarningText tone={tone} />}
                         {commentRowError && (
                           <Text style={[captionStyle, { color: isChild ? theme.colors.brandPrimaryStrong : theme.colors.statusBlocking }]}>
-                            {COMMENT_SEND_FAIL_TEXT[tone]}
+                            {(commentFailure?.kind && actionableFailureMessage(commentFailure.kind, tone)) ||
+                              COMMENT_SEND_FAIL_TEXT[tone]}
                           </Text>
                         )}
+                        {commentRowError && <FailureRefText value={commentFailure?.ref} tone={tone} />}
                         <View style={styles.commentComposeButtonRow}>
                           <AppButton
                             tone={tone}

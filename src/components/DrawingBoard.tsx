@@ -56,6 +56,7 @@ import type { DrawingTool } from "@/lib/drawingShapes";
 import type { FamilyDrawing, FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "./NgWordWarningText";
+import FailureRefText from "./FailureRefText";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -84,6 +85,8 @@ interface DrawingBoardProps {
   saving: boolean;
   /** 直近の保存/削除/編集で発生した通信エラー文言。 */
   errorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。errorMessageの下に小さく出す。 */
+  errorRef?: string | null;
   /**
    * [2026-09-08追加・やること.md 4-4] 削除しようとした瞬間に他メンバーのガチャで
    * 先に公開されていた（削除は行われていない）ことを伝える文言。エラーではなく
@@ -146,6 +149,7 @@ export function DrawingBoard({
   atLimit,
   saving,
   errorMessage,
+  errorRef,
   deletePublishedNotice,
   saveLabel,
   clearLabel,
@@ -747,7 +751,10 @@ export function DrawingBoard({
           キャンバスを描いている最中にのみ意味を持つため、showCanvas
           （新規作成中・編集中）のときに限る。 */}
       {errorMessage ? (
-        <Text style={styles.error}>{errorMessage}</Text>
+        <>
+          <Text style={styles.error}>{errorMessage}</Text>
+          <FailureRefText value={errorRef} tone={tone} />
+        </>
       ) : showCanvas && fitBlockedMessage ? (
         <Text style={[bodyStyle, styles.atCapacity]}>{fitBlockedMessage}</Text>
       ) : showCanvas && atCapacity ? (

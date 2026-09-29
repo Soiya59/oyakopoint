@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import DrawingBoard from "@/components/DrawingBoard";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
@@ -23,7 +24,9 @@ export default function ChildDrawingScreen() {
   const myId = state.activeChildMemberId;
   const { loadState, unpublished, atLimit, reload, save, remove, edit } = useMyDrawings(myId);
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  // DB側が日本語で書いたメッセージ（ガチャ競合の check_violation 等、12.2a章「危険2」）は従来どおりそのまま出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("child");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // [2026-09-08追加・やること.md 4-4] 削除競合（先にガチャで公開された）の通知。
   const [deletePublishedNotice, setDeletePublishedNotice] = useState<string | null>(null);
@@ -38,7 +41,7 @@ export default function ChildDrawingScreen() {
     const res = await save(lineData, title);
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return false;
     }
     router.replace("/child/drawing-done");
@@ -62,7 +65,7 @@ export default function ChildDrawingScreen() {
     const res = await edit(drawingId, lineData, title);
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return false;
     }
     router.replace("/child/drawing-done");
@@ -76,7 +79,7 @@ export default function ChildDrawingScreen() {
     const res = await remove(drawingId);
     setDeletingId(null);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     // [2026-09-08追加・やること.md 4-4] 削除しようとした瞬間に他メンバーの
@@ -124,6 +127,7 @@ export default function ChildDrawingScreen() {
             atLimit={atLimit}
             saving={saving}
             errorMessage={errorMessage}
+            errorRef={errorRef}
             deletePublishedNotice={deletePublishedNotice}
             saveLabel="とっておく"
             clearLabel="ぜんぶ けす"

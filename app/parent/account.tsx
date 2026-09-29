@@ -10,6 +10,8 @@ import { Text } from "react-native";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { removeMember, requestFamilyDeletionCode } from "@/data/api";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import type { ApiResult } from "@/data/api";
 
 /**
@@ -50,7 +52,8 @@ export default function ParentAccountScreen() {
   const me = parentMember;
 
   const [processing, setProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
 
   // 59.3.1節「判定（クライアント側、state.membersから計算）」のとおり。
   const otherActiveParents = useMemo(
@@ -107,11 +110,11 @@ export default function ParentAccountScreen() {
     const res = await removeMember(me.id, "soft_remove");
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage(
-        res.error.code === "owner_must_delete_family"
-          ? "他に在籍している保護者がいないため、抜けるには家族を削除してください。"
-          : res.error.message
-      );
+      if (res.error.code === "owner_must_delete_family") {
+        setErrorMessage("他に在籍している保護者がいないため、抜けるには家族を削除してください。");
+      } else {
+        showFailure(res.error, { source: "edge" });
+      }
       return;
     }
     await logoutParent();
@@ -133,7 +136,7 @@ export default function ParentAccountScreen() {
     const res = await removeMember(me.id, "delete_family", deleteFamilyNameDraft, deletionCodeDraft);
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage(
+      const knownMessage =
         res.error.code === "family_name_mismatch"
           ? "家族の名前が一致しません。もう一度ご確認ください"
           : res.error.code === "deletion_code_invalid" ||
@@ -142,8 +145,12 @@ export default function ParentAccountScreen() {
           ? "うまく確認できませんでした。もう一度、メールの数字をご確認のうえ入力してください。"
           : res.error.code === "deletion_code_locked"
           ? "少し時間をおいてから、もう一度お試しください。"
-          : res.error.message
-      );
+          : null;
+      if (knownMessage) {
+        setErrorMessage(knownMessage);
+      } else {
+        showFailure(res.error, { source: "edge" });
+      }
       return;
     }
     await logoutParent();
@@ -164,6 +171,7 @@ export default function ParentAccountScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s3 }}>
         <AppButton label="ログアウト" variant="secondary" onPress={doLogout} disabled={processing || confirmMode !== null} />

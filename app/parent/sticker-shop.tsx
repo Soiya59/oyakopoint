@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import StickerShopPanel from "@/components/StickerShopPanel";
 import StickerPurchaseResultView from "@/components/StickerPurchaseResultView";
 import theme from "@/theme/theme";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import { useAppData } from "@/data/store";
 import {
   computeEverPurchasedShapeRarities,
@@ -56,7 +57,9 @@ export default function ParentStickerShopScreen() {
     reload: reloadTierResets,
   } = useFamilyStickerTierResets(state.family.id);
   const { purchasing, purchase } = useStickerPurchaseAction();
-  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: purchaseError, errorRef: purchaseErrorRef, setErrorMessage: setPurchaseError, showFailure: showPurchaseFailure } =
+    useFailureNotice("parent");
   // [2026-09-09新設・34章] 購入結果ビューに切り替えるための状態。購入APIの戻り値
   // （`purchase_id`）とカタログ項目（`shape`・`rarity`・`display_name`の導出元）を
   // 保持する。nullの間は従来どおりメダル一覧を表示する。
@@ -82,7 +85,7 @@ export default function ParentStickerShopScreen() {
     setPurchaseError(null);
     const res = await purchase(catalogId);
     if (!res.ok) {
-      setPurchaseError(res.error.message);
+      showPurchaseFailure(res.error);
       // [2026-09-09変更] 失敗時はfalseを返し、確認モーダルを開いたままにして
       // エラー文言を見せる（従来どおりの挙動）。
       return false;
@@ -143,6 +146,7 @@ export default function ParentStickerShopScreen() {
         resetAtByShape={resetAtByShape}
         purchasing={purchasing}
         purchaseErrorMessage={purchaseError}
+        purchaseErrorRef={purchaseErrorRef}
         onRetry={() => {
           reloadCatalog();
           reloadFamilyPurchases();

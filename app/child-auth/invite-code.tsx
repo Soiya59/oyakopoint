@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import ChildBackLink from "@/components/ChildBackLink";
+import FailureRefText from "@/components/FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { inviteLookup } from "@/data/api";
 
@@ -19,7 +21,8 @@ import { inviteLookup } from "@/data/api";
 export default function ChildInviteCodeScreen() {
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 通信の失敗などは、子ども向けの言葉（とどきませんでした…）に小さな目印を添えて出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("child");
 
   const submit = async () => {
     if (!code.trim()) return;
@@ -28,9 +31,11 @@ export default function ChildInviteCodeScreen() {
     const res = await inviteLookup(code.trim());
     setChecking(false);
     if (!res.ok) {
-      setErrorMessage(
-        res.error.code === "invite_code_not_found" ? "コードがみつからなかったよ。もういちどたしかめてね" : res.error.message
-      );
+      if (res.error.code === "invite_code_not_found") {
+        setErrorMessage("コードがみつからなかったよ。もういちどたしかめてね");
+      } else {
+        showFailure(res.error, { source: "edge" });
+      }
       return;
     }
     if (res.data.children.length === 0) {
@@ -78,6 +83,7 @@ export default function ChildInviteCodeScreen() {
           {errorMessage}
         </Text>
       )}
+      <FailureRefText value={errorRef} tone="child" style={{ textAlign: "center" }} />
 
       <AppButton
         label={checking ? "たしかめています…" : "すすむ"}

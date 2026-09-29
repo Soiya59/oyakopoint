@@ -3,6 +3,8 @@ import { Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import theme from "@/theme/theme";
 import { setChildPin } from "@/data/api";
 
@@ -22,7 +24,8 @@ export default function ChildPinResetScreen() {
   const { memberId, displayName } = useLocalSearchParams<{ memberId: string; displayName: string }>();
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const [done, setDone] = useState(false);
 
   const submit = async () => {
@@ -32,7 +35,11 @@ export default function ChildPinResetScreen() {
     const res = await setChildPin(memberId, pin);
     setSubmitting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.code === "invalid_pin_format" ? "4桁の数字を入力してください" : res.error.message);
+      if (res.error.code === "invalid_pin_format") {
+        setErrorMessage("4桁の数字を入力してください");
+      } else {
+        showFailure(res.error, { source: "edge" });
+      }
       return;
     }
     setDone(true);
@@ -76,6 +83,7 @@ export default function ChildPinResetScreen() {
           {errorMessage && (
             <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
           )}
+          <FailureRefText value={errorRef} tone="parent" />
 
           <AppButton
             label={submitting ? "設定中…" : "PINを設定する"}

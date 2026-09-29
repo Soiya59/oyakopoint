@@ -18,7 +18,11 @@
  */
 
 /** createOne が返す最小限の結果の形（ApiResult<T>のok/errorのみを想定）。 */
-export type SequentialCreateResult = { ok: true } | { ok: false; error: { message: string } };
+// [2026-09-29変更・実装メモ331章] 失敗の原因（code・status）も呼び出し側へ渡すため、
+// errorにcodeとstatusを加えた（src/data/api.tsのApiErrorと同じ形。呼び出し側は
+// describeApiFailureで文言と目印を作る）。
+export type SequentialFailure = { code: string; message: string; status?: number };
+export type SequentialCreateResult = { ok: true } | { ok: false; error: SequentialFailure };
 
 export interface SequentialSaveOutcome {
   /** 保存できたメンバーの表示名（呼び出し前にすでに成功していた分も含む、決定15）。 */
@@ -27,6 +31,8 @@ export interface SequentialSaveOutcome {
   failed: string[];
   /** 最初の失敗時にAPIから返ってきたエラーメッセージ。全員成功した場合はnull。 */
   errorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 最初の失敗時のエラー本体（code・status付き）。全員成功した場合はnull。 */
+  failure: SequentialFailure | null;
   /** 再試行の対象となるID（failedと対応する順序を保つ）。全員成功した場合は空配列。 */
   remainingIds: string[];
 }
@@ -61,8 +67,9 @@ export async function saveSequentially(
       succeeded,
       failed: remainingIds.map(labelOf),
       errorMessage: res.error.message,
+      failure: res.error,
       remainingIds: [...remainingIds],
     };
   }
-  return { succeeded, failed: [], errorMessage: null, remainingIds: [] };
+  return { succeeded, failed: [], errorMessage: null, failure: null, remainingIds: [] };
 }

@@ -6,6 +6,8 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { describeApiFailure, type FailureDisplay } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 import { cancelRedemptionErrorText, CANCEL_LABEL, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { playSound } from "@/lib/sound";
 
@@ -44,10 +46,15 @@ export default function SupporterRewardConfirmScreen() {
   const balance = me ? memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0 : 0;
   const [insufficientError, setInsufficientError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // [2026-09-29追加・実装メモ331章] 残高不足以外で交換に失敗したとき、これまでは何も表示されなかった。
+  const [redeemFailure, setRedeemFailure] = useState<FailureDisplay | null>(null);
 
   const [redeemed, setRedeemed] = useState<{ redemptionId: string; costPaid: number } | null>(null);
   const [cancelState, setCancelState] = useState<CancelState>("idle");
   const [cancelErrorText, setCancelErrorText] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 取消の失敗の「目印」と、通信・サーバー側の失敗（networkError）の文言。
+  const [cancelRef, setCancelRef] = useState<string | null>(null);
+  const [cancelNetworkText, setCancelNetworkText] = useState<string | null>(null);
   const [withinWindow, setWithinWindow] = useState(true);
   useEffect(() => {
     if (!redeemed) return;
@@ -77,11 +84,14 @@ export default function SupporterRewardConfirmScreen() {
       return;
     }
     setSubmitting(true);
+    setRedeemFailure(null);
     const result = await dispatch({ type: "REDEEM_REWARD", rewardId: reward.id, memberId: me.id });
     setSubmitting(false);
     if (!result.ok) {
       if (result.error.code === PG_ERRCODE.checkViolation) {
         setInsufficientError(true);
+      } else {
+        setRedeemFailure(describeApiFailure("supporter", result.error));
       }
       return;
     }
@@ -97,13 +107,17 @@ export default function SupporterRewardConfirmScreen() {
     if (!redeemed?.redemptionId) return;
     setCancelState("processing");
     setCancelErrorText(null);
+    setCancelRef(null);
     const result = await dispatch({ type: "CANCEL_REDEMPTION", redemptionId: redeemed.redemptionId });
     if (!result.ok) {
       const isKnownDbError =
         result.error.code === PG_ERRCODE.checkViolation ||
         result.error.code === PG_ERRCODE.noDataFound ||
         result.error.code === PG_ERRCODE.insufficientPrivilege;
+      const failure = describeApiFailure("supporter", result.error);
+      setCancelRef(failure.ref);
       if (!isKnownDbError) {
+        setCancelNetworkText(failure.message);
         setCancelState("networkError");
         return;
       }
@@ -174,8 +188,11 @@ export default function SupporterRewardConfirmScreen() {
             )}
             {cancelState === "networkError" && (
               <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>
-                とどきませんでした…
+                {cancelNetworkText}
               </Text>
+            )}
+            {(cancelState === "error" || cancelState === "networkError") && (
+              <FailureRefText value={cancelRef} tone="supporter" />
             )}
           </View>
         )}
@@ -224,6 +241,12 @@ export default function SupporterRewardConfirmScreen() {
         style={{ marginTop: theme.spacing.s6 }}
         onPress={confirm}
       />
+      {redeemFailure && (
+        <View style={{ marginTop: theme.spacing.s3 }}>
+          <Text style={{ color: theme.colors.statusBlocking }}>{redeemFailure.message}</Text>
+          <FailureRefText value={redeemFailure.ref} tone="supporter" />
+        </View>
+      )}
       <AppButton tone="supporter" label="戻る" variant="secondary" style={{ marginTop: theme.spacing.s3 }} onPress={() => router.back()} />
     </Screen>
   );

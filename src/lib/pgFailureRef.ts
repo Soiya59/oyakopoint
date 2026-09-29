@@ -53,6 +53,8 @@ const CODE_ALIASES: Record<string, string> = {
   P0002: "notfound", // PG_ERRCODE.noDataFound
   // familyInviteLookup()が0件時に自前で付ける独自code（P0002とは別表記だが同じ意味）
   no_data_found: "notfound",
+  // fromPostgrestErrorがcodeの無いエラー（HTML等のJSONでない本文を返したゲートウェイ異常）に付ける既定値
+  unknown_error: "unk",
 };
 
 export function formatPgFailureRef(error: ApiError): string {

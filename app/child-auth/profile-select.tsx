@@ -4,6 +4,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import MemberAvatar from "@/components/MemberAvatar";
 import ChildBackLink from "@/components/ChildBackLink";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import theme from "@/theme/theme";
 import { inviteLookup, childSwitch } from "@/data/api";
 import type { InviteLookupChild } from "@/data/api";
@@ -51,6 +53,8 @@ export default function ProfileSelectScreen() {
   const { loginChild } = useSession();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchErrorId, setSwitchErrorId] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 切り替えに失敗したときの小さな目印。
+  const [switchErrorRef, setSwitchErrorRef] = useState<string | null>(null);
 
   useEffect(() => {
     if (!inviteCode) return;
@@ -82,6 +86,7 @@ export default function ProfileSelectScreen() {
       return;
     }
     setSwitchErrorId(null);
+    setSwitchErrorRef(null);
     setSwitchingId(c.member_id);
     const res = await childSwitch(c.member_id);
     setSwitchingId(null);
@@ -96,6 +101,7 @@ export default function ProfileSelectScreen() {
       return;
     }
     setSwitchErrorId(c.member_id);
+    setSwitchErrorRef(failureDetail(res.error, "edge").ref);
   };
 
   return (
@@ -138,6 +144,7 @@ export default function ProfileSelectScreen() {
                 >
                   うまく切り替えられませんでした
                 </Text>
+                <FailureRefText value={switchErrorRef} tone="child" />
                 <Pressable onPress={() => goToPinInput(c)} hitSlop={8}>
                   <Text style={[theme.typography.childBody, { fontSize: 13, textDecorationLine: "underline" }]}>
                     あんしょうばんごうで入る

@@ -42,6 +42,7 @@ import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
+import FailureRefText from "./FailureRefText";
 import FigureIcon, { hasFigureImage } from "./FigureIcon";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
@@ -164,6 +165,8 @@ export interface StickerShopPanelProps {
   resetAtByShape: Record<string, string>;
   purchasing: boolean;
   purchaseErrorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 購入失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  purchaseErrorRef?: string | null;
   onRetry: () => void;
   /**
    * 購入を実行する。**成功したらtrueを返すこと。**
@@ -196,6 +199,7 @@ export function StickerShopPanel({
   resetAtByShape,
   purchasing,
   purchaseErrorMessage,
+  purchaseErrorRef,
   onRetry,
   onConfirmPurchase,
 }: StickerShopPanelProps) {
@@ -383,6 +387,7 @@ export function StickerShopPanel({
                         : `${selected.points_cost}ptで購入します。よろしいですか？`}
                     </Text>
                     {purchaseErrorMessage && <Text style={styles.errorText}>{purchaseErrorMessage}</Text>}
+                    {purchaseErrorMessage && <FailureRefText value={purchaseErrorRef} tone={tone} />}
                     <View style={styles.modalButtonRow}>
                       <AppButton
                         label={isChild ? "かう" : "買う"}

@@ -22,6 +22,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import CircleFrame from "./CircleFrame";
+import FailureRefText from "./FailureRefText";
 import { HabitFigureCircleIcon } from "./StickerIcon";
 import theme from "@/theme/theme";
 import { resolveChildFriendlyKindDisplayName } from "@/lib/habitCardDisplay";
@@ -40,9 +41,11 @@ export interface HabitCardKindPickerProps {
   onChoose: (kindKey: string) => void;
   choosing: boolean;
   error: string | null;
+  /** [2026-09-29追加・実装メモ331章] 失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  errorRef?: string | null;
 }
 
-export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, choosing, error }: HabitCardKindPickerProps) {
+export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, choosing, error, errorRef }: HabitCardKindPickerProps) {
   const isChild = tone === "child";
   const bodyStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
   const captionStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
@@ -95,6 +98,7 @@ export function HabitCardKindPicker({ tone, groups, currentKindKey, onChoose, ch
         })}
       </View>
       {error && <Text style={[captionStyle, { color: theme.colors.statusBlocking, marginTop: theme.spacing.s2 }]}>{error}</Text>}
+      {error && <FailureRefText value={errorRef} tone={tone} />}
     </View>
   );
 }

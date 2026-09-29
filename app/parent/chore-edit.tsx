@@ -30,6 +30,9 @@ import {
   NFC_WRITE_ERROR_MESSAGE,
   NFC_WRITE_RETRY_LABEL,
 } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 
 // [2026-08-23追加] 絵文字自由入力欄の候補チップ。よくあるお手伝いの例
 // （勉強・掃除・お風呂・洗濯・食器洗い）を想定した5個。
@@ -166,7 +169,7 @@ export default function ChoreEditScreen() {
   // 2人以上を選んで保存し、途中で失敗したときの結果表示。succeeded/failedは
   // メンバーの表示名（決定15）。failedAssigneeIdsは再試行のためだけに保持する
   // 内部状態で、表示には使わない。
-  const [saveResult, setSaveResult] = useState<{ succeeded: string[]; failed: string[]; errorMessage: string | null } | null>(
+  const [saveResult, setSaveResult] = useState<{ succeeded: string[]; failed: string[]; errorMessage: string | null; errorRef: string | null } | null>(
     null
   );
   const [failedAssigneeIds, setFailedAssigneeIds] = useState<string[]>([]);
@@ -179,11 +182,13 @@ export default function ChoreEditScreen() {
   // 画面内2段階確認にする（Alert.alert等はWeb版で挙動が不安定なため使わない）。
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は生の文言でなく、原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
 
   const [modalVisible, setModalVisible] = useState(false);
   const [nfcStep, setNfcStep] = useState<NfcModalStep>("list");
-  const [nfcErrorMessage, setNfcErrorMessage] = useState<string | null>(null);
+  const { errorMessage: nfcErrorMessage, errorRef: nfcErrorRef, setErrorMessage: setNfcErrorMessage, showFailure: showNfcFailure } =
+    useFailureNotice("parent");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
 
   // [2026-09-01追加] 発行済みタグ一覧（chore_nfc_tags、有効なもののみ）。P11の外側の
@@ -192,11 +197,12 @@ export default function ChoreEditScreen() {
   // 7.6.1節「開いた瞬間に現状の枚数感がつかめるようにするため」）。
   const [tags, setTags] = useState<ChoreNfcTagWithMember[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
-  const [tagsError, setTagsError] = useState<string | null>(null);
+  const { errorMessage: tagsError, errorRef: tagsErrorRef, setErrorMessage: setTagsError, showFailure: showTagsFailure } =
+    useFailureNotice("parent");
   const [issuedSnackbar, setIssuedSnackbar] = useState<string | null>(null);
   const [confirmingRevokeTagId, setConfirmingRevokeTagId] = useState<string | null>(null);
   const [revokingTagId, setRevokingTagId] = useState<string | null>(null);
-  const [revokeErrorTagId, setRevokeErrorTagId] = useState<string | null>(null);
+  const [revokeFailure, setRevokeFailure] = useState<{ tagId: string; message: string; ref: string } | null>(null);
 
   const loadTags = async (choreId: string) => {
     setTagsLoading(true);
@@ -204,7 +210,7 @@ export default function ChoreEditScreen() {
     const res = await fetchActiveChoreNfcTags(client, choreId);
     setTagsLoading(false);
     if (!res.ok) {
-      setTagsError(res.error.message);
+      showTagsFailure(res.error);
       return;
     }
     setTags(res.data);
@@ -293,7 +299,7 @@ export default function ChoreEditScreen() {
         setIssuedSnackbar(`${ownerName}さんのタグを発行しました`);
         setNfcStep("list");
       } else {
-        setNfcErrorMessage(res.error.message);
+        showNfcFailure(res.error);
         setNfcStep("writeFailed");
       }
     } else if (result.errorReason === "cancelled") {
@@ -306,11 +312,12 @@ export default function ChoreEditScreen() {
 
   const startRevoke = async (tagId: string) => {
     setRevokingTagId(tagId);
-    setRevokeErrorTagId(null);
+    setRevokeFailure(null);
     const res = await revokeChoreNfcTag(client, tagId);
     setRevokingTagId(null);
     if (!res.ok) {
-      setRevokeErrorTagId(tagId);
+      const f = describeApiFailure("parent", res.error, { fallback: NFC_UNLINK_ERROR_MESSAGE, useDbMessage: false });
+      setRevokeFailure({ tagId, message: f.message, ref: f.ref });
       return;
     }
     setTags((prev) => prev.filter((t) => t.id !== tagId));
@@ -348,7 +355,7 @@ export default function ChoreEditScreen() {
     const res = await deleteChore(client, chore.id);
     setDeleting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -398,7 +405,7 @@ export default function ChoreEditScreen() {
       const res = await updateChore(client, chore.id, buildChoreInput(assignedTo));
       setSaving(false);
       if (!res.ok) {
-        setErrorMessage(res.error.message);
+        showFailure(res.error);
         return;
       }
       await refresh();
@@ -414,7 +421,7 @@ export default function ChoreEditScreen() {
       const res = await createChore(client, state.family.id, buildChoreInput(assigneeIds[0]));
       setSaving(false);
       if (!res.ok) {
-        setErrorMessage(res.error.message);
+        showFailure(res.error);
         return;
       }
       await refresh();
@@ -435,7 +442,8 @@ export default function ChoreEditScreen() {
     );
     setSaving(false);
     if (outcome.remainingIds.length > 0) {
-      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      const f = outcome.failure ? describeApiFailure("parent", outcome.failure) : null;
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: f?.message ?? null, errorRef: f?.ref ?? null });
       setFailedAssigneeIds(outcome.remainingIds);
       return;
     }
@@ -457,7 +465,8 @@ export default function ChoreEditScreen() {
     );
     setSaving(false);
     if (outcome.remainingIds.length > 0) {
-      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      const f = outcome.failure ? describeApiFailure("parent", outcome.failure) : null;
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: f?.message ?? null, errorRef: f?.ref ?? null });
       setFailedAssigneeIds(outcome.remainingIds);
       return;
     }
@@ -746,6 +755,7 @@ export default function ChoreEditScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       {/* [2026-09-11改訂・要件定義書07-26章決定17・決定20／主要画面ワイヤーフレーム.md
           39.3.3節決定14] 0人・1人選択時は「保存する」（変更なし）。2人以上選択時のみ
@@ -877,6 +887,7 @@ export default function ChoreEditScreen() {
               （{saveResult.errorMessage}）
             </Text>
           )}
+          <FailureRefText value={saveResult.errorRef} tone="parent" />
           <AppButton
             label={saving ? "保存中…" : `${saveResult.failed.join("・")} の分だけ、もう一度保存する`}
             loading={saving}
@@ -914,6 +925,7 @@ export default function ChoreEditScreen() {
                 {tagsError && (
                   <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{tagsError}</Text>
                 )}
+                <FailureRefText value={tagsErrorRef} tone="parent" />
 
                 {tags.length === 0 ? (
                   <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>
@@ -936,10 +948,13 @@ export default function ChoreEditScreen() {
                                   <Text style={{ color: theme.colors.statusBlocking }}>
                                     このタグはもう使えなくなります（元にはもどせません）。本当に解除しますか？
                                   </Text>
-                                  {revokeErrorTagId === t.id && (
-                                    <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                                      {NFC_UNLINK_ERROR_MESSAGE}
-                                    </Text>
+                                  {revokeFailure?.tagId === t.id && (
+                                    <>
+                                      <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
+                                        {revokeFailure.message}
+                                      </Text>
+                                      <FailureRefText value={revokeFailure.ref} tone="parent" />
+                                    </>
                                   )}
                                   <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
                                     <AppButton
@@ -948,7 +963,7 @@ export default function ChoreEditScreen() {
                                       disabled={revokingTagId === t.id}
                                       onPress={() => {
                                         setConfirmingRevokeTagId(null);
-                                        setRevokeErrorTagId(null);
+                                        setRevokeFailure(null);
                                       }}
                                     />
                                     <AppButton
@@ -967,7 +982,7 @@ export default function ChoreEditScreen() {
                                   <Pressable
                                     onPress={() => {
                                       setConfirmingRevokeTagId(t.id);
-                                      setRevokeErrorTagId(null);
+                                      setRevokeFailure(null);
                                     }}
                                   >
                                     <Text style={{ color: theme.colors.statusBlocking }}>解除する</Text>
@@ -1055,6 +1070,7 @@ export default function ChoreEditScreen() {
                 <Text style={{ marginTop: theme.spacing.s3 }}>
                   {nfcErrorMessage ?? NFC_WRITE_ERROR_MESSAGE}
                 </Text>
+                <FailureRefText value={nfcErrorRef} tone="parent" />
                 <AppButton label={NFC_WRITE_RETRY_LABEL} style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
                 <AppButton
                   label="キャンセル"

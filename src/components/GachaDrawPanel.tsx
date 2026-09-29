@@ -15,6 +15,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
+import FailureRefText from "./FailureRefText";
 import GachaProgressDots from "./GachaProgressDots";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
@@ -30,6 +31,11 @@ export interface GachaDrawPanelProps {
   drawing: boolean;
   /** 直近の「まわす」操作で発生した通信エラー文言。 */
   drawErrorMessage: string | null;
+  /**
+   * [2026-09-29追加・実装メモ331章] 失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。
+   * 文言の下に小さく添える。
+   */
+  drawErrorRef?: string | null;
   onDraw: () => void;
   onRetryLoad: () => void;
   /** [2026-08-26追加・第4段階] まだ`family_tree_decorations`に反映していない直近のガチャ結果。 */
@@ -48,6 +54,7 @@ export function GachaDrawPanel({
   canDrawNow,
   drawing,
   drawErrorMessage,
+  drawErrorRef,
   onDraw,
   onRetryLoad,
   undecoratedDrawId,
@@ -107,8 +114,11 @@ export function GachaDrawPanel({
       </View>
       <Text style={[bodyStyle, styles.title]}>{title}</Text>
 
-      {drawErrorMessage && !isChild && <Text style={styles.errorText}>読み込みに失敗しました</Text>}
-      {drawErrorMessage && isChild && <Text style={styles.errorText}>{drawErrorMessage}</Text>}
+      {/* [2026-09-29変更・実装メモ331章] 保護者・みまもりは以前「読み込みに失敗しました」の
+          固定文言だった。画面側が原因に応じた文言（電波・混み合い等。それ以外は従来の
+          「読み込みに失敗しました」）を渡し、その下に目印を添える。 */}
+      {drawErrorMessage && <Text style={styles.errorText}>{drawErrorMessage}</Text>}
+      {drawErrorMessage && <FailureRefText value={drawErrorRef} tone={tone} />}
 
       <AppButton
         label={drawLabel}

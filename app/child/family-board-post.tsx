@@ -9,6 +9,8 @@ import { useSession } from "@/lib/session";
 import { createFamilyBoardPost, PG_ERRCODE } from "@/data/api";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 
 /**
  * C28 かきこむ（子ども）
@@ -32,6 +34,8 @@ export default function ChildFamilyBoardPostScreen() {
   const [body, setBody] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>("form");
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 通信の失敗のときの小さな目印（文言は子ども向けのまま）。
+  const [failureRef, setFailureRef] = useState<string | null>(null);
   const ngGuard = useNgWordGuard();
 
   // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
@@ -66,6 +70,7 @@ export default function ChildFamilyBoardPostScreen() {
         setLimitMessage("きょうは もう いっぱい とどけたよ。また あした！");
         setScreenState("form");
       } else {
+        setFailureRef(failureDetail(res.error).ref);
         setScreenState("networkError");
       }
       return;
@@ -99,6 +104,7 @@ export default function ChildFamilyBoardPostScreen() {
       <Screen tone="child">
         <View style={styles.centerBlock}>
           <Text style={theme.typography.childBody}>⚠ とどきませんでした…</Text>
+          <FailureRefText value={failureRef} tone="child" />
         </View>
         <AppButton label="もういちど" tone="child" fullWidth onPress={() => setScreenState("form")} />
       </Screen>

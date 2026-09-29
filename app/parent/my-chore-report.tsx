@@ -8,6 +8,8 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { PG_ERRCODE, describeChoreReportFailure } from "@/data/api";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { playSound } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
@@ -42,6 +44,8 @@ export default function ParentMyChoreReportScreen() {
   // [2026-09-17追加・やること.md 4-36 症状3] 「通信エラーが発生しました」の固定文言を
   // やめ、失敗の種類ごとに文言を出し分ける（describeChoreReportFailure参照）。
   const [sendErrorMessage, setSendErrorMessage] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 失敗の「目印」（317章と同じ形）。
+  const [sendErrorRef, setSendErrorRef] = useState<string | null>(null);
   // [2026-09-19改訂・要件定義書07-28章2026-09-19全面改訂決定25] シール帳は
   // 全クエスト共通の記録になったため、どのクエストの完了報告でも段階到達演出を
   // 確認する。新規画面へは遷移せず、この画面上に一時的に表示する。
@@ -80,6 +84,7 @@ export default function ParentMyChoreReportScreen() {
         setScreenState("limitReached");
       } else {
         setSendErrorMessage(describeChoreReportFailure(result.error));
+        setSendErrorRef(failureDetail(result.error).ref);
         setScreenState("networkError");
       }
       return;
@@ -152,6 +157,7 @@ export default function ParentMyChoreReportScreen() {
         </View>
         <View style={styles.centerBlock}>
           <Text style={theme.typography.parentBody}>{sendErrorMessage ?? GENERIC_ERROR_MESSAGE}</Text>
+          <FailureRefText value={sendErrorRef} tone="parent" />
         </View>
         <AppButton
           label="もう一度送信する"

@@ -6,6 +6,8 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { describeApiFailure, type FailureDisplay } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 
 /**
  * C10 交換確認（主要5画面のひとつ、C9〜C11の一連）
@@ -20,6 +22,9 @@ export default function RewardConfirmScreen() {
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const [insufficientError, setInsufficientError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // [2026-09-29追加・実装メモ331章] 残高不足以外で交換に失敗したとき、これまでは何も表示されなかった。
+  // 子ども向けの言葉のまま（とどきませんでした…）、小さな目印を添えて出す。
+  const [redeemFailure, setRedeemFailure] = useState<FailureDisplay | null>(null);
 
   if (!reward) {
     return (
@@ -42,11 +47,14 @@ export default function RewardConfirmScreen() {
       return;
     }
     setSubmitting(true);
+    setRedeemFailure(null);
     const result = await dispatch({ type: "REDEEM_REWARD", rewardId: reward.id, memberId: me.id });
     setSubmitting(false);
     if (!result.ok) {
       if (result.error.code === PG_ERRCODE.checkViolation) {
         setInsufficientError(true);
+      } else {
+        setRedeemFailure(describeApiFailure("child", result.error));
       }
       return;
     }
@@ -107,6 +115,13 @@ export default function RewardConfirmScreen() {
           <Text style={theme.typography.childBody}>{balance - reward.cost}pt</Text>
         </View>
       </View>
+
+      {redeemFailure && (
+        <View style={{ alignItems: "center", marginTop: theme.spacing.s4 }}>
+          <Text style={[theme.typography.childBody, { textAlign: "center" }]}>⚠ {redeemFailure.message}</Text>
+          <FailureRefText value={redeemFailure.ref} tone="child" />
+        </View>
+      )}
 
       <AppButton
         label={submitting ? "こうかんしています…" : "こうかんする！"}

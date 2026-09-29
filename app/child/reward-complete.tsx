@@ -6,6 +6,8 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 import { cancelRedemptionErrorText, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { playSound } from "@/lib/sound";
 
@@ -46,6 +48,8 @@ export default function RewardCompleteScreen() {
 
   const [cancelState, setCancelState] = useState<CancelState>("idle");
   const [cancelErrorText, setCancelErrorText] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 取消が失敗したときの小さな目印（文言は子ども向けのまま）。
+  const [cancelRef, setCancelRef] = useState<string | null>(null);
   // [2026-09-25追加] 1分経過でリンクごと非表示にする（28.0節決定4・サーバー側の
   // 時間窓と同じ判定をクライアント側でも行う）。交換直後は必ず1分以内のため
   // 初期値はtrueでよいが、念のため実際の値で初期化する。
@@ -70,6 +74,7 @@ export default function RewardCompleteScreen() {
     if (!redemptionId) return;
     setCancelState("processing");
     setCancelErrorText(null);
+    setCancelRef(null);
     const result = await dispatch({ type: "CANCEL_REDEMPTION", redemptionId });
     if (!result.ok) {
       // 必ずPG_ERRCODE定数と比較する（可読名の文字列比較はしない。
@@ -78,6 +83,7 @@ export default function RewardCompleteScreen() {
         result.error.code === PG_ERRCODE.checkViolation ||
         result.error.code === PG_ERRCODE.noDataFound ||
         result.error.code === PG_ERRCODE.insufficientPrivilege;
+      setCancelRef(describeApiFailure("child", result.error).ref);
       if (!isKnownDbError) {
         setCancelState("networkError");
         return;
@@ -197,6 +203,9 @@ export default function RewardCompleteScreen() {
             >
               とどきませんでした…
             </Text>
+          )}
+          {(cancelState === "error" || cancelState === "networkError") && (
+            <FailureRefText value={cancelRef} tone="child" />
           )}
         </View>
       )}

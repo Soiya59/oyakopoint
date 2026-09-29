@@ -9,6 +9,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchMyGratitudeGiveableBalance, sendGratitudePoints, PG_ERRCODE } from "@/data/api";
 import { gratitudeSendErrorText } from "@/lib/gratitudeSendError";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
 
@@ -63,6 +65,9 @@ export default function ChildGratitudeSendScreen() {
   // が空でも贈れる（67.3章。感謝ポイントを贈ること自体は止めない）。
   const noteBlocksSend = interactionsEnabled && !trimmedNote;
 
+  // [2026-09-29追加・実装メモ331章] 通信の失敗のときの小さな目印（文言は子ども向けのまま）。
+  const [failureRef, setFailureRef] = useState<string | null>(null);
+
   const send = async () => {
     if (!myId || !recipientId || points < 1 || noteBlocksSend) return;
     if (ngGuard.guard(trimmedNote)) return;
@@ -88,6 +93,7 @@ export default function ChildGratitudeSendScreen() {
         setLimitMessage(gratitudeSendErrorText("child", res.error));
         setScreenState("form");
       } else {
+        setFailureRef(failureDetail(res.error).ref);
         setScreenState("networkError");
       }
       return;
@@ -122,6 +128,7 @@ export default function ChildGratitudeSendScreen() {
       <Screen tone="child">
         <View style={styles.centerBlock}>
           <Text style={theme.typography.childBody}>⚠ とどきませんでした…</Text>
+          <FailureRefText value={failureRef} tone="child" />
         </View>
         <AppButton label="もういちど" tone="child" fullWidth onPress={() => setScreenState("form")} />
       </Screen>

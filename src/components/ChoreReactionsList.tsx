@@ -22,6 +22,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { deleteFamilyComment, PG_ERRCODE } from "@/data/api";
 import { formatTimeShort } from "@/lib/calendarDates";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "./FailureRefText";
 import type { ChoreReaction, FamilyMember } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -65,7 +67,7 @@ export function ChoreReactionsList({
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [rowError, setRowError] = useState<{ id: string; message: string; ref: string } | null>(null);
 
   const runDelete = async (id: string) => {
     setDeletingId(id);
@@ -78,7 +80,11 @@ export function ChoreReactionsList({
         void refresh();
         return;
       }
-      setRowError({ id, message: res.error.message });
+      // [2026-09-29変更・実装メモ331章] これまでは、どの失敗でも「このコメントは もう なくなっちゃった
+      // みたい」と出していた（電波が悪いだけでも）。電波・混み合い・ログイン切れ・権限拒否のときは
+      // それぞれの文言に分け、それ以外は従来の一文のまま。目印を添える。
+      const f = describeApiFailure(tone, res.error, { fallback: ALREADY_DELETED_TEXT[tone], useDbMessage: false });
+      setRowError({ id, message: f.message, ref: f.ref });
       return;
     }
     void refresh();
@@ -100,7 +106,7 @@ export function ChoreReactionsList({
         const canDelete = isComment && isParent && !isOwnComment;
         const isConfirming = confirmDeleteId === r.id;
         const isProcessing = deletingId === r.id;
-        const err = rowError?.id === r.id ? rowError.message : null;
+        const err = rowError?.id === r.id ? rowError : null;
         return (
           <View key={r.id}>
             <Text style={bodyStyle}>
@@ -139,7 +145,8 @@ export function ChoreReactionsList({
                   </View>
                 )
               ))}
-            {err && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{ALREADY_DELETED_TEXT[tone]}</Text>}
+            {err && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{err.message}</Text>}
+            {err && <FailureRefText value={err.ref} tone={tone} />}
           </View>
         );
       })}

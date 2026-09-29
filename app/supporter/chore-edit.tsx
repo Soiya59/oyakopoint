@@ -26,6 +26,9 @@ import {
   NFC_WRITE_ERROR_MESSAGE,
   NFC_WRITE_RETRY_LABEL,
 } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 
 // [2026-09-01追加・実装メモ.md 108章] 要件定義書07-2章判断事項7「みまもりメンバー
 // 自身の自分専用クエストへのタグ発行」。当初は自分専用クエストのタグの持ち主が
@@ -104,7 +107,8 @@ export default function SupporterChoreEditScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は生の文言でなく、原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("supporter");
 
   // [2026-09-01追加・実装メモ.md 108章、2026-09-26改訂・実装メモ.md 307章]
   // NFCタグ管理（要件定義書07-2章判断事項7、スキーマ設計.sql 78章）。
@@ -126,15 +130,17 @@ export default function SupporterChoreEditScreen() {
       : state.members.filter((m) => m.is_active && m.role === "supporter");
   const [modalVisible, setModalVisible] = useState(false);
   const [nfcStep, setNfcStep] = useState<NfcModalStep>("list");
-  const [nfcErrorMessage, setNfcErrorMessage] = useState<string | null>(null);
+  const { errorMessage: nfcErrorMessage, errorRef: nfcErrorRef, setErrorMessage: setNfcErrorMessage, showFailure: showNfcFailure } =
+    useFailureNotice("supporter");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
   const [tags, setTags] = useState<ChoreNfcTagWithMember[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
-  const [tagsError, setTagsError] = useState<string | null>(null);
+  const { errorMessage: tagsError, errorRef: tagsErrorRef, setErrorMessage: setTagsError, showFailure: showTagsFailure } =
+    useFailureNotice("supporter");
   const [issuedSnackbar, setIssuedSnackbar] = useState<string | null>(null);
   const [confirmingRevokeTagId, setConfirmingRevokeTagId] = useState<string | null>(null);
   const [revokingTagId, setRevokingTagId] = useState<string | null>(null);
-  const [revokeErrorTagId, setRevokeErrorTagId] = useState<string | null>(null);
+  const [revokeFailure, setRevokeFailure] = useState<{ tagId: string; message: string; ref: string } | null>(null);
 
   const loadTags = async (choreId: string) => {
     setTagsLoading(true);
@@ -142,7 +148,7 @@ export default function SupporterChoreEditScreen() {
     const res = await fetchActiveChoreNfcTags(client, choreId);
     setTagsLoading(false);
     if (!res.ok) {
-      setTagsError(res.error.message);
+      showTagsFailure(res.error);
       return;
     }
     setTags(res.data);
@@ -193,7 +199,7 @@ export default function SupporterChoreEditScreen() {
         setIssuedSnackbar(`${ownerName}さんのタグを発行しました`);
         setNfcStep("list");
       } else {
-        setNfcErrorMessage(res.error.message);
+        showNfcFailure(res.error);
         setNfcStep("writeFailed");
       }
     } else if (result.errorReason === "cancelled") {
@@ -206,11 +212,12 @@ export default function SupporterChoreEditScreen() {
 
   const startRevoke = async (tagId: string) => {
     setRevokingTagId(tagId);
-    setRevokeErrorTagId(null);
+    setRevokeFailure(null);
     const res = await revokeChoreNfcTag(client, tagId);
     setRevokingTagId(null);
     if (!res.ok) {
-      setRevokeErrorTagId(tagId);
+      const f = describeApiFailure("supporter", res.error, { fallback: NFC_UNLINK_ERROR_MESSAGE, useDbMessage: false });
+      setRevokeFailure({ tagId, message: f.message, ref: f.ref });
       return;
     }
     setTags((prev) => prev.filter((t) => t.id !== tagId));
@@ -260,7 +267,7 @@ export default function SupporterChoreEditScreen() {
 
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -273,7 +280,7 @@ export default function SupporterChoreEditScreen() {
     const res = await deleteChore(client, chore.id);
     setDeleting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -386,6 +393,7 @@ export default function SupporterChoreEditScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="supporter" />
 
       <AppButton
         tone="supporter"
@@ -490,6 +498,7 @@ export default function SupporterChoreEditScreen() {
                 {tagsError && (
                   <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{tagsError}</Text>
                 )}
+                <FailureRefText value={tagsErrorRef} tone="supporter" />
 
                 {tags.length === 0 ? (
                   <Text style={[theme.typography.supporterBody, { marginTop: theme.spacing.s3 }]}>
@@ -515,10 +524,13 @@ export default function SupporterChoreEditScreen() {
                                   <Text style={{ color: theme.colors.statusBlocking }}>
                                     このタグはもう使えなくなります（元にはもどせません）。本当に解除しますか？
                                   </Text>
-                                  {revokeErrorTagId === t.id && (
-                                    <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
-                                      {NFC_UNLINK_ERROR_MESSAGE}
-                                    </Text>
+                                  {revokeFailure?.tagId === t.id && (
+                                    <>
+                                      <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>
+                                        {revokeFailure.message}
+                                      </Text>
+                                      <FailureRefText value={revokeFailure.ref} tone="supporter" />
+                                    </>
                                   )}
                                   <View style={{ flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 }}>
                                     <AppButton
@@ -528,7 +540,7 @@ export default function SupporterChoreEditScreen() {
                                       disabled={revokingTagId === t.id}
                                       onPress={() => {
                                         setConfirmingRevokeTagId(null);
-                                        setRevokeErrorTagId(null);
+                                        setRevokeFailure(null);
                                       }}
                                     />
                                     <AppButton
@@ -548,7 +560,7 @@ export default function SupporterChoreEditScreen() {
                                   <Pressable
                                     onPress={() => {
                                       setConfirmingRevokeTagId(t.id);
-                                      setRevokeErrorTagId(null);
+                                      setRevokeFailure(null);
                                     }}
                                   >
                                     <Text style={{ color: theme.colors.statusBlocking }}>解除する</Text>
@@ -647,6 +659,7 @@ export default function SupporterChoreEditScreen() {
                 <Text style={{ marginTop: theme.spacing.s3 }}>
                   {nfcErrorMessage ?? NFC_WRITE_ERROR_MESSAGE}
                 </Text>
+                <FailureRefText value={nfcErrorRef} tone="supporter" />
                 <AppButton tone="supporter" label={NFC_WRITE_RETRY_LABEL} style={{ marginTop: theme.spacing.s4 }} onPress={startWrite} />
                 <AppButton
                   tone="supporter"

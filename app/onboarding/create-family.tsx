@@ -6,6 +6,8 @@ import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { createFamilyWithOwner, PG_ERRCODE } from "@/data/api";
 import { useSession } from "@/lib/session";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 
 /**
  * P4 家族名入力（新規作成）
@@ -15,7 +17,8 @@ export default function CreateFamilyScreen() {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const { refreshParentMember } = useSession();
 
   const submit = async () => {
@@ -25,13 +28,13 @@ export default function CreateFamilyScreen() {
     const res = await createFamilyWithOwner(name.trim(), displayName.trim());
     if (!res.ok) {
       setSubmitting(false);
-      setErrorMessage(
-        res.error.code === PG_ERRCODE.insufficientPrivilege
-          ? "メールのリンクをタップして認証を完了してから、もう一度お試しください"
-          : res.error.code === PG_ERRCODE.uniqueViolation
-          ? "すでに家族に参加しています"
-          : res.error.message
-      );
+      if (res.error.code === PG_ERRCODE.insufficientPrivilege) {
+        setErrorMessage("メールのリンクをタップして認証を完了してから、もう一度お試しください");
+      } else if (res.error.code === PG_ERRCODE.uniqueViolation) {
+        setErrorMessage("すでに家族に参加しています");
+      } else {
+        showFailure(res.error);
+      }
       return;
     }
     await refreshParentMember();
@@ -78,6 +81,7 @@ export default function CreateFamilyScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <AppButton
         label={submitting ? "作成中…" : "作成する"}

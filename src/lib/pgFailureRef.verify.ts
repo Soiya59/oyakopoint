@@ -90,6 +90,12 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
   assertEqual("codeが空文字（status===0以外）→ '{status}-net'", formatPgFailureRef(error), "500-net");
 }
 
+// ---- 10. [2026-09-29追加・実装メモ331章] JSONでない本文を返したゲートウェイ異常（fromPostgrestErrorがcodeへ"unknown_error"を付ける） ----
+{
+  const error: ApiError = { code: "unknown_error", message: "<html>Bad Gateway</html>", status: 502 };
+  assertEqual("unknown_error＋502 → '502-unk'（HTML本文は目印に入れない）", formatPgFailureRef(error), "502-unk");
+}
+
 console.log("");
 if (failed === 0) {
   console.log("全件OK");

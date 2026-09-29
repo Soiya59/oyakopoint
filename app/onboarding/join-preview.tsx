@@ -9,6 +9,8 @@ import InviteVisibilityConsent, { JOIN_CONSENT_VERSION } from "@/components/Invi
 import theme from "@/theme/theme";
 import { joinFamilyWithInviteCode, PG_ERRCODE } from "@/data/api";
 import { useSession } from "@/lib/session";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import type { InviteLookupChild } from "@/data/api";
 
 /**
@@ -36,7 +38,8 @@ export default function JoinPreviewScreen() {
   const [displayName, setDisplayName] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
 
   const children: InviteLookupChild[] = childrenJson ? JSON.parse(childrenJson) : [];
 
@@ -47,20 +50,20 @@ export default function JoinPreviewScreen() {
     const res = await joinFamilyWithInviteCode(inviteCode, displayName.trim(), JOIN_CONSENT_VERSION);
     if (!res.ok) {
       setSubmitting(false);
-      setErrorMessage(
-        res.error.code === PG_ERRCODE.insufficientPrivilege
-          ? "メールのリンクをタップして認証を完了してから、もう一度お試しください"
-          : res.error.code === PG_ERRCODE.uniqueViolation
-          ? "すでに家族に参加しています"
-          : res.error.code === PG_ERRCODE.noDataFound
-          ? "招待コードが無効です"
-          : // res.error.code === PG_ERRCODE.checkViolation（同意版数不一致。
-            // スキーマ設計.sql 40.5章）の場合も含め、DB側のRAISE EXCEPTIONの
-            // メッセージ本文（例:「アプリが古い可能性があります。最新の状態に
-            // 更新してからもう一度お試しください」）をそのまま表示する
-            // （API仕様.md 9章の指針どおり）。
-            res.error.message
-      );
+      if (res.error.code === PG_ERRCODE.insufficientPrivilege) {
+        setErrorMessage("メールのリンクをタップして認証を完了してから、もう一度お試しください");
+      } else if (res.error.code === PG_ERRCODE.uniqueViolation) {
+        setErrorMessage("すでに家族に参加しています");
+      } else if (res.error.code === PG_ERRCODE.noDataFound) {
+        setErrorMessage("招待コードが無効です");
+      } else {
+        // res.error.code === PG_ERRCODE.checkViolation（同意版数不一致。スキーマ設計.sql 40.5章）の
+        // 場合も含め、DB側のRAISE EXCEPTIONのメッセージ本文（例:「アプリが古い可能性があります。
+        // 最新の状態に更新してからもう一度お試しください」）は従来どおりそのまま表示される
+        // （API仕様.md 9章の指針。日本語のDBメッセージはshowFailureがそのまま出す）。電波・混み合い等の
+        // ときだけ文言が入れ替わり、目印が付く。
+        showFailure(res.error);
+      }
       return;
     }
     await refreshParentMember();
@@ -101,6 +104,7 @@ export default function JoinPreviewScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <AppButton
         label={submitting ? "参加中…" : "参加を確定する"}

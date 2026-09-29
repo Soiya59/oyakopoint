@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import Card from "@/components/Card";
 import AvatarDrawingPanel from "@/components/AvatarDrawingPanel";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
@@ -29,10 +30,16 @@ export default function ParentMemberAvatarScreen() {
   const isProxy = memberId !== state.activeParentMemberId;
 
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
-  const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
+  const {
+    errorMessage: resetErrorMessage,
+    errorRef: resetErrorRef,
+    setErrorMessage: setResetErrorMessage,
+    showFailure: showResetFailure,
+  } = useFailureNotice("parent");
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
   // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
@@ -47,7 +54,7 @@ export default function ParentMemberAvatarScreen() {
     const res = await saveMemberAvatar(client, memberId, lineData);
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return false;
     }
     setMemberAvatarLocal(memberId, lineData);
@@ -64,7 +71,7 @@ export default function ParentMemberAvatarScreen() {
     const res = await deleteMemberAvatar(client, memberId);
     setResetting(false);
     if (!res.ok) {
-      setResetErrorMessage(res.error.message);
+      showResetFailure(res.error);
       return false;
     }
     clearMemberAvatarLocal(memberId);
@@ -143,10 +150,12 @@ export default function ParentMemberAvatarScreen() {
             savedLineData={memberAvatars[memberId] ?? null}
             saving={saving}
             errorMessage={errorMessage}
+            errorRef={errorRef}
             savedMessage={savedMessage}
             onSave={handleSave}
             resetting={resetting}
             resetErrorMessage={resetErrorMessage}
+            resetErrorRef={resetErrorRef}
             resetSuccessMessage={resetSuccessMessage}
             onReset={handleReset}
             onGestureActiveChange={setCanvasGestureActive}

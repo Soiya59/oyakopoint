@@ -24,6 +24,7 @@ import {
 } from "@/lib/habitCardDisplay";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import type { Chore, FamilyMember, HabitCard, HabitCardChoreBreakdownRow, HabitFigureCatalogItem, HabitFigureGrantWithCatalog } from "@/types/domain";
 
 type Tone = "parent" | "child" | "supporter";
@@ -195,7 +196,9 @@ export function HabitCardBoard({
   const { memberAvatars } = useAppData();
   const { choosing, choose } = useChooseHabitCardKindAction();
   const [kindPickerOpen, setKindPickerOpen] = useState(false);
-  const [chooseError, setChooseError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: chooseError, errorRef: chooseErrorRef, setErrorMessage: setChooseError, showFailure: showChooseFailure } =
+    useFailureNotice(tone);
 
   const kindGroups = groupHabitFigureCatalogByKind(catalog);
 
@@ -204,7 +207,7 @@ export function HabitCardBoard({
     setChooseError(null);
     const res = await choose(card.id, kindKey);
     if (!res.ok) {
-      setChooseError(res.error.message);
+      showChooseFailure(res.error);
       return;
     }
     setKindPickerOpen(false);
@@ -289,6 +292,7 @@ export function HabitCardBoard({
                   onChoose={handleChoose}
                   choosing={choosing}
                   error={chooseError}
+                  errorRef={chooseErrorRef}
                 />
                 <Pressable onPress={() => setKindPickerOpen(false)}>
                   <Text style={[captionStyle, styles.link]}>とじる</Text>

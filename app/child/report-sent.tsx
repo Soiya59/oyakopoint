@@ -9,6 +9,8 @@ import HabitFigureGrantBanner from "@/components/HabitFigureGrantBanner";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { PG_ERRCODE } from "@/data/api";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import { cancelCompletionErrorText, CANCEL_PROCESSING_TEXT, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { playSound, type SoundHandle } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
@@ -71,6 +73,8 @@ export default function ReportSentScreen() {
 
   const [cancelState, setCancelState] = useState<CancelState>("idle");
   const [cancelErrorText, setCancelErrorText] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 通信の失敗のときの小さな目印（文言は子ども向けのまま）。
+  const [cancelRef, setCancelRef] = useState<string | null>(null);
   // ガチャ進捗ヒントを取消成功後に再取得させるための強制remountキー（28.9節・
   // 実装メモ.md120章「取消後は関連データの再取得を行う」対応。GachaCelebrationHint
   // 自体はマウント時に1回fetchする設計〈同コンポーネントのコメント参照〉のため、
@@ -117,6 +121,7 @@ export default function ReportSentScreen() {
     soundHandleRef.current?.stop();
     setCancelState("processing");
     setCancelErrorText(null);
+    setCancelRef(null);
     const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
     if (!result.ok) {
       // 通信エラー（PostgRESTのcode以外、例:ネットワーク断）とDB側のcheck_violation等を
@@ -126,6 +131,7 @@ export default function ReportSentScreen() {
         result.error.code === PG_ERRCODE.checkViolation ||
         result.error.code === PG_ERRCODE.noDataFound ||
         result.error.code === PG_ERRCODE.insufficientPrivilege;
+      setCancelRef(failureDetail(result.error).ref);
       if (!isKnownDbError) {
         setCancelState("networkError");
         return;
@@ -246,6 +252,9 @@ export default function ReportSentScreen() {
             >
               とどきませんでした…
             </Text>
+          )}
+          {(cancelState === "error" || cancelState === "networkError") && (
+            <FailureRefText value={cancelRef} tone="child" />
           )}
         </View>
       )}

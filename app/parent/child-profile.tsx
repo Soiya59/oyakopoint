@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import MemberAvatar from "@/components/MemberAvatar";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
@@ -49,7 +51,8 @@ export default function ChildProfileScreen() {
   const [usedColorMessage, setUsedColorMessage] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const [createdChildName, setCreatedChildName] = useState("");
   const [createdMemberId, setCreatedMemberId] = useState<string | null>(null);
 
@@ -73,7 +76,7 @@ export default function ChildProfileScreen() {
     });
     setSubmitting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     setCreatedChildName(res.data.display_name);
@@ -90,7 +93,11 @@ export default function ChildProfileScreen() {
     const res = await setChildPin(createdMemberId, pin);
     setSubmitting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.code === "invalid_pin_format" ? "4桁の数字を入力してください" : res.error.message);
+      if (res.error.code === "invalid_pin_format") {
+        setErrorMessage("4桁の数字を入力してください");
+      } else {
+        showFailure(res.error, { source: "edge" });
+      }
       return;
     }
     setStep("done");
@@ -151,6 +158,7 @@ export default function ChildProfileScreen() {
           {errorMessage && (
             <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
           )}
+          <FailureRefText value={errorRef} tone="parent" />
 
           <AppButton
             label={submitting ? "作成中…" : "つぎへ（PIN設定）"}
@@ -179,6 +187,7 @@ export default function ChildProfileScreen() {
           {errorMessage && (
             <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
           )}
+          <FailureRefText value={errorRef} tone="parent" />
 
           <AppButton
             label={submitting ? "設定中…" : "PINを設定する"}

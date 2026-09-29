@@ -20,6 +20,8 @@ import React, { useEffect, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
+import FailureRefText from "./FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import AndroidKeyboardAvoidingPadding from "./AndroidKeyboardAvoidingPadding";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
@@ -47,7 +49,8 @@ function MemberGoalEditModal({
 }) {
   const [goalText, setGoalText] = useState("");
   const [linkedChoreId, setLinkedChoreId] = useState<string | null>(null);
-  const [errorText, setErrorText] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: errorText, errorRef, setErrorMessage: setErrorText, showFailure } = useFailureNotice("parent");
   const { saving, save } = useSetMemberGoalAction();
 
   useEffect(() => {
@@ -71,7 +74,7 @@ function MemberGoalEditModal({
     setErrorText(null);
     const res = await save(child.id, trimmed, linkedChoreId);
     if (!res.ok) {
-      setErrorText("保存できませんでした。もういちど試してください");
+      showFailure(res.error, { fallback: "保存できませんでした。もういちど試してください", useDbMessage: false });
       return;
     }
     onSaved({ memberId: child.id, goalText: trimmed, linkedChoreId });
@@ -130,6 +133,7 @@ function MemberGoalEditModal({
             {errorText && (
               <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorText}</Text>
             )}
+            <FailureRefText value={errorRef} tone="parent" />
 
             <AppButton
               label={saving ? "保存中…" : "保存する"}

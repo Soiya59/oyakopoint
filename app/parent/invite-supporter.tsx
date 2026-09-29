@@ -3,6 +3,8 @@ import { Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
@@ -21,7 +23,8 @@ export default function InviteSupporterScreen() {
   const { client } = useSession();
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
 
   const submit = async () => {
     if (!email.trim()) return;
@@ -30,7 +33,7 @@ export default function InviteSupporterScreen() {
     const res = await createFamilyInvite(client, email.trim());
     setSending(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     router.replace({
@@ -79,6 +82,7 @@ export default function InviteSupporterScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <AppButton
         label={sending ? "送信中…" : "招待を送る"}

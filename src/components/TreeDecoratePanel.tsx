@@ -28,6 +28,7 @@
 import React, { useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
+import FailureRefText from "./FailureRefText";
 import { DECORATION_DIM_OPACITY, PRIZE_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import { ErrorState, SkeletonList } from "./StatusViews";
 import theme from "@/theme/theme";
@@ -66,6 +67,8 @@ export interface TreeDecoratePanelProps {
   decorating: boolean;
   /** 直近の確定操作で発生した通信エラー文言。 */
   decorateErrorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 確定失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  decorateErrorRef?: string | null;
   onRetryLoad: () => void;
   onConfirm: (completionId: string) => void;
 }
@@ -99,6 +102,7 @@ export function TreeDecoratePanel({
   myMemberId,
   decorating,
   decorateErrorMessage,
+  decorateErrorRef,
   onRetryLoad,
   onConfirm,
 }: TreeDecoratePanelProps) {
@@ -187,6 +191,7 @@ export function TreeDecoratePanel({
       />
 
       {decorateErrorMessage && <Text style={styles.errorText}>{decorateErrorMessage}</Text>}
+      {decorateErrorMessage && <FailureRefText value={decorateErrorRef} tone={tone} />}
 
       <AppButton
         label={isChild ? "かざる！" : "かざる"}

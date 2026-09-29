@@ -5,6 +5,8 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import FamilyDeletionCodeField from "@/components/FamilyDeletionCodeField";
+import FailureRefText from "@/components/FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useSession } from "@/lib/session";
@@ -50,7 +52,8 @@ export default function AccountDeleteScreen() {
   // [2026-09-27追加・要件定義書07-42章] 確認コード（保護者のメールに送る6桁）。
   const [deletionCodeDraft, setDeletionCodeDraft] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
 
   useEffect(() => {
     let mounted = true;
@@ -79,7 +82,7 @@ export default function AccountDeleteScreen() {
     );
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage(
+      const knownMessage =
         res.error.code === "family_name_mismatch"
           ? "家族の名前が一致しません。もう一度ご確認ください"
           : res.error.code === "deletion_code_invalid" ||
@@ -88,8 +91,13 @@ export default function AccountDeleteScreen() {
           ? "うまく確認できませんでした。もう一度、メールの数字をご確認のうえ入力してください。"
           : res.error.code === "deletion_code_locked"
           ? "少し時間をおいてから、もう一度お試しください。"
-          : "削除できませんでした。もう一度お試しください。"
-      );
+          : null;
+      if (knownMessage) {
+        setErrorMessage(knownMessage);
+      } else {
+        // 原因を特定できないときは従来の一文のまま（電波・混み合い等のときだけ別の文言）。
+        showFailure(res.error, { source: "edge", fallback: "削除できませんでした。もう一度お試しください。", useDbMessage: false });
+      }
       return;
     }
     await logoutParent();
@@ -178,6 +186,7 @@ export default function AccountDeleteScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       {preview && (
         <AppButton

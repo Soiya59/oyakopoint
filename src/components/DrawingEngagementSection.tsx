@@ -35,6 +35,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppButton from "./AppButton";
 import NgWordWarningText from "./NgWordWarningText";
+import FailureRefText from "./FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
@@ -167,7 +170,13 @@ export function DrawingEngagementSection({
 
   // --- リアクション（スタンプ） ---
   const [reactingKey, setReactingKey] = useState<StampKey | null>(null);
-  const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const {
+    errorMessage: reactionError,
+    errorRef: reactionErrorRef,
+    setErrorMessage: setReactionError,
+    showFailure: showReactionFailure,
+  } = useFailureNotice(tone);
   const [showReactors, setShowReactors] = useState(false);
 
   const handleReact = useCallback(
@@ -177,7 +186,7 @@ export function DrawingEngagementSection({
       const res = await toggleFamilyDrawingReactionStamp(client, { drawing_id: drawingId, stamp_key: stampKey });
       setReactingKey(null);
       if (!res.ok) {
-        setReactionError(res.error.message);
+        showReactionFailure(res.error);
         return;
       }
       if (res.data.removed) {
@@ -189,19 +198,20 @@ export function DrawingEngagementSection({
         ]);
       }
     },
-    [client, drawingId, myMemberId]
+    [client, drawingId, myMemberId, setReactionError, showReactionFailure]
   );
 
   // --- コメント ---
   const [composing, setComposing] = useState(!!initialComposing);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const { errorMessage: sendError, errorRef: sendErrorRef, setErrorMessage: setSendError, showFailure: showSendFailure } =
+    useFailureNotice(tone);
   const ngGuard = useNgWordGuard();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [rowError, setRowError] = useState<{ id: string; message: string; ref: string } | null>(null);
 
   const handleSend = useCallback(async () => {
     if (ngGuard.guard(draft)) return;
@@ -210,7 +220,7 @@ export function DrawingEngagementSection({
     const res = await createFamilyDrawingComment(client, { drawing_id: drawingId, commenter_member_id: myMemberId, body: draft.trim() });
     setSending(false);
     if (!res.ok) {
-      setSendError(SEND_FAIL_TEXT[tone]);
+      showSendFailure(res.error, { fallback: SEND_FAIL_TEXT[tone], useDbMessage: false });
       return;
     }
     setComments((prev) => [
@@ -219,7 +229,7 @@ export function DrawingEngagementSection({
     ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
     setDraft("");
     setComposing(false);
-  }, [client, drawingId, myMemberId, draft, ngGuard, tone]);
+  }, [client, drawingId, myMemberId, draft, ngGuard, tone, showSendFailure, setSendError]);
 
   const runDelete = useCallback(
     async (commentId: string) => {
@@ -233,12 +243,14 @@ export function DrawingEngagementSection({
           setComments((prev) => prev.filter((c) => c.id !== commentId));
           return;
         }
-        setRowError({ id: commentId, message: res.error.message });
+        // 電波・混み合い等のときだけ文言を分け、それ以外は従来の「削除されています」の一文のまま（目印付き）。
+        const f = describeApiFailure(tone, res.error, { fallback: ALREADY_DELETED_TEXT[tone], useDbMessage: false });
+        setRowError({ id: commentId, message: f.message, ref: f.ref });
         return;
       }
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     },
-    [client]
+    [client, tone]
   );
 
   if (!loaded) return null;
@@ -281,6 +293,7 @@ export function DrawingEngagementSection({
       {reactionError && (
         <Text style={[captionStyle, { color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }]}>{reactionError}</Text>
       )}
+      <FailureRefText value={reactionErrorRef} tone={tone} />
       {hasAnyReaction && (
         <Pressable onPress={() => setShowReactors((v) => !v)} style={{ marginTop: theme.spacing.s1 }}>
           <Text style={styles.link}>{tone === "child" ? "だれが おくったか みる" : "だれが送ったか見る"}</Text>
@@ -309,7 +322,7 @@ export function DrawingEngagementSection({
             const canDelete = isParent && !isOwnComment;
             const isConfirming = confirmDeleteId === c.id;
             const isProcessing = deletingId === c.id;
-            const err = rowError?.id === c.id ? rowError.message : null;
+            const err = rowError?.id === c.id ? rowError : null;
             return (
               <View key={c.id} style={styles.commentRow}>
                 <Text style={bodyStyle}>
@@ -344,7 +357,8 @@ export function DrawingEngagementSection({
                     </View>
                   )
                 )}
-                {err && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{ALREADY_DELETED_TEXT[tone]}</Text>}
+                {err && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{err.message}</Text>}
+                {err && <FailureRefText value={err.ref} tone={tone} />}
               </View>
             );
           })}
@@ -369,6 +383,7 @@ export function DrawingEngagementSection({
               />
               {ngGuard.blocked && <NgWordWarningText tone={tone} />}
               {sendError && <Text style={[captionStyle, { color: theme.colors.statusBlocking }]}>{sendError}</Text>}
+              <FailureRefText value={sendErrorRef} tone={tone} />
               <View style={styles.confirmRow}>
                 <Pressable onPress={() => { setComposing(false); setDraft(""); ngGuard.clear(); }} disabled={sending}>
                   <Text style={styles.link}>やめる</Text>

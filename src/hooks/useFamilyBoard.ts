@@ -45,6 +45,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
+import { failureDetail } from "@/lib/apiFailureDisplay";
+import type { ApiFailureKind } from "@/lib/apiFailure";
 import {
   createFamilyBoardComment,
   deleteFamilyBoardPost,
@@ -210,7 +212,7 @@ export function useFamilyBoardHistory(familyId: string) {
   // 2つの操作の違いであるため、フック側は単一の`removePost`のみを公開する
   // （UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 22.4節）。
   const [removingPostId, setRemovingPostId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<{ postId: string; code: string; message: string } | null>(null);
+  const [actionError, setActionError] = useState<{ postId: string; code: string; message: string; kind: ApiFailureKind; ref: string } | null>(null);
 
   const removePost = useCallback(
     async (postId: string): Promise<boolean> => {
@@ -219,7 +221,7 @@ export function useFamilyBoardHistory(familyId: string) {
       const res = await deleteFamilyBoardPost(client, postId);
       setRemovingPostId(null);
       if (!res.ok) {
-        setActionError({ postId, code: res.error.code, message: res.error.message });
+        setActionError({ postId, code: res.error.code, message: res.error.message, ...failureDetail(res.error) });
         // no_data_found（対象が既に無い）の場合は、次のreloadを待たずに一覧から
         // 即時除去しておく（例: 別タブ・他メンバーの操作により既に削除済みだった場合）。
         if (res.error.code === PG_ERRCODE.noDataFound) {
@@ -251,7 +253,7 @@ export function useFamilyBoardHistory(familyId: string) {
   // （1人1件まで）とは意図的に異なる（実装メモ.md 160章参照。完了報告は
   // 「一言添える」、掲示板は「みんなで押す」という場の性格の違いによる）。
   const [reactingReaction, setReactingReaction] = useState<{ postId: string; stampKey: StampKey } | null>(null);
-  const [reactionError, setReactionError] = useState<{ postId: string; message: string } | null>(null);
+  const [reactionError, setReactionError] = useState<{ postId: string; message: string; kind: ApiFailureKind; ref: string } | null>(null);
 
   const reactToPost = useCallback(
     async (postId: string, memberId: string, stampKey: StampKey): Promise<boolean> => {
@@ -266,7 +268,7 @@ export function useFamilyBoardHistory(familyId: string) {
         if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
           setPosts((prev) => prev.filter((p) => p.id !== postId));
         }
-        setReactionError({ postId, message: res.error.message });
+        setReactionError({ postId, message: res.error.message, ...failureDetail(res.error) });
         return false;
       }
       // [160章] RPC本体と同じ手順をローカルでも再現する。取消なら「自分×この
@@ -302,9 +304,9 @@ export function useFamilyBoardHistory(familyId: string) {
   // 「だれが送ったか見る」リンクをタップした時点で呼ばれる遅延取得（一覧取得時には
   // 反応者の氏名を含めないため、この関数が唯一の取得経路になる）。
   const viewReactorsForPost = useCallback(
-    async (postId: string): Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string }> => {
+    async (postId: string): Promise<{ ok: true; data: FamilyBoardReactionWithReactor[] } | { ok: false; message: string; kind: ApiFailureKind; ref: string }> => {
       const res = await fetchFamilyBoardReactionsForPost(client, postId);
-      if (!res.ok) return { ok: false, message: res.error.message };
+      if (!res.ok) return { ok: false, message: res.error.message, ...failureDetail(res.error) };
       return { ok: true, data: res.data };
     },
     [client]
@@ -317,9 +319,9 @@ export function useFamilyBoardHistory(familyId: string) {
   // （reactToPost・removePostと同じ「該当行だけをローカル更新し、全件reload
   // しない」パターン）。
   const [sendingCommentPostId, setSendingCommentPostId] = useState<string | null>(null);
-  const [commentError, setCommentError] = useState<{ postId: string; message: string } | null>(null);
+  const [commentError, setCommentError] = useState<{ postId: string; message: string; kind: ApiFailureKind; ref: string } | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  const [commentActionError, setCommentActionError] = useState<{ commentId: string; message: string } | null>(null);
+  const [commentActionError, setCommentActionError] = useState<{ commentId: string; message: string; kind: ApiFailureKind; ref: string } | null>(null);
 
   const addComment = useCallback(
     async (postId: string, commenterMemberId: string, body: string): Promise<boolean> => {
@@ -331,7 +333,7 @@ export function useFamilyBoardHistory(familyId: string) {
         if (res.error.code === PG_ERRCODE.foreignKeyViolation) {
           setPosts((prev) => prev.filter((p) => p.id !== postId));
         }
-        setCommentError({ postId, message: res.error.message });
+        setCommentError({ postId, message: res.error.message, ...failureDetail(res.error) });
         return false;
       }
       setPosts((prev) =>
@@ -357,7 +359,7 @@ export function useFamilyBoardHistory(familyId: string) {
           );
           return false;
         }
-        setCommentActionError({ commentId, message: res.error.message });
+        setCommentActionError({ commentId, message: res.error.message, ...failureDetail(res.error) });
         return false;
       }
       setPosts((prev) =>

@@ -9,6 +9,7 @@ import { formatDateTimeShort } from "@/lib/calendarDates";
 import type { ChoreCompletion, ChoreReaction, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
+import FailureRefText from "@/components/FailureRefText";
 
 /**
  * 子ども向け 完了報告の詳細モーダル（とどいたリアクション一覧・スタンプ・ひとこと）
@@ -38,6 +39,8 @@ export type ChildCompletionDetailModalProps = {
   sendingComment: boolean;
   /** スタンプ・ひとことの送信失敗の文言（55.5節）。 */
   reactionError: string | null;
+  /** [2026-09-29追加・実装メモ331章] 失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  reactionErrorRef?: string | null;
   onSendStamp: (completionId: string, stampKey: StampKey) => void;
   onSendComment: () => void;
   onClose: () => void;
@@ -60,6 +63,7 @@ export function ChildCompletionDetailModal({
   onChangeCommentDraft,
   sendingComment,
   reactionError,
+  reactionErrorRef,
   onSendStamp,
   onSendComment,
   onClose,
@@ -179,6 +183,7 @@ export function ChildCompletionDetailModal({
                       {reactionError}
                     </Text>
                   )}
+                  {reactionError && <FailureRefText value={reactionErrorRef} tone="child" />}
 
                   <AppButton
                     label="もどる"

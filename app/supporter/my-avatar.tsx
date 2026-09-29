@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import AvatarDrawingPanel from "@/components/AvatarDrawingPanel";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
@@ -25,10 +26,16 @@ export default function SupporterMyAvatarScreen() {
   const me = state.members.find((m) => m.id === myId);
 
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("supporter");
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
-  const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
+  const {
+    errorMessage: resetErrorMessage,
+    errorRef: resetErrorRef,
+    setErrorMessage: setResetErrorMessage,
+    showFailure: showResetFailure,
+  } = useFailureNotice("supporter");
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   // [2026-09-18追加・やること.md 2-51、実装メモ.md 248・243章] キャンバスに指が
   // 触れている間trueにし、下のScreenのscrollEnabledを一時的にfalseへ切り替える
@@ -42,7 +49,7 @@ export default function SupporterMyAvatarScreen() {
     const res = await saveMemberAvatar(client, myId, lineData);
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return false;
     }
     setMemberAvatarLocal(myId, lineData);
@@ -58,7 +65,7 @@ export default function SupporterMyAvatarScreen() {
     const res = await deleteMemberAvatar(client, myId);
     setResetting(false);
     if (!res.ok) {
-      setResetErrorMessage(res.error.message);
+      showResetFailure(res.error);
       return false;
     }
     clearMemberAvatarLocal(myId);
@@ -121,10 +128,12 @@ export default function SupporterMyAvatarScreen() {
             savedLineData={memberAvatars[myId] ?? null}
             saving={saving}
             errorMessage={errorMessage}
+            errorRef={errorRef}
             savedMessage={savedMessage}
             onSave={handleSave}
             resetting={resetting}
             resetErrorMessage={resetErrorMessage}
+            resetErrorRef={resetErrorRef}
             resetSuccessMessage={resetSuccessMessage}
             onReset={handleReset}
             onGestureActiveChange={setCanvasGestureActive}

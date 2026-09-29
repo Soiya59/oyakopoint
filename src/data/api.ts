@@ -87,7 +87,6 @@ import type {
   StickerCatalogItem,
   StickerPurchaseWithCatalog,
   StickerTierReset,
-  WeeklyFamilyDigest,
 } from "@/types/domain";
 
 export interface ApiError {
@@ -319,11 +318,11 @@ export async function completeEmailSignIn(url: string): Promise<ApiResult<null>>
 
 /** API仕様.md 1章 手順3: supabase.rpc('create_family_with_owner', ...) */
 export async function createFamilyWithOwner(familyName: string, displayName: string): Promise<ApiResult<string>> {
-  const { data, error } = await supabase.rpc("create_family_with_owner", {
+  const { data, error, status } = await supabase.rpc("create_family_with_owner", {
     p_family_name: familyName,
     p_display_name: displayName,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -343,12 +342,12 @@ export async function joinFamilyWithInviteCode(
   displayName: string,
   consentVersion: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await supabase.rpc("join_family_with_invite_code", {
+  const { data, error, status } = await supabase.rpc("join_family_with_invite_code", {
     p_invite_code: inviteCode,
     p_display_name: displayName,
     p_consent_version: consentVersion,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -447,8 +446,8 @@ export async function removeMember(
 export async function fetchAccountDeletionPreview(
   client: SupabaseClient
 ): Promise<ApiResult<AccountDeletionPreview>> {
-  const { data, error } = await client.rpc("account_deletion_preview");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("account_deletion_preview");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as AccountDeletionPreview };
 }
 
@@ -528,35 +527,35 @@ export async function createFamilyInvite(client: SupabaseClient, invitedEmail: s
       },
     };
   }
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_invites")
     .insert({ invited_email: invitedEmail.trim().toLowerCase(), token })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyInvite };
 }
 
 /** API仕様.md 2d章手順2: 発行済み招待の一覧（保護者操作、家族管理画面P14拡張用） */
 export async function fetchFamilyInvites(client: SupabaseClient, familyId: string): Promise<ApiResult<FamilyInvite[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_invites")
     .select("*")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as FamilyInvite[] };
 }
 
 /** API仕様.md 2d章手順2: 招待の取消（保護者操作）。pending→revokedのみ許可される。 */
 export async function revokeFamilyInvite(client: SupabaseClient, inviteId: string): Promise<ApiResult<FamilyInvite>> {
-  const { data, error } = await client
+  const { data, error, status: httpStatus } = await client
     .from("family_invites")
     .update({ status: "revoked" })
     .eq("id", inviteId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, httpStatus) };
   return { ok: true, data: data as FamilyInvite };
 }
 
@@ -566,8 +565,8 @@ export async function revokeFamilyInvite(client: SupabaseClient, inviteId: strin
  * `supabase`クライアント（session.clientではない）を使う。
  */
 export async function familyInviteLookup(token: string): Promise<ApiResult<FamilyInviteLookupResult>> {
-  const { data, error } = await supabase.rpc("family_invite_lookup", { p_token: token });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await supabase.rpc("family_invite_lookup", { p_token: token });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "no_data_found", message: "招待が見つかりません" } };
   return { ok: true, data: row as FamilyInviteLookupResult };
@@ -587,12 +586,12 @@ export async function acceptFamilyInvite(
   displayName: string,
   consentVersion: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await supabase.rpc("accept_family_invite", {
+  const { data, error, status } = await supabase.rpc("accept_family_invite", {
     p_token: token,
     p_display_name: displayName,
     p_consent_version: consentVersion,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -639,11 +638,11 @@ export async function fetchFamilyBundle(client: SupabaseClient, familyId: string
       .order("created_at"),
   ]);
 
-  if (familyRes.error) return { ok: false, error: fromPostgrestError(familyRes.error) };
-  if (membersRes.error) return { ok: false, error: fromPostgrestError(membersRes.error) };
-  if (categoriesRes.error) return { ok: false, error: fromPostgrestError(categoriesRes.error) };
-  if (choresRes.error) return { ok: false, error: fromPostgrestError(choresRes.error) };
-  if (rewardsRes.error) return { ok: false, error: fromPostgrestError(rewardsRes.error) };
+  if (familyRes.error) return { ok: false, error: fromPostgrestError(familyRes.error, familyRes.status) };
+  if (membersRes.error) return { ok: false, error: fromPostgrestError(membersRes.error, membersRes.status) };
+  if (categoriesRes.error) return { ok: false, error: fromPostgrestError(categoriesRes.error, categoriesRes.status) };
+  if (choresRes.error) return { ok: false, error: fromPostgrestError(choresRes.error, choresRes.status) };
+  if (rewardsRes.error) return { ok: false, error: fromPostgrestError(rewardsRes.error, rewardsRes.status) };
 
   return {
     ok: true,
@@ -677,13 +676,13 @@ export async function updateMemberDisplayName(
   memberId: string,
   displayName: string
 ): Promise<ApiResult<FamilyMember>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_members")
     .update({ display_name: displayName })
     .eq("id", memberId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyMember };
 }
 
@@ -703,13 +702,13 @@ export async function updateMemberAvatarColor(
   memberId: string,
   avatarColor: string
 ): Promise<ApiResult<FamilyMember>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_members")
     .update({ avatar_color: avatarColor })
     .eq("id", memberId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyMember };
 }
 
@@ -727,11 +726,11 @@ export async function fetchMemberAvatars(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<MemberAvatarRow[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("member_avatars")
     .select("member_id, line_data, updated_at")
     .eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberAvatarRow[] };
 }
 
@@ -749,8 +748,8 @@ export async function saveMemberAvatar(
   memberId: string,
   lineData: FamilyDrawingLineData
 ): Promise<ApiResult<null>> {
-  const { error } = await client.from("member_avatars").upsert({ member_id: memberId, line_data: lineData });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.from("member_avatars").upsert({ member_id: memberId, line_data: lineData });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -759,8 +758,8 @@ export async function saveMemberAvatar(
  * 対象行が既に存在しない場合もエラーにはならない（削除0件のまま成功扱い）。
  */
 export async function deleteMemberAvatar(client: SupabaseClient, memberId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("member_avatars").delete().eq("member_id", memberId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.from("member_avatars").delete().eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -789,8 +788,8 @@ export async function deleteMemberAvatar(client: SupabaseClient, memberId: strin
  * （自分の行しか返らない。69.3章）。
  */
 export async function fetchMyMemberBlocks(client: SupabaseClient): Promise<ApiResult<MemberBlock[]>> {
-  const { data, error } = await client.from("member_blocks").select("*");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("member_blocks").select("*");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberBlock[] };
 }
 
@@ -806,7 +805,7 @@ export async function blockMember(
   blockerMemberId: string,
   blockedMemberId: string
 ): Promise<ApiResult<MemberBlock>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("member_blocks")
     .insert({ family_id: familyId, blocker_member_id: blockerMemberId, blocked_member_id: blockedMemberId })
     .select("*")
@@ -823,7 +822,7 @@ export async function blockMember(
         return { ok: true, data: existing.data as MemberBlock };
       }
     }
-    return { ok: false, error: fromPostgrestError(error) };
+    return { ok: false, error: fromPostgrestError(error, status) };
   }
   return { ok: true, data: data as MemberBlock };
 }
@@ -841,12 +840,12 @@ export async function unblockMember(
   blockerMemberId: string,
   blockedMemberId: string
 ): Promise<ApiResult<null>> {
-  const { error } = await client
+  const { error, status } = await client
     .from("member_blocks")
     .delete()
     .eq("blocker_member_id", blockerMemberId)
     .eq("blocked_member_id", blockedMemberId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -863,8 +862,8 @@ export async function fetchHiddenContents(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<HiddenContent[]>> {
-  const { data, error } = await client.from("hidden_contents").select("*").eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("hidden_contents").select("*").eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as HiddenContent[] };
 }
 
@@ -879,10 +878,10 @@ export async function setFamilySocialSettings(
   client: SupabaseClient,
   interactionsEnabled: boolean
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("set_family_social_settings", {
+  const { error, status } = await client.rpc("set_family_social_settings", {
     p_interactions_enabled: interactionsEnabled,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -898,10 +897,10 @@ export async function setFamilyPushNotificationsEnabled(
   client: SupabaseClient,
   enabled: boolean
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("set_family_push_notifications_enabled", {
+  const { error, status } = await client.rpc("set_family_push_notifications_enabled", {
     p_enabled: enabled,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -915,12 +914,12 @@ export async function fetchFamilyScheduledAnnouncements(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<ScheduledAnnouncement[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_scheduled_announcements")
     .select("*")
     .eq("family_id", familyId)
     .order("slot");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as ScheduledAnnouncement[] };
 }
 
@@ -939,13 +938,13 @@ export async function setFamilyScheduledAnnouncement(
   sendTime: string,
   message: string | null
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("set_family_scheduled_announcement", {
+  const { error, status } = await client.rpc("set_family_scheduled_announcement", {
     p_slot: slot,
     p_enabled: enabled,
     p_send_time: sendTime,
     p_message: message,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -959,10 +958,10 @@ export async function deleteFamilyScheduledAnnouncement(
   client: SupabaseClient,
   slot: ScheduledAnnouncementSlot
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("delete_family_scheduled_announcement", {
+  const { error, status } = await client.rpc("delete_family_scheduled_announcement", {
     p_slot: slot,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -977,13 +976,13 @@ export async function setMemberScheduledAnnouncementReceiveEnabled(
   memberId: string,
   enabled: boolean
 ): Promise<ApiResult<FamilyMember>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_members")
     .update({ scheduled_announcement_notifications_enabled: enabled })
     .eq("id", memberId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyMember };
 }
 
@@ -995,8 +994,8 @@ export async function setMemberScheduledAnnouncementReceiveEnabled(
 export async function fetchCurrentFamilyPushPermissionNeeded(
   client: SupabaseClient
 ): Promise<ApiResult<boolean>> {
-  const { data, error } = await client.rpc("current_family_push_permission_needed");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("current_family_push_permission_needed");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: Boolean(data) };
 }
 
@@ -1012,12 +1011,12 @@ export async function submitContentReport(
   client: SupabaseClient,
   params: { aboutText?: string | null; seenWhereText?: string | null; note?: string | null }
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("submit_content_report", {
+  const { error, status } = await client.rpc("submit_content_report", {
     p_about_text: params.aboutText ?? null,
     p_seen_where_text: params.seenWhereText ?? null,
     p_note: params.note ?? null,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -1026,13 +1025,13 @@ export async function updateFamilyName(
   familyId: string,
   name: string
 ): Promise<ApiResult<Family>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("families")
     .update({ name })
     .eq("id", familyId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Family };
 }
 
@@ -1055,13 +1054,13 @@ export async function fetchCompletions(
   sinceIso?: string
 ): Promise<ApiResult<ChoreCompletion[]>> {
   if (sinceIso) {
-    const { data, error } = await client
+    const { data, error, status } = await client
       .from("chore_completions")
       .select("*")
       .eq("family_id", familyId)
       .gte("reported_at", sinceIso)
       .order("reported_at", { ascending: false });
-    if (error) return { ok: false, error: fromPostgrestError(error) };
+    if (error) return { ok: false, error: fromPostgrestError(error, status) };
     return { ok: true, data: (data ?? []) as ChoreCompletion[] };
   }
 
@@ -1092,12 +1091,12 @@ async function fetchAllPages<T>(
     from: number,
     to: number,
     withCount: boolean
-  ) => PromiseLike<{ data: unknown[] | null; error: { code?: string | null; message?: string } | null; count: number | null }>,
+  ) => PromiseLike<{ data: unknown[] | null; error: { code?: string | null; message?: string } | null; count: number | null; status?: number }>,
   rowKey?: (row: T) => string
 ): Promise<ApiResult<T[]>> {
   const keyOf = rowKey ?? ((row: T) => (row as unknown as { id: string }).id);
   const first = await pageQuery(0, COMPLETIONS_PAGE_SIZE - 1, true);
-  if (first.error) return { ok: false, error: fromPostgrestError(first.error) };
+  if (first.error) return { ok: false, error: fromPostgrestError(first.error, first.status) };
   const firstRows = (first.data ?? []) as T[];
 
   const total = first.count;
@@ -1110,7 +1109,7 @@ async function fetchAllPages<T>(
     while (size >= COMPLETIONS_PAGE_SIZE && last.length === size && pages.length < COMPLETIONS_MAX_PAGES) {
       const from = pages.length * size;
       const next = await pageQuery(from, from + size - 1, false);
-      if (next.error) return { ok: false, error: fromPostgrestError(next.error) };
+      if (next.error) return { ok: false, error: fromPostgrestError(next.error, next.status) };
       last = (next.data ?? []) as T[];
       pages.push(last);
     }
@@ -1129,7 +1128,7 @@ async function fetchAllPages<T>(
   const rest = await Promise.all(plan.ranges.map((r) => pageQuery(r.from, r.to, false)));
   const pages: T[][] = [firstRows];
   for (const page of rest) {
-    if (page.error) return { ok: false, error: fromPostgrestError(page.error) };
+    if (page.error) return { ok: false, error: fromPostgrestError(page.error, page.status) };
     pages.push((page.data ?? []) as T[]);
   }
   return { ok: true, data: mergeCompletionPages(pages, keyOf) };
@@ -1179,12 +1178,12 @@ export async function fetchMyDailyFlaggedChoreIds(
   // 統括の要望「おしっこ1人でできたを一番上に」に対し、上下の矢印による
   // 並べ替えは作らず、★を押し直せば一番上に来る形で満たす（実装メモ155章・156章）。
   // created_at はテーブル新設時（20260822082002）から入っており、列の追加は不要。
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_daily_flags")
     .select("chore_id, created_at")
     .eq("member_id", memberId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []).map((row) => row.chore_id as string) };
 }
 
@@ -1196,47 +1195,47 @@ export async function setChoreDailyFlag(
   flagged: boolean
 ): Promise<ApiResult<null>> {
   if (flagged) {
-    const { error } = await client
+    const { error, status } = await client
       .from("chore_daily_flags")
       .upsert({ family_id: familyId, member_id: memberId, chore_id: choreId }, { onConflict: "member_id,chore_id" });
-    if (error) return { ok: false, error: fromPostgrestError(error) };
+    if (error) return { ok: false, error: fromPostgrestError(error, status) };
     return { ok: true, data: null };
   }
-  const { error } = await client
+  const { error, status } = await client
     .from("chore_daily_flags")
     .delete()
     .eq("member_id", memberId)
     .eq("chore_id", choreId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
 /** API仕様.md 5章「あるファミリーのリアクション一覧」相当。通帳・完了報告一覧で使う。 */
 export async function fetchReactions(client: SupabaseClient, familyId: string): Promise<ApiResult<ChoreReaction[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_reactions")
     .select("*")
     .eq("family_id", familyId)
     .order("created_at");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as ChoreReaction[] };
 }
 
 /** API仕様.md 6章「消費履歴」 */
 export async function fetchRedemptions(client: SupabaseClient, familyId: string): Promise<ApiResult<RewardRedemption[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("reward_redemptions")
     .select("*")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as RewardRedemption[] };
 }
 
 /** API仕様.md 6章「現在残高」: member_points View */
 export async function fetchMemberPoints(client: SupabaseClient, familyId: string): Promise<ApiResult<MemberPoints[]>> {
-  const { data, error } = await client.from("member_points").select("*").eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("member_points").select("*").eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberPoints[] };
 }
 
@@ -1357,7 +1356,7 @@ export async function addReaction(
   client: SupabaseClient,
   input: { completion_id: string; reacted_by: string; kind: ReactionKind; stamp_key?: StampKey; comment_body?: string }
 ): Promise<ApiResult<ChoreReaction>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_reactions")
     .insert({
       completion_id: input.completion_id,
@@ -1368,7 +1367,7 @@ export async function addReaction(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as ChoreReaction };
 }
 
@@ -1385,10 +1384,10 @@ export async function toggleReactionStamp(
   client: SupabaseClient,
   input: { completion_id: string; stamp_key: StampKey }
 ): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .rpc("toggle_chore_reaction_stamp", { p_completion_id: input.completion_id, p_stamp_key: input.stamp_key })
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
 }
 
@@ -1397,12 +1396,12 @@ export async function redeemReward(
   client: SupabaseClient,
   input: { reward_id: string; member_id: string }
 ): Promise<ApiResult<RewardRedemption>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("reward_redemptions")
     .insert({ reward_id: input.reward_id, member_id: input.member_id })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as RewardRedemption };
 }
 
@@ -1424,8 +1423,8 @@ export async function cancelRewardRedemption(
   client: SupabaseClient,
   redemptionId: string
 ): Promise<ApiResult<{ redemption_id: string; reward_id: string | null; reward_name: string; member_id: string; cost: number }>> {
-  const { data, error } = await client.rpc("cancel_reward_redemption", { p_redemption_id: redemptionId }).single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("cancel_reward_redemption", { p_redemption_id: redemptionId }).single();
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: data as { redemption_id: string; reward_id: string | null; reward_name: string; member_id: string; cost: number },
@@ -1460,8 +1459,8 @@ export async function deleteChore(client: SupabaseClient, choreId: string): Prom
   // 「何も消えていないのに成功」になる（ユーザーが実機で「jijiを消しても消えない」と発見）。
   // 具体的には、みまもりメンバーが作った scope='personal' のクエストは
   // `chores_write_personal_by_creator`（作成者本人のみ）の対象で、保護者は削除できない。
-  const { data, error } = await client.from("chores").delete().eq("id", choreId).select("id");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("chores").delete().eq("id", choreId).select("id");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   if (!data || data.length === 0) {
     return {
       ok: false,
@@ -1489,25 +1488,25 @@ export async function setChoreNfcTag(
   choreId: string,
   tagValue: string
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .update({ nfc_tag_id: tagValue })
     .eq("id", choreId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
 /** [2026-09-01凍結] 上記と同じ理由で呼び出し元が無い。API仕様.md 4a章手順2相当（旧方式）。 */
 export async function findChoreByTag(client: SupabaseClient, tagValue: string): Promise<ApiResult<Chore | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .select("*")
     .eq("nfc_tag_id", tagValue)
     .eq("is_active", true)
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as Chore | null) ?? null };
 }
 
@@ -1522,13 +1521,13 @@ export async function fetchActiveChoreNfcTags(
   client: SupabaseClient,
   choreId: string
 ): Promise<ApiResult<ChoreNfcTagWithMember[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_nfc_tags")
     .select("*, member:family_members!member_id(display_name)")
     .eq("chore_id", choreId)
     .is("revoked_at", null)
     .order("created_at");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as ChoreNfcTagWithMember[]) ?? [] };
 }
 
@@ -1541,12 +1540,12 @@ export async function createChoreNfcTag(
   client: SupabaseClient,
   input: { chore_id: string; member_id: string; tag_value: string }
 ): Promise<ApiResult<ChoreNfcTag>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_nfc_tags")
     .insert({ chore_id: input.chore_id, member_id: input.member_id, tag_value: input.tag_value })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as ChoreNfcTag };
 }
 
@@ -1556,13 +1555,13 @@ export async function createChoreNfcTag(
  * （改ざん防止パターン、39.3章）ため、送る値自体はダミーの現在時刻でよい。
  */
 export async function revokeChoreNfcTag(client: SupabaseClient, tagId: string): Promise<ApiResult<ChoreNfcTag>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_nfc_tags")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", tagId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as ChoreNfcTag };
 }
 
@@ -1577,10 +1576,10 @@ export async function reportChoreCompletionByNfcTag(
   client: SupabaseClient,
   input: { tag_value: string; note?: string | null }
 ): Promise<ApiResult<ReportChoreCompletionByNfcTagResult | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .rpc("report_chore_completion_by_nfc_tag", { p_tag_value: input.tag_value, p_note: input.note ?? null })
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as ReportChoreCompletionByNfcTagResult | null) ?? null };
 }
 
@@ -1589,7 +1588,7 @@ export async function createChildProfile(
   client: SupabaseClient,
   input: { family_id: string; display_name: string; avatar_color: string | null }
 ): Promise<ApiResult<FamilyMember>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_members")
     .insert({
       family_id: input.family_id,
@@ -1599,7 +1598,7 @@ export async function createChildProfile(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyMember };
 }
 
@@ -1644,7 +1643,7 @@ export async function createChore(
   familyId: string,
   input: ChoreFormInput
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .insert({
       family_id: familyId,
@@ -1658,7 +1657,7 @@ export async function createChore(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
@@ -1670,7 +1669,7 @@ export async function updateChore(
   choreId: string,
   input: ChoreFormInput
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .update({
       category_id: input.category_id,
@@ -1684,7 +1683,7 @@ export async function updateChore(
     .eq("id", choreId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
@@ -1712,7 +1711,7 @@ export async function createReward(
   familyId: string,
   input: RewardFormInput
 ): Promise<ApiResult<Reward>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("rewards")
     .insert({
       family_id: familyId,
@@ -1724,7 +1723,7 @@ export async function createReward(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Reward };
 }
 
@@ -1733,7 +1732,7 @@ export async function updateReward(
   rewardId: string,
   input: RewardFormInput
 ): Promise<ApiResult<Reward>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("rewards")
     .update({
       name: input.name,
@@ -1745,7 +1744,7 @@ export async function updateReward(
     .eq("id", rewardId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Reward };
 }
 
@@ -1784,7 +1783,7 @@ export async function createPersonalChore(
   familyId: string,
   input: PersonalChoreFormInput
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .insert({
       family_id: familyId,
@@ -1797,7 +1796,7 @@ export async function createPersonalChore(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
@@ -1816,7 +1815,7 @@ export async function createSupporterSharedChore(
   familyId: string,
   input: PersonalChoreFormInput
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .insert({
       family_id: familyId,
@@ -1829,7 +1828,7 @@ export async function createSupporterSharedChore(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
@@ -1845,7 +1844,7 @@ export async function updatePersonalChore(
   choreId: string,
   input: PersonalChoreFormInput
 ): Promise<ApiResult<Chore>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chores")
     .update({
       title: input.title,
@@ -1857,14 +1856,14 @@ export async function updatePersonalChore(
     .eq("id", choreId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Chore };
 }
 
 /** API仕様.md 3b章「論理削除（非表示化）」 */
 export async function deactivateChore(client: SupabaseClient, choreId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("chores").update({ is_active: false }).eq("id", choreId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.from("chores").update({ is_active: false }).eq("id", choreId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -1886,7 +1885,7 @@ export async function createPersonalReward(
   familyId: string,
   input: PersonalRewardFormInput
 ): Promise<ApiResult<Reward>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("rewards")
     .insert({
       family_id: familyId,
@@ -1898,7 +1897,7 @@ export async function createPersonalReward(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Reward };
 }
 
@@ -1914,7 +1913,7 @@ export async function createSupporterSharedReward(
   familyId: string,
   input: PersonalRewardFormInput
 ): Promise<ApiResult<Reward>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("rewards")
     .insert({
       family_id: familyId,
@@ -1926,7 +1925,7 @@ export async function createSupporterSharedReward(
     })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Reward };
 }
 
@@ -1935,7 +1934,7 @@ export async function updatePersonalReward(
   rewardId: string,
   input: PersonalRewardFormInput
 ): Promise<ApiResult<Reward>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("rewards")
     .update({
       name: input.name,
@@ -1946,14 +1945,14 @@ export async function updatePersonalReward(
     .eq("id", rewardId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as Reward };
 }
 
 /** API仕様.md 7b章「論理削除（非表示化）」 */
 export async function deactivateReward(client: SupabaseClient, rewardId: string): Promise<ApiResult<null>> {
-  const { error } = await client.from("rewards").update({ is_active: false }).eq("id", rewardId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.from("rewards").update({ is_active: false }).eq("id", rewardId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -1977,8 +1976,8 @@ export async function deactivateReward(client: SupabaseClient, rewardId: string)
  */
 export async function deleteReward(client: SupabaseClient, rewardId: string): Promise<ApiResult<null>> {
   // deleteChore と同じ理由で `.select("id")` を付ける（上のコメント参照）。
-  const { data, error } = await client.from("rewards").delete().eq("id", rewardId).select("id");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("rewards").delete().eq("id", rewardId).select("id");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   if (!data || data.length === 0) {
     return {
       ok: false,
@@ -2006,8 +2005,8 @@ export async function deleteReward(client: SupabaseClient, rewardId: string): Pr
  * （ランキング防止のための設計判断、スキーマ設計.sql 13e章参照）。
  */
 export async function fetchMyGratitudeGiveableBalance(client: SupabaseClient): Promise<ApiResult<number>> {
-  const { data, error } = await client.rpc("my_gratitude_giveable_balance");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("my_gratitude_giveable_balance");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as number };
 }
 
@@ -2052,12 +2051,12 @@ export async function fetchGratitudeSentHistory(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<GratitudePointWithCounterpart[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gratitude_points")
     .select("*, family_members!recipient_id(display_name, avatar_color)")
     .eq("sender_id", memberId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as GratitudePointWithCounterpart[] };
 }
 
@@ -2066,12 +2065,12 @@ export async function fetchGratitudeReceivedHistory(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<GratitudePointWithCounterpart[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gratitude_points")
     .select("*, family_members!sender_id(display_name, avatar_color)")
     .eq("recipient_id", memberId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as GratitudePointWithCounterpart[] };
 }
 
@@ -2082,12 +2081,12 @@ export async function fetchGratitudeReceivedHistory(
  * 「贈った履歴」側〔fetchGratitudeSentHistory〕でユーザー自身が確認できるようにするため）。
  */
 export async function fetchGratitudeLog(client: SupabaseClient, familyId: string): Promise<ApiResult<GratitudePoint[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gratitude_points")
     .select("*")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as GratitudePoint[] };
 }
 
@@ -2100,13 +2099,13 @@ export async function revokeGratitudePoints(
   client: SupabaseClient,
   gratitudePointId: string
 ): Promise<ApiResult<GratitudePoint>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gratitude_points")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", gratitudePointId)
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as GratitudePoint };
 }
 
@@ -2125,12 +2124,12 @@ export async function fetchFamilyTreeCurrentSeason(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<FamilyTreeSeason | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_current_season")
     .select("*")
     .eq("family_id", familyId)
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as FamilyTreeSeason | null) ?? null };
 }
 
@@ -2139,12 +2138,12 @@ export async function fetchFamilyTreeSeasonHistory(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<FamilyTreeSeason[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_seasons")
     .select("*")
     .eq("family_id", familyId)
     .order("season_start", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as FamilyTreeSeason[] };
 }
 
@@ -2157,11 +2156,11 @@ export async function fetchFamilyTreeMemberBreakdown(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<FamilyTreeMemberBreakdown[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_member_breakdown")
     .select("*")
     .eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as FamilyTreeMemberBreakdown[];
   // ソートしない要件（07-10章必須条件1）を満たしつつ、表示順だけ登録順に揃える。
   return { ok: true, data: [...rows].sort((a, b) => (a.member_created_at < b.member_created_at ? -1 : 1)) };
@@ -2179,12 +2178,12 @@ export async function fetchFamilyTreeWeeklyCompletionCounts(
   client: SupabaseClient,
   seasonId: string
 ): Promise<ApiResult<FamilyTreeWeeklyCompletionCount[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_weekly_completion_counts")
     .select("family_id, season_id, season_start, week_start, completion_count")
     .eq("season_id", seasonId)
     .order("week_start", { ascending: true });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as FamilyTreeWeeklyCompletionCount[] };
 }
 
@@ -2318,8 +2317,8 @@ export async function fetchFamilyTreeCompletionDots(
     .gte("reported_at", seasonStartIso)
     .order("reported_at");
   if (seasonEndIso) query = query.lt("reported_at", seasonEndIso);
-  const { data, error } = await query;
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await query;
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     reported_at: string;
@@ -2397,7 +2396,7 @@ export async function fetchFamilyTreeStickerPlacements(
   familyId: string,
   seasonId: string
 ): Promise<ApiResult<FamilyTreeStickerPlacement[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_decorations")
     .select(
       "id, pos_x, pos_y, decorated_at, " +
@@ -2408,7 +2407,7 @@ export async function fetchFamilyTreeStickerPlacements(
     .eq("family_id", familyId)
     .eq("season_id", seasonId)
     .eq("decoration_source", "sticker");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     pos_x: number | null;
@@ -2475,12 +2474,12 @@ export async function fetchFamilyTreeStickerPlacements(
  * （将来のコレクター棚〔第5段階〕実装時にそのまま流用できるようにするため）。
  */
 export async function fetchMyDrawings(client: SupabaseClient, memberId: string): Promise<ApiResult<FamilyDrawing[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawings")
     .select("*")
     .eq("artist_member_id", memberId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as FamilyDrawing[] };
 }
 
@@ -2503,12 +2502,12 @@ export async function createDrawing(
   lineData: FamilyDrawingLineData,
   title: string | null
 ): Promise<ApiResult<FamilyDrawing>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawings")
     .insert({ line_data: lineData, title })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyDrawing };
 }
 
@@ -2523,13 +2522,13 @@ export async function fetchFamilyPublishedDrawings(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<{ id: string; artist_member_id: string; published_at: string | null; title: string | null }[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawings")
     .select("id, artist_member_id, published_at, title")
     .eq("family_id", familyId)
     .eq("is_published", true)
     .order("published_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: (data ?? []) as { id: string; artist_member_id: string; published_at: string | null; title: string | null }[],
@@ -2560,8 +2559,8 @@ export interface DeleteDrawingResult {
  * 二重押下等で既に削除済みとみなし、published: falseのまま扱う＝実害なし）。
  */
 export async function deleteDrawing(client: SupabaseClient, drawingId: string): Promise<ApiResult<DeleteDrawingResult>> {
-  const { data, error } = await client.from("family_drawings").delete().eq("id", drawingId).select("id");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("family_drawings").delete().eq("id", drawingId).select("id");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   if (data && data.length > 0) return { ok: true, data: { published: false } };
 
   const { data: row } = await client
@@ -2600,12 +2599,12 @@ export async function editUnpublishedDrawing(
   lineData: FamilyDrawingLineData,
   title: string | null
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("edit_unpublished_drawing", {
+  const { data, error, status } = await client.rpc("edit_unpublished_drawing", {
     p_drawing_id: drawingId,
     p_new_line_data: lineData,
     p_new_title: title,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -2629,12 +2628,12 @@ export async function fetchGachaProgressSummary(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<GachaMemberProgressSummary | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gacha_member_progress_summary")
     .select("*")
     .eq("member_id", memberId)
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as GachaMemberProgressSummary | null) ?? null };
 }
 
@@ -2644,8 +2643,8 @@ export async function fetchGachaProgressSummary(
  * `RETURNS TABLE`のため`data`は配列で返る（常に1行）。
  */
 export async function drawGacha(client: SupabaseClient): Promise<ApiResult<GachaDrawResult>> {
-  const { data, error } = await client.rpc("draw_gacha");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("draw_gacha");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "unknown_error", message: "抽選結果を取得できませんでした" } };
   return { ok: true, data: row as GachaDrawResult };
@@ -2659,12 +2658,12 @@ export async function fetchGachaPresetOrnament(
   client: SupabaseClient,
   ornamentId: string
 ): Promise<ApiResult<GachaPresetOrnament>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gacha_preset_ornaments")
     .select("*")
     .eq("id", ornamentId)
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as GachaPresetOrnament };
 }
 
@@ -2684,12 +2683,12 @@ export async function fetchGachaPrizeDrawing(
   client: SupabaseClient,
   drawingId: string
 ): Promise<ApiResult<GachaPrizeDrawing>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawings")
     .select("*, family_members!artist_member_id(display_name)")
     .eq("id", drawingId)
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as unknown as GachaPrizeDrawing };
 }
 
@@ -2719,7 +2718,7 @@ export async function fetchUndecoratedGachaDraws(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<UndecoratedGachaDraw[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gacha_draws")
     .select("id, prize_kind, preset_ornament_id, prize_drawing_id, drawn_at, family_tree_decorations(id)")
     .eq("member_id", memberId)
@@ -2730,7 +2729,7 @@ export async function fetchUndecoratedGachaDraws(
     // （マイグレーション 20260827063303、UIだけの制限にしない方針）。
     .eq("prize_kind", "family_drawing")
     .order("drawn_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     prize_kind: GachaPrizeKind;
@@ -2772,14 +2771,14 @@ export async function fetchMyDecoratableCompletions(
   memberId: string,
   seasonStartIso: string
 ): Promise<ApiResult<DecoratableCompletion[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_completions")
     .select("id, chore_title, chore_emoji, reported_at, family_tree_decorations(id)")
     .eq("family_id", familyId)
     .eq("reported_by", memberId)
     .gte("reported_at", seasonStartIso)
     .order("reported_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     chore_title: string;
@@ -2807,11 +2806,11 @@ export async function decorateTreeWithGachaPrize(
   drawId: string,
   completionId: string
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("decorate_tree_with_gacha_prize", {
+  const { data, error, status } = await client.rpc("decorate_tree_with_gacha_prize", {
     p_draw_id: drawId,
     p_completion_id: completionId,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -2894,7 +2893,7 @@ export async function fetchFamilyCollectedGachaDraws(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<CollectedGachaDraw[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("gacha_draws")
     .select(
       "id, drawn_at, prize_kind, member_id, " +
@@ -2905,7 +2904,7 @@ export async function fetchFamilyCollectedGachaDraws(
     )
     .eq("family_id", familyId)
     .order("drawn_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     drawn_at: string;
@@ -2974,29 +2973,16 @@ export async function fetchFamilyDrawingLineDataById(
     chunks.map((chunk) => client.from("family_drawings").select("id, line_data").in("id", chunk))
   );
   const byId: Record<string, FamilyDrawingLineData> = {};
-  for (const { data, error } of results) {
-    if (error) return { ok: false, error: fromPostgrestError(error) };
+  for (const { data, error, status } of results) {
+    if (error) return { ok: false, error: fromPostgrestError(error, status) };
     const rows = (data ?? []) as { id: string; line_data: FamilyDrawingLineData }[];
     for (const row of rows) byId[row.id] = row.line_data;
   }
   return { ok: true, data: byId };
 }
 
-/** API仕様.md 10.1章: 直近（今週）のメッセージを取得する。未生成のごく短い時間帯は0件（null）になり得る。 */
-export async function fetchLatestWeeklyFamilyDigest(
-  client: SupabaseClient,
-  familyId: string
-): Promise<ApiResult<WeeklyFamilyDigest | null>> {
-  const { data, error } = await client
-    .from("weekly_family_digests")
-    .select("*")
-    .eq("family_id", familyId)
-    .order("week_start", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
-  return { ok: true, data: (data as WeeklyFamilyDigest | null) ?? null };
-}
+// [2026-09-29削除・実装メモ332章、やること.md 4-14] `fetchLatestWeeklyFamilyDigest`（週次まとめの取得）を
+// 削除した。表示する画面が無くなり、生成バッチも止めた（20260930220000）。表`weekly_family_digests`は残してある。
 
 // ============================================================
 // 13. 家族の書き込みボード（要件定義書07-14章、API仕様.md 13章、
@@ -3019,12 +3005,12 @@ export async function fetchFamilyHomeCard(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<FamilyHomeCard | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_home_card")
     .select("*")
     .eq("family_id", familyId)
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as FamilyHomeCard | null) ?? null };
 }
 
@@ -3057,7 +3043,7 @@ export async function fetchFamilyBoardPostsHistory(
   familyId: string,
   range: { from: number; to: number }
 ): Promise<ApiResult<FamilyBoardPostWithAuthor[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_posts")
     .select(
       "*, family_members!author_member_id(display_name, avatar_color), " +
@@ -3073,7 +3059,7 @@ export async function fetchFamilyBoardPostsHistory(
     .order("created_at", { ascending: false })
     .order("created_at", { ascending: true, referencedTable: "family_board_comments" })
     .range(range.from, range.to);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardPostWithAuthor[] };
 }
 
@@ -3089,12 +3075,12 @@ export async function fetchFamilyBoardReactionsForPost(
   client: SupabaseClient,
   postId: string
 ): Promise<ApiResult<FamilyBoardReactionWithReactor[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_reactions")
     .select("id, stamp_key, reactor_member_id, created_at, family_members!reactor_member_id(display_name, avatar_color)")
     .eq("post_id", postId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithReactor[] };
 }
 
@@ -3106,8 +3092,8 @@ export async function fetchFamilyBoardReactionsForPost(
  * 変えずreturnしない」の対象にそもそもならない設計）。
  */
 export async function fetchMyFamilyBoardPostsRemainingToday(client: SupabaseClient): Promise<ApiResult<number>> {
-  const { data, error } = await client.rpc("my_family_board_posts_remaining_today");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("my_family_board_posts_remaining_today");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as number };
 }
 
@@ -3136,12 +3122,12 @@ export async function createFamilyBoardPost(
   body: string,
   authorMemberId: string
 ): Promise<ApiResult<FamilyBoardPost>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_posts")
     .insert({ body, author_member_id: authorMemberId })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyBoardPost };
 }
 
@@ -3162,8 +3148,8 @@ export async function createFamilyBoardPost(
  * SECURITY DEFINER RPCラッパーを呼ぶだけで、判定ロジック自体は一切持たない。
  */
 export async function deleteFamilyBoardPost(client: SupabaseClient, postId: string): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("delete_family_board_post", { p_post_id: postId });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.rpc("delete_family_board_post", { p_post_id: postId });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -3202,10 +3188,10 @@ export async function toggleFamilyBoardReactionStamp(
   client: SupabaseClient,
   input: { post_id: string; stamp_key: StampKey }
 ): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .rpc("toggle_family_board_reaction_stamp", { p_post_id: input.post_id, p_stamp_key: input.stamp_key })
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
 }
 
@@ -3227,12 +3213,12 @@ export async function fetchFamilyBoardReactionsLog(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<FamilyBoardReactionWithPostBody[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_reactions")
     .select("*, family_board_posts(body, author_member_id)")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardReactionWithPostBody[] };
 }
 
@@ -3255,8 +3241,8 @@ export async function deleteFamilyComment(
   kind: DeletableCommentKind,
   commentId: string
 ): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("delete_family_comment", { p_kind: kind, p_comment_id: commentId });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.rpc("delete_family_comment", { p_kind: kind, p_comment_id: commentId });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -3270,12 +3256,12 @@ export async function fetchFamilyBoardCommentsForPost(
   client: SupabaseClient,
   postId: string
 ): Promise<ApiResult<FamilyBoardCommentWithAuthor[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_comments")
     .select("*, family_members!commenter_member_id(display_name, avatar_color)")
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyBoardCommentWithAuthor[] };
 }
 
@@ -3289,12 +3275,12 @@ export async function createFamilyBoardComment(
   client: SupabaseClient,
   input: { post_id: string; commenter_member_id: string; body: string }
 ): Promise<ApiResult<FamilyBoardComment>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_comments")
     .insert({ post_id: input.post_id, commenter_member_id: input.commenter_member_id, body: input.body })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyBoardComment };
 }
 
@@ -3308,12 +3294,12 @@ export async function fetchFamilyBoardCommentsLog(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<(FamilyBoardComment & { family_board_posts: { body: string; author_member_id: string } | null })[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_board_comments")
     .select("*, family_board_posts(body, author_member_id)")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: (data ?? []) as unknown as (FamilyBoardComment & {
@@ -3331,12 +3317,12 @@ export async function fetchFamilyDrawingCommentsForDrawing(
   client: SupabaseClient,
   drawingId: string
 ): Promise<ApiResult<FamilyDrawingCommentWithAuthor[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawing_comments")
     .select("*, family_members!commenter_member_id(display_name, avatar_color)")
     .eq("drawing_id", drawingId)
     .order("created_at", { ascending: true });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyDrawingCommentWithAuthor[] };
 }
 
@@ -3350,12 +3336,12 @@ export async function createFamilyDrawingComment(
   client: SupabaseClient,
   input: { drawing_id: string; commenter_member_id: string; body: string }
 ): Promise<ApiResult<FamilyDrawingComment>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawing_comments")
     .insert({ drawing_id: input.drawing_id, commenter_member_id: input.commenter_member_id, body: input.body })
     .select("*")
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as FamilyDrawingComment };
 }
 
@@ -3368,12 +3354,12 @@ export async function fetchFamilyDrawingCommentsLog(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<(FamilyDrawingComment & { family_drawings: { artist_member_id: string; title: string | null } | null })[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawing_comments")
     .select("*, family_drawings(artist_member_id, title)")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: (data ?? []) as unknown as (FamilyDrawingComment & {
@@ -3392,10 +3378,10 @@ export async function toggleFamilyDrawingReactionStamp(
   client: SupabaseClient,
   input: { drawing_id: string; stamp_key: StampKey }
 ): Promise<ApiResult<{ removed: boolean; reaction_id: string | null }>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .rpc("toggle_family_drawing_reaction_stamp", { p_drawing_id: input.drawing_id, p_stamp_key: input.stamp_key })
     .single();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as { removed: boolean; reaction_id: string | null } };
 }
 
@@ -3408,12 +3394,12 @@ export async function fetchFamilyDrawingReactionsForDrawing(
   client: SupabaseClient,
   drawingId: string
 ): Promise<ApiResult<FamilyDrawingReactionWithReactor[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawing_reactions")
     .select("id, stamp_key, reactor_member_id, created_at, family_members!reactor_member_id(display_name, avatar_color)")
     .eq("drawing_id", drawingId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as FamilyDrawingReactionWithReactor[] };
 }
 
@@ -3426,12 +3412,12 @@ export async function fetchFamilyDrawingReactionsLog(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<(FamilyDrawingReaction & { family_drawings: { artist_member_id: string; title: string | null } | null })[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_drawing_reactions")
     .select("*, family_drawings(artist_member_id, title)")
     .eq("family_id", familyId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return {
     ok: true,
     data: (data ?? []) as unknown as (FamilyDrawingReaction & {
@@ -3461,13 +3447,13 @@ export async function fetchFamilyDrawingReactionsLog(
  * なる。`StickerShopPanel.tsx`・`useStickers.ts`は無改修（設計部53.9章のとおり）。
  */
 export async function fetchStickerCatalog(client: SupabaseClient): Promise<ApiResult<StickerCatalogItem[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("sticker_catalog_effective_prices")
     .select("*")
     .eq("is_active", true)
     .order("shape")
     .order("points_cost");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as StickerCatalogItem[] };
 }
 
@@ -3491,8 +3477,8 @@ export interface PurchaseStickerResult {
  * `foreign_key_violation`。
  */
 export async function purchaseSticker(client: SupabaseClient, catalogId: string): Promise<ApiResult<PurchaseStickerResult>> {
-  const { data, error } = await client.rpc("purchase_sticker", { p_catalog_id: catalogId });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("purchase_sticker", { p_catalog_id: catalogId });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "unknown_error", message: "購入結果を取得できませんでした" } };
   return { ok: true, data: row as PurchaseStickerResult };
@@ -3552,12 +3538,12 @@ export async function fetchMyStickerPurchases(
   memberId: string,
   currentSeasonId: string | null
 ): Promise<ApiResult<StickerPurchaseWithCatalog[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("ornament_sticker_purchases")
     .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("member_id", memberId)
     .order("purchased_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as StickerPurchaseRow[];
   return { ok: true, data: rows.map((r) => mapStickerPurchaseRow(r, currentSeasonId)) };
 }
@@ -3576,12 +3562,12 @@ export async function fetchFamilyStickerPurchases(
   familyId: string,
   currentSeasonId: string | null
 ): Promise<ApiResult<StickerPurchaseWithCatalog[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("ornament_sticker_purchases")
     .select("*, sticker_catalog(shape, rarity, sticker_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("family_id", familyId)
     .order("purchased_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as StickerPurchaseRow[];
   return { ok: true, data: rows.map((r) => mapStickerPurchaseRow(r, currentSeasonId)) };
 }
@@ -3602,12 +3588,12 @@ export async function decorateTreeWithSticker(
   posX: number,
   posY: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("decorate_tree_with_sticker", {
+  const { data, error, status } = await client.rpc("decorate_tree_with_sticker", {
     p_purchase_id: purchaseId,
     p_pos_x: posX,
     p_pos_y: posY,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -3626,12 +3612,12 @@ export async function moveTreeSticker(
   posX: number,
   posY: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("move_tree_sticker", {
+  const { data, error, status } = await client.rpc("move_tree_sticker", {
     p_decoration_id: decorationId,
     p_pos_x: posX,
     p_pos_y: posY,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -3640,12 +3626,12 @@ export async function moveTreeSticker(
  * バッジ一覧。`member_badges_select_same_family`により家族の誰でも閲覧可能。
  */
 export async function fetchMemberBadges(client: SupabaseClient, memberId: string): Promise<ApiResult<MemberBadge[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("member_badges")
     .select("*")
     .eq("member_id", memberId)
     .order("achieved_at");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberBadge[] };
 }
 
@@ -3654,8 +3640,8 @@ export async function fetchMemberBadgeProgress(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<MemberBadgeProgress[]>> {
-  const { data, error } = await client.from("member_badge_progress").select("*").eq("member_id", memberId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("member_badge_progress").select("*").eq("member_id", memberId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberBadgeProgress[] };
 }
 
@@ -3665,8 +3651,8 @@ export async function fetchMemberBadgeProgress(
  * スキーマ設計.sql 47.6章）を正とする。昇順の整数配列を返す。
  */
 export async function fetchBadgeTierThresholds(client: SupabaseClient, badgeKey: string): Promise<ApiResult<number[]>> {
-  const { data, error } = await client.rpc("badge_tier_thresholds", { p_badge_key: badgeKey });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("badge_tier_thresholds", { p_badge_key: badgeKey });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as number[] };
 }
 
@@ -3682,8 +3668,8 @@ export async function fetchBadgeTierThresholds(client: SupabaseClient, badgeKey:
  * （設計部52.6章・52.7章の判断。集計はクライアント側で行う既存方針を踏襲）。
  */
 export async function fetchStickerTierResets(client: SupabaseClient, familyId: string): Promise<ApiResult<StickerTierReset[]>> {
-  const { data, error } = await client.from("sticker_tier_resets").select("*").eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.from("sticker_tier_resets").select("*").eq("family_id", familyId);
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as StickerTierReset[] };
 }
 
@@ -3703,8 +3689,8 @@ export interface ResetStickerTierResult {
  * （設計部決定52-5、配列引数の一括RPCは不採用）。
  */
 export async function resetStickerTier(client: SupabaseClient, shape: string): Promise<ApiResult<ResetStickerTierResult>> {
-  const { data, error } = await client.rpc("reset_sticker_tier", { p_shape: shape });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("reset_sticker_tier", { p_shape: shape });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "unknown_error", message: "リセット結果を取得できませんでした" } };
   return { ok: true, data: row as ResetStickerTierResult };
@@ -3732,12 +3718,12 @@ export interface FamilyStickerPriceRow {
  * 取得すれば家族の現在の有効価格が過不足なく揃う。
  */
 export async function fetchFamilyStickerPrices(client: SupabaseClient): Promise<ApiResult<FamilyStickerPriceRow[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("sticker_catalog_effective_prices")
     .select("shape, rarity, points_cost")
     .eq("shape", "beetle")
     .eq("is_active", true);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as FamilyStickerPriceRow[] };
 }
 
@@ -3759,13 +3745,13 @@ export async function setFamilyStickerPrices(
   client: SupabaseClient,
   prices: { bronze: number; silver: number; gold: number; crystal: number }
 ): Promise<ApiResult<SetFamilyStickerPricesResultRow[]>> {
-  const { data, error } = await client.rpc("set_family_sticker_prices", {
+  const { data, error, status } = await client.rpc("set_family_sticker_prices", {
     p_bronze: prices.bronze,
     p_silver: prices.silver,
     p_gold: prices.gold,
     p_crystal: prices.crystal,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as SetFamilyStickerPricesResultRow[] };
 }
 
@@ -3784,13 +3770,13 @@ export async function setFamilyStickerPrices(
  * プレビューをまとめて表示する（絵柄選び直し画面で使う）。
  */
 export async function fetchHabitFigureCatalog(client: SupabaseClient): Promise<ApiResult<HabitFigureCatalogItem[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_figure_catalog")
     .select("*")
     .eq("is_active", true)
     .order("sort_order")
     .order("tier");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as HabitFigureCatalogItem[] };
 }
 
@@ -3802,25 +3788,25 @@ export async function fetchHabitFigureCatalog(client: SupabaseClient): Promise<A
  * （nullが返るのは異常系のみ）。
  */
 export async function fetchActiveHabitCard(client: SupabaseClient, memberId: string): Promise<ApiResult<HabitCard | null>> {
-  const { data, error } = await client
+  const { data, error, status: httpStatus } = await client
     .from("habit_cards")
     .select("*")
     .eq("member_id", memberId)
     .eq("status", "active")
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, httpStatus) };
   return { ok: true, data: (data as HabitCard | null) ?? null };
 }
 
 /** API仕様.md 17.4節「完成した冊の一覧」（コレクション、決定31）。 */
 export async function fetchCompletedHabitCards(client: SupabaseClient, memberId: string): Promise<ApiResult<HabitCard[]>> {
-  const { data, error } = await client
+  const { data, error, status: httpStatus } = await client
     .from("habit_cards")
     .select("*")
     .eq("member_id", memberId)
     .eq("status", "completed")
     .order("completed_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, httpStatus) };
   return { ok: true, data: (data ?? []) as HabitCard[] };
 }
 
@@ -3836,11 +3822,11 @@ export async function fetchHabitCardChoreBreakdown(
   habitCardIds: string[]
 ): Promise<ApiResult<HabitCardChoreBreakdownRow[]>> {
   if (habitCardIds.length === 0) return { ok: true, data: [] };
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_card_chore_breakdown")
     .select("*")
     .in("habit_card_id", habitCardIds);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as HabitCardChoreBreakdownRow[] };
 }
 
@@ -3856,11 +3842,11 @@ export async function fetchChoreCompletionTotals(
   client: SupabaseClient,
   familyId: string
 ): Promise<ApiResult<ChoreCompletionTotalEntry[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_completion_totals")
     .select("chore_id, member_id, total_count")
     .eq("family_id", familyId);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as ChoreCompletionTotalEntry[] };
 }
 
@@ -3874,11 +3860,11 @@ export async function chooseHabitCardKind(
   habitCardId: string,
   kindKey: string
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("choose_habit_card_kind", {
+  const { data, error, status } = await client.rpc("choose_habit_card_kind", {
     p_habit_card_id: habitCardId,
     p_kind_key: kindKey,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -3893,12 +3879,12 @@ export async function fetchHabitFigureGrantsForCards(
   habitCardIds: string[]
 ): Promise<ApiResult<HabitFigureGrantWithCatalog[]>> {
   if (habitCardIds.length === 0) return { ok: true, data: [] };
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_figure_grants")
     .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name)")
     .in("habit_card_id", habitCardIds)
     .order("granted_at");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as unknown as HabitFigureGrantWithCatalog[] };
 }
 
@@ -3913,13 +3899,13 @@ export async function fetchLatestHabitFigureGrant(
   client: SupabaseClient,
   memberId: string
 ): Promise<ApiResult<HabitFigureGrantWithCatalog | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_figure_grants")
     .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name)")
     .eq("member_id", memberId)
     .order("granted_at", { ascending: false })
     .limit(1);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as HabitFigureGrantWithCatalog[];
   return { ok: true, data: rows[0] ?? null };
 }
@@ -3936,12 +3922,12 @@ export async function decorateTreeWithHabitFigure(
   posX: number,
   posY: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("decorate_tree_with_habit_figure", {
+  const { data, error, status } = await client.rpc("decorate_tree_with_habit_figure", {
     p_grant_id: grantId,
     p_pos_x: posX,
     p_pos_y: posY,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -3955,12 +3941,12 @@ export async function moveTreeHabitFigure(
   posX: number,
   posY: number
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("move_tree_habit_figure", {
+  const { data, error, status } = await client.rpc("move_tree_habit_figure", {
     p_decoration_id: decorationId,
     p_pos_x: posX,
     p_pos_y: posY,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }
 
@@ -3991,7 +3977,7 @@ export async function fetchFamilyTreeHabitFigurePlacements(
   familyId: string,
   seasonId: string
 ): Promise<ApiResult<FamilyTreeHabitFigurePlacement[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("family_tree_decorations")
     .select(
       "id, pos_x, pos_y, decorated_at, " +
@@ -4002,7 +3988,7 @@ export async function fetchFamilyTreeHabitFigurePlacements(
     .eq("family_id", familyId)
     .eq("season_id", seasonId)
     .eq("decoration_source", "habit_figure");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as {
     id: string;
     pos_x: number | null;
@@ -4093,12 +4079,12 @@ export async function fetchMyHabitFigureGrants(
   memberId: string,
   currentSeasonId: string | null
 ): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_figure_grants")
     .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("member_id", memberId)
     .order("granted_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as HabitFigureGrantRow[];
   return { ok: true, data: rows.map((r) => mapHabitFigureGrantRow(r, currentSeasonId)) };
 }
@@ -4109,12 +4095,12 @@ export async function fetchFamilyHabitFigureGrants(
   familyId: string,
   currentSeasonId: string | null
 ): Promise<ApiResult<HabitFigureGrantWithPlacement[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("habit_figure_grants")
     .select("*, habit_figure_catalog(kind_display_name, kind_display_name_child, kind_emoji, figure_key, display_name), family_tree_decorations(id, season_id, pos_x, pos_y)")
     .eq("family_id", familyId)
     .order("granted_at", { ascending: false });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   const rows = (data ?? []) as unknown as HabitFigureGrantRow[];
   return { ok: true, data: rows.map((r) => mapHabitFigureGrantRow(r, currentSeasonId)) };
 }
@@ -4134,8 +4120,8 @@ export async function fetchFamilyHabitFigureGrants(
  * 同意済みかどうか。`has_agreed_to_current_terms()`（SECURITY DEFINER）。
  */
 export async function hasAgreedToCurrentTerms(client: SupabaseClient): Promise<ApiResult<boolean>> {
-  const { data, error } = await client.rpc("has_agreed_to_current_terms");
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { data, error, status } = await client.rpc("has_agreed_to_current_terms");
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: Boolean(data) };
 }
 
@@ -4146,8 +4132,8 @@ export async function hasAgreedToCurrentTerms(client: SupabaseClient): Promise<A
  * （「アプリが古い可能性があります…」）で拒否される。
  */
 export async function recordTermsConsent(client: SupabaseClient, consentVersion: number): Promise<ApiResult<null>> {
-  const { error } = await client.rpc("record_terms_consent", { p_consent_version: consentVersion });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  const { error, status } = await client.rpc("record_terms_consent", { p_consent_version: consentVersion });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: null };
 }
 
@@ -4183,13 +4169,13 @@ export async function fetchChoreWeeklyCompletionCounts(
   memberId: string,
   weekStart: string
 ): Promise<ApiResult<ChoreWeeklyCompletionCount[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("chore_weekly_completion_counts")
     .select("family_id, chore_id, member_id, week_start, completion_count")
     .eq("family_id", familyId)
     .eq("member_id", memberId)
     .eq("week_start", weekStart);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as ChoreWeeklyCompletionCount[] };
 }
 
@@ -4219,7 +4205,7 @@ export async function fetchMemberCompletedHabitCardsInRange(
   fromIsoInclusive: string,
   toIsoExclusive: string
 ): Promise<ApiResult<HabitCard[]>> {
-  const { data, error } = await client
+  const { data, error, status: httpStatus } = await client
     .from("habit_cards")
     .select("*")
     .eq("family_id", familyId)
@@ -4227,7 +4213,7 @@ export async function fetchMemberCompletedHabitCardsInRange(
     .eq("status", "completed")
     .gte("completed_at", fromIsoInclusive)
     .lt("completed_at", toIsoExclusive);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, httpStatus) };
   return { ok: true, data: (data ?? []) as HabitCard[] };
 }
 
@@ -4241,13 +4227,13 @@ export async function fetchMemberCompletedHabitCardsInRange(
  * `retired_at IS NULL`の行は1人につき高々1件（71.1章の部分UNIQUEインデックス）。
  */
 export async function fetchActiveMemberGoal(client: SupabaseClient, memberId: string): Promise<ApiResult<MemberGoal | null>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("member_goals")
     .select("*")
     .eq("member_id", memberId)
     .is("retired_at", null)
     .maybeSingle();
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data as MemberGoal | null) ?? null };
 }
 
@@ -4257,12 +4243,12 @@ export async function fetchActiveMemberGoal(client: SupabaseClient, memberId: st
  * （子どもの人数ぶん個別に問い合わせない＝N+1にしない）。
  */
 export async function fetchActiveMemberGoalsForFamily(client: SupabaseClient, familyId: string): Promise<ApiResult<MemberGoal[]>> {
-  const { data, error } = await client
+  const { data, error, status } = await client
     .from("member_goals")
     .select("*")
     .eq("family_id", familyId)
     .is("retired_at", null);
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as MemberGoal[] };
 }
 
@@ -4277,11 +4263,11 @@ export async function setMemberGoal(
   goalText: string,
   linkedChoreId: string | null
 ): Promise<ApiResult<string>> {
-  const { data, error } = await client.rpc("set_member_goal", {
+  const { data, error, status } = await client.rpc("set_member_goal", {
     p_member_id: memberId,
     p_goal_text: goalText,
     p_linked_chore_id: linkedChoreId,
   });
-  if (error) return { ok: false, error: fromPostgrestError(error) };
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: data as string };
 }

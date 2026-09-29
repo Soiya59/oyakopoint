@@ -16,6 +16,8 @@ import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from 
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
@@ -224,7 +226,9 @@ export default function ApprovalsScreen() {
   // 気づけない設計だったことが問題）。また送信成功後もモーダルが閉じず
   // 「そのUIが消えない」との指摘もあったため、送信失敗時のエラー表示と、
   // コメント送信成功時にモーダルを閉じる処理を追加した。
-  const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] スタンプ・コメントの失敗は、電波・混み合い等の原因に応じた文言＋目印で出す（それ以外は従来の一文）。
+  const { errorMessage: reactionError, errorRef: reactionErrorRef, setErrorMessage: setReactionError, showFailure: showReactionFailure } =
+    useFailureNotice("parent");
 
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 28.4節。
@@ -298,9 +302,9 @@ export default function ApprovalsScreen() {
     async (completionId: string, stampKey: StampKey) => {
       setReactionError(null);
       const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myParentId, stampKey });
-      if (!result.ok) setReactionError(STAMP_SEND_ERROR_MESSAGE);
+      if (!result.ok) showReactionFailure(result.error, { fallback: STAMP_SEND_ERROR_MESSAGE, useDbMessage: false });
     },
-    [dispatch, myParentId]
+    [dispatch, myParentId, setReactionError, showReactionFailure]
   );
 
   const openDetail = useCallback((c: ChoreCompletion) => {
@@ -363,7 +367,7 @@ export default function ApprovalsScreen() {
     });
     setSendingComment(false);
     if (!result.ok) {
-      setReactionError(COMMENT_SEND_ERROR_MESSAGE);
+      showReactionFailure(result.error, { fallback: COMMENT_SEND_ERROR_MESSAGE, useDbMessage: false });
       return;
     }
     setCommentDraft("");
@@ -613,6 +617,7 @@ export default function ApprovalsScreen() {
                         {reactionError}
                       </Text>
                     )}
+                    <FailureRefText value={reactionErrorRef} tone="parent" />
 
                     <AppButton
                       label="もどる"

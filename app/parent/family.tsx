@@ -22,6 +22,8 @@ import type { FamilyInvite } from "@/types/domain";
 import { resolveAvatarColorOptions } from "@/lib/avatarColorAvailability";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import {
   HELP_CHILD_URL,
   HELP_PARENT_URL,
@@ -74,7 +76,8 @@ export default function FamilyScreen() {
   const { state, refresh, memberAvatars } = useAppData();
   const { client, parentMember, logoutParent } = useSession();
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const [invites, setInvites] = useState<FamilyInvite[]>([]);
   const [invitesLoaded, setInvitesLoaded] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -91,7 +94,9 @@ export default function FamilyScreen() {
   const [usedColorMessage, setUsedColorMessage] = useState<string | null>(null);
   const [confirmingColorChange, setConfirmingColorChange] = useState(false);
   const [savingColor, setSavingColor] = useState(false);
-  const [colorError, setColorError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: colorError, errorRef: colorErrorRef, setErrorMessage: setColorError, showFailure: showColorFailure } =
+    useFailureNotice("parent");
   // 保存成功後、カードを閉じたあとも数秒だけ「色を変更しました」を表示する
   // （25.1節「保存成功」状態。全画面演出はしない控えめなインライン表示）。
   const [colorSuccessId, setColorSuccessId] = useState<string | null>(null);
@@ -142,7 +147,7 @@ export default function FamilyScreen() {
     setProcessingId(null);
     setConfirmingRemoveId(null);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error, { source: "edge" });
       return;
     }
     void refresh();
@@ -199,7 +204,7 @@ export default function FamilyScreen() {
     const res = await updateMemberDisplayName(client, memberId, name);
     setSavingName(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     cancelEditName();
@@ -255,11 +260,11 @@ export default function FamilyScreen() {
     if (!res.ok) {
       // 25.1節「保存失敗」: パレットは開いたまま再試行できるよう、確認だけ閉じて戻す。
       setConfirmingColorChange(false);
-      setColorError(
-        res.error.code === PG_ERRCODE.uniqueViolation
-          ? "この色は、ちょうど他の方が選んだため使えなくなりました。もう一度お試しください"
-          : "変更できませんでした。もう一度お試しください"
-      );
+      if (res.error.code === PG_ERRCODE.uniqueViolation) {
+        setColorError("この色は、ちょうど他の方が選んだため使えなくなりました。もう一度お試しください");
+      } else {
+        showColorFailure(res.error, { fallback: "変更できませんでした。もう一度お試しください", useDbMessage: false });
+      }
       return;
     }
     cancelEditColor();
@@ -292,6 +297,7 @@ export default function FamilyScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <View style={{ marginTop: theme.spacing.s4, gap: theme.spacing.s2 }}>
         {activeMembers.map((m) => {
@@ -371,6 +377,7 @@ export default function FamilyScreen() {
                   {colorError && (
                     <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{colorError}</Text>
                   )}
+                  <FailureRefText value={colorErrorRef} tone="parent" />
                   {confirmingColorChange ? (
                     <>
                       <Text style={[theme.typography.parentBody, { marginTop: theme.spacing.s3 }]}>

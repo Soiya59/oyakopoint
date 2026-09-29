@@ -6,6 +6,7 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { reportChoreCompletionByNfcTag, PG_ERRCODE } from "@/data/api";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import { usePendingNfcLink } from "@/lib/pendingNfcLink";
 
 /**
@@ -153,7 +154,12 @@ export default function NfcScanScreen() {
         // いずれも取得できない（自分・代理を区別しない汎用文言、7.6.4節）。
         router.replace({ pathname: "/child/nfc-complete", params: { result: "limitReached" } });
       } else {
-        router.replace({ pathname: "/child/nfc-complete", params: { result: "networkError", tagValue } });
+        // [2026-09-29追加・実装メモ331章] 失敗の種類と目印を結果画面へ渡す。
+        const detail = failureDetail(res.error);
+        router.replace({
+          pathname: "/child/nfc-complete",
+          params: { result: "networkError", tagValue, failureKind: detail.kind, failureRef: detail.ref },
+        });
       }
       return;
     }

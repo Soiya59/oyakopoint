@@ -16,6 +16,8 @@ import { formatDateTimeFullJp, formatDateTimeShort, isWithinCancelWindow } from 
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
 import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
@@ -182,7 +184,9 @@ export default function SupporterActivityScreen() {
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
-  const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] スタンプ・コメントの失敗は、電波・混み合い等の原因に応じた文言＋目印で出す（それ以外は従来の一文）。
+  const { errorMessage: reactionError, errorRef: reactionErrorRef, setErrorMessage: setReactionError, showFailure: showReactionFailure } =
+    useFailureNotice("supporter");
   const ngGuard = useNgWordGuard();
 
   // [2026-09-03追加] 要件定義書07-17章「完了報告の直後の取消」・UIUXデザイン部/成果物/
@@ -247,9 +251,9 @@ export default function SupporterActivityScreen() {
     async (completionId: string, stampKey: StampKey) => {
       setReactionError(null);
       const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
-      if (!result.ok) setReactionError(STAMP_SEND_ERROR_MESSAGE);
+      if (!result.ok) showReactionFailure(result.error, { fallback: STAMP_SEND_ERROR_MESSAGE, useDbMessage: false });
     },
-    [dispatch, myId]
+    [dispatch, myId, setReactionError, showReactionFailure]
   );
 
   const openDetail = useCallback((c: ChoreCompletion) => {
@@ -300,7 +304,7 @@ export default function SupporterActivityScreen() {
     });
     setSendingComment(false);
     if (!result.ok) {
-      setReactionError(COMMENT_SEND_ERROR_MESSAGE);
+      showReactionFailure(result.error, { fallback: COMMENT_SEND_ERROR_MESSAGE, useDbMessage: false });
       return;
     }
     setCommentDraft("");
@@ -482,6 +486,7 @@ export default function SupporterActivityScreen() {
                         {reactionError}
                       </Text>
                     )}
+                    <FailureRefText value={reactionErrorRef} tone="supporter" />
 
                     <AppButton
                       tone="supporter"

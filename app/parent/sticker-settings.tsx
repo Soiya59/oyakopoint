@@ -9,6 +9,9 @@ import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { fetchFamilyStickerPrices, resetStickerTier, setFamilyStickerPrices } from "@/data/api";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 import { rarityLabel, shapeLabel } from "@/components/StickerShopPanel";
 import { computeHighestEverPurchasedRarity, useFamilyStickerPurchasesForLock } from "@/hooks/useStickers";
 import type { StickerShape } from "@/theme/theme";
@@ -76,7 +79,9 @@ export default function ParentStickerSettingsScreen() {
   const [silverText, setSilverText] = useState("");
   const [goldText, setGoldText] = useState("");
   const [crystalText, setCrystalText] = useState("");
-  const [priceError, setPriceError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: priceError, errorRef: priceErrorRef, setErrorMessage: setPriceError, showFailure: showPriceFailure } =
+    useFailureNotice("parent");
   const [priceSaving, setPriceSaving] = useState(false);
   const [priceSaved, setPriceSaved] = useState(false);
 
@@ -160,7 +165,7 @@ export default function ParentStickerSettingsScreen() {
     const res = await setFamilyStickerPrices(client, values);
     setPriceSaving(false);
     if (!res.ok) {
-      setPriceError(res.error.message);
+      showPriceFailure(res.error);
       return;
     }
     setPriceSaved(true);
@@ -189,6 +194,7 @@ export default function ParentStickerSettingsScreen() {
   const [confirmingTierReset, setConfirmingTierReset] = useState(false);
   const [tierResetting, setTierResetting] = useState(false);
   const [tierResetError, setTierResetError] = useState<string | null>(null);
+  const [tierResetErrorRef, setTierResetErrorRef] = useState<string | null>(null);
   const [tierResetSuccessMessage, setTierResetSuccessMessage] = useState<string | null>(null);
 
   const selectTierShape = (shape: TierShapeSelection) => {
@@ -236,16 +242,19 @@ export default function ParentStickerSettingsScreen() {
     if (!selectedTierShape) return;
     setTierResetting(true);
     setTierResetError(null);
+    setTierResetErrorRef(null);
     const shapesToReset: StickerShape[] = selectedTierShape === "all" ? [...theme.stickerShapes] : [selectedTierShape];
     for (const shape of shapesToReset) {
       const res = await resetStickerTier(client, shape);
       if (!res.ok) {
         setTierResetting(false);
+        const failure = describeApiFailure("parent", res.error);
         setTierResetError(
           shapesToReset.length > 1
-            ? `「${shapeLabel[shape].parent}」のリセットに失敗しました：${res.error.message}`
-            : res.error.message
+            ? `「${shapeLabel[shape].parent}」のリセットに失敗しました：${failure.message}`
+            : failure.message
         );
+        setTierResetErrorRef(failure.ref);
         return;
       }
     }
@@ -331,6 +340,7 @@ export default function ParentStickerSettingsScreen() {
           </View>
 
           {priceError && <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{priceError}</Text>}
+          <FailureRefText value={priceErrorRef} tone="parent" />
           {priceSaved && !priceError && (
             <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }}>変更しました</Text>
           )}
@@ -406,6 +416,7 @@ export default function ParentStickerSettingsScreen() {
           <Text style={theme.typography.parentBody}>・もう一度、銅から集め直すことになります</Text>
           <Text style={theme.typography.parentBody}>・あとから元に戻すことはできません</Text>
           {tierResetError && <Text style={{ color: theme.colors.statusBlocking }}>{tierResetError}</Text>}
+          {tierResetError && <FailureRefText value={tierResetErrorRef} tone="parent" />}
           <AppButton
             label={tierResetting ? "リセットしています…" : "リセットする"}
             variant="secondary"

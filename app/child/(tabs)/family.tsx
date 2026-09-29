@@ -11,6 +11,7 @@ import ChildTabHeader from "@/components/ChildTabHeader";
 import TabIntroBubble from "@/components/TabIntroBubble";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
@@ -56,7 +57,9 @@ export default function ChildFamilyTabScreen() {
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
-  const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 文言は子ども向けのまま（おくれなかったよ…）、小さな目印を添える（useFailureNotice）。
+  const { errorMessage: reactionError, errorRef: reactionErrorRef, setErrorMessage: setReactionError, showFailure: showReactionFailure } =
+    useFailureNotice("child");
 
   const myId = state.activeChildMemberId;
   const memberOf = useCallback((id: string) => state.members.find((m) => m.id === id), [state.members]);
@@ -103,16 +106,16 @@ export default function ChildFamilyTabScreen() {
     async (completionId: string, stampKey: StampKey) => {
       setReactionError(null);
       const result = await dispatch({ type: "TOGGLE_REACTION_STAMP", completionId, reactedBy: myId, stampKey });
-      if (!result.ok) setReactionError("おくれなかったよ。もういちどためしてね");
+      if (!result.ok) showReactionFailure(result.error, { fallback: "おくれなかったよ。もういちどためしてね", useDbMessage: false });
     },
-    [dispatch, myId]
+    [dispatch, myId, setReactionError, showReactionFailure]
   );
 
   const openDetail = useCallback((c: ChoreCompletion) => {
     setCommentDraft("");
     setReactionError(null);
     setDetailTarget(c);
-  }, []);
+  }, [setReactionError]);
 
   const sendComment = async () => {
     if (!detailTarget) return;
@@ -123,7 +126,7 @@ export default function ChildFamilyTabScreen() {
     const result = await dispatch({ type: "ADD_REACTION", completionId: detailTarget.id, reactedBy: myId, kind: "comment", commentBody: body });
     setSendingComment(false);
     if (!result.ok) {
-      setReactionError("おくれなかったよ。もういちどためしてね");
+      showReactionFailure(result.error, { fallback: "おくれなかったよ。もういちどためしてね", useDbMessage: false });
       return;
     }
     setCommentDraft("");
@@ -231,6 +234,7 @@ export default function ChildFamilyTabScreen() {
         onChangeCommentDraft={setCommentDraft}
         sendingComment={sendingComment}
         reactionError={reactionError}
+        reactionErrorRef={reactionErrorRef}
         commentsEnabled={state.family.social_interactions_enabled}
         onSendStamp={sendStamp}
         onSendComment={sendComment}

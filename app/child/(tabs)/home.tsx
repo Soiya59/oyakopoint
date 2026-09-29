@@ -14,6 +14,8 @@ import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import { getCurrentJstWeekStart, isWithinCancelWindow } from "@/lib/calendarDates";
 import { cancelCompletionErrorText, CANCEL_SUCCESS_TEXT } from "@/lib/cancelChoreCompletion";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import { formatChoreRowRewardLabel } from "@/lib/habitCardDisplay";
 import { keyChoreCompletionTotal, useChoreCompletionTotals } from "@/hooks/useChoreCompletionTotals";
 import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
@@ -137,7 +139,7 @@ export default function ChildHomeScreen() {
     .sort((a, b) => new Date(b.reported_at).getTime() - new Date(a.reported_at).getTime());
 
   const [cancelingCompletionId, setCancelingCompletionId] = useState<string | null>(null);
-  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string } | null>(null);
+  const [cancelRowError, setCancelRowError] = useState<{ id: string; message: string; ref: string } | null>(null);
   const [cancelFlashMessage, setCancelFlashMessage] = useState<string | null>(null);
 
   // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」週の初めの自動
@@ -198,7 +200,12 @@ export default function ChildHomeScreen() {
     const result = await dispatch({ type: "CANCEL_COMPLETION", completionId });
     setCancelingCompletionId(null);
     if (!result.ok) {
-      setCancelRowError({ id: completionId, message: cancelCompletionErrorText("child", result.error) });
+      setCancelRowError({
+        id: completionId,
+        message: cancelCompletionErrorText("child", result.error),
+        // [2026-09-29追加・実装メモ331章] 文言は子ども向けのまま、小さな目印を添える。
+        ref: failureDetail(result.error).ref,
+      });
       return;
     }
     // [実装メモ.md 120章] 取り消し後は木・ガチャの表示が変わるため、RPCが返さない
@@ -306,6 +313,7 @@ export default function ChildHomeScreen() {
               {cancelRowError?.id === c.id && (
                 <Text style={[theme.typography.childBody, styles.recentRowError]}>{cancelRowError.message}</Text>
               )}
+              {cancelRowError?.id === c.id && <FailureRefText value={cancelRowError.ref} tone="child" />}
             </View>
           ))}
           {cancelFlashMessage && <Text style={styles.recentFlash}>{cancelFlashMessage}</Text>}

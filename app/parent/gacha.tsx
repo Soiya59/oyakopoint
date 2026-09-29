@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import GachaDrawPanel from "@/components/GachaDrawPanel";
+import { describeApiFailure, type FailureDisplay } from "@/lib/apiFailureDisplay";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useGachaDrawAction, useGachaProgress } from "@/hooks/useGacha";
@@ -23,13 +24,14 @@ export default function ParentGachaScreen() {
   const { drawing, draw } = useGachaDrawAction();
   // [2026-08-26追加・第4段階] 21.2節「未配置の景品あり」案内カード用。
   const { draw: undecoratedDraw, reload: reloadUndecorated } = useUndecoratedGachaDraw(myId);
-  const [drawErrorMessage, setDrawErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 生のエラー文言でなく、原因に応じた文言＋目印で出す。
+  const [drawFailure, setDrawFailure] = useState<FailureDisplay | null>(null);
 
   const handleDraw = async () => {
-    setDrawErrorMessage(null);
+    setDrawFailure(null);
     const res = await draw();
     if (!res.ok) {
-      setDrawErrorMessage(res.error.message);
+      setDrawFailure(describeApiFailure("parent", res.error, { fallback: "読み込みに失敗しました", useDbMessage: false }));
       return;
     }
     void reloadUndecorated();
@@ -76,7 +78,8 @@ export default function ParentGachaScreen() {
         remaining={remaining}
         canDrawNow={canDrawNow}
         drawing={drawing}
-        drawErrorMessage={drawErrorMessage}
+        drawErrorMessage={drawFailure?.message ?? null}
+        drawErrorRef={drawFailure?.ref ?? null}
         onDraw={handleDraw}
         onRetryLoad={reload}
         undecoratedDrawId={undecoratedDraw?.draw_id ?? null}

@@ -3,6 +3,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
 import ChildBackLink from "@/components/ChildBackLink";
+import FailureRefText from "@/components/FailureRefText";
+import { failureDetail } from "@/lib/apiFailureDisplay";
 import theme from "@/theme/theme";
 import { childLogin } from "@/data/api";
 import { useSession } from "@/lib/session";
@@ -25,6 +27,8 @@ export default function PinInputScreen() {
   const [pin, setPin] = useState("");
   const [checking, setChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29追加・実装メモ331章] 通信などの失敗（あんしょうばんごうの間違い以外）のときの小さな目印。
+  const [errorRef, setErrorRef] = useState<string | null>(null);
 
   const onDigit = (d: string) => {
     if (checking || pin.length >= 4) return;
@@ -39,6 +43,7 @@ export default function PinInputScreen() {
     if (!inviteCode || !memberId) return;
     setChecking(true);
     setErrorMessage(null);
+    setErrorRef(null);
     const res = await childLogin(inviteCode, memberId, value);
     setChecking(false);
 
@@ -70,6 +75,7 @@ export default function PinInputScreen() {
       setErrorMessage("まだあんしょうばんごうが せっていされていないよ。おうちのひとにきいてね");
     } else {
       setErrorMessage("つうしんがおやすみ中みたい。もういちどためしてね");
+      setErrorRef(failureDetail(res.error, "edge").ref);
     }
   };
 
@@ -105,6 +111,7 @@ export default function PinInputScreen() {
           {errorMessage}
         </Text>
       )}
+      <FailureRefText value={errorRef} tone="child" style={{ textAlign: "center" }} />
 
       <View style={styles.pad}>
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((key, idx) => (

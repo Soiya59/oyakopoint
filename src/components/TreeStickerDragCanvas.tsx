@@ -34,6 +34,7 @@
 import React, { useRef, useState } from "react";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
+import FailureRefText from "./FailureRefText";
 import { CANVAS_HEIGHT, DECORATION_DIM_OPACITY, STICKER_DOT_SIZE, TreeStageVisual } from "./FamilyTree";
 import FigureFrame from "./FigureFrame";
 import FigureIcon from "./FigureIcon";
@@ -86,6 +87,8 @@ export interface TreeStickerDragCanvasProps {
   initialPos?: { x: number; y: number } | null;
   confirming: boolean;
   confirmErrorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 確定失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  confirmErrorRef?: string | null;
   onRetryLoad: () => void;
   onConfirm: (posX: number, posY: number) => void;
 }
@@ -104,6 +107,7 @@ export function TreeStickerDragCanvas({
   initialPos = null,
   confirming,
   confirmErrorMessage,
+  confirmErrorRef,
   onRetryLoad,
   onConfirm,
 }: TreeStickerDragCanvasProps) {
@@ -203,6 +207,7 @@ export function TreeStickerDragCanvas({
       </View>
 
       {confirmErrorMessage && <Text style={styles.errorText}>{confirmErrorMessage}</Text>}
+      {confirmErrorMessage && <FailureRefText value={confirmErrorRef} tone={tone} />}
 
       <AppButton
         label={confirmLabel}

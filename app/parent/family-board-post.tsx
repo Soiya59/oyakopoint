@@ -8,6 +8,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createFamilyBoardPost, PG_ERRCODE } from "@/data/api";
 import { BOARD_POST_SEND_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
 
@@ -32,7 +34,8 @@ export default function ParentFamilyBoardPostScreen() {
   const myMemberId = state.activeParentMemberId;
   const [body, setBody] = useState("");
   const [screenState, setScreenState] = useState<ScreenState>("form");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const ngGuard = useNgWordGuard();
 
   // [2026-09-21追加・要件定義書07-32章 決定20〜24、主要画面ワイヤーフレーム.md
@@ -63,7 +66,7 @@ export default function ParentFamilyBoardPostScreen() {
       if (res.error.code === PG_ERRCODE.checkViolation) {
         setErrorMessage("本日の投稿数の上限（5件）に達しています");
       } else {
-        setErrorMessage(BOARD_POST_SEND_ERROR_MESSAGE);
+        showFailure(res.error, { fallback: BOARD_POST_SEND_ERROR_MESSAGE, useDbMessage: false });
       }
       return;
     }
@@ -113,6 +116,7 @@ export default function ParentFamilyBoardPostScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       <AppButton
         label={screenState === "sending" ? "書き込んでいます…" : "書き込む"}

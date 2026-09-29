@@ -12,6 +12,8 @@ import { useSession } from "@/lib/session";
 import { removeMember, setMemberScheduledAnnouncementReceiveEnabled } from "@/data/api";
 import ExternalLinkRow from "@/components/ExternalLinkRow";
 import AppVersionInfo from "@/components/AppVersionInfo";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 import { HELP_SUPPORTER_URL, LEGAL_PAGES_PUBLISHED, PRIVACY_POLICY_URL, TERMS_URL, TIPS_URL } from "@/lib/legalLinks";
 import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
 import { SCHEDULED_ANNOUNCEMENT_FEATURE_NAME } from "@/constants/scheduledAnnouncement";
@@ -30,7 +32,8 @@ export default function SupporterSettingsScreen() {
   const { parentMember, logoutParent, client } = useSession();
   const { state, refresh } = useAppData();
   const [processing, setProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("supporter");
 
   // [2026-09-23追加・要件定義書07-37章4-8節、UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 64.7.2節] みまもりメンバー自身の
@@ -67,7 +70,7 @@ export default function SupporterSettingsScreen() {
     const res = await removeMember(me.id, "soft_remove");
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error, { source: "edge" });
       return;
     }
     await logoutParent();
@@ -209,6 +212,7 @@ export default function SupporterSettingsScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s4, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="supporter" />
 
       <AppButton tone="supporter" label="ホームへ戻る" variant="ghost" style={{ marginTop: theme.spacing.s6 }} onPress={() => router.replace("/supporter/self")} />
 

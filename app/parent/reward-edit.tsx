@@ -12,6 +12,9 @@ import { toJstDateString } from "@/lib/calendarDates";
 import { findRewardSuggestionById } from "@/data/rewardSuggestions";
 import { saveSequentially } from "@/lib/sequentialSave";
 import { FAMILY_DATA_NOT_READY_MESSAGE } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import { describeApiFailure } from "@/lib/apiFailureDisplay";
+import FailureRefText from "@/components/FailureRefText";
 
 // [2026-09-04追加・統括判断] ごほうびの絵文字の候補チップ。
 // 上のコメントのとおり2026-08-20に「自分で決めたい、選択ではなく」との要望で自由入力へ
@@ -83,13 +86,14 @@ export default function RewardEditScreen() {
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   // [2026-09-11追加・要件定義書07-26章決定20／主要画面ワイヤーフレーム.md 39.3.4節]
   // app/parent/chore-edit.tsxの`saveResult`/`failedAssigneeIds`と同型。
-  const [saveResult, setSaveResult] = useState<{ succeeded: string[]; failed: string[]; errorMessage: string | null } | null>(
+  const [saveResult, setSaveResult] = useState<{ succeeded: string[]; failed: string[]; errorMessage: string | null; errorRef: string | null } | null>(
     null
   );
   const [failedAssigneeIds, setFailedAssigneeIds] = useState<string[]>([]);
 
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は生の文言でなく、原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -114,7 +118,7 @@ export default function RewardEditScreen() {
     const res = await deleteReward(client, reward.id);
     setDeleting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -150,7 +154,7 @@ export default function RewardEditScreen() {
       const res = await updateReward(client, reward.id, buildRewardInput(assignedTo));
       setSaving(false);
       if (!res.ok) {
-        setErrorMessage(res.error.message);
+        showFailure(res.error);
         return;
       }
       await refresh();
@@ -165,7 +169,7 @@ export default function RewardEditScreen() {
       const res = await createReward(client, state.family.id, buildRewardInput(assigneeIds[0]));
       setSaving(false);
       if (!res.ok) {
-        setErrorMessage(res.error.message);
+        showFailure(res.error);
         return;
       }
       await refresh();
@@ -186,7 +190,8 @@ export default function RewardEditScreen() {
     );
     setSaving(false);
     if (outcome.remainingIds.length > 0) {
-      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      const f = outcome.failure ? describeApiFailure("parent", outcome.failure) : null;
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: f?.message ?? null, errorRef: f?.ref ?? null });
       setFailedAssigneeIds(outcome.remainingIds);
       return;
     }
@@ -208,7 +213,8 @@ export default function RewardEditScreen() {
     );
     setSaving(false);
     if (outcome.remainingIds.length > 0) {
-      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: outcome.errorMessage });
+      const f = outcome.failure ? describeApiFailure("parent", outcome.failure) : null;
+      setSaveResult({ succeeded: outcome.succeeded, failed: outcome.failed, errorMessage: f?.message ?? null, errorRef: f?.ref ?? null });
       setFailedAssigneeIds(outcome.remainingIds);
       return;
     }
@@ -416,6 +422,7 @@ export default function RewardEditScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="parent" />
 
       {/* [2026-09-11改訂・要件定義書07-26章決定17・決定20／主要画面ワイヤーフレーム.md
           39.3.3節決定14] 0人・1人選択時は「保存する」（変更なし）。2人以上選択時のみ
@@ -519,6 +526,7 @@ export default function RewardEditScreen() {
               （{saveResult.errorMessage}）
             </Text>
           )}
+          <FailureRefText value={saveResult.errorRef} tone="parent" />
           <AppButton
             label={saving ? "保存中…" : `${saveResult.failed.join("・")} の分だけ、もう一度保存する`}
             loading={saving}

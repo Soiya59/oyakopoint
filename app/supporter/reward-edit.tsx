@@ -8,6 +8,8 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { createSupporterSharedReward, deleteReward, updatePersonalReward } from "@/data/api";
 import { FAMILY_DATA_NOT_READY_MESSAGE } from "@/lib/errorMessages";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
 
 /**
  * S9 ごほうび登録・編集（みまもりメンバー）
@@ -39,7 +41,8 @@ export default function SupporterRewardEditScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は生の文言でなく、原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("supporter");
 
   const validate = (): string | null => {
     if (!name.trim()) return "名前を入力してください";
@@ -75,7 +78,7 @@ export default function SupporterRewardEditScreen() {
 
     setSaving(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -88,7 +91,7 @@ export default function SupporterRewardEditScreen() {
     const res = await deleteReward(client, reward.id);
     setDeleting(false);
     if (!res.ok) {
-      setErrorMessage(res.error.message);
+      showFailure(res.error);
       return;
     }
     await refresh();
@@ -162,6 +165,7 @@ export default function SupporterRewardEditScreen() {
       />
 
       {errorMessage && <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>}
+      <FailureRefText value={errorRef} tone="supporter" />
 
       <AppButton
         tone="supporter"

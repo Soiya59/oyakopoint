@@ -46,7 +46,7 @@ function makeCreateOne(failingIds: readonly string[], calls: string[]) {
   return async (id: string): Promise<SequentialCreateResult> => {
     calls.push(id);
     if (failingIds.includes(id)) {
-      return { ok: false, error: { message: "通信できませんでした" } };
+      return { ok: false, error: { code: "network_error", message: "通信できませんでした", status: 0 } };
     }
     return { ok: true };
   };
@@ -91,6 +91,8 @@ function makeCreateOne(failingIds: readonly string[], calls: string[]) {
   );
   assertEqual("2人目で失敗 → remainingIdsは['fuka','jiji']（再試行対象）", outcome.remainingIds, ["fuka", "jiji"]);
   assertEqual("2人目で失敗 → errorMessageはAPIのエラーメッセージ", outcome.errorMessage, "通信できませんでした");
+  // [2026-09-29追加・実装メモ331章] 失敗の原因（code・status）を呼び出し側へ渡す。
+  assertEqual("2人目で失敗 → failureにcode・statusが入る", outcome.failure?.code === "network_error" && outcome.failure?.status === 0, true);
 }
 
 // ---- 4. 再試行: 上記3.のremainingIdsに対してもう一度呼び、今度は全員成功する ----

@@ -26,6 +26,7 @@ import React, { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import AppButton from "./AppButton";
+import FailureRefText from "./FailureRefText";
 import MemberAvatar from "./MemberAvatar";
 import ZoomableDrawingCanvas, { type ZoomableDrawingCanvasHandle } from "./ZoomableDrawingCanvas";
 import DrawingPalette from "./DrawingPalette";
@@ -59,12 +60,16 @@ interface AvatarDrawingPanelProps {
   savedLineData: FamilyDrawingLineData | null;
   saving: boolean;
   errorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 保存失敗の「目印」（src/lib/apiFailureDisplay.tsの`ref`）。 */
+  errorRef?: string | null;
   /** 保存成功時に数秒だけ表示するメッセージ（表示・自動消去のタイミングは呼び出し画面側が管理する）。 */
   savedMessage: string | null;
   /** 保存（新規・なおすの両方、常に全置き換え）。成功したらtrueを返すこと（キャンバスをクリアするため）。 */
   onSave: (lineData: FamilyDrawingLineData) => Promise<boolean>;
   resetting: boolean;
   resetErrorMessage: string | null;
+  /** [2026-09-29追加・実装メモ331章] 「色にもどす」失敗の「目印」。 */
+  resetErrorRef?: string | null;
   resetSuccessMessage: string | null;
   /** 「色にもどす」の確定。成功したらtrueを返すこと（確認表示を閉じるため）。 */
   onReset: () => Promise<boolean>;
@@ -87,10 +92,12 @@ export function AvatarDrawingPanel({
   savedLineData,
   saving,
   errorMessage,
+  errorRef,
   savedMessage,
   onSave,
   resetting,
   resetErrorMessage,
+  resetErrorRef,
   resetSuccessMessage,
   onReset,
   onGestureActiveChange,
@@ -285,6 +292,7 @@ export function AvatarDrawingPanel({
           <View style={styles.resetConfirmBlock}>
             <Text style={bodyStyle}>{resetConfirmText}</Text>
             {resetErrorMessage && <Text style={styles.error}>{resetErrorMessage}</Text>}
+            {resetErrorMessage && <FailureRefText value={resetErrorRef} tone={tone} />}
             <View style={styles.confirmRow}>
               <Pressable onPress={confirmReset} disabled={resetting} hitSlop={8}>
                 <Text style={[bodyStyle, styles.resetConfirmActionText]}>
@@ -349,7 +357,10 @@ export function AvatarDrawingPanel({
       </View>
 
       {errorMessage ? (
-        <Text style={styles.error}>{errorMessage}</Text>
+        <>
+          <Text style={styles.error}>{errorMessage}</Text>
+          <FailureRefText value={errorRef} tone={tone} />
+        </>
       ) : atCapacity ? (
         <Text style={[bodyStyle, styles.atCapacity]}>{atCapacityText}</Text>
       ) : nearCapacity ? (

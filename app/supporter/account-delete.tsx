@@ -4,6 +4,8 @@ import { TextInput, View } from "react-native";
 import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import ScreenBackLink from "@/components/ScreenBackLink";
+import FailureRefText from "@/components/FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { Text } from "react-native";
 import { useSession } from "@/lib/session";
@@ -35,7 +37,8 @@ export default function SupporterAccountDeleteScreen() {
   const [loadError, setLoadError] = useState(false);
   const [familyNameDraft, setFamilyNameDraft] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("supporter");
 
   useEffect(() => {
     let mounted = true;
@@ -61,7 +64,7 @@ export default function SupporterAccountDeleteScreen() {
     const res = await deleteAccount(preview.will_delete_family ? familyNameDraft : undefined);
     setProcessing(false);
     if (!res.ok) {
-      setErrorMessage("削除できませんでした。もう一度お試しください。");
+      showFailure(res.error, { source: "edge", fallback: "削除できませんでした。もう一度お試しください。", useDbMessage: false });
       return;
     }
     await logoutParent();
@@ -130,6 +133,7 @@ export default function SupporterAccountDeleteScreen() {
       {errorMessage && (
         <Text style={{ marginTop: theme.spacing.s3, color: theme.colors.statusBlocking }}>{errorMessage}</Text>
       )}
+      <FailureRefText value={errorRef} tone="supporter" />
 
       {preview && (
         <AppButton

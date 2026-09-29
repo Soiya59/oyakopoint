@@ -9,6 +9,8 @@ import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { useGachaProgress } from "@/hooks/useGacha";
 import { playSound } from "@/lib/sound";
+import FailureRefText from "@/components/FailureRefText";
+import { actionableFailureMessage, type ApiFailureKind } from "@/lib/apiFailure";
 
 /**
  * C14 NFCタップ完了（3ロール共通）
@@ -36,6 +38,9 @@ export default function NfcCompleteScreen() {
     ownerDisplayName?: string;
     isProxy?: string;
     tagValue?: string;
+    /** [2026-09-29追加・実装メモ331章] networkErrorのときの失敗の種類・目印（app/child/nfc-scan.tsxが渡す）。 */
+    failureKind?: string;
+    failureRef?: string;
   }>();
   const result = (params.result as ResultParam) ?? "notFound";
   const { status } = useSession();
@@ -229,7 +234,11 @@ export default function NfcCompleteScreen() {
   return (
     <Screen tone={tone}>
       <View style={styles.centerBlock}>
-        <Text style={bodyStyle}>⚠ とどきませんでした…</Text>
+        {/* 電波・混み合い等のときだけ保護者・みまもり向けの文言に差し替える（子どもは従来のまま）。 */}
+        <Text style={bodyStyle}>
+          {(params.failureKind && actionableFailureMessage(params.failureKind as ApiFailureKind, tone)) || "⚠ とどきませんでした…"}
+        </Text>
+        <FailureRefText value={params.failureRef} tone={tone} />
         <Text style={[bodyStyle, { marginTop: theme.spacing.s2 }]}>もういちど タグに近づけてね</Text>
       </View>
       <AppButton

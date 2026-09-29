@@ -7,6 +7,7 @@ import TreeDecoratePanel from "@/components/TreeDecoratePanel";
 import TreeStickerDragCanvas from "@/components/TreeStickerDragCanvas";
 import TreeHabitFigureDragCanvas from "@/components/TreeHabitFigureDragCanvas";
 import theme from "@/theme/theme";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
@@ -112,7 +113,9 @@ export default function ChildTreeDecorateScreen() {
   const { moving: movingSticker, move: moveSticker } = useMoveTreeStickerAction();
   const { decorating: placingHabitFigure, decorate: placeHabitFigure } = useDecorateTreeWithHabitFigureAction();
   const { moving: movingHabitFigure, move: moveHabitFigure } = useMoveTreeHabitFigureAction();
-  const [decorateError, setDecorateError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: decorateError, errorRef: decorateErrorRef, setErrorMessage: setDecorateError, showFailure: showDecorateFailure } =
+    useFailureNotice("child");
   const [success, setSuccess] = useState(false);
 
   const isStickerMode = !!purchaseId || !!moveDecorationId;
@@ -136,7 +139,7 @@ export default function ChildTreeDecorateScreen() {
     setDecorateError(null);
     const res = await decorateGacha(drawId!, completionId);
     if (!res.ok) {
-      setDecorateError(res.error.message);
+      showDecorateFailure(res.error);
       return;
     }
     setSuccess(true);
@@ -147,7 +150,7 @@ export default function ChildTreeDecorateScreen() {
     setDecorateError(null);
     const res = purchaseId ? await placeSticker(purchaseId, nx, ny) : await moveSticker(moveDecorationId!, nx, ny);
     if (!res.ok) {
-      setDecorateError(res.error.message);
+      showDecorateFailure(res.error);
       return;
     }
     setSuccess(true);
@@ -162,7 +165,7 @@ export default function ChildTreeDecorateScreen() {
       ? await placeHabitFigure(habitFigureGrantId, nx, ny)
       : await moveHabitFigure(moveHabitFigureDecorationId!, nx, ny);
     if (!res.ok) {
-      setDecorateError(res.error.message);
+      showDecorateFailure(res.error);
       return;
     }
     setSuccess(true);
@@ -217,6 +220,7 @@ export default function ChildTreeDecorateScreen() {
           initialPos={posX && posY ? { x: Number(posX), y: Number(posY) } : null}
           confirming={placingHabitFigure || movingHabitFigure}
           confirmErrorMessage={decorateError}
+          confirmErrorRef={decorateErrorRef}
           onRetryLoad={reloadTree}
           onConfirm={handleConfirmHabitFigure}
         />
@@ -235,6 +239,7 @@ export default function ChildTreeDecorateScreen() {
           initialPos={posX && posY ? { x: Number(posX), y: Number(posY) } : null}
           confirming={placingSticker || movingSticker}
           confirmErrorMessage={decorateError}
+          confirmErrorRef={decorateErrorRef}
           onRetryLoad={reloadTree}
           onConfirm={handleConfirmSticker}
         />
@@ -251,6 +256,7 @@ export default function ChildTreeDecorateScreen() {
           myMemberId={myId}
           decorating={decoratingGacha}
           decorateErrorMessage={decorateError}
+          decorateErrorRef={decorateErrorRef}
           onRetryLoad={() => {
             reloadTree();
             reloadCandidates();

@@ -17,6 +17,8 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import { DrawingThumbnail } from "./DrawingCanvas";
+import FailureRefText from "./FailureRefText";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
@@ -84,7 +86,9 @@ function GachaDrawingReactionRow({
   const [reactions, setReactions] = useState<FamilyDrawingReactionWithReactor[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [reactingKey, setReactingKey] = useState<StampKey | null>(null);
-  const [reactionError, setReactionError] = useState<string | null>(null);
+  // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
+  const { errorMessage: reactionError, errorRef: reactionErrorRef, setErrorMessage: setReactionError, showFailure: showReactionFailure } =
+    useFailureNotice(tone);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +114,7 @@ function GachaDrawingReactionRow({
     const res = await toggleFamilyDrawingReactionStamp(client, { drawing_id: drawingId, stamp_key: stampKey });
     setReactingKey(null);
     if (!res.ok) {
-      setReactionError(res.error.message);
+      showReactionFailure(res.error);
       return;
     }
     if (res.data.removed) {
@@ -171,6 +175,7 @@ function GachaDrawingReactionRow({
         </Pressable>
       )}
       {reactionError && <Text style={styles.reactionErrorText}>{reactionError}</Text>}
+      {reactionError && <FailureRefText value={reactionErrorRef} tone={tone} />}
     </View>
   );
 }

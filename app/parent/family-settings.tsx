@@ -11,6 +11,11 @@ import { useAppData } from "@/data/store";
 import { useSession } from "@/lib/session";
 import { updateFamilyName, setMemberScheduledAnnouncementReceiveEnabled } from "@/data/api";
 import { NotificationDeviceStatusRow } from "@/components/NotificationSoftAsk";
+import { useFailureNotice } from "@/hooks/useFailureNotice";
+import FailureRefText from "@/components/FailureRefText";
+
+// [2026-09-29追加・実装メモ331章] 設定の変更に失敗したときの一文（従来のまま）。電波・混み合い等のときだけ別の文言に入れ替わる。
+const SETTING_CHANGE_FAILED_MESSAGE = "変更できませんでした。もう一度お試しください。";
 import { SCHEDULED_ANNOUNCEMENT_FEATURE_NAME } from "@/constants/scheduledAnnouncement";
 
 /**
@@ -31,7 +36,8 @@ export default function FamilySettingsScreen() {
   // 受信オンオフ。
   const me = state.members.find((m) => m.id === parentMember?.id);
   const [savingReceive, setSavingReceive] = useState(false);
-  const [receiveError, setReceiveError] = useState<string | null>(null);
+  const { errorMessage: receiveError, errorRef: receiveErrorRef, setErrorMessage: setReceiveError, showFailure: showReceiveFailure } =
+    useFailureNotice("parent");
   const setMyScheduledAnnouncementReceive = async (enabled: boolean) => {
     if (!parentMember) return;
     setSavingReceive(true);
@@ -39,7 +45,7 @@ export default function FamilySettingsScreen() {
     const res = await setMemberScheduledAnnouncementReceiveEnabled(client, parentMember.id, enabled);
     setSavingReceive(false);
     if (!res.ok) {
-      setReceiveError("変更できませんでした。もう一度お試しください。");
+      showReceiveFailure(res.error, { fallback: SETTING_CHANGE_FAILED_MESSAGE, useDbMessage: false });
       return;
     }
     await refresh();
@@ -52,18 +58,21 @@ export default function FamilySettingsScreen() {
   const [familyName, setFamilyName] = useState(state.family.name);
   const [savingFamilyName, setSavingFamilyName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
+  const { errorMessage: nameError, errorRef: nameErrorRef, setErrorMessage: setNameError, showFailure: showNameFailure } =
+    useFailureNotice("parent");
 
   const [savingSocial, setSavingSocial] = useState(false);
   const [socialSuccess, setSocialSuccess] = useState(false);
-  const [socialError, setSocialError] = useState<string | null>(null);
+  const { errorMessage: socialError, errorRef: socialErrorRef, setErrorMessage: setSocialError, showFailure: showSocialFailure } =
+    useFailureNotice("parent");
 
   // [2026-09-22追加・要件定義書07-37章3-1節、UIUXデザイン部/成果物/
   // 主要画面ワイヤーフレーム.md 63.1節] 通知トグル（やりとりトグルの直下に
   // 1段インデントして従属配置）。
   const [savingNotify, setSavingNotify] = useState(false);
   const [notifySuccess, setNotifySuccess] = useState(false);
-  const [notifyError, setNotifyError] = useState<string | null>(null);
+  const { errorMessage: notifyError, errorRef: notifyErrorRef, setErrorMessage: setNotifyError, showFailure: showNotifyFailure } =
+    useFailureNotice("parent");
 
   const saveFamilyName = async () => {
     const trimmed = familyName.trim();
@@ -74,7 +83,7 @@ export default function FamilySettingsScreen() {
     const res = await updateFamilyName(client, state.family.id, trimmed);
     setSavingFamilyName(false);
     if (!res.ok) {
-      setNameError(res.error.message);
+      showNameFailure(res.error);
       return;
     }
     await refresh();
@@ -89,7 +98,7 @@ export default function FamilySettingsScreen() {
     const res = await setFamilySocialInteractionsEnabled(enabled);
     setSavingSocial(false);
     if (!res.ok) {
-      setSocialError("変更できませんでした。もう一度お試しください。");
+      showSocialFailure(res.error, { fallback: SETTING_CHANGE_FAILED_MESSAGE, useDbMessage: false });
       return;
     }
     setSocialSuccess(true);
@@ -106,7 +115,7 @@ export default function FamilySettingsScreen() {
     const res = await setFamilyPushNotificationsEnabled(enabled);
     setSavingNotify(false);
     if (!res.ok) {
-      setNotifyError("変更できませんでした。もう一度お試しください。");
+      showNotifyFailure(res.error, { fallback: SETTING_CHANGE_FAILED_MESSAGE, useDbMessage: false });
       return;
     }
     setNotifySuccess(true);
@@ -129,6 +138,7 @@ export default function FamilySettingsScreen() {
         style={[theme.typography.parentBody, styles.nameInput, { marginTop: theme.spacing.s2 }]}
       />
       {nameError && <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.statusBlocking }}>{nameError}</Text>}
+      <FailureRefText value={nameErrorRef} tone="parent" />
       {nameSaved && !nameError && (
         <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.brandPrimaryStrong }}>変更しました</Text>
       )}
@@ -201,6 +211,7 @@ export default function FamilySettingsScreen() {
             {receiveError && (
               <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{receiveError}</Text>
             )}
+            <FailureRefText value={receiveErrorRef} tone="parent" />
           </View>
         )}
       </Card>
@@ -247,6 +258,7 @@ export default function FamilySettingsScreen() {
         {socialError && (
           <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{socialError}</Text>
         )}
+        <FailureRefText value={socialErrorRef} tone="parent" />
         {/* [2026-09-21追加・主要画面ワイヤーフレーム.md 56.4節 決定21] オフの間だけ、
             過去の投稿を読む道を残す（読み取り専用。投稿ボタンは出さない）。 */}
         {!state.family.social_interactions_enabled && (
@@ -296,6 +308,7 @@ export default function FamilySettingsScreen() {
           {notifyError && (
             <Text style={{ color: theme.colors.statusBlocking, marginTop: theme.spacing.s1 }}>{notifyError}</Text>
           )}
+          <FailureRefText value={notifyErrorRef} tone="parent" />
           {/* [主要画面ワイヤーフレーム.md 63.5.1節] 通知トグルが「お知らせする」で、
               かつこの端末の状態が「行動が必要」なときだけ、再挑戦の導線を出す。
               [2026-09-22本部長の画面確認で追加] やりとりトグルがオフのときも
