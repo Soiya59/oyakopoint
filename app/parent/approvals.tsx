@@ -19,7 +19,13 @@ import { STAMP_SEND_ERROR_MESSAGE, COMMENT_SEND_ERROR_MESSAGE } from "@/lib/erro
 import { useFailureNotice } from "@/hooks/useFailureNotice";
 import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
-import { buildRequestChoreIdSet, isRequestCompletion, requestDraftNote, shouldShowCompletionPoints } from "@/lib/requestChore";
+import {
+  buildRequestChoreIdSet,
+  isRequestCompletion,
+  requestDraftNote,
+  shouldShowCompletionPoints,
+  shouldShowPointsValue,
+} from "@/lib/requestChore";
 import { APPROVAL_REQUEST_MARK, APPROVAL_THANKS_BUTTON_LABEL } from "@/lib/requestChoreText";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
@@ -154,7 +160,7 @@ const CompletionRow = React.memo(function CompletionRow({
           <Text style={[theme.typography.parentBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                 のため何も添えない。 */}
-            {c.chore_emoji} {c.chore_title} {c.points != null && !isRequest ? `+${c.points}pt` : ""}
+            {c.chore_emoji} {c.chore_title} {shouldShowPointsValue(c.points, isRequest) ? `+${c.points}pt` : ""}
           </Text>
         </View>
         <View style={[styles.cardMeta, styles.cardMetaRow]}>

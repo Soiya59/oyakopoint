@@ -23,6 +23,7 @@ import {
   isHiddenRequestChore,
   isRequestChore,
   requestBadgeText,
+  shouldShowChorePoints,
   shouldShowCompletionPoints,
 } from "@/lib/requestChore";
 import { useWeeklyReview, useWeeklyReviewCardVisible } from "@/hooks/useWeeklyReview";
@@ -448,11 +449,21 @@ export default function ChildHomeScreen() {
                     {chore.title}
                   </Text>
                   {isRequest ? (
-                    // [D6] 下段は「+Npt」の代わりに、依頼者の印（淡い札）。「+0pt」は出さない。
+                    // [D6] 【2026-09-30再改訂】下段は、頼むときに決めたポイントが1以上のときだけ「+Npt」
+                    // （通常のカードと同じ書式・同じ`pointLabel`）を出し、その下に依頼者の印（淡い札）を足す。
+                    // 0（ポイントなし）のときは印だけ（「+0pt」も「ポイントなし」も出さない）。判定は
+                    // `shouldShowChorePoints`（requestChore.ts）。煽らない（「もらえる！」の語・強調は無し）。
                     // 依頼者が分からないときだけ「おうちの ひとから おねがい」。2行に折り返してよい。
-                    <View style={styles.requestBadge}>
-                      <Text style={styles.requestBadgeText}>{requestBadgeText(chore.creator?.display_name)}</Text>
-                    </View>
+                    <>
+                      {shouldShowChorePoints(chore) && (
+                        <Text style={styles.pointLabel} numberOfLines={1}>
+                          {formatChoreRowRewardLabel(chore)}
+                        </Text>
+                      )}
+                      <View style={styles.requestBadge}>
+                        <Text style={styles.requestBadgeText}>{requestBadgeText(chore.creator?.display_name)}</Text>
+                      </View>
+                    </>
                   ) : done ? (
                     // [2026-08-27] 実施済みの「1回だけ」設定（is_repeatable=false）のchoreは
                     // 上のフィルタで一覧から外れるようになったため、ここへ来るのは

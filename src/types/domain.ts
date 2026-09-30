@@ -356,6 +356,8 @@ export interface LedgerEntry {
   // [新設・2026-09-30] 「+Npt」の欄を出すか（省略は出す）。おねがい（`chores.is_request`）の
   // 完了報告は、行そのものは残したままポイント欄だけ出さない（主要画面ワイヤーフレーム.md 70.9節D16。
   // 「やってくれた→ありがとう」の記録が同じ場所に並ぶよう、0ptの行を通帳から外さない）。
+  // [2026-09-30再改訂] おねがいは`points`が0より大きいときだけ出す（頼むときに決めたポイントが入るため。
+  // 0＝「ポイントなし」のときだけ出さない）。判定は`requestChore.ts`の`shouldShowCompletionPoints`。
   showPoints?: boolean;
 }
 

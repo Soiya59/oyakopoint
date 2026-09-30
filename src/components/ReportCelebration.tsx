@@ -30,6 +30,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text } from "react-native";
 import Confetti from "./Confetti";
 import GachaCelebrationHint from "./GachaCelebrationHint";
 import theme from "@/theme/theme";
+import { shouldShowPointsValue } from "@/lib/requestChore";
 
 /** 自動で閉じるまで。子どもの完了画面が自動でホームへ戻るまでの時間と揃えている。 */
 const AUTO_DISMISS_MS = 3000;
@@ -44,8 +45,9 @@ export interface ReportCelebrationProps {
   memberId: string | null;
   /**
    * [2026-09-30追加・主要画面ワイヤーフレーム.md 70.4節D7・70.13節] おねがい（`chore.is_request`）の
-   * 完了のときは「+Npt」を出さない。判定は`points`の真偽ではなく`is_request`で行う（`points`は
-   * 文字列で、"0"は真になり「+0pt」が出てしまうため）。現在の呼び出し元（P19・S5。自分の
+   * 完了のときは、**0より大きいときだけ**「+Npt」を出す（【2026-09-30再改訂】頼むときに決めたポイントが
+   * 入るようになったため。0のときは出さない）。判定は`points`の真偽ではなく数として行う
+   * （`shouldShowPointsValue`。`points`は文字列で、"0"は真になり「+0pt」が出てしまうため）。現在の呼び出し元（P19・S5。自分の
    * クエストの報告）はおねがいを報告しない（おねがいの担当は子どもだけ）が、C7・今後の呼び出し元が
    * 同じ部品を使っても「+0pt」が出ないよう、部品自体に持たせてある。
    */
@@ -93,7 +95,7 @@ export function ReportCelebration({
         {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型クエストの記録では
             呼び出し元（P19/S5）が`points`に空文字を渡す（ポイントに一切触れない）。
             その場合は「+◯pt」自体を出さない。 */}
-        {points && !isRequest && <Text style={styles.points}>+{points}pt</Text>}
+        {points ? shouldShowPointsValue(Number(points), isRequest) && <Text style={styles.points}>+{points}pt</Text> : null}
 
         <GachaCelebrationHint tone={tone} memberId={memberId} />
       </Animated.View>

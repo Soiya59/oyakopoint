@@ -320,8 +320,21 @@ export const avatarDrawingPalette = drawingPalette;
 // titleMaxLength: 題名の上限（70.3節D3。DB側の100字は変えない）。
 // titleWarningThreshold: 残りがこの字数以下でカウンターをアンバーにする（お絵かきの題名と同じ規則）。
 // successDisplayMs: 保存後の「おねがいしました」を出す時間（70.3節D5）。
+// [2026-09-30再改訂・要件定義書07-43章決定20〜27、設計部/成果物/スキーマ設計.sql 82.19章、
+// API仕様.md 38.14章、開発部/成果物/実装メモ.md 341章]
+// maxPoints: 頼むときに決めるポイントの上限（0〜maxPoints。「ポイントなし」＋1〜maxPointsのチップを作る。
+// 3をチップにベタ書きしない）。**3か所そろえる**: DBの`max_request_points()`（supabase/migrations/
+// 20261002010000_chore_request_points.sql）・本定数・supabase/tests/rls_checks.sqlのC-R11
+// （自動でそろえる仕組みは無い。値を変えるときは同じ変更で3つとも直す）。**上げるときはDB→アプリ（OTA）、
+// 下げるときはアプリ（OTA）→DBの順**（逆にすると、古い上限を出している画面の操作をDBが断る時間帯ができる）。
+// **感謝ポイントの1日の上限（DBの`gratitude_daily_allowance()`・アプリの`allowance`等）とは別の定数**で、
+// 値が同じ3でも代入し合わない・互いを参照しない（決定20。感謝＝「贈る量」の1日の上限、これ＝おねがいの「約束の幅」）。
+// pointChipsGridFontScale: 文字の大きさの設定（`PixelRatio.getFontScale()`）がこの値以上のとき、
+// ポイントのチップを1行4つから2行2列に組み替える（70.11節D22。しきい値は見積りの値で、実機で調整してよい）。
 export const requestLimit = {
   maxOpenPerChild: 3,
+  maxPoints: 3,
+  pointChipsGridFontScale: 1.3,
   titleMaxLength: 20,
   titleWarningThreshold: 5,
   successDisplayMs: 1500,

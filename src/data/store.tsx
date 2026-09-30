@@ -22,7 +22,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { buildRequestChoreIdSet, isRequestCompletion } from "@/lib/requestChore";
+import { buildRequestChoreIdSet, shouldShowCompletionPoints } from "@/lib/requestChore";
 import type {
   Chore,
   ChoreCompletion,
@@ -469,6 +469,10 @@ function buildLedgers(state: State) {
   // HabitCardBoard）で見る。
   // [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16] おねがいの完了報告は行を残したまま
   // ポイント欄だけ出さない（`showPoints: false`）。判定は`chore_id`から引いた`chores.is_request`。
+  // [2026-09-30再改訂・同70.9節D16・実装メモ341章] おねがいは`points`が0より大きいときだけ「+Npt」を出す
+  // （頼むときに決めたポイントが入るようになったため。0のときだけ出さない）。普通のクエストの0ptは
+  // 今までどおり「+0pt」。判定は`requestChore.ts`の`shouldShowCompletionPoints`（`chore_completions.points`＝
+  // 完了時のスナップショットで見る）。
   const requestChoreIds = buildRequestChoreIdSet(state.chores);
   const earnLedger = (memberId: string): LedgerEntry[] =>
     state.completions
@@ -481,7 +485,7 @@ function buildLedgers(state: State) {
         points: c.points,
         occurredAt: c.reported_at,
         reactions: reactionsForCompletion(c.id),
-        showPoints: !isRequestCompletion(c, requestChoreIds),
+        showPoints: shouldShowCompletionPoints(c, requestChoreIds),
       }));
 
   // reward_redemptions は reward_emoji のスナップショットを持たない設計

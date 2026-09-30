@@ -77,20 +77,42 @@ export function isRequestCompletion(
 }
 
 /**
+ * 「+Npt」の断片を出してよいポイントか（70.9節D16・企画部決定23・U12。2026-09-30再改訂）。
+ * - **おねがい**: `points`が**0より大きいときだけ**出す。0のときは出さない（「ポイントなし」のおねがいに
+ *   「+0」と出すと「0しかもらえない」と読めるため）。
+ * - **普通のクエスト**: 今までどおり。`points`が数値なら0でも出す（07-28章決定26「+0pt」）。
+ *   台紙型で`points`がNULLのときは出さない（既存の扱い）。
+ * 判定はここの1か所。画面ごとに「おねがいなら出さない」を書き分けない。
+ */
+export function shouldShowPointsValue(points: number | null | undefined, isRequest: boolean): boolean {
+  if (points === null || points === undefined) return false;
+  return isRequest ? points > 0 : true;
+}
+
+/**
  * 「+Npt」を出してよい完了報告か（70.9節D16の規則。「+0pt」の断片だけを出さない。行そのものは残す）。
- * おねがいの完了報告はポイント欄ごと出さない。通常の完了報告は今までどおり（ポイントがあれば出す）。
+ * おねがいの完了報告は`points`が0より大きいときだけ（`chore_completions.points`は完了時のスナップショット）。
+ * 通常の完了報告は今までどおり（ポイントがあれば0でも出す）。
  */
 export function shouldShowCompletionPoints(
   completion: RequestCompletionLike & { points?: number | null },
   requestChoreIds: ReadonlySet<string>
 ): boolean {
-  if (isRequestCompletion(completion, requestChoreIds)) return false;
-  return completion.points !== null && completion.points !== undefined;
+  return shouldShowPointsValue(completion.points, isRequestCompletion(completion, requestChoreIds));
 }
 
-/** 一覧の行の「+Npt」を出してよいクエストか（おねがいは出さない。決定11・13）。 */
-export function shouldShowChorePoints(chore: { is_request?: boolean }): boolean {
-  return !isRequestChore(chore);
+/**
+ * 一覧の行の「+Npt」を出してよいクエストか（`chore.points`。おねがいは0より大きいときだけ。
+ * 普通のクエストは今までどおり常に出す。決定23）。
+ */
+export function shouldShowChorePoints(chore: { is_request?: boolean; points?: number | null }): boolean {
+  if (!isRequestChore(chore)) return true;
+  return shouldShowPointsValue(chore.points, true);
+}
+
+/** 「+Npt」の書式（通常のクエストの行と同じ）。 */
+export function formatPointsAmount(points: number): string {
+  return `+${points}pt`;
 }
 
 // ============================================================
@@ -212,9 +234,63 @@ export function requestTitleCounter(
   return { count, text: `${count}/${max}`, warn: max - count <= warnThreshold };
 }
 
-/** 保存できるか（子どもを1人以上選び、題名が1字以上で、保存中でない）。 */
-export function canSubmitRequest(input: { selectedCount: number; title: string; saving: boolean }): boolean {
-  return !input.saving && input.selectedCount >= 1 && normalizeRequestTitle(input.title).length >= 1;
+/**
+ * 保存できるか（子どもを1人以上選び、題名が1字以上で、**ポイントが選ばれていて**、保存中でない）。
+ * `points`は**`null`＝未選択**、`0`＝「ポイントなし」を選んだ、を区別する（統括判断U9。`points !== null`で
+ * 判定し、`!points`のような真偽では判定しない。0を「未選択」と取り違えない）。
+ */
+export function canSubmitRequest(input: {
+  selectedCount: number;
+  title: string;
+  points: number | null;
+  saving: boolean;
+}): boolean {
+  return (
+    !input.saving &&
+    input.selectedCount >= 1 &&
+    normalizeRequestTitle(input.title).length >= 1 &&
+    input.points !== null
+  );
+}
+
+// ============================================================
+// ポイントの欄（D20〜D22。2026-09-30再改訂）
+// ============================================================
+
+/**
+ * ポイントのチップの値（「ポイントなし」＝0と、1〜max）。並びは固定で、`max`（`theme.requestLimit.maxPoints`）から
+ * 作る（3をチップにベタ書きしない）。
+ */
+export function requestPointChoices(max: number): number[] {
+  const out: number[] = [];
+  for (let n = 0; n <= max; n += 1) out.push(n);
+  return out;
+}
+
+/** 頼むときのポイントとして正しいか（0以上max以下の整数）。範囲外・小数・NaNは送らない（DBが最終防衛線）。 */
+export function isValidRequestPoints(points: number, max: number): boolean {
+  return Number.isInteger(points) && points >= 0 && points <= max;
+}
+
+/**
+ * ポイントのチップの並べ方（70.11節D22）。文字の大きさの設定（`PixelRatio.getFontScale()`）が
+ * `gridThreshold`（`theme.requestLimit.pointChipsGridFontScale`、1.3）以上なら2行2列、それより小さければ1行。
+ * 1行のときの幅の配りは`requestPointChipFlex`。
+ */
+export function requestPointChipsLayout(fontScale: number, gridThreshold: number): "row" | "grid" {
+  return fontScale >= gridThreshold ? "grid" : "row";
+}
+
+/** 1行に並べるときのチップの幅の割合。「ポイントなし」（6字）は1.7、ほかは1（D22）。 */
+export function requestPointChipFlex(points: number): number {
+  return points === 0 ? 1.7 : 1;
+}
+
+/** 2行2列のときの行への分け方（各行2つ。順番は変えない）。 */
+export function splitPointChoicesIntoRows(choices: readonly number[], perRow: number): number[][] {
+  const rows: number[][] = [];
+  for (let i = 0; i < choices.length; i += perRow) rows.push(choices.slice(i, i + perRow));
+  return rows;
 }
 
 // ============================================================

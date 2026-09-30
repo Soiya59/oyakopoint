@@ -16,6 +16,7 @@ import { playSound, type SoundHandle } from "@/lib/sound";
 import { useCheckNewHabitFigureGrant } from "@/hooks/useHabitCards";
 import type { HabitFigureGrantWithCatalog } from "@/types/domain";
 import { requestReportSentTitle } from "@/lib/requestChoreText";
+import { shouldShowPointsValue } from "@/lib/requestChore";
 
 /**
  * C7 報告完了（送信済み）
@@ -162,8 +163,12 @@ export default function ReportSentScreen() {
               「+0ptとどいたよ！」とそのまま表示する（決定26「0を勧める作りには
               しない」であり、0の表示自体を隠す・特別扱いする必要はない）。 */}
           {/* [2026-09-30変更・主要画面ワイヤーフレーム.md 70.4節D7] おねがいの完了は「+0pt」を出さない
-              （「「題名」とどいたよ！」。紙吹雪は通常と同じ。「ありがとうがもらえるよ」の予告は足さない）。 */}
-          {isRequest ? requestReportSentTitle(choreTitle ?? "") : `「${choreTitle}」+${points}ptとどいたよ！`}
+              （「「題名」とどいたよ！」。紙吹雪は通常と同じ。「ありがとうがもらえるよ」の予告は足さない）。
+              【2026-09-30再改訂】頼むときに決めたポイントが1以上のおねがいは、通常のクエストと同じ書式
+              「「題名」+Nptとどいたよ！」（`shouldShowPointsValue`。0のときだけ「+0pt」を出さない）。 */}
+          {shouldShowPointsValue(Number(points), Boolean(isRequest))
+            ? `「${choreTitle}」+${points}ptとどいたよ！`
+            : requestReportSentTitle(choreTitle ?? "")}
         </Text>
         <Text
           style={[

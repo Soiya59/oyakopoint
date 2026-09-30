@@ -802,6 +802,14 @@ VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_a'), 'テストおねがいA2
 INSERT INTO chore_completions (chore_id, reported_by, note)
 VALUES ((SELECT id FROM _seed_ids WHERE key = 'a_request_done'), (SELECT id FROM _seed_ids WHERE key = 'a_child'), 'テスト完了A-おねがい');
 
+-- [2026-09-30再改訂・要件定義書07-43章決定20〜27、設計部82.19.9章、実装メモ341章]
+-- ポイント付きのおねがい。0ptだけのseedだと、C-R16・B層が「ポイントがあっても見える／数えられる」を
+-- 確かめられない。家族Aに「未完了の2pt」（上のA2と合わせて未完了2つ。上限3の範囲内）、
+-- 家族Bに「やってくれた3pt」（完了報告付き。子どもの残高が+3になる）を入れる。
+INSERT INTO chores (family_id, title, points, is_repeatable, scope, assigned_to, is_request)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_a'), 'テストおねがいA3(かたづけ・2pt・未完了)', 2, false, 'family',
+        (SELECT id FROM _seed_ids WHERE key = 'a_child'), true);
+
 INSERT INTO chore_request_done_notices (chore_id, family_id)
 VALUES ((SELECT id FROM _seed_ids WHERE key = 'a_request_done'), (SELECT id FROM _seed_ids WHERE key = 'fam_a'));
 
@@ -820,6 +828,20 @@ VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done'), (SELECT id FROM
 
 INSERT INTO chore_request_done_notices (chore_id, family_id)
 VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done'), (SELECT id FROM _seed_ids WHERE key = 'fam_b'));
+
+WITH ins AS (
+  INSERT INTO chores (family_id, title, points, is_repeatable, scope, assigned_to, is_request)
+  VALUES ((SELECT id FROM _seed_ids WHERE key = 'fam_b'), 'テストおねがいB2(おてつだい・3pt・済)', 3, false, 'family',
+          (SELECT id FROM _seed_ids WHERE key = 'b_child'), true)
+  RETURNING id
+)
+INSERT INTO _seed_ids SELECT 'b_request_done_3pt', id FROM ins;
+
+INSERT INTO chore_completions (chore_id, reported_by, note)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done_3pt'), (SELECT id FROM _seed_ids WHERE key = 'b_child'), 'テスト完了B-おねがい(3pt)');
+
+INSERT INTO chore_request_done_notices (chore_id, family_id)
+VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done_3pt'), (SELECT id FROM _seed_ids WHERE key = 'fam_b'));
 
 
 -- ============================================================

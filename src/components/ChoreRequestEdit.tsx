@@ -32,7 +32,7 @@ import { normalizeRequestTitle, requestTitleCounter } from "@/lib/requestChore";
 import {
   CHORE_LIST_REQUEST_NO_ASSIGNEE,
   REQUEST_CREATE_FAILED_MESSAGE,
-  REQUEST_EDIT_NO_POINTS,
+  REQUEST_EDIT_CHANGE_HINT,
   REQUEST_EDIT_SAVE_LABEL,
   REQUEST_EDIT_TITLE,
   REQUEST_EDIT_TITLE_DONE,
@@ -41,6 +41,7 @@ import {
   REQUEST_WITHDRAW_CANCEL_LABEL,
   REQUEST_WITHDRAW_CONFIRM_LABEL,
   requestDoneNote,
+  requestEditPointsLine,
   requestEditTarget,
   requestWithdrawConfirmBody,
   requestWithdrawConfirmTitle,
@@ -122,6 +123,10 @@ export default function ChoreRequestEdit({ choreId }: { choreId: string }) {
         </Text>
         <Text style={[theme.typography.parentBody, styles.line]}>{requestDoneNote(doneByName)}</Text>
         <Text style={[theme.typography.parentCaption, styles.caption]}>{requestEditTarget(assigneeName ?? CHORE_LIST_REQUEST_NO_ASSIGNEE)}</Text>
+        {/* [2026-09-30再改訂・D15] 1以上のときだけ「ポイント：Npt」。0のときは行ごと出さない。 */}
+        {requestEditPointsLine(chore.points, true) && (
+          <Text style={[theme.typography.parentCaption, styles.caption]}>{requestEditPointsLine(chore.points, true)}</Text>
+        )}
         <AppButton label="もどる" variant="secondary" fullWidth style={{ marginTop: theme.spacing.s6 }} onPress={() => router.back()} />
       </Screen>
     );
@@ -133,7 +138,10 @@ export default function ChoreRequestEdit({ choreId }: { choreId: string }) {
       <Text style={[theme.typography.parentBody, styles.line]}>
         {requestEditTarget(assigneeName ?? CHORE_LIST_REQUEST_NO_ASSIGNEE)}
       </Text>
-      <Text style={[theme.typography.parentCaption, styles.caption]}>{REQUEST_EDIT_NO_POINTS}</Text>
+      {/* [2026-09-30再改訂・D15] ポイントは表示のみ（変更する欄は出さない。約束は変えられない＝決定22）。
+          0は「ポイントなし」。変えたいときは取り下げて頼み直す道を、未完了のうちだけ1行で案内する。 */}
+      <Text style={[theme.typography.parentCaption, styles.caption]}>{requestEditPointsLine(chore.points, false)}</Text>
+      <Text style={[theme.typography.parentCaption, styles.caption]}>{REQUEST_EDIT_CHANGE_HINT}</Text>
 
       <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>{REQUEST_TITLE_HEADING}</Text>
       {canEditTitle ? (

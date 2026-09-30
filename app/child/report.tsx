@@ -11,7 +11,7 @@ import FailureRefText from "@/components/FailureRefText";
 import { failureDetail } from "@/lib/apiFailureDisplay";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
-import { isRequestChore, requestBadgeText } from "@/lib/requestChore";
+import { isRequestChore, requestBadgeText, shouldShowChorePoints } from "@/lib/requestChore";
 
 /**
  * C6 完了報告（主要5画面のひとつ）
@@ -175,9 +175,25 @@ export default function ChildReportScreen() {
 
       {/* [2026-09-30変更・D7] おねがいのときは見出しを「{依頼者}から おねがい」に差し替える（「できたら +0pt」を
           出さない。「もらえるかも」の予告もしない）。2行に折り返してよい。ひとことメモ・とどけるは通常と同じ。 */}
-      <Text style={[theme.typography.childHeadline, { textAlign: "center", marginTop: theme.spacing.s6 }]}>
-        {isRequestChore(chore) ? requestBadgeText(chore.creator?.display_name) : `できたら +${chore.points}pt`}
-      </Text>
+      {/* [2026-09-30再改訂・D7] 頼むときに決めたポイントが1以上のおねがいは2行にする: 1行目「{依頼者}から おねがい」
+          （childBody。印の言い方）、2行目「できたら +Npt」（childHeadline。通常のクエストの見出しと同じ大きさ・書式）。
+          これは約束（事前承認）で、感謝ポイントの額の予告ではない。「もらえる！」の語は足さない。
+          ポイントなし（0）のおねがいは今のまま1行（「+0pt」も「ポイントなし」も出さない）。判定は
+          `shouldShowChorePoints`（requestChore.ts）。 */}
+      {isRequestChore(chore) && shouldShowChorePoints(chore) ? (
+        <View style={{ alignItems: "center", marginTop: theme.spacing.s6 }}>
+          <Text style={[theme.typography.childBody, { textAlign: "center" }]}>
+            {requestBadgeText(chore.creator?.display_name)}
+          </Text>
+          <Text style={[theme.typography.childHeadline, { textAlign: "center", marginTop: theme.spacing.s2 }]}>
+            できたら +{chore.points}pt
+          </Text>
+        </View>
+      ) : (
+        <Text style={[theme.typography.childHeadline, { textAlign: "center", marginTop: theme.spacing.s6 }]}>
+          {isRequestChore(chore) ? requestBadgeText(chore.creator?.display_name) : `できたら +${chore.points}pt`}
+        </Text>
+      )}
 
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>ひとことメモ（にんい）</Text>
       <TextInput

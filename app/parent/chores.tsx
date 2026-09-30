@@ -141,11 +141,13 @@ export default function ChoresListScreen() {
     // 表示、決定11）。取得に失敗したときは回数の部分だけ出さない（53.7節）。
     const completionTotalSuffix =
       totalsLoadState === "error" ? "" : c.assigned_to !== null ? `・計${completionCountFor(c)}回` : `・家族で計${completionCountFor(c)}回`;
-    // [2026-09-30追加・D15] おねがいの行の右側。ポイント・回数は出さない。
+    // [2026-09-30追加・D15] おねがいの行の右側。回数は出さない。
+    // 【2026-09-30再改訂】頼むときに決めたポイントが1以上なら先頭に「{N}pt・」（0のときは今までどおりptを出さない）。
     const requestRightLabel = isRequestChore(c)
       ? requestListRightLabel(
           isOneOffFinished(c),
-          c.assigned_to ? state.members.find((m) => m.id === c.assigned_to)?.display_name ?? null : null
+          c.assigned_to ? state.members.find((m) => m.id === c.assigned_to)?.display_name ?? null : null,
+          c.points
         )
       : null;
     return (

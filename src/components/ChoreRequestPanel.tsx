@@ -5,8 +5,11 @@
  * 設計部/成果物/API仕様.md 38.2章、UIUXデザイン部/成果物/主要画面ワイヤーフレーム.md 70.3節
  * （D2〜D5・D19）・70.11節（文字が大きい端末で崩れないこと）、開発部/成果物/実装メモ.md 335章。
  *
- * 入力は「だれに」と「なにを」だけ。ポイント・繰り返し・絵文字などの入力欄は画面に存在しない
- * （決定9。「先にポイントを決めない」ことを、入力欄が存在しないという形で担保する）。
+ * 入力は「だれに」「なにを」「ポイント」の3つ（【2026-09-30再改訂・要件定義書07-43章決定20〜27・
+ * 主要画面ワイヤーフレーム.md 70.3節D20〜D22、実装メモ341章】頼むときにポイント〈0〜`theme.requestLimit.maxPoints`。
+ * 0は「ポイントなし」〉を決め、やってくれたら自動で入る＝事前承認）。ポイントのチップは最初は**未選択**
+ * （`null`。0と区別する。統括判断U9）で、選ぶまで「おねがいする」は押せない。複数の子には同じ額。
+ * 繰り返し・絵文字などの入力欄は今までどおり画面に存在しない。
  * 保存は子どもごとに別々のINSERT（`createChoreRequest`）。1人の失敗が他の人の成功を巻き戻さない。
  * 判定（選べる子・満杯・結果のまとめ）は`src/lib/requestChore.ts`の純粋関数（`node`で検証済み）。
  *
@@ -17,7 +20,7 @@
  * `flexWrap`。理由の文・案内文は横幅いっぱいの`Text`。`adjustsFontSizeToFit`は使わない。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
@@ -39,7 +42,11 @@ import {
   normalizeRequestTitle,
   pruneRequestSelection,
   requestFailureStatus,
+  requestPointChipFlex,
+  requestPointChipsLayout,
+  requestPointChoices,
   requestTitleCounter,
+  splitPointChoicesIntoRows,
   summarizeRequestOutcomes,
   toggleRequestSelection,
   type RequestOutcome,
@@ -49,19 +56,24 @@ import {
   REQUEST_FULL_OPEN_MANAGE_LABEL,
   REQUEST_NO_CHILD_ACTION,
   REQUEST_NO_CHILD_TITLE,
+  REQUEST_POINTS_HEADING,
   REQUEST_RESULT_DONE_LABEL,
   REQUEST_SUCCESS_TITLE,
   REQUEST_TAB_INTRO,
   REQUEST_TITLE_HEADING,
   REQUEST_TITLE_PLACEHOLDER,
   requestFullReasonText,
+  requestPointChipAccessibilityLabel,
+  requestPointChipLabel,
   requestResultFailedLine,
   requestResultFullLine,
   requestResultOkLine,
   requestRetryLabel,
   requestSelectedCaption,
+  requestSubmitBlockedReason,
   requestSubmitLabel,
   requestSuccessDetail,
+  requestSuccessPointsLine,
   requestWhoHeading,
 } from "@/lib/requestChoreText";
 import { EmptyState } from "@/components/StatusViews";
@@ -93,8 +105,11 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
 
   const [selection, setSelection] = useState<string[]>([]);
   const [title, setTitle] = useState("");
+  // ポイントは`null`＝未選択（「ポイントなし」＝0とは別）。最初は必ず未選択で、前回の額も覚えない（U9・D20）。
+  const [points, setPoints] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [finished, setFinished] = useState<string[] | null>(null); // 成功した子どもの名前（成功表示中）
+  const [finished, setFinished] = useState<{ names: string[]; points: number } | null>(null); // 成功した子どもの名前・額（成功表示中）
+  const { fontScale } = useWindowDimensions();
   const [outcomes, setOutcomes] = useState<RequestOutcome[] | null>(null); // 一部失敗の結果カード
   const { errorMessage, errorRef, setErrorMessage, showFailure } = useFailureNotice("parent");
   const initializedRef = useRef(false);
@@ -144,19 +159,30 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
   const selectedNames = selection.map(nameOf);
   const trimmedTitle = normalizeRequestTitle(title);
   const counter = requestTitleCounter(title, theme.requestLimit.titleMaxLength, theme.requestLimit.titleWarningThreshold);
-  const canSubmit = canSubmitRequest({ selectedCount: selection.length, title, saving });
+  const canSubmit = canSubmitRequest({ selectedCount: selection.length, title, points, saving });
   const fullNames = fullChildNames(options);
   const allFull = isAllRequestFull(options);
+  const pointsLayout = requestPointChipsLayout(fontScale, theme.requestLimit.pointChipsGridFontScale);
+  const pointChoices = requestPointChoices(theme.requestLimit.maxPoints);
+  const pointRows = pointsLayout === "row" ? [pointChoices] : splitPointChoicesIntoRows(pointChoices, 2);
+  const blockedReason = requestSubmitBlockedReason({
+    hasTitle: trimmedTitle.length >= 1,
+    hasChild: selection.length >= 1,
+    hasPoints: points !== null,
+    allFull,
+    saving,
+  });
 
   /** 子どもごとに別々に作る。失敗しても止めず、ほかの子の分は作る（満杯の子だけがRQ001で断られる）。 */
   const runSave = async (childIds: string[], previous: RequestOutcome[]) => {
-    if (!familyId) return;
+    // ポイントが未選択のまま保存する道は無い（`canSubmit`が偽。再試行は選択済みの額で送る）。
+    if (!familyId || points === null) return;
     setSaving(true);
     setErrorMessage(null);
     const results: RequestOutcome[] = [];
     let firstFailure: ApiError | null = null;
     for (const childId of childIds) {
-      const res = await createChoreRequest(client, familyId, { title: trimmedTitle, assigned_to: childId });
+      const res = await createChoreRequest(client, familyId, { title: trimmedTitle, assigned_to: childId, points });
       if (res.ok) {
         results.push({ childId, status: "ok" });
       } else {
@@ -176,7 +202,7 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
 
     if (summary.allOk) {
       setOutcomes(null);
-      setFinished(merged.map((o) => nameOf(o.childId)));
+      setFinished({ names: merged.map((o) => nameOf(o.childId)), points });
       return;
     }
 
@@ -226,7 +252,13 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
       <View style={styles.successBox}>
         <Text style={styles.successEmoji}>💌</Text>
         <Text style={[theme.typography.parentTitle, styles.successText]}>{REQUEST_SUCCESS_TITLE}</Text>
-        <Text style={[theme.typography.parentBody, styles.successText]}>{requestSuccessDetail(finished)}</Text>
+        <Text style={[theme.typography.parentBody, styles.successText]}>{requestSuccessDetail(finished.names)}</Text>
+        {/* 【2026-09-30再改訂・D22】約束の額をもう一度見せる（1以上のときだけ。0のときは行ごと出さない）。 */}
+        {requestSuccessPointsLine(finished.names.length, finished.points) && (
+          <Text style={[theme.typography.parentBody, styles.successText]}>
+            {requestSuccessPointsLine(finished.names.length, finished.points)}
+          </Text>
+        )}
       </View>
     );
   }
@@ -278,8 +310,8 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
           </View>
         )}
 
-        {requestSelectedCaption(selectedNames) && (
-          <Text style={[theme.typography.parentCaption, styles.reason]}>{requestSelectedCaption(selectedNames)}</Text>
+        {requestSelectedCaption(selectedNames, points) && (
+          <Text style={[theme.typography.parentCaption, styles.reason]}>{requestSelectedCaption(selectedNames, points)}</Text>
         )}
 
         <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>{REQUEST_TITLE_HEADING}</Text>
@@ -301,6 +333,40 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
         >
           {counter.text}
         </Text>
+
+        {/* 【2026-09-30再改訂・D20・D22】「ポイントは？（必須）」。チップは0〜maxPointsから作る（「ポイントなし」＋1〜）。
+            最初は未選択。選び方は1つだけ（ラジオ。選んだチップをもう一度押しても外れない）。選択中は太字＋枠＋淡い背景
+            （名前の後ろの✓は付けない。幅が変わって行が折り返し、押した瞬間に高さが変わるのを避ける）。
+            文字の大きさの設定が`pointChipsGridFontScale`以上なら2行2列に組み替える（1行4つは幅が足りなくなる）。 */}
+        <Text style={[theme.typography.parentBodyMedium, styles.fieldLabel]}>{REQUEST_POINTS_HEADING}</Text>
+        <View accessibilityRole="radiogroup">
+          {pointRows.map((row, rowIndex) => (
+            <View key={rowIndex} style={styles.pointRow}>
+              {row.map((n) => {
+                const selected = points === n;
+                return (
+                  <Pressable
+                    key={n}
+                    disabled={saving}
+                    onPress={() => setPoints(n)}
+                    accessibilityRole="radio"
+                    accessibilityLabel={requestPointChipAccessibilityLabel(n)}
+                    accessibilityState={{ selected, disabled: saving }}
+                    style={[
+                      styles.pointChip,
+                      pointsLayout === "row" ? { flex: requestPointChipFlex(n), flexBasis: 0 } : styles.pointChipGrid,
+                      selected && styles.chipSelected,
+                    ]}
+                  >
+                    <Text style={[styles.pointChipText, selected && styles.pointChipTextSelected]}>
+                      {requestPointChipLabel(n)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
 
       {errorMessage && !outcomes && (
@@ -347,13 +413,18 @@ export default function ChoreRequestPanel({ onBusyChange, onFinished }: Props) {
         </Card>
       )}
 
+      {/* 【2026-09-30再改訂・D21】押せない理由を、ボタンのすぐ上に1行（題名を書いたあとだけ。赤・アンバーは使わない）。 */}
+      {!outcomes && blockedReason && (
+        <Text style={[theme.typography.parentCaption, styles.blockedReason]}>{blockedReason}</Text>
+      )}
       {!outcomes && (
         <AppButton
           label={requestSubmitLabel(selection.length, saving)}
           fullWidth
           loading={saving}
           disabled={!canSubmit || allFull}
-          style={{ marginTop: theme.spacing.s4 }}
+          accessibilityHint={blockedReason ?? undefined}
+          style={{ marginTop: blockedReason ? theme.spacing.s2 : theme.spacing.s4 }}
           onPress={() => void submit()}
         />
       )}
@@ -380,6 +451,24 @@ const styles = StyleSheet.create({
   // 満杯の子は淡色にして押せなくする（名前は隠さない。「頼めない人がいる」ことが見えるように）。
   chipFull: { opacity: 0.5 },
   chipText: { marginLeft: theme.spacing.s2, flexShrink: 1 },
+  // ポイントのチップ（D22）。1行のときは幅を「ポイントなし」1.7・ほか1の割合（flex）、左右の余白はs1。
+  // 2行2列のときは各行の中で等分（flex: 1）、行の間隔はs2。文字は折り返してよい（numberOfLinesを付けない）。
+  pointRow: { flexDirection: "row", gap: theme.spacing.s2, marginTop: theme.spacing.s2 },
+  pointChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: theme.tapTarget.parent,
+    paddingHorizontal: theme.spacing.s1,
+    paddingVertical: theme.spacing.s2,
+    borderRadius: theme.radius.parentMd,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    backgroundColor: theme.colors.neutralSurface,
+  },
+  pointChipGrid: { flex: 1, flexBasis: 0 },
+  pointChipText: { textAlign: "center", color: theme.colors.neutralTextPrimary },
+  pointChipTextSelected: { fontWeight: "700" },
+  blockedReason: { marginTop: theme.spacing.s4, color: theme.colors.neutralTextSecondary },
   reason: { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary },
   linkText: { marginTop: theme.spacing.s1, color: theme.colors.brandPrimaryStrong, textDecorationLine: "underline" },
   input: {

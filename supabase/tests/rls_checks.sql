@@ -654,6 +654,19 @@
 -- 見ない。82.15章のR1〜R30・L1〜L12・N1〜N18・E1〜E4を手動で実行し、実装メモ335章に
 -- 結果を記録した。
 --
+-- [2026-09-30追加・開発部] おねがいのポイントの事前指定（要件定義書07-43章 2026-09-30再改訂
+-- 決定20〜27、設計部/成果物/スキーマ設計.sql 82.19章、開発部/成果物/実装メモ.md 341章、
+-- supabase/migrations/20261002010000_chore_request_points.sql）に伴い、S4（105→106件、上限の
+-- 定数関数`max_request_points`。REVOKEしない定数関数のため`max_open_requests_per_child`と同じ扱い）
+-- を更新した。**設計部の見込み（82.19.9章「S4 +1」）と実測が一致した**（ローカルDockerで
+-- 適用前後に実測。手計算していない）。S1・S2c・S3・S5は±0（表・ポリシーを足していない）。
+-- C-R8から`c.points <> 0`を外し（おねがいのポイントは0〜3。範囲はC-R16が見る）、C層にC-R11〜C-R16
+-- （上限の定数が3・感謝の上限と連動していない・guardの主要な検査が残っている・通知の宛先関数に
+-- points/titleが無い・形のCHECKにpointsが無い・is_request行のpointsが範囲内）を追加した。
+-- 上限の3は、DBの`max_request_points()`・アプリの`theme.requestLimit.maxPoints`・C-R11の3か所
+-- （自動でそろえる仕組みは無い。変えるときは同じ変更で3つとも直す）。書き込み系の挙動は
+-- 82.19.10章のPT1〜PT28を手動で実行し、実装メモ341章に結果を記録した。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -1476,7 +1489,12 @@ WITH expected(f) AS (VALUES
   -- INSERTで動く）の本文から呼ばれるため、REVOKEしない（本文中の別の関数は呼び出し元の
   -- 実行権限が確認される。82.8章）。残りの新関数6つ（guard・宛先の組み立て2・通知の
   -- トリガー関数3）はすべてREVOKE済みでここには入らない（C-R6が確認）。
-  ('max_open_requests_per_child')
+  ('max_open_requests_per_child'),
+  -- [2026-09-30追加・設計部82.19.9章、実装メモ341章] max_request_points: おねがいのポイントの
+  -- 上限（値3）の定数関数。LANGUAGE SQL・IMMUTABLEでmax_open_requests_per_child()と同じ扱い。
+  -- chores_request_guard()（authenticatedのINSERTで動く）の本文から呼ばれるため、REVOKEしない。
+  -- 設計部の見込み（S4 +1）と実測が一致した。
+  ('max_request_points')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1489,7 +1507,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数105件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数106件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1630,6 +1648,8 @@ SELECT 'C層', 'C-R7b chore_request_done_noticesの権限（authenticatedはSELE
 
 -- C-R8 is_request行の形と担当のロールが正しいこと（データ整合。CHECKとトリガーが働いていれば
 --      0件のはずの事故検出）。0行の環境ではPASSにせずSKIP。
+--      [2026-09-30再改訂] `c.points <> 0`は外した（おねがいのポイントは頼むときに決める0〜3。
+--      範囲はC-R16が見る。設計部82.19.9章）。
 INSERT INTO _r
 SELECT 'C層', 'C-R8 is_request行の形と担当のロールが正しい', '0',
   CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN 'SKIP（is_request行が0件）'
@@ -1637,7 +1657,7 @@ SELECT 'C層', 'C-R8 is_request行の形と担当のロールが正しい', '0',
   CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN NULL ELSE count(*) = 0 END
 FROM chores c
 WHERE c.is_request
-  AND (c.points <> 0 OR c.is_repeatable OR c.daily_limit IS NOT NULL OR c.scope <> 'family'
+  AND (c.is_repeatable OR c.daily_limit IS NOT NULL OR c.scope <> 'family'
        OR (c.assigned_to IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM family_members fm
                            WHERE fm.id = c.assigned_to AND fm.family_id = c.family_id AND fm.role = 'child')));
@@ -1658,6 +1678,67 @@ SELECT 'C層', 'C-R10 trg_chores_request_guardがBEFORE INSERT/UPDATE/DELETE（R
              WHERE t.tgrelid = 'public.chores'::regclass AND t.tgname = 'trg_chores_request_guard'), 'トリガーが無い'),
   coalesce((SELECT t.tgtype::int = 31 FROM pg_trigger t
              WHERE t.tgrelid = 'public.chores'::regclass AND t.tgname = 'trg_chores_request_guard'), false);
+
+-- C-R11 【2026-09-30再改訂・設計部82.19.9章】おねがいのポイントの上限の定数関数が3を返すこと
+--       （アプリの`theme.requestLimit.maxPoints`と1か所ずつで管理している。値を変える決定が
+--       出たら、この期待値とアプリの定数を同時に直す）
+INSERT INTO _r
+SELECT 'C層', 'C-R11 max_request_points()が3', '3',
+  coalesce((SELECT public.max_request_points()::text), '関数が無い'),
+  coalesce((SELECT public.max_request_points() = 3), false);
+
+-- C-R12 おねがいのポイント上限と感謝ポイントの1日上限が連動していないこと（互いの本文に相手の名前が無い）
+INSERT INTO _r
+SELECT 'C層', 'C-R12 max_request_points()とgratitude_daily_allowance()が互いを参照していない', '0',
+  count(*)::text, count(*) = 0
+FROM (
+  SELECT p.proname, pg_get_functiondef(p.oid) AS def
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace
+    AND p.proname IN ('max_request_points', 'gratitude_daily_allowance')
+) d
+WHERE (d.proname = 'max_request_points' AND d.def ~* 'gratitude')
+   OR (d.proname = 'gratitude_daily_allowance' AND d.def ~* 'max_request');
+
+-- C-R13 chores_request_guard()の本文に、主要な検査が残っていること（CREATE OR REPLACEの全面書き換えで、
+--       検査が無音で消えていないか）。足りない語の数を数える（0が正しい）。
+INSERT INTO _r
+SELECT 'C層', 'C-R13 chores_request_guard()の本文に主要な検査の語が残っている（足りない語の数）', '0',
+  count(*)::text, count(*) = 0
+FROM (VALUES ('max_request_points'), ('max_open_requests_per_child'), ('RQ001'),
+             ('chore_request_completed'), ('pg_advisory_xact_lock'), ('chore_request_points_out_of_range')) m(word)
+WHERE position(m.word in pg_get_functiondef('public.chores_request_guard()'::regprocedure)) = 0;
+
+-- C-R14 【U11】おねがいの通知の宛先関数の本文に、ポイントも題名も現れないこと（通知にポイントを載せない）
+INSERT INTO _r
+SELECT 'C層', 'C-R14 chore_request_notification_payload()の本文にpoints・titleが無い', '含まない',
+  CASE WHEN pg_get_functiondef('public.chore_request_notification_payload(text,uuid)'::regprocedure) ~* '(points|title)'
+       THEN 'points/titleが含まれている' ELSE '含まない' END,
+  pg_get_functiondef('public.chore_request_notification_payload(text,uuid)'::regprocedure) !~* '(points|title)';
+
+-- C-R15 【決定27-1】形のCHECK制約の定義にpointsが含まれないこと（上限をCHECKに書かない）
+INSERT INTO _r
+SELECT 'C層', 'C-R15 chk_chores_request_shapeの定義にpointsが含まれない', '含まない',
+  coalesce((SELECT CASE WHEN pg_get_constraintdef(con.oid) ~* 'points' THEN '含まれている' ELSE '含まない' END
+            FROM pg_constraint con
+            WHERE con.conrelid = 'public.chores'::regclass AND con.conname = 'chk_chores_request_shape'),
+           '制約が無い'),
+  coalesce((SELECT pg_get_constraintdef(con.oid) !~* 'points'
+            FROM pg_constraint con
+            WHERE con.conrelid = 'public.chores'::regclass AND con.conname = 'chk_chores_request_shape'),
+           false);
+
+-- C-R16 is_request行のpointsが0以上max_request_points()以下であること（データ整合。CHECKの代わりに
+--       ここで事故を検出する。トリガーが無効化された・別経路で入った、を拾う）。0行の環境ではPASSにせずSKIP。
+--       **上限を将来下げる決定をしたときは、既存の行が上限を超えて残るのが正しいので、この検査の上限側を
+--       「情報のみ（合否なし）」に直すこと**（決定27-3。下げた直後にFAILし続けないように）。
+INSERT INTO _r
+SELECT 'C層', 'C-R16 is_request行のpointsが0以上max_request_points()以下', '0',
+  CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN 'SKIP（is_request行が0件）'
+       ELSE count(*)::text END,
+  CASE WHEN (SELECT count(*) FROM chores WHERE is_request) = 0 THEN NULL ELSE count(*) = 0 END
+FROM chores c
+WHERE c.is_request AND (c.points < 0 OR c.points > public.max_request_points());
 
 
 -- ============================================================

@@ -21,7 +21,12 @@ import FailureRefText from "@/components/FailureRefText";
 import type { ChoreCompletion, FamilyDrawingLineData, FamilyMember, StampKey } from "@/types/domain";
 import { useNgWordGuard } from "@/hooks/useNgWordGuard";
 import NgWordWarningText from "@/components/NgWordWarningText";
-import { buildRequestChoreIdSet, isRequestCompletion, shouldShowCompletionPoints } from "@/lib/requestChore";
+import {
+  buildRequestChoreIdSet,
+  isRequestCompletion,
+  shouldShowCompletionPoints,
+  shouldShowPointsValue,
+} from "@/lib/requestChore";
 
 /**
  * S2 完了報告一覧・リアクション（みまもりメンバービュー、全件）
@@ -118,7 +123,7 @@ const SupporterCompletionRow = React.memo(function SupporterCompletionRow({
           <Text style={[theme.typography.supporterBodyMedium, { flexShrink: 1, textAlign: "right", marginLeft: theme.spacing.s2 }]}>
             {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULL
                 のため何も添えない。 */}
-            {c.chore_emoji} {c.chore_title} {c.points != null && !isRequest ? `+${c.points}pt` : ""}
+            {c.chore_emoji} {c.chore_title} {shouldShowPointsValue(c.points, isRequest) ? `+${c.points}pt` : ""}
           </Text>
         </View>
         <View style={[styles.cardMeta, styles.cardMetaRow]}>

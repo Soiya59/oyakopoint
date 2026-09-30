@@ -13,6 +13,7 @@ import {
   buildRequestChoreIdSet,
   canSubmitRequest,
   countOpenRequestsForChild,
+  formatPointsAmount,
   fullChildNames,
   gratitudeLimitBackLabel,
   gratitudeLimitBackRoute,
@@ -25,6 +26,7 @@ import {
   isRequestFull,
   isRequestPushType,
   isRequestWithoutAssignee,
+  isValidRequestPoints,
   normalizeRequestTitle,
   parseGratitudeSendParams,
   pruneRequestSelection,
@@ -33,15 +35,23 @@ import {
   requestDoneForRequester,
   requestDraftNote,
   requestFailureStatus,
+  requestPointChipFlex,
+  requestPointChipsLayout,
+  requestPointChoices,
   requestTitleCounter,
   routeForRequestPushType,
   shouldHideFromChildFamilyFeed,
   shouldShowChorePoints,
   shouldShowCompletionPoints,
   shouldShowGratitudeLimitCard,
+  shouldShowPointsValue,
+  splitPointChoicesIntoRows,
   summarizeRequestOutcomes,
   toggleRequestSelection,
 } from "./requestChore.ts";
+// 上限の値はリテラルを写さず、アプリの定数（theme.requestLimit）を読む（4か所目を作らない。
+// DBの`max_request_points()`・rls_checks.sqlのC-R11・themeの3か所で値をそろえる。実装メモ341章）。
+import { requestLimit } from "../theme/theme.ts";
 
 let failed = 0;
 
@@ -84,14 +94,29 @@ assertEqual("通常のクエストの完了報告 → false", isRequestCompletio
 assertEqual("chore_idがNULLの完了報告 → おねがいではない（普通のもの）", isRequestCompletion({ chore_id: null }, ids), false);
 assertEqual("家族データに無いchore_id → false", isRequestCompletion({ chore_id: "zzz" }, ids), false);
 
-// ---- 3. 「+Npt」を出すか（70.9節D16） ----
-assertEqual("おねがいの完了報告は「+0pt」を出さない", shouldShowCompletionPoints({ chore_id: "r1", points: 0 }, ids), false);
+// ---- 3. 「+Npt」を出すか（70.9節D16。【2026-09-30再改訂】おねがいは0より大きいときだけ） ----
+assertEqual("おねがいの完了報告（0pt）は「+0pt」を出さない", shouldShowCompletionPoints({ chore_id: "r1", points: 0 }, ids), false);
+assertEqual("おねがいの完了報告（1pt）は出す（再改訂）", shouldShowCompletionPoints({ chore_id: "r1", points: 1 }, ids), true);
+assertEqual("おねがいの完了報告（2pt）は出す（再改訂）", shouldShowCompletionPoints({ chore_id: "r2", points: 2 }, ids), true);
+assertEqual("おねがいの完了報告（上限pt）は出す（再改訂）", shouldShowCompletionPoints({ chore_id: "r3", points: requestLimit.maxPoints }, ids), true);
+assertEqual("おねがいの完了報告でpointsがNULLは出さない", shouldShowCompletionPoints({ chore_id: "r1", points: null }, ids), false);
 assertEqual("通常の完了報告（0pt）は今までどおり出す（07-28章決定26）", shouldShowCompletionPoints({ chore_id: "n1", points: 0 }, ids), true);
 assertEqual("通常の完了報告（5pt）は出す", shouldShowCompletionPoints({ chore_id: "n1", points: 5 }, ids), true);
 assertEqual("台紙型でpointsがNULLは出さない（既存の扱い）", shouldShowCompletionPoints({ chore_id: "n1", points: null }, ids), false);
 assertEqual("chore_idがNULLの完了報告（通常扱い）は出す", shouldShowCompletionPoints({ chore_id: null, points: 3 }, ids), true);
-assertEqual("一覧の行: おねがいは+Nptを出さない", shouldShowChorePoints({ is_request: true }), false);
+assertEqual("chore_idがNULLの完了報告（通常扱い・0pt）は今までどおり出す", shouldShowCompletionPoints({ chore_id: null, points: 0 }, ids), true);
+assertEqual("一覧の行: おねがい（0pt）は+Nptを出さない", shouldShowChorePoints({ is_request: true, points: 0 }), false);
+assertEqual("一覧の行: おねがい（2pt）は出す（再改訂）", shouldShowChorePoints({ is_request: true, points: 2 }), true);
+assertEqual("一覧の行: おねがいでpoints未指定は出さない", shouldShowChorePoints({ is_request: true }), false);
+assertEqual("一覧の行: 通常（0pt）は今までどおり出す", shouldShowChorePoints({ is_request: false, points: 0 }), true);
 assertEqual("一覧の行: 通常は出す", shouldShowChorePoints({ is_request: false }), true);
+assertEqual("値の規則: おねがい・0 → 出さない", shouldShowPointsValue(0, true), false);
+assertEqual("値の規則: おねがい・1 → 出す", shouldShowPointsValue(1, true), true);
+assertEqual("値の規則: おねがい・NaN（points文字列が数でない）→ 出さない", shouldShowPointsValue(NaN, true), false);
+assertEqual("値の規則: 通常・0 → 出す", shouldShowPointsValue(0, false), true);
+assertEqual("値の規則: 通常・null → 出さない", shouldShowPointsValue(null, false), false);
+assertEqual("値の規則: 通常・undefined → 出さない", shouldShowPointsValue(undefined, false), false);
+assertEqual("書式は通常のクエストと同じ「+Npt」", formatPointsAmount(2), "+2pt");
 
 // ---- 4. 子どもの印 ----
 assertEqual("印: 依頼者の名前あり", requestBadgeText("ママ"), "ママから おねがい");
@@ -151,10 +176,31 @@ assertEqual("題名は前後の空白を除く", normalizeRequestTitle("  おふ
 assertEqual("カウンター: 12/20・警告なし", requestTitleCounter("あ".repeat(12), 20, 5), { count: 12, text: "12/20", warn: false });
 assertEqual("カウンター: 残り5字でアンバー", requestTitleCounter("あ".repeat(15), 20, 5).warn, true);
 assertEqual("カウンター: 残り6字は警告なし", requestTitleCounter("あ".repeat(14), 20, 5).warn, false);
-assertEqual("保存できる: 1人選択・題名あり", canSubmitRequest({ selectedCount: 1, title: "そうじ", saving: false }), true);
-assertEqual("保存できない: 誰も選んでいない", canSubmitRequest({ selectedCount: 0, title: "そうじ", saving: false }), false);
-assertEqual("保存できない: 題名が空白だけ", canSubmitRequest({ selectedCount: 1, title: "   ", saving: false }), false);
-assertEqual("保存できない: 保存中（二度押し防止）", canSubmitRequest({ selectedCount: 1, title: "そうじ", saving: true }), false);
+assertEqual("保存できる: 1人選択・題名あり・ポイント2", canSubmitRequest({ selectedCount: 1, title: "そうじ", points: 2, saving: false }), true);
+assertEqual("保存できる: ポイント0（ポイントなし）は選択済み（U9。0を未選択と取り違えない）", canSubmitRequest({ selectedCount: 1, title: "そうじ", points: 0, saving: false }), true);
+assertEqual("保存できない: ポイントが未選択（null。U9）", canSubmitRequest({ selectedCount: 1, title: "そうじ", points: null, saving: false }), false);
+assertEqual("保存できない: 誰も選んでいない", canSubmitRequest({ selectedCount: 0, title: "そうじ", points: 1, saving: false }), false);
+assertEqual("保存できない: 題名が空白だけ", canSubmitRequest({ selectedCount: 1, title: "   ", points: 1, saving: false }), false);
+assertEqual("保存できない: 保存中（二度押し防止）", canSubmitRequest({ selectedCount: 1, title: "そうじ", points: 1, saving: true }), false);
+
+// ---- 7b. ポイントの欄（D20〜D22。上限はthemeの値から作る） ----
+assertEqual("チップの値は0〜maxPoints（「ポイントなし」＋1〜max）", requestPointChoices(requestLimit.maxPoints), [0, 1, 2, 3]);
+assertEqual("チップの数はmaxPoints+1（上限が変わっても作り直せる）", requestPointChoices(5), [0, 1, 2, 3, 4, 5]);
+assertEqual("チップの値: 上限0なら「ポイントなし」だけ", requestPointChoices(0), [0]);
+assertEqual("正しいポイント: 0", isValidRequestPoints(0, requestLimit.maxPoints), true);
+assertEqual("正しいポイント: 上限ちょうど", isValidRequestPoints(requestLimit.maxPoints, requestLimit.maxPoints), true);
+assertEqual("範囲外: 上限+1", isValidRequestPoints(requestLimit.maxPoints + 1, requestLimit.maxPoints), false);
+assertEqual("範囲外: 負", isValidRequestPoints(-1, requestLimit.maxPoints), false);
+assertEqual("範囲外: 小数", isValidRequestPoints(1.5, requestLimit.maxPoints), false);
+assertEqual("範囲外: NaN", isValidRequestPoints(NaN, requestLimit.maxPoints), false);
+assertEqual("並べ方: 通常（1.0倍）は1行", requestPointChipsLayout(1.0, requestLimit.pointChipsGridFontScale), "row");
+assertEqual("並べ方: 1.29倍は1行", requestPointChipsLayout(1.29, requestLimit.pointChipsGridFontScale), "row");
+assertEqual("並べ方: しきい値ちょうど（1.3）は2行2列", requestPointChipsLayout(1.3, requestLimit.pointChipsGridFontScale), "grid");
+assertEqual("並べ方: 2.0倍は2行2列", requestPointChipsLayout(2.0, requestLimit.pointChipsGridFontScale), "grid");
+assertEqual("幅の配り: 「ポイントなし」は1.7", requestPointChipFlex(0), 1.7);
+assertEqual("幅の配り: 1ptは1", requestPointChipFlex(1), 1);
+assertEqual("2行2列: 1行目＝ポイントなし・1pt、2行目＝2pt・3pt", splitPointChoicesIntoRows(requestPointChoices(requestLimit.maxPoints), 2), [[0, 1], [2, 3]]);
+assertEqual("themeの上限（DB・rls_checksのC-R11と同じ3）", requestLimit.maxPoints, 3);
 
 // ---- 8. 保存の結果（子どもごと） ----
 assertEqual("RQ001は「3つまで」", requestFailureStatus("RQ001", "RQ001"), "full");

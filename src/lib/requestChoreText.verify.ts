@@ -23,14 +23,35 @@ function assertEqual(label: string, actual: unknown, expected: unknown): void {
 // ---- 70.3節の文言表 ----
 assertEqual("切り替え", [T.TAB_LABEL_THANKS, T.TAB_LABEL_REQUEST], ["ありがとうを贈る", "おねがいする"]);
 assertEqual(
-  "説明（3文）",
+  "説明（2文。再改訂）",
   T.REQUEST_TAB_INTRO,
-  "お子さんの画面に「おねがい」として届きます。ポイントは付きません。やってくれたら、完了報告に届きます。"
+  "お子さんの画面に「おねがい」として届きます。決めたポイントは、やってくれたら自動で入ります（あとから変えられません）。"
 );
 assertEqual("見出し: 子ども1人", T.requestWhoHeading(1), "だれに？");
 assertEqual("見出し: 子ども2人以上", T.requestWhoHeading(2), "だれに？（複数選べます）");
-assertEqual("選んだ人の案内: 1人以下は出さない", T.requestSelectedCaption(["ちひろ"]), null);
-assertEqual("選んだ人の案内: 2人", T.requestSelectedCaption(["ちひろ", "そら"]), "ちひろ・そらに、それぞれ届きます");
+assertEqual("選んだ人の案内: 1人以下は出さない", T.requestSelectedCaption(["ちひろ"], 2), null);
+assertEqual("選んだ人の案内: 2人・ポイント未選択", T.requestSelectedCaption(["ちひろ", "そら"], null), "ちひろ・そらに、それぞれ届きます");
+assertEqual("選んだ人の案内: 2人・ポイントなし（0）は額を出さない", T.requestSelectedCaption(["ちひろ", "そら"], 0), "ちひろ・そらに、それぞれ届きます");
+assertEqual("選んだ人の案内: 2人・2pt", T.requestSelectedCaption(["ちひろ", "そら"], 2), "ちひろ・そらに、それぞれ 2pt で届きます");
+
+// ---- 70.3節 D20・D21（ポイントの欄） ----
+assertEqual("ポイントの見出し", T.REQUEST_POINTS_HEADING, "ポイントは？（必須）");
+assertEqual("チップ: 0は「ポイントなし」（「0pt」と書かない）", T.requestPointChipLabel(0), "ポイントなし");
+assertEqual("チップ: 1pt", T.requestPointChipLabel(1), "1pt");
+assertEqual("チップ: 3pt", T.requestPointChipLabel(3), "3pt");
+assertEqual("読み上げ: 0", T.requestPointChipAccessibilityLabel(0), "ポイントなし");
+assertEqual("読み上げ: 1は「1ポイント」", T.requestPointChipAccessibilityLabel(1), "1ポイント");
+assertEqual("押せない理由: ポイントだけ足りない", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: true, hasPoints: false }), "ポイントを選ぶと、おねがいできます。");
+assertEqual("押せない理由: だれにだけ足りない", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: false, hasPoints: true }), "だれに頼むか選ぶと、おねがいできます。");
+assertEqual("押せない理由: どちらも足りない", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: false, hasPoints: false }), "だれに頼むかとポイントを選ぶと、おねがいできます。");
+assertEqual("押せない理由: 題名が空なら出さない", T.requestSubmitBlockedReason({ hasTitle: false, hasChild: true, hasPoints: false }), null);
+assertEqual("押せない理由: そろっていれば出さない", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: true, hasPoints: true }), null);
+assertEqual("押せない理由: 全員がいっぱいなら出さない（D19の文が出ている）", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: false, hasPoints: false, allFull: true }), null);
+assertEqual("押せない理由: 保存中は出さない", T.requestSubmitBlockedReason({ hasTitle: true, hasChild: true, hasPoints: false, saving: true }), null);
+assertEqual("成功の3行目: 1人・2pt", T.requestSuccessPointsLine(1, 2), "やってくれたら、2pt 入ります");
+assertEqual("成功の3行目: 2人・2pt", T.requestSuccessPointsLine(2, 2), "やってくれたら、それぞれ 2pt 入ります");
+assertEqual("成功の3行目: 0は行ごと出さない", T.requestSuccessPointsLine(2, 0), null);
+assertEqual("P22の案内（P8・P9から開いたとき）", T.GRATITUDE_FROM_APPROVALS_NOTE, "ここでは、ひとことと、上乗せの贈り物ができます。");
 assertEqual("なにを", T.REQUEST_TITLE_HEADING, "なにを？");
 assertEqual("placeholder", T.REQUEST_TITLE_PLACEHOLDER, "例：おふろのそうじ");
 assertEqual("保存ボタン: 1人", T.requestSubmitLabel(1, false), "おねがいする");
@@ -72,6 +93,14 @@ assertEqual("P8の印とボタン", [T.APPROVAL_REQUEST_MARK, T.APPROVAL_THANKS_
 assertEqual("P10: 未完了", T.requestListRightLabel(false, "ちひろ"), "おねがい・ちひろ");
 assertEqual("P10: 済", T.requestListRightLabel(true, "そら"), "おねがい（済）・そら");
 assertEqual("P10: 担当なし", T.requestListRightLabel(true, null), "おねがい（済）・担当なし");
+assertEqual("P10: 0ptはptを出さない（今までどおり）", T.requestListRightLabel(false, "ちひろ", 0), "おねがい・ちひろ");
+assertEqual("P10: 2pt（再改訂）", T.requestListRightLabel(false, "ちひろ", 2), "2pt・おねがい・ちひろ");
+assertEqual("P10: 済・1pt（再改訂）", T.requestListRightLabel(true, "そら", 1), "1pt・おねがい（済）・そら");
+assertEqual("P11: 未完了・2pt（表示のみ）", T.requestEditPointsLine(2, false), "ポイント：2pt（変更できません）");
+assertEqual("P11: 未完了・0は「ポイントなし」", T.requestEditPointsLine(0, false), "ポイントなし");
+assertEqual("P11: 済・1pt", T.requestEditPointsLine(1, true), "ポイント：1pt");
+assertEqual("P11: 済・0は行ごと出さない", T.requestEditPointsLine(0, true), null);
+assertEqual("P11: 変えたいときの案内", T.REQUEST_EDIT_CHANGE_HINT, "変えたいときは、取り下げて、もう一度おねがいしてください。");
 assertEqual("P11: おねがい先", T.requestEditTarget("ちひろ"), "おねがい先：ちひろ");
 assertEqual("P11: 取り下げ確認", T.requestWithdrawConfirmTitle("おふろのそうじ"), "「おふろのそうじ」のおねがいを取り下げますか？");
 assertEqual("P11: 取り下げ確認の本文", T.requestWithdrawConfirmBody("ちひろ"), "ちひろさんの画面から消えます。お知らせはしません。");
@@ -94,6 +123,13 @@ all.push(
   T.requestWhoHeading(2),
   T.requestSubmitLabel(2, true),
   T.requestSuccessDetail(["ちひろ"]),
+  T.requestSuccessPointsLine(2, 3) ?? "",
+  T.requestSelectedCaption(["ちひろ", "そら"], 3) ?? "",
+  T.requestSubmitBlockedReason({ hasTitle: true, hasChild: false, hasPoints: false }) ?? "",
+  T.requestPointChipLabel(0),
+  T.requestPointChipLabel(2),
+  T.requestEditPointsLine(2, false) ?? "",
+  T.REQUEST_EDIT_CHANGE_HINT,
   T.requestResultFullLine("そら", 3),
   T.requestListRightLabel(false, "ちひろ"),
   T.requestWithdrawConfirmTitle("そうじ"),

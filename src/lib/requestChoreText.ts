@@ -11,8 +11,9 @@ export const TAB_LABEL_THANKS = "ありがとうを贈る";
 export const TAB_LABEL_REQUEST = "おねがいする";
 
 // ---- 「おねがいする」タブ（70.3節） ----
+// 【2026-09-30再改訂・70.3節】2文。「あとから変えられません」は、選んだあとではなく選ぶ前に読める場所に置く。
 export const REQUEST_TAB_INTRO =
-  "お子さんの画面に「おねがい」として届きます。ポイントは付きません。やってくれたら、完了報告に届きます。";
+  "お子さんの画面に「おねがい」として届きます。決めたポイントは、やってくれたら自動で入ります（あとから変えられません）。";
 export const REQUEST_TITLE_HEADING = "なにを？";
 export const REQUEST_TITLE_PLACEHOLDER = "例：おふろのそうじ";
 export const REQUEST_SAVING_LABEL_ONE = "おねがいしています…";
@@ -22,10 +23,47 @@ export function requestWhoHeading(childCount: number): string {
   return childCount >= 2 ? "だれに？（複数選べます）" : "だれに？";
 }
 
-/** 選んだ人の案内（2人以上を選んだときだけ）。 */
-export function requestSelectedCaption(selectedNames: readonly string[]): string | null {
+/**
+ * 選んだ人の案内（2人以上を選んだときだけ）。【2026-09-30再改訂】ポイントを選んだあと（1以上）は
+ * 「{名前}・{名前}に、それぞれ {n}pt で届きます」。未選択・0（ポイントなし）は今までどおり
+ * 「それぞれ届きます」（「+0pt」「0pt」は出さない。U12）。
+ */
+export function requestSelectedCaption(selectedNames: readonly string[], points: number | null): string | null {
   if (selectedNames.length < 2) return null;
-  return `${selectedNames.join("・")}に、それぞれ届きます`;
+  const who = selectedNames.join("・");
+  return points !== null && points > 0 ? `${who}に、それぞれ ${points}pt で届きます` : `${who}に、それぞれ届きます`;
+}
+
+// ---- 「ポイントは？（必須）」の欄（70.3節D20・D21） ----
+export const REQUEST_POINTS_HEADING = "ポイントは？（必須）";
+
+/** チップの名前。0は「ポイントなし」（「0pt」と書かない。D20）。 */
+export function requestPointChipLabel(points: number): string {
+  return points === 0 ? "ポイントなし" : `${points}pt`;
+}
+
+/** チップの読み上げ（「1pt」は「1ポイント」）。 */
+export function requestPointChipAccessibilityLabel(points: number): string {
+  return points === 0 ? "ポイントなし" : `${points}ポイント`;
+}
+
+/**
+ * ボタンが押せない理由の1行（D21）。題名が1字以上入っているのに、「だれに」「ポイント」のどちらか
+ * （または両方）が足りないときだけ出す。それ以外（題名が空・全員がいっぱい・保存中・そろっている）は
+ * null（理由は出さない）。赤・アンバー・警告の絵文字は使わない（呼び出し側で`neutralTextSecondary`）。
+ */
+export function requestSubmitBlockedReason(input: {
+  hasTitle: boolean;
+  hasChild: boolean;
+  hasPoints: boolean;
+  allFull?: boolean;
+  saving?: boolean;
+}): string | null {
+  if (!input.hasTitle || input.allFull || input.saving) return null;
+  if (input.hasChild && input.hasPoints) return null;
+  if (!input.hasChild && !input.hasPoints) return "だれに頼むかとポイントを選ぶと、おねがいできます。";
+  if (!input.hasChild) return "だれに頼むか選ぶと、おねがいできます。";
+  return "ポイントを選ぶと、おねがいできます。";
 }
 
 /** 保存ボタン。1人：おねがいする／2人以上：{n}人におねがいする。保存中は文言を差し替える。 */
@@ -38,6 +76,14 @@ export function requestSubmitLabel(selectedCount: number, saving: boolean): stri
 export const REQUEST_SUCCESS_TITLE = "おねがいしました";
 export function requestSuccessDetail(names: readonly string[]): string {
   return `${names.join("・")}の画面に届きました`;
+}
+/**
+ * 成功の3行目（【2026-09-30再改訂・D22】約束の額をもう一度見せる）。ポイントが1以上のときだけ。
+ * 0のときは行ごと出さない（「ポイントなし」に触れない。U12）。1文にとどめる（1.5秒で読める長さ）。
+ */
+export function requestSuccessPointsLine(childCount: number, points: number): string | null {
+  if (points <= 0) return null;
+  return childCount >= 2 ? `やってくれたら、それぞれ ${points}pt 入ります` : `やってくれたら、${points}pt 入ります`;
 }
 
 /** 全員失敗・1人で失敗したときのフォールバックの一文（新しい定数`REQUEST_CREATE_FAILED_MESSAGE`）。 */
@@ -102,16 +148,35 @@ export const CHORE_LIST_REQUEST_LABEL = "おねがい";
 export const CHORE_LIST_REQUEST_DONE_LABEL = "おねがい（済）";
 export const CHORE_LIST_REQUEST_NO_ASSIGNEE = "担当なし";
 
-/** P10の行の右側。「おねがい・{担当}」「おねがい（済）・{担当}」。担当が空なら「担当なし」。 */
-export function requestListRightLabel(finished: boolean, assigneeName: string | null | undefined): string {
+/**
+ * P10の行の右側。「おねがい・{担当}」「おねがい（済）・{担当}」。担当が空なら「担当なし」。
+ * 【2026-09-30再改訂・D15】ポイントが1以上のときは先頭に「{N}pt・」（「2pt・おねがい・ちひろ」）。0のときは
+ * 「pt」を出さない（今までどおり）。`points`を渡さない古い呼び方は0と同じ。
+ */
+export function requestListRightLabel(
+  finished: boolean,
+  assigneeName: string | null | undefined,
+  points: number | null | undefined = 0
+): string {
   const head = finished ? CHORE_LIST_REQUEST_DONE_LABEL : CHORE_LIST_REQUEST_LABEL;
   const who = assigneeName && assigneeName.length > 0 ? assigneeName : CHORE_LIST_REQUEST_NO_ASSIGNEE;
-  return `${head}・${who}`;
+  const pt = points && points > 0 ? `${points}pt・` : "";
+  return `${pt}${head}・${who}`;
 }
 
 export const REQUEST_EDIT_TITLE = "おねがい";
 export const REQUEST_EDIT_TITLE_DONE = "おねがい（済）";
-export const REQUEST_EDIT_NO_POINTS = "ポイントは付きません。";
+/**
+ * P11（おねがい版）のポイントの表示（D15）。**表示のみ**で、変更する欄は出さない（約束は変えられない。決定22）。
+ * 未完了：1以上は「ポイント：Npt（変更できません）」、0は「ポイントなし」。
+ * 済：1以上は「ポイント：Npt」、0は行ごと出さない（null）。
+ */
+export function requestEditPointsLine(points: number, finished: boolean): string | null {
+  if (finished) return points > 0 ? `ポイント：${points}pt` : null;
+  return points > 0 ? `ポイント：${points}pt（変更できません）` : "ポイントなし";
+}
+/** 未完了のおねがいのときだけ出す1行（済のおねがいは取り下げられないので案内しない）。 */
+export const REQUEST_EDIT_CHANGE_HINT = "変えたいときは、取り下げて、もう一度おねがいしてください。";
 export function requestEditTarget(name: string): string {
   return `おねがい先：${name}`;
 }
@@ -133,3 +198,6 @@ export function requestDoneNote(name: string): string {
 export const NOTIFY_SWITCH_HEADING = "お知らせの通知（家族みんな共通）";
 export const NOTIFY_SWITCH_DESCRIPTION =
   "書き込み・おねがい・ありがとうのポイントが届いたときに、スマホでお知らせします。";
+
+// ---- P22「ありがとうを贈る」タブの案内（D23。P8・P9から開いたときだけ） ----
+export const GRATITUDE_FROM_APPROVALS_NOTE = "ここでは、ひとことと、上乗せの贈り物ができます。";

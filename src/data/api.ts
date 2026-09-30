@@ -19,6 +19,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
+import { isValidRequestPoints } from "@/lib/requestChore";
+import { requestLimit } from "@/theme/theme";
 import {
   COMPLETIONS_MAX_PAGES,
   COMPLETIONS_PAGE_SIZE,
@@ -1788,29 +1790,45 @@ export async function updateChore(
  * [2026-09-30新設・要件定義書07-43章決定9・10、設計部/成果物/スキーマ設計.sql 82.3〜82.4章、
  * API仕様.md 38.2章、開発部/成果物/実装メモ.md 335章] 「おねがい」を1人の子どもに作る。
  *
- * **決定10の固定値（ポイント0・1回だけ・1日の上限なし・担当は子ども1人・カテゴリーなし・
- * 絵文字💌・is_request=true）を必ず入れる、おねがいを作る唯一の経路**（入力は「だれに」と
- * 「なにを」だけ。ポイント・繰り返しなどの入力欄は画面に存在しない）。DBは入れ忘れ・改ざんを
+ * **決定10・27の固定値（1回だけ・1日の上限なし・担当は子ども1人・カテゴリーなし・絵文字💌・
+ * is_request=true）を必ず入れる、おねがいを作る唯一の経路**。入力は「だれに」「なにを」
+ * 「ポイント」の3つ（繰り返しなどの入力欄は画面に存在しない）。DBは入れ忘れ・改ざんを
  * すべて`check_violation`で拒否する（絵文字だけは💌に上書きする）。`scope`は送らない
  * （既定'family'）。`created_by`はDBが`current_family_member_id()`で必ず上書きする。
  *
+ * **[2026-09-30再改訂・API仕様.md 38.14.1節] `points`は頼むときに決める約束のポイント（0〜
+ * `theme.requestLimit.maxPoints`。0は「ポイントなし」）。必須で、既定値を置かない**（未選択のまま
+ * 送れないことをコンパイルで担保する。統括判断U9）。整数でない・範囲外は**送らずに**
+ * `check_violation`（DBが同じ範囲外に返すのと同じコード）の失敗を返す（画面のチップは範囲内しか
+ * 出さないので通常は到達しない。画面は通信の失敗と同じ扱いで、DBの生の文言は出さない）。
+ * 頼んだ後は変えられない（DBが拒否する）。**DBを先に当ててから出す**（古いDBは1〜3を断る）。
+ *
  * 複数の子どもを選んだときは、**子どもごとに別々に1回ずつ呼ぶ**（1人の失敗が他の人の成功を
- * 巻き戻さない。API仕様.md 38.2章）。未完了のおねがいがすでに上限に達している子どもは
- * `PG_ERRCODE.chore_request_limit`（RQ001）で断られる（ほかの子どもの分は作られる）。
- * 作成が成功すると、DBトリガーが（家族の通知スイッチがONで、担当の子どもの端末が登録されて
- * いれば）担当の子どもへ通知を1通送る。クライアントは何もしない。
+ * 巻き戻さない。API仕様.md 38.2章。全員に同じ`points`を渡す）。未完了のおねがいがすでに
+ * 上限に達している子どもは`PG_ERRCODE.chore_request_limit`（RQ001）で断られる（ほかの子どもの分は
+ * 作られる）。作成が成功すると、DBトリガーが（家族の通知スイッチがONで、担当の子どもの端末が登録
+ * されていれば）担当の子どもへ通知を1通送る（**通知にポイントは載せない**）。クライアントは何もしない。
  */
 export async function createChoreRequest(
   client: SupabaseClient,
   familyId: string,
-  input: { title: string; assigned_to: string }
+  input: { title: string; assigned_to: string; points: number }
 ): Promise<ApiResult<Chore>> {
+  if (!isValidRequestPoints(input.points, requestLimit.maxPoints)) {
+    return {
+      ok: false,
+      error: {
+        code: PG_ERRCODE.checkViolation,
+        message: `おねがいのポイントは0〜${requestLimit.maxPoints}までです`,
+      },
+    };
+  }
   const { data, error, status } = await client
     .from("chores")
     .insert({
       family_id: familyId,
       title: input.title,
-      points: 0,
+      points: input.points, // 頼むときに決めた額。0＝「ポイントなし」のおねがい
       is_repeatable: false,
       daily_limit: null,
       assigned_to: input.assigned_to,

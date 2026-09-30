@@ -8,7 +8,7 @@ import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import { WeekBar, MonthCalendar } from "@/components/HistoryCalendar";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
-import { isRequestChore } from "@/lib/requestChore";
+import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
 import type { DailySummaryEntry } from "@/types/domain";
@@ -218,8 +218,8 @@ export default function ParentHistoryScreen() {
                     </Text>
                     {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLの
                         ため何も添えない。 */}
-                    {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は「+Npt」を出さない（行そのものは残す） */}
-                    {c.points != null && !isRequestChore(chore) && <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>}
+                    {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は0より大きいときだけ「+Npt」を出す（【2026-09-30再改訂】行そのものは残す。判定はrequestChore.tsの`shouldShowPointsValue`） */}
+                    {shouldShowPointsValue(c.points, isRequestChore(chore)) && <Text style={theme.typography.parentBodyMedium}>+{c.points}pt</Text>}
                   </View>
                 );
               })}

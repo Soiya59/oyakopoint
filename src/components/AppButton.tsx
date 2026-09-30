@@ -24,6 +24,11 @@ interface AppButtonProps {
   numberOfLines?: number;
   adjustsFontSizeToFit?: boolean;
   minimumFontScale?: number;
+  /**
+   * [2026-09-30追加・実装メモ.md 341章、主要画面ワイヤーフレーム.md 70.3節D21] 画面読み上げ用の補足。
+   * 「おねがいする」が押せない理由を読み上げるために使う。省略時は今までどおり（何も付けない）。
+   */
+  accessibilityHint?: string;
 }
 
 /**
@@ -47,6 +52,7 @@ export function AppButton({
   numberOfLines,
   adjustsFontSizeToFit,
   minimumFontScale,
+  accessibilityHint,
 }: AppButtonProps) {
   const isChild = tone === "child";
   // [2026-08-22追加] tone="supporter"（デザイントークン.md 1.7節）。primaryボタンは
@@ -72,6 +78,7 @@ export function AppButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [

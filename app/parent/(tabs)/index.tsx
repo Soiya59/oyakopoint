@@ -9,7 +9,7 @@ import TabIntroBubble from "@/components/TabIntroBubble";
 import { countRecentInbox } from "@/components/InboxPanel";
 import { useUnreadSince } from "@/hooks/useLastSeen";
 import theme from "@/theme/theme";
-import { isRequestChore } from "@/lib/requestChore";
+import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 import { useFamilyHomeCard } from "@/hooks/useFamilyBoard";
@@ -222,8 +222,8 @@ export default function ParentFamilyTabScreen() {
                 <View style={{ alignItems: "flex-end" }}>
                   {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLの
                       ため何も添えない。 */}
-                  {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は「+Npt」を出さない（行そのものは残す） */}
-                  {c.points != null && !isRequestChore(state.chores.find((ch) => ch.id === c.chore_id)) && (
+                  {/* [2026-09-30追加・主要画面ワイヤーフレーム.md 70.9節D16・D17] おねがいの完了報告は0より大きいときだけ「+Npt」を出す（【2026-09-30再改訂】行そのものは残す。判定はrequestChore.tsの`shouldShowPointsValue`） */}
+                  {shouldShowPointsValue(c.points, isRequestChore(state.chores.find((ch) => ch.id === c.chore_id))) && (
                     <Text style={{ color: theme.colors.neutralTextSecondary }}>+{c.points}pt</Text>
                   )}
                   <Text style={[theme.typography.parentCaption, { color: theme.colors.neutralTextSecondary }]}>

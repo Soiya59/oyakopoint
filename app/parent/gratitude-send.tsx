@@ -25,6 +25,7 @@ import {
 import {
   GRATITUDE_BALANCE_ERROR_TEXT,
   GRATITUDE_BALANCE_RETRY_LABEL,
+  GRATITUDE_FROM_APPROVALS_NOTE,
   GRATITUDE_LIMIT_CARD_LINES,
   TAB_LABEL_REQUEST,
   TAB_LABEL_THANKS,
@@ -252,6 +253,14 @@ export default function ParentGratitudeSendScreen() {
           </View>
         ) : (
           <>
+            {/* [2026-09-30再改訂・D23・実装メモ341章] P8・P9から開いたとき（from=approvals）だけ、切り替えのすぐ下に
+                1行の案内。約束のポイントは頼むときに決めて自動で入るので、ここは「ひとことと、上乗せの贈り物」。
+                P21から開いたとき・引数の無いときは出さない。残り0の案内カードのときも出さない（上の分岐）。 */}
+            {initial.from === "approvals" && (
+              <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s3, color: theme.colors.neutralTextSecondary }]}>
+                {GRATITUDE_FROM_APPROVALS_NOTE}
+              </Text>
+            )}
             <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>だれに？</Text>
             <View style={styles.chipRow}>
               {candidates.map((m) => (
