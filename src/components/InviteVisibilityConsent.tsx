@@ -38,7 +38,9 @@ interface InviteVisibilityConsentProps {
  * 進める同一デプロイを行うこと。** 片方だけ更新すると全ての参加リクエストが
  * check_violationで拒否され続ける（40.5章・40.11章、乖離にはすぐ気づける設計）。
  */
-export const JOIN_CONSENT_VERSION = 1;
+// [2026-10-01・版2] S0にITEM_F（みまもりのごほうびも家族に見える）を足した
+// （統括決定・要件定義書06章(1)f行、実装メモ342章）。
+export const JOIN_CONSENT_VERSION = 2;
 
 // [2026-09-02改訂・統括] 当初は「家族の中に隠しごとを作らない、という考え方で
 // つくられています。」だったが、統括より「言い過ぎかもしれない、本質からずれて
@@ -63,14 +65,19 @@ const ITEM_C =
 const ITEM_D =
   "家族の書き込みボードは、投稿の本文と、スタンプの数・だれが送ったかが家族全員に公開されます。投稿から5分を過ぎると本人でも削除できなくなり、それ以降は保護者だけがいつでも削除できます。";
 
+// [2026-10-01追加] みまもりメンバーのごほうびは2026-08-23から家族全員に見える
+// （rewards_select_scoped）。交換の記録（reward_redemptions）も同じ。S0だけに出す。
+const ITEM_F =
+  "あなたが登録したごほうび（名前・ポイント）と、ごほうびを交換した記録も、家族全員が見られます。";
+
 const CHECKBOX_LABEL = "上記の内容を確認し、同意します";
 
 export default function InviteVisibilityConsent({ role, checked, onChange }: InviteVisibilityConsentProps) {
   const isSupporter = role === "supporter";
   const bodyStyle = isSupporter ? theme.typography.supporterBody : theme.typography.parentBody;
   const accentColor = isSupporter ? theme.colors.supporterAccent : theme.colors.brandPrimary;
-  // 26.2節: P6（parent）は導入文＋a・b・c・d、S0（supporter）は導入文＋b・c・dのみ。
-  const items = isSupporter ? [ITEM_B, ITEM_C, ITEM_D] : [ITEM_A, ITEM_B, ITEM_C, ITEM_D];
+  // 26.2節: P6（parent）は導入文＋a・b・c・d、S0（supporter）は導入文＋b・c・d・f（fは2026-10-01追加。記号は要件定義書06章(1)の表に合わせた）。
+  const items = isSupporter ? [ITEM_B, ITEM_C, ITEM_D, ITEM_F] : [ITEM_A, ITEM_B, ITEM_C, ITEM_D];
 
   return (
     <View>
