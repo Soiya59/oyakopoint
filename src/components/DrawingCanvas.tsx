@@ -23,6 +23,7 @@ import {
   findLineIndexAtPoint,
   translateLinePoints,
   rotateLinePoints,
+  selectionAfterRelease,
   type HitTestLine,
 } from "@/lib/drawingLineMove";
 import theme from "@/theme/theme";
@@ -82,6 +83,16 @@ import type { FamilyDrawingLine, FamilyDrawingLineData } from "@/types/domain";
  *   ではなく直前の1回（15度）分だけ戻る。315章の1回のドラッグ移動と同じ
  *   「1操作＝1回分」の粒度に自然にそろうため、`preMoveLinesRef`側は変更しなかった
  *   （依頼文「既存の巻き戻しの作りに合う方を選ぶ」への回答）。
+ *
+ * [2026-09-30変更・実装メモ.md 340章、本部長依頼・軽微変更ルート、統括承認済み]
+ * 上の316章の「実際に動かした（ドラッグ）場合は…選択状態は変えない」を変更した。
+ * ドラッグで動かした線も、指を離した後は選んだ状態のままにする（動かした直後に
+ * そのまま↻や🗑を押せるように）。回転の基準は動かした後の座標・角度0で張り直す
+ * （316章と同じ考え方）。別の線をつかむ・何もない所をつかむ・道具を切り替えると
+ * 選択が外れる条件は316章のまま変えていない。判定は`selectionAfterRelease`
+ * （`src/lib/drawingLineMove.ts`）に切り出して`drawingLineMove.verify.ts`で検証している。
+ * ↻と🗑のボタン（`ZoomableDrawingCanvas.tsx`）は、✋を選んだ時点から、選んでいない間は
+ * うすい色（押しても案内が出るだけ）で出すようにした。
  *
  * [2026-09-29追加・実装メモ.md 326章、本部長依頼・軽微変更ルート、統括承認済み]
  * ✋で選んだ線・形を1つだけ削除できるようにする（「これをけす」）。
@@ -653,27 +664,24 @@ ref) {
       const moved = finalPoints.some((v, i) => v !== grab.origPoints[i]);
       if (moved) {
         onLineMoveRef.current?.(grab.index, finalPoints);
-        // [316章] 選択中の線をドラッグで動かした場合（Grantで選択を外していない＝
-        // 同じ線をつかんだ場合のみここに来る）、回転の基準（rotateBaseRef）を
-        // 動かした後の座標へ張り直す。動かす前の位置を基準にしたまま回すと、
-        // 回転のたびに動かす前の位置へ引き戻って見えてしまうため。
-        if (rotateBaseRef.current !== null && rotateBaseRef.current.index === grab.index) {
-          rotateBaseRef.current = { index: grab.index, basePoints: finalPoints, angle: 0 };
-        }
-        return;
       }
-      // [316章] つかんだが動かさなかった＝タップ。依頼文「軽くタップ（動かさずに
-      // 離す）すると…選ばれた状態になる」のとおり、その線を選択状態にする。
-      // 既に選択中の線を再度タップした場合（rotateBaseRefのindexが一致）は、
-      // 積み上げてきた回転角度を無駄に0へ戻さないよう基準を張り直さない。
-      setSelectedIndex(grab.index);
-      if (rotateBaseRef.current === null || rotateBaseRef.current.index !== grab.index) {
-        rotateBaseRef.current = {
-          index: grab.index,
-          basePoints: linesRef.current[grab.index]?.p ?? grab.origPoints,
-          angle: 0,
-        };
-      }
+      // [2026-09-30変更・実装メモ.md 340章、統括承認済み] 動かした線も、動かさずに離した
+      // （タップ）線も、どちらも選んだ状態にする。316章では動かしたときは選択しなかったが、
+      // 「動かした直後にそのまま↻や🗑を押せる」ように変えた。選ぶ線・回す基準の決め方
+      // （動かしたなら動かした後の座標・角度0で張り直す／タップなら既存の基準を保つ）は
+      // 純粋関数`selectionAfterRelease`（`drawingLineMove.verify.ts`で検証）に委ねる。
+      // 「ひとつ もどす」（呼び出し元の`preMoveLinesRef`）は`onLineMove`の呼び出しだけで
+      // 決まるため、ここでは何も変えていない。
+      const result = selectionAfterRelease({
+        grabIndex: grab.index,
+        moved,
+        finalPoints,
+        origPoints: grab.origPoints,
+        currentLinePoints: linesRef.current[grab.index]?.p,
+        currentBase: rotateBaseRef.current,
+      });
+      setSelectedIndex(result.selectedIndex);
+      rotateBaseRef.current = result.base;
       return;
     }
     // [2026-09-26追加・実装メモ.md 309章] 形ツールは、ペンとは別の経路で確定する。

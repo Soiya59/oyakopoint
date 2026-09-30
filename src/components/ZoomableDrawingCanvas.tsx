@@ -37,6 +37,13 @@
  * `subscribeIntroSeen`は使わない）。理由は、パン中に案内が消えると直下の
  * 46-B見本・パレット・太さ選択の位置が詰まって画面が揺れるため（本部長差し戻し、
  * 47章・48章が守ってきた「指を動かしている最中は何も動かさない」原則と同じ）。
+ *
+ * [2026-09-30変更・実装メモ.md 340章、本部長依頼・軽微変更ルート、統括承認済み]
+ * ↻（回す）と🗑（えらんだものを消す）を、✋（うごかす）を選んだ時点から出す
+ * （それまでは、線を選ぶまで隠れていたため、統括が「無いかも」と感じた）。線・形を
+ * 選んでいない間はうすい色（押せない見た目、`accessibilityState.disabled`）にし、
+ * 押すと数秒だけ「えらんでね」の案内を出す。線・形を選ぶと、今までと同じはっきりした
+ * 色で押せる。✋以外の道具では今までどおり出さない。
  */
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
@@ -90,6 +97,20 @@ const ROTATE_BUTTON_LABEL: Record<Tone, string> = {
  * 画面には記号（🗑️）のみを表示し、文字ラベルは出さない（↻と同じ扱い）。
  */
 const DELETE_SELECTED_BUTTON_LABEL = "えらんだものを けす";
+
+/**
+ * [2026-09-30追加・実装メモ.md 340章] ✋を選んでいるが線・形をまだ選んでいない間に、
+ * うすい↻・🗑を押したときの案内。子ども向けは平仮名（分かち書き）、保護者・
+ * みまもりメンバー向けは漢字（この2ロールは常に同一文言）。
+ */
+const SELECT_FIRST_HINT: Record<Tone, { rotate: string; remove: string }> = {
+  child: { rotate: "まわしたい せんを えらんでね", remove: "けしたい せんを えらんでね" },
+  parent: { rotate: "回したい線をタップして選んでください", remove: "消したい線をタップして選んでください" },
+  supporter: { rotate: "回したい線をタップして選んでください", remove: "消したい線をタップして選んでください" },
+};
+
+/** [2026-09-30追加・340章] 案内を消すまでの時間。`DrawingToolPicker.tsx`の初回案内（4秒）より少し短く。 */
+const SELECT_FIRST_HINT_DURATION_MS = 3000;
 
 interface ZoomableDrawingCanvasProps {
   tone: Tone;
@@ -249,6 +270,40 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
   const canvasRef = useRef<DrawingCanvasHandle>(null);
   const [hasSelection, setHasSelection] = useState(false);
   /**
+   * [2026-09-30追加・実装メモ.md 340章] うすい（選択前の）↻・🗑を押したときの案内。
+   * `null`＝出していない。数秒で消す（`DrawingToolPicker.tsx`の初回案内と同じ
+   * setTimeout方式）。レイアウトを押し下げないよう窓の上に重ねて出す（絶対配置）。
+   */
+  const [selectHint, setSelectHint] = useState<"rotate" | "remove" | null>(null);
+  const selectHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSelectHint = () => {
+    if (selectHintTimerRef.current) {
+      clearTimeout(selectHintTimerRef.current);
+      selectHintTimerRef.current = null;
+    }
+    setSelectHint(null);
+  };
+  const showSelectHint = (kind: "rotate" | "remove") => {
+    if (selectHintTimerRef.current) clearTimeout(selectHintTimerRef.current);
+    setSelectHint(kind);
+    selectHintTimerRef.current = setTimeout(() => {
+      selectHintTimerRef.current = null;
+      setSelectHint(null);
+    }, SELECT_FIRST_HINT_DURATION_MS);
+  };
+  // 線・形を選んだら、案内はもう要らない。道具を切り替えたら（ボタンごと消えるので）案内も消す。
+  // アンマウント時はタイマーを止める。
+  useEffect(() => {
+    if (hasSelection || tool !== "move") clearSelectHint();
+    // clearSelectHintは毎回作り直されるが中身はrefとsetStateだけのため依存に入れない。
+  }, [hasSelection, tool]);
+  useEffect(
+    () => () => {
+      if (selectHintTimerRef.current) clearTimeout(selectHintTimerRef.current);
+    },
+    []
+  );
+  /**
    * [2026-09-29変更・実装メモ.md 327章] 326章では`onSelectionChange`で親へも
    * 橋渡ししていたが、削除ボタン（🗑）がこのファイル内部（↻と同じ窓の隅）へ
    * 移り、親（`DrawingBoard.tsx`・`AvatarDrawingPanel.tsx`）は選択の有無を
@@ -388,6 +443,10 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
   const panIntroTextStyle =
     tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterCaption : theme.typography.parentCaption;
 
+  // [2026-09-30追加・340章] 案内の文字。子どもは`childBody`、大人は各ロールの本文サイズ。
+  const selectHintTextStyle =
+    tone === "child" ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
+
   return (
     <View style={styles.measureWrap} onLayout={handleLayout}>
       <DrawingZoomPicker tone={tone} selected={zoom} onSelect={handleSelectZoom} disabled={zoomPickerDisabled} />
@@ -440,14 +499,23 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
             押すたびに選択中の線を15度（時計回り）回す（`DrawingCanvas.tsx`の
             `rotateSelected`を`ref`経由で呼ぶだけ）。既存の道具ボタンと同じ56dp前後
             のタップ領域（`theme.drawingLimits.swatchSize`）にする。 */}
-        {tool === "move" && hasSelection && (
+        {tool === "move" && (
           <Pressable
-            onPress={() => canvasRef.current?.rotateSelected()}
+            onPress={() => {
+              if (hasSelection) canvasRef.current?.rotateSelected();
+              else showSelectHint("rotate");
+            }}
             disabled={disabled}
             accessibilityRole="button"
             accessibilityLabel={ROTATE_BUTTON_LABEL[tone]}
+            accessibilityHint={hasSelection ? undefined : SELECT_FIRST_HINT[tone].rotate}
+            accessibilityState={{ disabled: disabled || !hasSelection }}
             hitSlop={8}
-            style={[styles.rotateButton, disabled && styles.rotateButtonDisabled]}
+            style={[
+              styles.rotateButton,
+              !hasSelection && styles.selectButtonInactive,
+              disabled && styles.rotateButtonDisabled,
+            ]}
           >
             <Text style={styles.rotateButtonSymbol}>↻</Text>
           </Pressable>
@@ -459,18 +527,42 @@ export const ZoomableDrawingCanvas = forwardRef<ZoomableDrawingCanvasHandle, Zoo
             同じ丸い見た目（`rotateButton`と共通のstyleを再利用し、位置とborderColorだけ
             差し替える）。押すと選択中の線を1本削除する（`DrawingCanvas.tsx`の
             `deleteSelected`を`ref`経由で呼ぶだけ。↻の`rotateSelected`呼び出しと
-            全く同じ役割分担）。 */}
-        {tool === "move" && hasSelection && (
+            全く同じ役割分担）。
+            [2026-09-30変更・340章] ↻と同じく、✋を選んだ時点から出す（選択前はうすい色）。 */}
+        {tool === "move" && (
           <Pressable
-            onPress={() => canvasRef.current?.deleteSelected()}
+            onPress={() => {
+              if (hasSelection) canvasRef.current?.deleteSelected();
+              else showSelectHint("remove");
+            }}
             disabled={disabled}
             accessibilityRole="button"
             accessibilityLabel={DELETE_SELECTED_BUTTON_LABEL}
+            accessibilityHint={hasSelection ? undefined : SELECT_FIRST_HINT[tone].remove}
+            accessibilityState={{ disabled: disabled || !hasSelection }}
             hitSlop={8}
-            style={[styles.deleteSelectedButton, disabled && styles.rotateButtonDisabled]}
+            style={[
+              styles.deleteSelectedButton,
+              !hasSelection && styles.selectButtonInactive,
+              disabled && styles.rotateButtonDisabled,
+            ]}
           >
             <Text style={styles.deleteSelectedButtonSymbol}>🗑️</Text>
           </Pressable>
+        )}
+
+        {/* [2026-09-30追加・実装メモ.md 340章] うすいボタンを押したときの案内。ボタンの
+            すぐ下（窓の上部）に重ねて数秒だけ出す（絶対配置のため行は増えない）。
+            指は通す（pointerEvents="none"）ので、案内の下でもキャンバスの操作はできる。 */}
+        {tool === "move" && selectHint !== null && (
+          <View style={styles.selectHintWrap} pointerEvents="none">
+            <Text
+              style={[selectHintTextStyle, styles.selectHintText]}
+              accessibilityLiveRegion="polite"
+            >
+              {SELECT_FIRST_HINT[tone][selectHint]}
+            </Text>
+          </View>
         )}
       </View>
 
@@ -526,6 +618,31 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   rotateButtonDisabled: { opacity: 0.4 },
+  // [2026-09-30追加・実装メモ.md 340章] ✋を選んでいるが線・形をまだ選んでいない間の
+  // うすい見た目（押しても案内が出るだけ）。`rotateButtonDisabled`（0.4）と別に持つのは、
+  // 押せない理由が違う（あちらは保存中・上限到達で本当に無効、こちらは選ぶと押せる）ため。
+  selectButtonInactive: { opacity: 0.35 },
+  // [2026-09-30追加・340章] うすいボタンを押したときの案内。窓の上端から、ボタン（56dp）の
+  // 下へ重ねる。左右にはボタンぶんの余白を取らず、窓いっぱいの幅で中央寄せ。
+  selectHintWrap: {
+    position: "absolute",
+    top: theme.spacing.s4 + theme.drawingLimits.swatchSize + theme.spacing.s2,
+    left: theme.spacing.s3,
+    right: theme.spacing.s3,
+    alignItems: "center",
+    zIndex: 10,
+    elevation: 10,
+  },
+  selectHintText: {
+    backgroundColor: theme.colors.neutralSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.neutralBorder,
+    borderRadius: theme.radius.parentMd,
+    paddingHorizontal: theme.spacing.s3,
+    paddingVertical: theme.spacing.s2,
+    color: theme.colors.neutralTextSecondary,
+    textAlign: "center",
+  },
   // 子ども向けは記号のみ（依頼文どおり）。文字ラベルは持たせずaccessibilityLabelのみで補う。
   rotateButtonSymbol: {
     fontSize: 26,

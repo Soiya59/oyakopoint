@@ -241,3 +241,53 @@ export function translateLinePoints(points: readonly number[], dx: number, dy: n
   }
   return out;
 }
+
+/** 回す基準（`DrawingCanvas.tsx`の`rotateBaseRef`と同じ形）。 */
+export interface RotateBase {
+  index: number;
+  basePoints: number[];
+  angle: number;
+}
+
+/**
+ * [2026-09-30追加・実装メモ.md 340章、本部長依頼・軽微変更ルート・統括承認済み]
+ * ✋で線をつかんで指を離した瞬間に、「どの線を選んだ状態にするか」と「回す基準を
+ * どう持つか」を決める。316章までは、動かさずに離した（タップ）ときだけ線を選び、
+ * ドラッグで動かしたときは選択しなかった。340章から、動かした線も選んだままにする
+ * （動かした直後にそのまま↻や🗑を押せるようにするため）。
+ *
+ * - 動かした（`moved`）: 選ぶ線は`grabIndex`。回す基準は、動かした後の座標
+ *   （`finalPoints`）・角度0で必ず張り直す（動かす前の位置に引き戻って回り始めない
+ *   ため。316章の考え方と同じ）。
+ * - 動かさずに離した（タップ）: 選ぶ線は`grabIndex`。すでに同じ線の基準を持って
+ *   いれば（`currentBase.index === grabIndex`）、積み上げた回転角度を0へ戻さないよう
+ *   そのまま保つ。そうでなければ、今の線の座標（`currentLinePoints`、無ければ
+ *   つかんだ時点の`origPoints`）・角度0で新しく立てる。
+ *
+ * どちらの場合も、選ぶ線の番号は`grabIndex`になる（別の線をつかんだ場合は、Grantの
+ * 時点で前の選択と基準が外れているので、`currentBase`は`null`か同じ線のものだけが
+ * 渡される）。
+ */
+export function selectionAfterRelease(input: {
+  grabIndex: number;
+  moved: boolean;
+  finalPoints: readonly number[];
+  origPoints: readonly number[];
+  currentLinePoints: readonly number[] | undefined;
+  currentBase: RotateBase | null;
+}): { selectedIndex: number; base: RotateBase } {
+  const { grabIndex, moved, finalPoints, origPoints, currentLinePoints, currentBase } = input;
+  if (moved) {
+    return {
+      selectedIndex: grabIndex,
+      base: { index: grabIndex, basePoints: [...finalPoints], angle: 0 },
+    };
+  }
+  if (currentBase !== null && currentBase.index === grabIndex) {
+    return { selectedIndex: grabIndex, base: currentBase };
+  }
+  return {
+    selectedIndex: grabIndex,
+    base: { index: grabIndex, basePoints: [...(currentLinePoints ?? origPoints)], angle: 0 },
+  };
+}

@@ -14,7 +14,9 @@ import {
   translateLinePoints,
   rotateLinePoints,
   removeLineAtIndex,
+  selectionAfterRelease,
   type HitTestLine,
+  type RotateBase,
 } from "./drawingLineMove.ts";
 
 let failed = 0;
@@ -182,6 +184,51 @@ function assert(label: string, condition: boolean): void {
   const original = ["a", "b", "c"];
   removeLineAtIndex(original, 1);
   assertEqual("元の配列はそのまま", original, ["a", "b", "c"]);
+}
+
+// ---- 16. selectionAfterRelease（340章）: 動かした線も、選んだままにする ----
+{
+  const orig = [100, 100, 200, 200];
+  const moved = [150, 160, 250, 260];
+  const r = selectionAfterRelease({
+    grabIndex: 2, moved: true, finalPoints: moved, origPoints: orig,
+    currentLinePoints: orig, currentBase: null,
+  });
+  assertEqual("動かした線は選択状態になる", r.selectedIndex, 2);
+  assertEqual("動かした後の座標・角度0で回す基準を張り直す", r.base, { index: 2, basePoints: moved, angle: 0 });
+
+  const oldBase: RotateBase = { index: 2, basePoints: orig, angle: 45 };
+  const r2 = selectionAfterRelease({
+    grabIndex: 2, moved: true, finalPoints: moved, origPoints: orig,
+    currentLinePoints: orig, currentBase: oldBase,
+  });
+  assertEqual("回してある線を動かすと、角度は0に戻り、基準は動かした後の座標", r2.base, { index: 2, basePoints: moved, angle: 0 });
+}
+
+// ---- 17. selectionAfterRelease: 動かさずに離した（タップ）場合は316章と同じ ----
+{
+  const orig = [100, 100, 200, 200];
+  const r = selectionAfterRelease({
+    grabIndex: 0, moved: false, finalPoints: orig, origPoints: orig,
+    currentLinePoints: orig, currentBase: null,
+  });
+  assertEqual("タップで選択、基準は今の座標・角度0", r, {
+    selectedIndex: 0, base: { index: 0, basePoints: orig, angle: 0 },
+  });
+  const kept: RotateBase = { index: 0, basePoints: orig, angle: 30 };
+  const r2 = selectionAfterRelease({
+    grabIndex: 0, moved: false, finalPoints: orig, origPoints: orig,
+    currentLinePoints: orig, currentBase: kept,
+  });
+  assertEqual("同じ線をもう一度タップしても、回した角度を0へ戻さない", r2.base, kept);
+  const other: RotateBase = { index: 3, basePoints: [1, 2, 3, 4], angle: 15 };
+  const r3 = selectionAfterRelease({
+    grabIndex: 0, moved: false, finalPoints: orig, origPoints: orig,
+    currentLinePoints: undefined, currentBase: other,
+  });
+  assertEqual("別の線の基準が残っていれば、つかんだ線で立て直す（線が見つからなければつかんだ時点の座標）", r3.base, {
+    index: 0, basePoints: orig, angle: 0,
+  });
 }
 
 console.log("");
