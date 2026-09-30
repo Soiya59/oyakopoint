@@ -26,6 +26,13 @@
         "buildType": "app-bundle"
       },
       "channel": "production"
+    },
+    "fire": {
+      "distribution": "internal",
+      "channel": "production",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
