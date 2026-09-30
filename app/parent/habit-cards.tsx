@@ -10,7 +10,7 @@ import { useAppData } from "@/data/store";
 import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 
 /**
- * P38 シール帳（保護者、新設）
+ * P46 シール帳（保護者、新設。2026-09-30にP38から付け替え＝アバターと重なっていたため、ワイヤーフレームv1.64）
  * 参照: 要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
  * 49-B.5章決定45〜46
  *

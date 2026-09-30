@@ -23,14 +23,15 @@ import type { AccountDeletionPreview } from "@/types/domain";
  * は `status === "parentNoFamily"` を問答無用で "/" へリダイレクトするため、
  * `app/parent/`配下に置くと決定10（家族に属していない人もアカウントを削除
  * できること）の経路がP1から到達できなくなる。P1（`app/index.tsx`）・
- * P41（`app/parent/account.tsx`）・S13（`app/supporter/settings.tsx`）の
- * いずれからもガード無しで到達できるよう、ロール別グループの外に置く
- * （`app/onboarding/*`と同じ配置方針）。
+ * P41（`app/parent/account.tsx`）のいずれからもガード無しで到達できるよう、
+ * ロール別グループの外に置く（`app/onboarding/*`と同じ配置方針）。
+ * 【2026-10-01訂正】S13（`app/supporter/settings.tsx`）からはここではなく
+ * S28（`app/supporter/account-delete.tsx`）へ進む（画面一覧 v2.21）。
  *
  * 戻るリンクは「← もどる」（行き先を名乗らない）なので`router.back()`を使う
  * （`src/components/ScreenBackLink.tsx`の教訓どおり、「ホームへ戻る」等
  * 行き先を名乗るラベルにだけ`router.replace(...)`を使う。実装メモ.md 86章）。
- * 決定13: 何も変更せずに元の画面（P41／S13／P1）へ戻れる。
+ * 決定13: 何も変更せずに元の画面（P41／P1）へ戻れる。
  *
  * ---- 破壊的操作についての事前記録（開発部CLAUDE.md） ----
  * 「本当に削除する」は Edge Function `delete-account` を呼び、

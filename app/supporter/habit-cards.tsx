@@ -10,12 +10,12 @@ import { useAppData } from "@/data/store";
 import { useActiveHabitCard, useHabitFigureCatalog } from "@/hooks/useHabitCards";
 
 /**
- * S26 シール帳（みまもりメンバー、新設）
+ * S30 シール帳（みまもりメンバー、新設。2026-09-30にS26から付け替え、ワイヤーフレームv1.64）
  * 参照: 要件定義書07-28章2026-09-19全面改訂、主要画面ワイヤーフレーム.md
  * 49-B.5章決定45〜46
  *
- * app/parent/habit-cards.tsx（P38）と同一設計の複製（49.0節「役割ごとに
- * P38・S26の番号を持つが、同一設計の複製であり複雑さの上限が言う『新画面1つ』は
+ * app/parent/habit-cards.tsx（P46）と同一設計の複製（49.0節「役割ごとに
+ * P46・S30の番号を持つが、同一設計の複製であり複雑さの上限が言う『新画面1つ』は
  * この1コンセプトを指す」）。
  */
 export default function SupporterHabitCardsScreen() {
