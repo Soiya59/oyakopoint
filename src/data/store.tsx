@@ -69,6 +69,7 @@ import * as api from "./api";
 import type { ApiError } from "./api";
 import theme from "@/theme/theme";
 import { useBackgroundAutoRefresh } from "@/hooks/useBackgroundAutoRefresh";
+import { ErrorState } from "@/components/StatusViews";
 
 export interface State {
   family: typeof seedFamily;
@@ -1641,6 +1642,27 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   // `Cannot read properties of undefined (reading 'display_name')`のクラッシュに
   // つながっていた（実機テストで複数回再現・デバッグログで確認）。
   // セッション状態が確定するまでは常にスピナーを表示するようにする。
+  // [2026-09-30追加・実装メモ338章、軽微変更ルート・統括承認済み] 最初の読み込み
+  // （`familyId && !loadedOnce`の間）が失敗すると、`loadError`・`loadFailure`は入るのに
+  // 下のゲートが`LoadingScreen`を出し続け、画面がくるくる回ったまま止まっていた
+  // （「アプリが開かない」の原因になりうる。337章の申し送り）。最初の読み込みが失敗して
+  // 通信が止まっている（`!loading`）ときだけ、ErrorState（331・337章の書き分けと目印）と
+  // 「もういちど」を出す。「もういちど」は同じ`load()`を呼び直す（成功すれば`loadedOnce`が
+  // trueになり、ふつうの画面に進む）。`session.status === "loading"`の間は従来どおりスピナー。
+  if (session.status !== "loading" && familyId && !loadedOnce && loadFailure && !loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", padding: theme.spacing.s6, backgroundColor: theme.colors.neutralBg }}>
+        <ErrorState
+          tone={session.status === "child" ? "child" : "parent"}
+          title={session.status === "child" ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+          failure={loadFailure}
+          onRetry={() => {
+            void load();
+          }}
+        />
+      </View>
+    );
+  }
   if (session.status === "loading" || (familyId && !loadedOnce)) {
     return <LoadingScreen />;
   }
