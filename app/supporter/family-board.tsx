@@ -25,6 +25,7 @@ export default function SupporterFamilyBoardScreen() {
   const myMemberId = state.activeParentMemberId;
   const {
     loadState,
+    failure,
     posts,
     hasMore,
     loadingMore,
@@ -75,6 +76,7 @@ export default function SupporterFamilyBoardScreen() {
       <FamilyBoardHistoryPanel
         tone="supporter"
         loadState={loadState}
+        loadFailure={failure}
         posts={posts}
         hasMore={hasMore}
         loadingMore={loadingMore}

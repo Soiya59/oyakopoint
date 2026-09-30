@@ -256,6 +256,12 @@ export interface DataContextValue {
   loading: boolean;
   /** 直近の読み込みで発生した通信エラー（実接続時のみ）。 */
   loadError: string | null;
+  /**
+   * [2026-09-30追加・やること.md 4-40の残り、実装メモ337章] `loadError`の元になった`ApiError`
+   * （code・status）。画面を開いたときの読み込み失敗（ErrorState）に「目印」と書き分けの文を
+   * 出すために使う。`loadError`と同時に入り、同時に消える（モック実装では常にnull）。
+   */
+  loadFailure: ApiError | null;
   /** 家族データ一式を再取得する。書き込み系アクション成功後にも自動で呼ばれる。 */
   refresh: () => Promise<void>;
   dispatch: (action: Action) => Promise<DispatchResult>;
@@ -601,6 +607,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
   const [dailySummaryRows, setDailySummaryRows] = useState<DailySummaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadFailure, setLoadFailure] = useState<ApiError | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
   // [2026-09-11追加・要件定義書07-27章、スキーマ設計.sql 54.7章・54.10章] member_avatars。
   // 意図的にload()（下記、useBackgroundAutoRefreshの対象）とは別系統にする。
@@ -665,7 +672,10 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // `loading`をそのままローカルのloadStateへ写しており、SkeletonListに
     // 一瞬切り替わってしまう（統括指摘「画面がちらつかないこと」に抵触するため）。
     if (!background) setLoading(true);
-    if (!background) setLoadError(null);
+    if (!background) {
+      setLoadError(null);
+      setLoadFailure(null);
+    }
     const client = session.client;
 
     // background=trueの通信エラーは無視して古い表示を保つ（統括指摘「裏での取り直し」の
@@ -674,10 +684,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     // 再評価され（依存配列`[loading, loadError]`）、一時的な通信エラーでいきなり
     // エラー画面に切り替わってしまう。次回の成功時（次のbackground再取得や次回起動）に
     // 静かに回復させる方針とした。
-    const fail = (message: string) => {
+    const fail = (error: ApiError) => {
       if (isStale()) return;
       if (!background) {
-        setLoadError(message);
+        setLoadError(error.message);
+        setLoadFailure(error);
         setLoading(false);
       }
     };
@@ -685,7 +696,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     const bundleRes = await api.fetchFamilyBundle(client, familyId);
     if (isStale()) return;
     if (!bundleRes.ok) {
-      fail(bundleRes.error.message);
+      fail(bundleRes.error);
       return;
     }
 
@@ -797,63 +808,63 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     if (isStale()) return;
 
     if (!completionsRes.ok) {
-      fail(completionsRes.error.message);
+      fail(completionsRes.error);
       return;
     }
     if (!reactionsRes.ok) {
-      fail(reactionsRes.error.message);
+      fail(reactionsRes.error);
       return;
     }
     if (!redemptionsRes.ok) {
-      fail(redemptionsRes.error.message);
+      fail(redemptionsRes.error);
       return;
     }
     if (!memberPointsRes.ok) {
-      fail(memberPointsRes.error.message);
+      fail(memberPointsRes.error);
       return;
     }
     if (!gratitudeRes.ok) {
-      fail(gratitudeRes.error.message);
+      fail(gratitudeRes.error);
       return;
     }
     if (!familyBoardReactionsRes.ok) {
-      fail(familyBoardReactionsRes.error.message);
+      fail(familyBoardReactionsRes.error);
       return;
     }
     if (!familyBoardCommentsRes.ok) {
-      fail(familyBoardCommentsRes.error.message);
+      fail(familyBoardCommentsRes.error);
       return;
     }
     if (!familyDrawingReactionsRes.ok) {
-      fail(familyDrawingReactionsRes.error.message);
+      fail(familyDrawingReactionsRes.error);
       return;
     }
     if (!familyDrawingCommentsRes.ok) {
-      fail(familyDrawingCommentsRes.error.message);
+      fail(familyDrawingCommentsRes.error);
       return;
     }
     if (!publishedDrawingsRes.ok) {
-      fail(publishedDrawingsRes.error.message);
+      fail(publishedDrawingsRes.error);
       return;
     }
     if (!dailySummaryRes.ok) {
-      fail(dailySummaryRes.error.message);
+      fail(dailySummaryRes.error);
       return;
     }
     if (!dailyFlagsRes.ok) {
-      fail(dailyFlagsRes.error.message);
+      fail(dailyFlagsRes.error);
       return;
     }
     if (!memberBlocksRes.ok) {
-      fail(memberBlocksRes.error.message);
+      fail(memberBlocksRes.error);
       return;
     }
     if (!hiddenContentsRes.ok) {
-      fail(hiddenContentsRes.error.message);
+      fail(hiddenContentsRes.error);
       return;
     }
     if (!scheduledAnnouncementsRes.ok) {
-      fail(scheduledAnnouncementsRes.error.message);
+      fail(scheduledAnnouncementsRes.error);
       return;
     }
 
@@ -1559,6 +1570,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       state,
       loading,
       loadError,
+      loadFailure,
       refresh: load,
       dispatch,
       memberPoints,
@@ -1588,6 +1600,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       state,
       loading,
       loadError,
+      loadFailure,
       load,
       dispatch,
       memberPoints,
@@ -1979,6 +1992,7 @@ function MockDataProviderImpl({ children }: { children: React.ReactNode }) {
       state,
       loading: false,
       loadError: null,
+      loadFailure: null,
       refresh: async () => {},
       dispatch,
       memberPoints: computeMemberPoints(state),

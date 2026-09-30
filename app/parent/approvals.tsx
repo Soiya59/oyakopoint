@@ -248,7 +248,7 @@ const CompletionRow = React.memo(function CompletionRow({
 });
 
 export default function ApprovalsScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, refresh, memberAvatars } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, loadFailure, refresh, memberAvatars } = useAppData();
   // [2026-09-11追加・実装メモ.md 190章] この画面を開いたことを記録し、
   // ベル／新着件数を未読方式で数えられるようにする。**入口がどこであったかは問わない**
   // （統括の指摘。「新着◯件」カードからでも「最近の報告」の行からでも同じ画面に来る）。
@@ -439,7 +439,7 @@ export default function ApprovalsScreen() {
       {loadState === "loading" && <SkeletonList count={3} />}
 
       {loadState === "error" && (
-        <ErrorState title="読み込みに失敗しました" onRetry={() => setLoadState("ready")} />
+        <ErrorState title="読み込みに失敗しました" failure={loadFailure} onRetry={() => setLoadState("ready")} />
       )}
 
       {loadState === "ready" && completions.length === 0 && (

@@ -103,3 +103,28 @@ export function actionableFailureMessage(kind: ApiFailureKind, tone: FailureTone
       return null;
   }
 }
+
+/**
+ * [2026-09-30追加・やること.md 4-40の残り、実装メモ337章] 複数のAPI呼び出しの結果のうち、
+ * 最初に失敗したものの`ApiError`を返す（全部成功ならnull）。画面を開いたときの読み込みが
+ * 複数のAPIをまとめて呼ぶ（`!a.ok || !b.ok`）hookが、失敗の中身を捨てずに`failure`として
+ * 返すために使う。値のimportを持たない（このファイルの制約と同じ）。
+ */
+export function firstApiFailure(...results: ReadonlyArray<{ ok: boolean; error?: ApiError }>): ApiError | null {
+  for (const r of results) {
+    if (!r.ok && r.error) return r.error;
+  }
+  return null;
+}
+
+/**
+ * [2026-09-30追加・実装メモ337章] 画面を開いたときの読み込み失敗（`ErrorState`）に添える
+ * 「大人向けの書き分けの文」を決める。331章の書き分け（電波・混み合い・ログイン切れ・権限）
+ * と同じ文言で、子ども（tone === "child"）・原因を特定できない失敗・DB側の日本語メッセージは
+ * nullを返す＝画面が持つ既存のタイトルだけを出す（言葉は変えず、原因の違いは目印だけで見分ける）。
+ * 読み込みの失敗ではDB側の日本語メッセージ（上限超過など）は出さない（もともと固定の一文だった）。
+ * 判定は`classifyApiFailure`の今の順番のまま使う（P0系のDB日本語は「混み合い」にしない、331.10節）。
+ */
+export function loadFailureDetailMessage(tone: FailureTone, error: ApiError, source: FailureSource = "pg"): string | null {
+  return actionableFailureMessage(classifyApiFailure(error, source), tone);
+}

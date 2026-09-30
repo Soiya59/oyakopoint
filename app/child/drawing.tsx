@@ -22,7 +22,7 @@ import type { FamilyDrawingLineData } from "@/types/domain";
 export default function ChildDrawingScreen() {
   const { state } = useAppData();
   const myId = state.activeChildMemberId;
-  const { loadState, unpublished, atLimit, reload, save, remove, edit } = useMyDrawings(myId);
+  const { loadState, failure, unpublished, atLimit, reload, save, remove, edit } = useMyDrawings(myId);
   const [saving, setSaving] = useState(false);
   // [2026-09-29変更・実装メモ331章] 失敗は原因に応じた文言＋目印（useFailureNotice）で出す。
   // DB側が日本語で書いたメッセージ（ガチャ競合の check_violation 等、12.2a章「危険2」）は従来どおりそのまま出す。
@@ -116,7 +116,7 @@ export default function ChildDrawingScreen() {
           <SkeletonList count={2} />
         </View>
       )}
-      {loadState === "error" && <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={reload} />}
+      {loadState === "error" && <ErrorState tone="child" title="つうしんがおやすみ中みたい" failure={failure} onRetry={reload} />}
 
       {loadState === "ready" && (
         <View style={{ marginTop: theme.spacing.s4 }}>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { firstApiFailure } from "@/lib/apiFailure";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
@@ -12,6 +13,7 @@ import {
   fetchGratitudeSentHistory,
   fetchMyGratitudeGiveableBalance,
   type GratitudePointWithCounterpart,
+  type ApiError,
 } from "@/data/api";
 import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
@@ -36,6 +38,7 @@ export default function ChildGratitudeHubScreen() {
   const myId = state.activeChildMemberId;
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadFailure, setLoadFailure] = useState<ApiError | null>(null);
   const [balance, setBalance] = useState(0);
   const [rows, setRows] = useState<LogRow[]>([]);
 
@@ -66,12 +69,14 @@ export default function ChildGratitudeHubScreen() {
       return;
     }
     setLoadState("loading");
+    setLoadFailure(null);
     const [balanceRes, sentRes, receivedRes] = await Promise.all([
       fetchMyGratitudeGiveableBalance(client),
       fetchGratitudeSentHistory(client, myId),
       fetchGratitudeReceivedHistory(client, myId),
     ]);
     if (!balanceRes.ok || !sentRes.ok || !receivedRes.ok) {
+      setLoadFailure(firstApiFailure(balanceRes, sentRes, receivedRes));
       setLoadState("error");
       return;
     }
@@ -114,7 +119,7 @@ export default function ChildGratitudeHubScreen() {
       )}
 
       {loadState === "error" && (
-        <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={load} />
+        <ErrorState tone="child" title="つうしんがおやすみ中みたい" failure={loadFailure} onRetry={load} />
       )}
 
       {loadState === "ready" && (

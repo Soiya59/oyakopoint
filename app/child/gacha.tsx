@@ -22,7 +22,7 @@ import { useUndecoratedGachaDraw } from "@/hooks/useTreeDecoration";
 export default function ChildGachaScreen() {
   const { state } = useAppData();
   const myId = state.activeChildMemberId;
-  const { loadState, remaining, canDrawNow, reload } = useGachaProgress(myId);
+  const { loadState, failure, remaining, canDrawNow, reload } = useGachaProgress(myId);
   const { drawing, draw } = useGachaDrawAction();
   const { draw: undecoratedDraw, reload: reloadUndecorated } = useUndecoratedGachaDraw(myId);
   // [2026-09-29変更・実装メモ331章] 生のエラー文言でなく、原因に応じた文言＋目印で出す。
@@ -61,6 +61,7 @@ export default function ChildGachaScreen() {
       <GachaDrawPanel
         tone="child"
         loadState={loadState}
+        loadFailure={failure}
         remaining={remaining}
         canDrawNow={canDrawNow}
         drawing={drawing}

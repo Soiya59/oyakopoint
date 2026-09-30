@@ -65,6 +65,7 @@ export default function SupporterSelfScreen() {
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
   const {
     loadState: habitCardsLoadState,
+    failure: habitCardsFailure,
     card: habitCard,
     totalCount: habitCardTotalCount,
     reload: reloadHabitCards,
@@ -145,6 +146,7 @@ export default function SupporterSelfScreen() {
       <HabitCardStrip
         tone="supporter"
         loadState={habitCardsLoadState}
+        loadFailure={habitCardsFailure}
         card={habitCard}
         totalCount={habitCardTotalCount}
         catalog={habitFigureCatalog}

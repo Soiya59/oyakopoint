@@ -15,6 +15,8 @@ import {
   MSG_SERVER_BUSY,
   apiFailureMessage,
   classifyApiFailure,
+  firstApiFailure,
+  loadFailureDetailMessage,
 } from "./apiFailure.ts";
 
 interface ApiError {
@@ -110,6 +112,39 @@ assertEqual("actionable: 子どもは常に上書きしない(null)", actionable
     const text = apiFailureMessage(classifyApiFailure(e), "parent", e, FALLBACK);
     assertEqual(`生の文言を出さない: ${e.status}-${e.code}`, text.includes(e.message), false);
   }
+}
+
+// ---- 6. 画面を開いたときの読み込み失敗（ErrorState、実装メモ337章） ----
+{
+  const off: ApiError = { code: "", message: "TypeError: Network request failed", status: 0 };
+  const busy: ApiError = { code: "unknown_error", message: "<html>Bad Gateway</html>", status: 502 };
+  const login: ApiError = { code: "PGRST301", message: "JWT expired", status: 401 };
+  const denied: ApiError = { code: "42501", message: RAW_EN, status: 403 };
+  const p0: ApiError = { code: "P0002", message: "対象の完了報告が見つかりません", status: 500 };
+  const other: ApiError = { code: "23505", message: "duplicate key value", status: 409 };
+
+  // firstApiFailure: 最初に失敗したものを返す。全部成功ならnull。
+  assertEqual("firstApiFailure: 全部成功 → null", firstApiFailure({ ok: true }, { ok: true }), null);
+  assertEqual("firstApiFailure: 1つ目が失敗 → 1つ目", firstApiFailure({ ok: false, error: off }, { ok: false, error: busy }), off);
+  assertEqual("firstApiFailure: 2つ目だけ失敗 → 2つ目", firstApiFailure({ ok: true }, { ok: false, error: busy }), busy);
+  assertEqual("firstApiFailure: 引数なし → null", firstApiFailure(), null);
+
+  // loadFailureDetailMessage: 保護者・みまもりは331章と同じ文言、子どもは常にnull（目印だけ）。
+  assertEqual("load: 保護者 offline", loadFailureDetailMessage("parent", off), MSG_OFFLINE);
+  assertEqual("load: 保護者 502 → busy", loadFailureDetailMessage("parent", busy), MSG_SERVER_BUSY);
+  assertEqual("load: みまもり login", loadFailureDetailMessage("supporter", login), MSG_LOGIN_LOST);
+  assertEqual("load: 保護者 denied", loadFailureDetailMessage("parent", denied), MSG_DENIED);
+  assertEqual("load: 保護者 その他は文を足さない(null)", loadFailureDetailMessage("parent", other), null);
+  // 331.10節の教訓: P0系のDB日本語（HTTP 500）は「混み合い」にしない（読み込みではDBの文も出さないのでnull）。
+  assertEqual("load: 保護者 P0002(500・DB日本語)は混み合いにしない", loadFailureDetailMessage("parent", p0), null);
+  assertEqual("load: 子どもは offline でも文を足さない(null)", loadFailureDetailMessage("child", off), null);
+  assertEqual("load: 子どもは busy でも文を足さない(null)", loadFailureDetailMessage("child", busy), null);
+  // Edge Function経路（プロフィール切替のinviteLookup）: network_errorはofflineになる。
+  assertEqual(
+    "load: edge network_error → offline",
+    loadFailureDetailMessage("parent", { code: "network_error", message: "fetch failed" }, "edge"),
+    MSG_OFFLINE
+  );
 }
 
 if (failed > 0) {

@@ -30,6 +30,7 @@ export default function ChildFamilyBoardScreen() {
   const myMemberId = state.activeChildMemberId;
   const {
     loadState,
+    failure,
     posts,
     hasMore,
     loadingMore,
@@ -81,6 +82,7 @@ export default function ChildFamilyBoardScreen() {
       <FamilyBoardHistoryPanel
         tone="child"
         loadState={loadState}
+        loadFailure={failure}
         posts={posts}
         hasMore={hasMore}
         loadingMore={loadingMore}

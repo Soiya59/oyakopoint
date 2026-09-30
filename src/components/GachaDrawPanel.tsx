@@ -13,6 +13,7 @@
  * （21.2節「未配置のまま複数回引けても構わない」）。
  */
 import React from "react";
+import type { ApiError } from "@/data/api";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import FailureRefText from "./FailureRefText";
@@ -25,6 +26,8 @@ type Tone = "parent" | "child" | "supporter";
 export interface GachaDrawPanelProps {
   tone: Tone;
   loadState: "loading" | "error" | "ready";
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   remaining: number;
   canDrawNow: boolean;
   /** 抽選中（`draw_gacha()`呼び出し〜短い待機演出の終了まで）。 */
@@ -50,6 +53,7 @@ const bodyStyleFor = (tone: Tone) =>
 export function GachaDrawPanel({
   tone,
   loadState,
+  loadFailure,
   remaining,
   canDrawNow,
   drawing,
@@ -73,6 +77,7 @@ export function GachaDrawPanel({
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        failure={loadFailure}
         onRetry={onRetryLoad}
       />
     );

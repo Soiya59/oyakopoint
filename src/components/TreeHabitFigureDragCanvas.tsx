@@ -16,6 +16,7 @@
  * 混同しないための「形を分ける」という考え方自体は変えていない。
  */
 import React, { useRef, useState } from "react";
+import type { ApiError } from "@/data/api";
 import { PanResponder, Platform, StyleSheet, Text, View, ViewStyle } from "react-native";
 import AppButton from "./AppButton";
 import FailureRefText from "./FailureRefText";
@@ -38,6 +39,8 @@ const DEFAULT_POS = { x: 500, y: 500 };
 export interface TreeHabitFigureDragCanvasProps {
   tone: Tone;
   treeLoadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   stage: number;
   dots: FamilyTreeCompletionDot[];
   /**
@@ -72,6 +75,7 @@ export interface TreeHabitFigureDragCanvasProps {
 export function TreeHabitFigureDragCanvas({
   tone,
   treeLoadState,
+  loadFailure,
   stage,
   dots,
   habitFigurePlacements,
@@ -127,7 +131,7 @@ export function TreeHabitFigureDragCanvas({
 
   if (treeLoadState === "loading") return <SkeletonList count={3} />;
   if (treeLoadState === "error") {
-    return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetryLoad} />;
+    return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={loadFailure} onRetry={onRetryLoad} />;
   }
 
   const instructionText =

@@ -18,7 +18,7 @@ import { useUndecoratedGachaDraw } from "@/hooks/useTreeDecoration";
 export default function SupporterGachaScreen() {
   const { state } = useAppData();
   const myId = state.activeParentMemberId;
-  const { loadState, remaining, canDrawNow, reload } = useGachaProgress(myId);
+  const { loadState, failure, remaining, canDrawNow, reload } = useGachaProgress(myId);
   const { drawing, draw } = useGachaDrawAction();
   // [2026-08-26追加・第4段階] 21.2節「未配置の景品あり」案内カード用。
   const { draw: undecoratedDraw, reload: reloadUndecorated } = useUndecoratedGachaDraw(myId);
@@ -71,6 +71,7 @@ export default function SupporterGachaScreen() {
       <GachaDrawPanel
         tone="supporter"
         loadState={loadState}
+        loadFailure={failure}
         remaining={remaining}
         canDrawNow={canDrawNow}
         drawing={drawing}

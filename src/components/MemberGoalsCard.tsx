@@ -153,7 +153,7 @@ function MemberGoalEditModal({
 export function MemberGoalsCard() {
   const { state } = useAppData();
   const familyId = state.family.id;
-  const { loadState, goals, reload } = useFamilyMemberGoals(familyId);
+  const { loadState, failure, goals, reload } = useFamilyMemberGoals(familyId);
   const { lookup: totalsLookup } = useChoreCompletionTotals();
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
 
@@ -172,7 +172,7 @@ export function MemberGoalsCard() {
       <Card style={{ marginTop: theme.spacing.s4 }}>
         <Text style={theme.typography.parentBodyMedium}>いまの目標</Text>
         {loadState === "loading" && <SkeletonList count={children.length} />}
-        {loadState === "error" && <ErrorState title="読み込みに失敗しました" onRetry={reload} />}
+        {loadState === "error" && <ErrorState title="読み込みに失敗しました" failure={failure} onRetry={reload} />}
         {loadState === "ready" && (
           <View style={{ marginTop: theme.spacing.s2, gap: theme.spacing.s2 }}>
             {children.map((child) => {

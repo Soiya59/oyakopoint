@@ -7,7 +7,7 @@ import MemberAvatar from "@/components/MemberAvatar";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
-import { inviteLookup, InviteLookupChild } from "@/data/api";
+import { inviteLookup, InviteLookupChild, type ApiError } from "@/data/api";
 import type { FamilyDrawingLineData } from "@/types/domain";
 
 /**
@@ -35,6 +35,7 @@ type LoadState = "loading" | "error" | "ready";
 export default function ProfileSwitchScreen() {
   const { childSession, logoutChild } = useSession();
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadFailure, setLoadFailure] = useState<ApiError | null>(null);
   const [children, setChildren] = useState<InviteLookupChild[]>([]);
   // [2026-09-11追加・実装メモ205.8章] この画面はinvite-lookupを自分で
   // 呼んでいる（URLパラメータ経由ではない）ため、child_avatarsをそのまま
@@ -44,8 +45,10 @@ export default function ProfileSwitchScreen() {
   const load = async () => {
     if (!childSession) return;
     setLoadState("loading");
+    setLoadFailure(null);
     const res = await inviteLookup(childSession.inviteCode);
     if (!res.ok) {
+      setLoadFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -105,7 +108,7 @@ export default function ProfileSwitchScreen() {
         </View>
       )}
       {loadState === "error" && (
-        <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={load} />
+        <ErrorState tone="child" title="つうしんがおやすみ中みたい" failure={loadFailure} failureSource="edge" onRetry={load} />
       )}
       {loadState === "ready" && children.length === 0 && (
         <EmptyState tone="child" emoji="🙂" title="ほかのプロフィールが見つからなかったよ" />

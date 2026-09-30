@@ -46,7 +46,7 @@ import { buildRequestChoreIdSet, shouldHideFromChildFamilyFeed } from "@/lib/req
 type LoadState = "loading" | "error" | "ready";
 
 export default function ChildFamilyActivityScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, memberAvatars } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, loadFailure, memberAvatars } = useAppData();
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
@@ -124,7 +124,7 @@ export default function ChildFamilyActivityScreen() {
       {loadState === "loading" && <SkeletonList count={3} />}
 
       {loadState === "error" && (
-        <ErrorState tone="child" title="よみこめなかったよ。もういちど ためしてね" onRetry={() => setLoadState("ready")} />
+        <ErrorState tone="child" title="よみこめなかったよ。もういちど ためしてね" failure={loadFailure} onRetry={() => setLoadState("ready")} />
       )}
 
       {/* 空状態の文言はかぞくタブと同一（`app/child/(tabs)/family.tsx`のEmptyState）。 */}

@@ -32,6 +32,7 @@ export type GachaLoadState = "loading" | "error" | "ready";
 export function useGachaProgress(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<GachaLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [remaining, setRemaining] = useState(5);
   const [canDrawNow, setCanDrawNow] = useState(false);
 
@@ -39,13 +40,19 @@ export function useGachaProgress(memberId: string) {
     async (options?: { background?: boolean }) => {
       if (!memberId) return;
       const background = options?.background ?? false;
-      if (!background) setLoadState("loading");
+      if (!background) {
+        setLoadState("loading");
+        setFailure(null);
+      }
       const res = await fetchGachaProgressSummary(client, memberId);
       if (!res.ok) {
         // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
         // 「あと◯回」ウィジェットが裏での取り直し失敗のたびにエラー表示へ
         // 切り替わってちらつくのを避けるため）。
-        if (!background) setLoadState("error");
+        if (!background) {
+          setFailure(res.error);
+          setLoadState("error");
+        }
         return;
       }
       if (res.data) {
@@ -77,7 +84,7 @@ export function useGachaProgress(memberId: string) {
     { enabled: Boolean(memberId) }
   );
 
-  return { loadState, remaining, canDrawNow, reload: load };
+  return { loadState, failure, remaining, canDrawNow, reload: load };
 }
 
 export type GachaDrawActionResult = { ok: true; data: GachaDrawResult } | { ok: false; error: ApiError };
@@ -126,6 +133,7 @@ export function useGachaPrizeDetail(
   const { client } = useSession();
   const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const [loadState, setLoadState] = useState<GachaLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [detail, setDetail] = useState<GachaPrizeDetail | null>(null);
 
   const load = useCallback(async () => {
@@ -134,9 +142,11 @@ export function useGachaPrizeDetail(
       return;
     }
     setLoadState("loading");
+    setFailure(null);
     if (prizeKind === "preset_ornament" && presetOrnamentId) {
       const res = await fetchGachaPresetOrnament(client, presetOrnamentId);
       if (!res.ok) {
+        setFailure(res.error);
         setLoadState("error");
         return;
       }
@@ -147,6 +157,7 @@ export function useGachaPrizeDetail(
     if (prizeKind === "family_drawing" && prizeDrawingId) {
       const res = await fetchGachaPrizeDrawing(client, prizeDrawingId);
       if (!res.ok) {
+        setFailure(res.error);
         setLoadState("error");
         return;
       }
@@ -170,5 +181,5 @@ export function useGachaPrizeDetail(
     void load();
   }, [load]);
 
-  return { loadState, detail, reload: load };
+  return { loadState, failure, detail, reload: load };
 }

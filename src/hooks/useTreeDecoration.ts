@@ -31,13 +31,16 @@ export type TreeDecorationLoadState = "loading" | "error" | "ready";
 export function useUndecoratedGachaDraw(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<TreeDecorationLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [draw, setDraw] = useState<UndecoratedGachaDraw | null>(null);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchUndecoratedGachaDraws(client, memberId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -50,7 +53,7 @@ export function useUndecoratedGachaDraw(memberId: string) {
     void load();
   }, [load]);
 
-  return { loadState, draw, reload: load };
+  return { loadState, failure, draw, reload: load };
 }
 
 /**
@@ -79,6 +82,7 @@ export function useDecoratableCompletions(
   const { state } = useAppData();
   const familyId = state.family.id;
   const [loadState, setLoadState] = useState<TreeDecorationLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [candidates, setCandidates] = useState<DecoratableCompletion[]>([]);
 
   const load = useCallback(async () => {
@@ -90,11 +94,13 @@ export function useDecoratableCompletions(
     }
     if (!memberId || !familyId || !seasonStart) return;
     setLoadState("loading");
+    setFailure(null);
     // useFamilyTree.tsのfetchFamilyTreeCompletionDots呼び出しと同じ変換
     // （season_startはJST基準の暦月初日の日付のみを持つため、JSTの0時を明示する）。
     const seasonStartIso = new Date(`${seasonStart}T00:00:00+09:00`).toISOString();
     const res = await fetchMyDecoratableCompletions(client, familyId, memberId, seasonStartIso);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -107,7 +113,7 @@ export function useDecoratableCompletions(
     void load();
   }, [load]);
 
-  return { loadState, candidates, reload: load };
+  return { loadState, failure, candidates, reload: load };
 }
 
 export type DecorateActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };

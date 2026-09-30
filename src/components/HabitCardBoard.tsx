@@ -9,6 +9,7 @@
  * （コレクションへ移設、依頼文決定11／手動終了は撤去、決定27）。
  */
 import React, { useState } from "react";
+import type { ApiError } from "@/data/api";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import HabitCardKindPicker from "./HabitCardKindPicker";
@@ -42,6 +43,8 @@ export interface HabitCardBoardProps {
   chores: Chore[];
   catalog: HabitFigureCatalogItem[];
   loadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   card: HabitCard | null;
   breakdown: HabitCardChoreBreakdownRow[];
   totalCount: number;
@@ -183,6 +186,7 @@ export function HabitCardBoard({
   chores,
   catalog,
   loadState,
+  loadFailure,
   card,
   breakdown,
   totalCount,
@@ -216,7 +220,7 @@ export function HabitCardBoard({
 
   if (loadState === "loading") return <SkeletonList count={3} />;
   if (loadState === "error") {
-    return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />;
+    return <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={loadFailure} onRetry={onRetry} />;
   }
 
   const kindInfo = getHabitCardKindInfo(card, catalog, isChild);

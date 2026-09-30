@@ -22,7 +22,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  */
 export default function SupporterFamilyTreeScreen() {
   const { state } = useAppData();
-  const { loadState, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, failure, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -63,7 +63,7 @@ export default function SupporterFamilyTreeScreen() {
           <SkeletonList count={2} />
         </View>
       )}
-      {loadState === "error" && <ErrorState title="読み込みに失敗しました" onRetry={reload} />}
+      {loadState === "error" && <ErrorState title="読み込みに失敗しました" failure={failure} onRetry={reload} />}
 
       {loadState === "ready" && (
         <Card tone="supporter" style={{ marginTop: theme.spacing.s4, alignItems: "center" }}>

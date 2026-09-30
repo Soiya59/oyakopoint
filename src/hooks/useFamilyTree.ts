@@ -7,6 +7,8 @@
  * 参照: API仕様.md 9章、src/data/api.ts。
  */
 import { useCallback, useEffect, useState } from "react";
+import { firstApiFailure } from "@/lib/apiFailure";
+import type { ApiError } from "@/data/api";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
@@ -34,19 +36,26 @@ export function useFamilyTreeSummary() {
   const { state } = useAppData();
   const familyId = state.family.id;
   const [loadState, setLoadState] = useState<FamilyTreeLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [season, setSeason] = useState<FamilyTreeSeason | null>(null);
 
   const load = useCallback(
     async (options?: { background?: boolean }) => {
       if (!familyId) return;
       const background = options?.background ?? false;
-      if (!background) setLoadState("loading");
+      if (!background) {
+        setLoadState("loading");
+        setFailure(null);
+      }
       const res = await fetchFamilyTreeCurrentSeason(client, familyId);
       if (!res.ok) {
         // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
         // ホームの控えめなウィジェットが、裏での取り直し失敗のたびにエラー表示へ
         // 切り替わってちらつくのを避けるため）。
-        if (!background) setLoadState("error");
+        if (!background) {
+          setFailure(res.error);
+          setLoadState("error");
+        }
         return;
       }
       setSeason(res.data);
@@ -70,7 +79,7 @@ export function useFamilyTreeSummary() {
     { enabled: Boolean(familyId) }
   );
 
-  return { loadState, season, reload: load };
+  return { loadState, failure, season, reload: load };
 }
 
 /** P26/C20/S14詳細画面用（現在シーズン・内訳・完了報告ドット・先月分の記録）。 */
@@ -79,6 +88,7 @@ export function useFamilyTreeDetail() {
   const { state, blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const familyId = state.family.id;
   const [loadState, setLoadState] = useState<FamilyTreeLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [season, setSeason] = useState<FamilyTreeSeason | null>(null);
   const [breakdown, setBreakdown] = useState<FamilyTreeMemberBreakdown[]>([]);
   const [dots, setDots] = useState<FamilyTreeCompletionDot[]>([]);
@@ -99,8 +109,10 @@ export function useFamilyTreeDetail() {
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const seasonRes = await fetchFamilyTreeCurrentSeason(client, familyId);
     if (!seasonRes.ok) {
+      setFailure(seasonRes.error);
       setLoadState("error");
       return;
     }
@@ -109,6 +121,7 @@ export function useFamilyTreeDetail() {
       fetchFamilyTreeSeasonHistory(client, familyId),
     ]);
     if (!breakdownRes.ok || !historyRes.ok) {
+      setFailure(firstApiFailure(breakdownRes, historyRes));
       setLoadState("error");
       return;
     }
@@ -125,6 +138,7 @@ export function useFamilyTreeDetail() {
         fetchFamilyTreeHabitFigurePlacements(client, familyId, seasonRes.data.id),
       ]);
       if (!dotsRes.ok || !weeklyRes.ok || !stickerPlacementsRes.ok || !habitFigurePlacementsRes.ok) {
+        setFailure(firstApiFailure(dotsRes, weeklyRes, stickerPlacementsRes, habitFigurePlacementsRes));
         setLoadState("error");
         return;
       }
@@ -160,5 +174,5 @@ export function useFamilyTreeDetail() {
     void load();
   }, [load]);
 
-  return { loadState, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload: load };
+  return { loadState, failure, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload: load };
 }

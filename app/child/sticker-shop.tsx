@@ -40,9 +40,10 @@ export default function ChildStickerShopScreen() {
   const { state, memberPoints } = useAppData();
   const myId = state.activeChildMemberId;
   const balance = memberPoints.find((m) => m.member_id === myId)?.current_points ?? 0;
-  const { loadState: catalogLoadState, catalog, reload: reloadCatalog } = useStickerCatalog();
+  const { loadState: catalogLoadState, failure: catalogFailure, catalog, reload: reloadCatalog } = useStickerCatalog();
   const {
     loadState: familyPurchasesLoadState,
+    failure: familyPurchasesFailure,
     purchases: familyPurchases,
     reload: reloadFamilyPurchases,
   } = useFamilyStickerPurchasesForLock(state.family.id);
@@ -52,6 +53,7 @@ export default function ChildStickerShopScreen() {
   // sticker_tier_resetsの生データも取得する。
   const {
     loadState: tierResetsLoadState,
+    failure: tierResetsFailure,
     resets: tierResets,
     reload: reloadTierResets,
   } = useFamilyStickerTierResets(state.family.id);
@@ -137,6 +139,7 @@ export default function ChildStickerShopScreen() {
       <StickerShopPanel
         tone="child"
         loadState={loadState}
+        loadFailure={catalogFailure ?? familyPurchasesFailure ?? tierResetsFailure}
         catalog={catalog}
         balance={balance}
         lockedCatalogIds={lockedCatalogIds}

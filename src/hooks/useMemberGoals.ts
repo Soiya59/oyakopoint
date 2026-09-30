@@ -17,13 +17,16 @@ export type MemberGoalLoadState = "loading" | "error" | "ready";
 export function useActiveMemberGoal(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<MemberGoalLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [goal, setGoal] = useState<MemberGoal | null>(null);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchActiveMemberGoal(client, memberId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -35,7 +38,7 @@ export function useActiveMemberGoal(memberId: string) {
     void load();
   }, [load]);
 
-  return { loadState, goal, reload: load };
+  return { loadState, failure, goal, reload: load };
 }
 
 /**
@@ -46,13 +49,16 @@ export function useActiveMemberGoal(memberId: string) {
 export function useFamilyMemberGoals(familyId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<MemberGoalLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [goals, setGoals] = useState<MemberGoal[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchActiveMemberGoalsForFamily(client, familyId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -64,7 +70,7 @@ export function useFamilyMemberGoals(familyId: string) {
     void load();
   }, [load]);
 
-  return { loadState, goals, reload: load };
+  return { loadState, failure, goals, reload: load };
 }
 
 export type SetMemberGoalActionResult = { ok: true; goalId: string } | { ok: false; error: ApiError };

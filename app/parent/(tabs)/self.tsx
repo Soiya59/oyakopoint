@@ -73,6 +73,7 @@ export default function ParentSelfTabScreen() {
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
   const {
     loadState: habitCardsLoadState,
+    failure: habitCardsFailure,
     card: habitCard,
     totalCount: habitCardTotalCount,
     reload: reloadHabitCards,
@@ -157,6 +158,7 @@ export default function ParentSelfTabScreen() {
       <HabitCardStrip
         tone="parent"
         loadState={habitCardsLoadState}
+        loadFailure={habitCardsFailure}
         card={habitCard}
         totalCount={habitCardTotalCount}
         catalog={habitFigureCatalog}

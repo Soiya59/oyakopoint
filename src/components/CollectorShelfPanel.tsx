@@ -47,7 +47,7 @@ import { computeHabitCardDurationDays, getHabitCardKindInfo, summarizeHabitCardB
 import { formatDateShort, formatMonthJp, toJstDateString } from "@/lib/calendarDates";
 import theme, { figureKeyOfSticker, stickerShapeFallbackEmoji } from "@/theme/theme";
 import type { StickerRarity, StickerShape } from "@/theme/theme";
-import type { CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
+import type { ApiError, CollectedGachaDraw, FamilyTreeCompletionDot, FamilyTreeHabitFigurePlacement, FamilyTreeStickerPlacement } from "@/data/api";
 import type {
   FamilyMember,
   FamilyTreeSeason,
@@ -106,8 +106,24 @@ function stickerKindOnlyLabel(tone: Tone, shape: StickerShape): string {
   return tone === "child" ? stickerShapeLabel[shape].child : stickerShapeLabel[shape].parent;
 }
 
+/**
+ * [2026-09-30追加・やること.md 4-40の残り、実装メモ337章] 区画ごとの読み込み失敗の中身
+ * （各hookの`failure`）。渡すと、その区画の「読み込みに失敗しました」に目印と書き分けの文を
+ * 添える。省略・nullなら従来どおりの表示。
+ */
+export interface CollectorShelfLoadFailures {
+  collected?: ApiError | null;
+  pastSeasons?: ApiError | null;
+  stickers?: ApiError | null;
+  familyStickers?: ApiError | null;
+  habitFigures?: ApiError | null;
+  familyHabitFigures?: ApiError | null;
+}
+
 export interface CollectorShelfPanelProps {
   tone: Tone;
+  /** 読み込み失敗の中身（区画ごと）。省略可。 */
+  loadFailures?: CollectorShelfLoadFailures;
   collectedLoadState: LoadState;
   collectedItems: CollectedGachaDraw[];
   onRetryCollected: () => void;
@@ -826,6 +842,7 @@ function MemberSelectionChips({
 
 export function CollectorShelfPanel({
   tone,
+  loadFailures,
   collectedLoadState,
   collectedItems,
   onRetryCollected,
@@ -1072,6 +1089,7 @@ export function CollectorShelfPanel({
                 <ErrorState
                   tone={isChild ? "child" : "parent"}
                   title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+                  failure={loadFailures?.collected}
                   onRetry={onRetryCollected}
                 />
               )}
@@ -1125,6 +1143,7 @@ export function CollectorShelfPanel({
                   tone={tone}
                   members={members}
                   loadState={familyStickersLoadState}
+                  loadFailure={loadFailures?.familyStickers}
                   purchases={familyStickerPurchases}
                   onRetry={onRetryFamilyStickers}
                 />
@@ -1146,6 +1165,7 @@ export function CollectorShelfPanel({
                   tone={tone}
                   members={members}
                   loadState={familyHabitFiguresLoadState}
+                  loadFailure={loadFailures?.familyHabitFigures}
                   grants={familyHabitFigureGrants}
                   onRetry={onRetryFamilyHabitFigures}
                 />
@@ -1181,6 +1201,7 @@ export function CollectorShelfPanel({
                   isViewingSelf={isViewingSelf}
                   selectedMemberName={selectedMember?.display_name ?? "?"}
                   loadState={stickersLoadState}
+                  loadFailure={loadFailures?.stickers}
                   purchases={stickerPurchases}
                   onRetry={onRetryStickers}
                   onGoToShop={onGoToStickerShop}
@@ -1196,6 +1217,7 @@ export function CollectorShelfPanel({
                   isViewingSelf={isViewingSelf}
                   selectedMemberName={selectedMember?.display_name ?? "?"}
                   loadState={habitFiguresLoadState}
+                  loadFailure={loadFailures?.habitFigures}
                   grants={habitFigureGrants}
                   onRetry={onRetryHabitFigures}
                   onPlace={onPlaceHabitFigure}
@@ -1214,6 +1236,7 @@ export function CollectorShelfPanel({
             <ErrorState
               tone={isChild ? "child" : "parent"}
               title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+              failure={loadFailures?.pastSeasons}
               onRetry={onRetryPastSeasons}
             />
           )}
@@ -1343,7 +1366,7 @@ function HabitCardArchiveSection({ tone, members, myMemberId }: { tone: Tone; me
   const [selectedMemberId, setSelectedMemberId] = useState(myMemberId);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const isAll = selectedMemberId === ALL_MEMBERS_ID;
-  const { loadState, cards, breakdown, grants, reload } = useCompletedHabitCards(isAll ? "" : selectedMemberId);
+  const { loadState, failure, cards, breakdown, grants, reload } = useCompletedHabitCards(isAll ? "" : selectedMemberId);
 
   return (
     <View style={{ marginTop: theme.spacing.s4 }}>
@@ -1358,7 +1381,7 @@ function HabitCardArchiveSection({ tone, members, myMemberId }: { tone: Tone; me
         <View style={{ marginTop: theme.spacing.s4 }}>
           {loadState === "loading" && <SkeletonList count={2} />}
           {loadState === "error" && (
-            <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={reload} />
+            <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={failure} onRetry={reload} />
           )}
           {loadState === "ready" && cards.length === 0 && (
             <Text style={bodyStyle}>{isChild ? "まだ できあがった シールちょうは ないよ" : "まだ完成したシール帳はありません"}</Text>
@@ -1501,6 +1524,7 @@ function StickerShelfSection({
   isViewingSelf,
   selectedMemberName,
   loadState,
+  loadFailure,
   purchases,
   onRetry,
   onGoToShop,
@@ -1511,6 +1535,7 @@ function StickerShelfSection({
   isViewingSelf: boolean;
   selectedMemberName: string;
   loadState: LoadState;
+  loadFailure?: ApiError | null;
   purchases: StickerPurchaseWithCatalog[];
   onRetry: () => void;
   onGoToShop: () => void;
@@ -1536,7 +1561,7 @@ function StickerShelfSection({
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
-        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
+        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={loadFailure} onRetry={onRetry} />
       )}
 
       {loadState === "ready" && totalOwned === 0 && (
@@ -1853,12 +1878,14 @@ function FamilyMedalSection({
   tone,
   members,
   loadState,
+  loadFailure,
   purchases,
   onRetry,
 }: {
   tone: Tone;
   members: FamilyMember[];
   loadState: LoadState;
+  loadFailure?: ApiError | null;
   purchases: StickerPurchaseWithCatalog[];
   onRetry: () => void;
 }) {
@@ -1876,6 +1903,7 @@ function FamilyMedalSection({
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        failure={loadFailure}
         onRetry={onRetry}
       />
     );
@@ -2126,6 +2154,7 @@ function HabitFigureShelfSection({
   isViewingSelf,
   selectedMemberName,
   loadState,
+  loadFailure,
   grants,
   onRetry,
   onPlace,
@@ -2135,6 +2164,7 @@ function HabitFigureShelfSection({
   isViewingSelf: boolean;
   selectedMemberName: string;
   loadState: LoadState;
+  loadFailure?: ApiError | null;
   grants: HabitFigureGrantWithPlacement[];
   onRetry: () => void;
   onPlace: (grantId: string, figureKey: string, kindEmoji: string | null) => void;
@@ -2157,7 +2187,7 @@ function HabitFigureShelfSection({
 
       {loadState === "loading" && <SkeletonList count={2} />}
       {loadState === "error" && (
-        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
+        <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={loadFailure} onRetry={onRetry} />
       )}
 
       {loadState === "ready" && totalOwned === 0 && (
@@ -2338,12 +2368,14 @@ function FamilyHabitFigureSection({
   tone,
   members,
   loadState,
+  loadFailure,
   grants,
   onRetry,
 }: {
   tone: Tone;
   members: FamilyMember[];
   loadState: LoadState;
+  loadFailure?: ApiError | null;
   grants: HabitFigureGrantWithPlacement[];
   onRetry: () => void;
 }) {
@@ -2351,7 +2383,7 @@ function FamilyHabitFigureSection({
   const bodyStyle = bodyStyleFor(tone);
   const captionStyle = captionStyleFor(tone);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const { loadState: catalogLoadState, catalog, reload: reloadCatalog } = useHabitFigureCatalog();
+  const { loadState: catalogLoadState, failure: catalogFailure, catalog, reload: reloadCatalog } = useHabitFigureCatalog();
 
   const entries = useMemo(() => buildFamilyMedalCatalogEntries(catalog, grants), [catalog, grants]);
   const selectedEntry = entries.find((e) => e.key === selectedKey) ?? null;
@@ -2369,6 +2401,7 @@ function FamilyHabitFigureSection({
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        failure={loadFailure ?? catalogFailure}
         onRetry={retryAll}
       />
     );

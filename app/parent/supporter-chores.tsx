@@ -31,7 +31,7 @@ import { useAppData } from "@/data/store";
 type LoadState = "loading" | "error" | "ready";
 
 export default function ParentSupporterChoresScreen() {
-  const { state, loading, loadError } = useAppData();
+  const { state, loading, loadError, loadFailure } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function ParentSupporterChoresScreen() {
       )}
 
       {loadState === "error" && (
-        <ErrorState title="読み込みに失敗しました" onRetry={() => setLoadState("ready")} />
+        <ErrorState title="読み込みに失敗しました" failure={loadFailure} onRetry={() => setLoadState("ready")} />
       )}
 
       {loadState === "ready" && Object.keys(byCreator).length === 0 && (

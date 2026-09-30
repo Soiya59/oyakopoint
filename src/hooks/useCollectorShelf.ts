@@ -9,6 +9,7 @@
  * 構成する（要件定義書07-13-7章「新規テーブルは不要」・API仕様.md 12.5章）。
  */
 import { useCallback, useEffect, useState } from "react";
+import type { ApiError } from "@/data/api";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import {
@@ -56,13 +57,16 @@ export function useCollectedPrizes(familyId: string) {
   const { client } = useSession();
   const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
   const [loadState, setLoadState] = useState<CollectorShelfLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [items, setItems] = useState<CollectedGachaDraw[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchFamilyCollectedGachaDraws(client, familyId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -98,7 +102,7 @@ export function useCollectedPrizes(familyId: string) {
     void load();
   }, [load]);
 
-  return { loadState, items, reload: load };
+  return { loadState, failure, items, reload: load };
 }
 
 /**
@@ -109,13 +113,16 @@ export function useCollectedPrizes(familyId: string) {
 export function usePastTreeSeasons(familyId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<CollectorShelfLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [seasons, setSeasons] = useState<FamilyTreeSeason[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchFamilyTreeSeasonHistory(client, familyId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -128,7 +135,7 @@ export function usePastTreeSeasons(familyId: string) {
     void load();
   }, [load]);
 
-  return { loadState, seasons, reload: load };
+  return { loadState, failure, seasons, reload: load };
 }
 
 /**

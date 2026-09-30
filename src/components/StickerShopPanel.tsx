@@ -39,6 +39,7 @@
  * 出さない。開放済みマスの見た目（価格／「あと◯pt」）は変更していない。
  */
 import React, { useState } from "react";
+import type { ApiError } from "@/data/api";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
@@ -140,6 +141,8 @@ function nextUnlockMessage(
 export interface StickerShopPanelProps {
   tone: Tone;
   loadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   catalog: StickerCatalogItem[];
   balance: number;
   /**
@@ -192,6 +195,7 @@ const captionStyleFor = (tone: Tone) =>
 export function StickerShopPanel({
   tone,
   loadState,
+  loadFailure,
   catalog,
   balance,
   lockedCatalogIds,
@@ -220,7 +224,7 @@ export function StickerShopPanel({
   if (loadState === "loading") return <SkeletonList count={3} />;
   if (loadState === "error") {
     return (
-      <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} onRetry={onRetry} />
+      <ErrorState tone={isChild ? "child" : "parent"} title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"} failure={loadFailure} onRetry={onRetry} />
     );
   }
 

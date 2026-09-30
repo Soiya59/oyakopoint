@@ -81,7 +81,7 @@ export default function ChildSelfTabScreen() {
   // 49-B.3章決定36〜40] シール帳の帯。進行中の冊は常に1冊（決定27）のため、
   // 単数の`card`を受け取る形に変わった。
   const { catalog: habitFigureCatalog } = useHabitFigureCatalog();
-  const { loadState: habitCardsLoadState, card: habitCard, totalCount: habitCardTotalCount, reload: reloadHabitCards } = useActiveHabitCard(me.id);
+  const { loadState: habitCardsLoadState, failure: habitCardsFailure, card: habitCard, totalCount: habitCardTotalCount, reload: reloadHabitCards } = useActiveHabitCard(me.id);
   const [habitCardModalVisible, setHabitCardModalVisible] = useState(false);
 
   // [2026-09-29追加・実装メモ.md 321章] 「先週のふりかえり」の細い1行カード。
@@ -157,6 +157,7 @@ export default function ChildSelfTabScreen() {
       <HabitCardStrip
         tone="child"
         loadState={habitCardsLoadState}
+        loadFailure={habitCardsFailure}
         card={habitCard}
         totalCount={habitCardTotalCount}
         catalog={habitFigureCatalog}

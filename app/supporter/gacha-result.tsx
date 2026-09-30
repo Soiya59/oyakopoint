@@ -30,7 +30,7 @@ export default function SupporterGachaResultScreen() {
     presetOrnamentId?: string;
     prizeDrawingId?: string;
   }>();
-  const { loadState, detail } = useGachaPrizeDetail(
+  const { loadState, failure, detail } = useGachaPrizeDetail(
     (prizeKind as GachaPrizeKind) ?? null,
     presetOrnamentId || null,
     prizeDrawingId || null
@@ -54,7 +54,7 @@ export default function SupporterGachaResultScreen() {
         </View>
       )}
       {loadState === "error" && (
-        <ErrorState title="読み込みに失敗しました" onRetry={() => router.back()} />
+        <ErrorState title="読み込みに失敗しました" failure={failure} onRetry={() => router.back()} />
       )}
       {loadState === "ready" && detail && (
         <GachaResultView

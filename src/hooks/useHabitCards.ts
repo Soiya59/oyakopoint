@@ -13,6 +13,7 @@
  * 56.4章と同じ申し送り）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { firstApiFailure } from "@/lib/apiFailure";
 import { useSession } from "@/lib/session";
 import {
   chooseHabitCardKind,
@@ -42,12 +43,15 @@ export type HabitCardLoadState = "loading" | "error" | "ready";
 export function useHabitFigureCatalog() {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [catalog, setCatalog] = useState<HabitFigureCatalogItem[]>([]);
 
   const load = useCallback(async () => {
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchHabitFigureCatalog(client);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -59,7 +63,7 @@ export function useHabitFigureCatalog() {
     void load();
   }, [load]);
 
-  return { loadState, catalog, reload: load };
+  return { loadState, failure, catalog, reload: load };
 }
 
 /** kind_keyごとに4段階（銅/銀/金/クリスタル）をまとめた絵柄選択用の1グループ。 */
@@ -130,6 +134,7 @@ export function computeHabitCardTierInfo(count: number): {
 export function useActiveHabitCard(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [card, setCard] = useState<HabitCard | null>(null);
   const [breakdown, setBreakdown] = useState<HabitCardChoreBreakdownRow[]>([]);
   const [grants, setGrants] = useState<HabitFigureGrantWithCatalog[]>([]);
@@ -137,8 +142,10 @@ export function useActiveHabitCard(memberId: string) {
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const cardRes = await fetchActiveHabitCard(client, memberId);
     if (!cardRes.ok) {
+      setFailure(cardRes.error);
       setLoadState("error");
       return;
     }
@@ -154,6 +161,7 @@ export function useActiveHabitCard(memberId: string) {
       fetchHabitFigureGrantsForCards(client, [cardRes.data.id]),
     ]);
     if (!breakdownRes.ok || !grantsRes.ok) {
+      setFailure(firstApiFailure(breakdownRes, grantsRes));
       setLoadState("error");
       return;
     }
@@ -170,13 +178,14 @@ export function useActiveHabitCard(memberId: string) {
   // 側で合計する」。
   const totalCount = breakdown.reduce((sum, row) => sum + row.completion_count, 0);
 
-  return { loadState, card, breakdown, totalCount, grants, reload: load };
+  return { loadState, failure, card, breakdown, totalCount, grants, reload: load };
 }
 
 /** 完成済み（コレクション）のシール帳一覧＋内訳＋獲得フィギュア（API仕様.md 17.4節）。 */
 export function useCompletedHabitCards(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [cards, setCards] = useState<HabitCard[]>([]);
   const [breakdown, setBreakdown] = useState<HabitCardChoreBreakdownRow[]>([]);
   const [grants, setGrants] = useState<HabitFigureGrantWithCatalog[]>([]);
@@ -184,8 +193,10 @@ export function useCompletedHabitCards(memberId: string) {
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const cardsRes = await fetchCompletedHabitCards(client, memberId);
     if (!cardsRes.ok) {
+      setFailure(cardsRes.error);
       setLoadState("error");
       return;
     }
@@ -197,6 +208,7 @@ export function useCompletedHabitCards(memberId: string) {
       fetchHabitFigureGrantsForCards(client, ids),
     ]);
     if (!breakdownRes.ok || !grantsRes.ok) {
+      setFailure(firstApiFailure(breakdownRes, grantsRes));
       setLoadState("error");
       return;
     }
@@ -209,7 +221,7 @@ export function useCompletedHabitCards(memberId: string) {
     void load();
   }, [load]);
 
-  return { loadState, cards, breakdown, grants, reload: load };
+  return { loadState, failure, cards, breakdown, grants, reload: load };
 }
 
 export type ChooseHabitCardKindActionResult = { ok: true; habitCardId: string } | { ok: false; error: ApiError };
@@ -302,13 +314,16 @@ export function useMoveTreeHabitFigureAction() {
 export function useMyHabitFigureGrants(memberId: string, currentSeasonId: string | null) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [grants, setGrants] = useState<HabitFigureGrantWithPlacement[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchMyHabitFigureGrants(client, memberId, currentSeasonId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -320,20 +335,23 @@ export function useMyHabitFigureGrants(memberId: string, currentSeasonId: string
     void load();
   }, [load]);
 
-  return { loadState, grants, reload: load };
+  return { loadState, failure, grants, reload: load };
 }
 
 /** 「全員」選択時の「フィギュア」区分（`useFamilyStickerPurchases`と同じ形）。 */
 export function useFamilyHabitFigureGrants(familyId: string, currentSeasonId: string | null) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<HabitCardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [grants, setGrants] = useState<HabitFigureGrantWithPlacement[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchFamilyHabitFigureGrants(client, familyId, currentSeasonId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -345,5 +363,5 @@ export function useFamilyHabitFigureGrants(familyId: string, currentSeasonId: st
     void load();
   }, [load]);
 
-  return { loadState, grants, reload: load };
+  return { loadState, failure, grants, reload: load };
 }

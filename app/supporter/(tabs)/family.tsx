@@ -69,7 +69,7 @@ import NgWordWarningText from "@/components/NgWordWarningText";
 type LoadState = "loading" | "error" | "ready";
 
 export default function SupporterFamilyScreen() {
-  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, memberAvatars } = useAppData();
+  const { state, dispatch, reactionsForCompletion, hasReactedWithStamp, loading, loadError, loadFailure, memberAvatars } = useAppData();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailTarget, setDetailTarget] = useState<ChoreCompletion | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -105,7 +105,7 @@ export default function SupporterFamilyScreen() {
   const inboxSince = useUnreadSince("inbox", myId);
   const inboxCount = countRecentInbox(state, myId, inboxSince);
 
-  const { loadState: cardLoadState, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
+  const { loadState: cardLoadState, failure: cardFailure, card, reload: reloadCard } = useFamilyHomeCard(state.family.id);
   const hasBoardPost = card?.source === "board_post";
   const cardAuthorName = hasBoardPost
     ? state.members.find((m) => m.id === card.board_post_author_member_id)?.display_name ?? null
@@ -220,7 +220,7 @@ export default function SupporterFamilyScreen() {
         (cardLoadState === "error" ? (
           <Card tone="supporter" style={{ marginTop: theme.spacing.s4 }}>
             <Text style={theme.typography.supporterBodyMedium}>家族の掲示板</Text>
-            <ErrorState title="読み込みに失敗しました" onRetry={reloadCard} />
+            <ErrorState title="読み込みに失敗しました" failure={cardFailure} onRetry={reloadCard} />
           </Card>
         ) : (
           <Pressable onPress={() => router.push("/supporter/family-board")}>
@@ -281,7 +281,7 @@ export default function SupporterFamilyScreen() {
       {loadState === "loading" && <SkeletonList count={3} />}
 
       {loadState === "error" && (
-        <ErrorState title="読み込みに失敗しました" onRetry={() => setLoadState("ready")} />
+        <ErrorState title="読み込みに失敗しました" failure={loadFailure} onRetry={() => setLoadState("ready")} />
       )}
 
       {loadState === "ready" && completions.length === 0 && (

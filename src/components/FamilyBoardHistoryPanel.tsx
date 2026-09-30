@@ -30,6 +30,7 @@
  * プッシュ通知は実装しない（本部長指示、要件定義書08章参照）。
  */
 import React, { useState } from "react";
+import type { ApiError } from "@/data/api";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppButton from "./AppButton";
 import Card from "./Card";
@@ -60,6 +61,8 @@ const FIVE_MIN_MS = 5 * 60 * 1000;
 export interface FamilyBoardHistoryPanelProps {
   tone: Tone;
   loadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   posts: FamilyBoardPostWithAuthor[];
   hasMore: boolean;
   loadingMore: boolean;
@@ -302,6 +305,7 @@ const STAMP_FONT_SIZE: Record<Tone, number> = { parent: 22, child: 27, supporter
 export function FamilyBoardHistoryPanel({
   tone,
   loadState,
+  loadFailure,
   posts,
   hasMore,
   loadingMore,
@@ -447,6 +451,7 @@ export function FamilyBoardHistoryPanel({
         <ErrorState
           tone={stateTone}
           title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+          failure={loadFailure}
           onRetry={onRetry}
         />
       )}

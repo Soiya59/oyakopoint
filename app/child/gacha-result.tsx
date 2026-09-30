@@ -36,7 +36,7 @@ export default function ChildGachaResultScreen() {
     presetOrnamentId?: string;
     prizeDrawingId?: string;
   }>();
-  const { loadState, detail } = useGachaPrizeDetail(
+  const { loadState, failure, detail } = useGachaPrizeDetail(
     (prizeKind as GachaPrizeKind) ?? null,
     presetOrnamentId || null,
     prizeDrawingId || null
@@ -60,7 +60,7 @@ export default function ChildGachaResultScreen() {
         </View>
       )}
       {loadState === "error" && (
-        <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={() => router.back()} />
+        <ErrorState tone="child" title="つうしんがおやすみ中みたい" failure={failure} onRetry={() => router.back()} />
       )}
       {loadState === "ready" && detail && (
         <GachaResultView

@@ -22,7 +22,7 @@ import { useHabitFigureCatalog } from "@/hooks/useHabitCards";
  */
 export default function SupporterWeeklyReviewScreen() {
   const { state } = useAppData();
-  const { loadState, data, reload } = useWeeklyReview();
+  const { loadState, failure, data, reload } = useWeeklyReview();
   const { catalog } = useHabitFigureCatalog();
 
   return (
@@ -33,6 +33,7 @@ export default function SupporterWeeklyReviewScreen() {
       <WeeklyReviewPanel
         tone="supporter"
         loadState={loadState}
+        loadFailure={failure}
         data={data}
         chores={state.chores}
         habitFigureCatalog={catalog}

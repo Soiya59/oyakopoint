@@ -15,6 +15,7 @@
  * 通常の帯と全く同じ形で表示する（決定39、不在を強調する表示にしない）。
  */
 import React from "react";
+import type { ApiError } from "@/data/api";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -37,6 +38,8 @@ const TIER_MARKS: { threshold: number; tier: "bronze" | "silver" | "gold" | "cry
 export interface HabitCardStripProps {
   tone: Tone;
   loadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   /** 自分の進行中のシール帳（常に1件、`useActiveHabitCard`の`card`をそのまま渡す）。 */
   card: HabitCard | null;
   /** 帯に出すn/100の進み具合（`useActiveHabitCard`の`totalCount`をそのまま渡す）。 */
@@ -72,7 +75,7 @@ function ProgressBar({ count }: { count: number }) {
   );
 }
 
-export function HabitCardStrip({ tone, loadState, card, totalCount, catalog, onPress, onRetry }: HabitCardStripProps) {
+export function HabitCardStrip({ tone, loadState, loadFailure, card, totalCount, catalog, onPress, onRetry }: HabitCardStripProps) {
   const isChild = tone === "child";
   const headingStyle = isChild ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBodyMedium : theme.typography.parentBodyMedium;
 
@@ -82,6 +85,7 @@ export function HabitCardStrip({ tone, loadState, card, totalCount, catalog, onP
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "シール帳の読み込みに失敗しました"}
+        failure={loadFailure}
         onRetry={onRetry}
       />
     );

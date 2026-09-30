@@ -34,6 +34,7 @@
  * `undefined`のままなので表示は一切変わらない。
  */
 import React from "react";
+import type { ApiError } from "@/data/api";
 import { StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import { ErrorState, SkeletonList } from "./StatusViews";
@@ -61,6 +62,8 @@ function captionStyleFor(tone: Tone) {
 export interface WeeklyReviewPanelProps {
   tone: Tone;
   loadState: WeeklyReviewLoadState;
+  /** 読み込みに失敗したAPIの中身（目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   data: WeeklyReviewData | null;
   chores: Chore[];
   habitFigureCatalog: HabitFigureCatalogItem[];
@@ -69,7 +72,7 @@ export interface WeeklyReviewPanelProps {
   subjectName?: string;
 }
 
-export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCatalog, onRetry, subjectName }: WeeklyReviewPanelProps) {
+export function WeeklyReviewPanel({ tone, loadState, loadFailure, data, chores, habitFigureCatalog, onRetry, subjectName }: WeeklyReviewPanelProps) {
   const isChild = tone === "child";
   const bodyStyle = bodyStyleFor(tone);
   const bodyMediumStyle = bodyMediumStyleFor(tone);
@@ -83,6 +86,7 @@ export function WeeklyReviewPanel({ tone, loadState, data, chores, habitFigureCa
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        failure={loadFailure}
         onRetry={onRetry}
       />
     );

@@ -20,7 +20,7 @@ import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
  */
 export default function ChildFamilyTreeScreen() {
   const { state } = useAppData();
-  const { loadState, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
+  const { loadState, failure, season, breakdown, dots, stickerPlacements, habitFigurePlacements, weeklyCounts, lastSeason, reload } = useFamilyTreeDetail();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const stage = season?.current_stage ?? 0;
@@ -59,7 +59,7 @@ export default function ChildFamilyTreeScreen() {
         </View>
       )}
       {loadState === "error" && (
-        <ErrorState tone="child" title="つうしんがおやすみ中みたい" onRetry={reload} />
+        <ErrorState tone="child" title="つうしんがおやすみ中みたい" failure={failure} onRetry={reload} />
       )}
 
       {loadState === "ready" && (

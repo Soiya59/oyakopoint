@@ -102,8 +102,8 @@ export default function ChildTreeDecorateScreen() {
   }>();
   const { state } = useAppData();
   const myId = state.activeChildMemberId;
-  const { loadState: treeLoadState, season, dots, stickerPlacements, habitFigurePlacements, reload: reloadTree } = useFamilyTreeDetail();
-  const { loadState: candidatesLoadState, candidates, reload: reloadCandidates } = useDecoratableCompletions(
+  const { loadState: treeLoadState, failure: treeFailure, season, dots, stickerPlacements, habitFigurePlacements, reload: reloadTree } = useFamilyTreeDetail();
+  const { loadState: candidatesLoadState, failure: candidatesFailure, candidates, reload: reloadCandidates } = useDecoratableCompletions(
     myId,
     season?.season_start ?? null,
     treeLoadState !== "loading"
@@ -209,6 +209,7 @@ export default function ChildTreeDecorateScreen() {
         <TreeHabitFigureDragCanvas
           tone="child"
           treeLoadState={treeLoadState}
+          loadFailure={treeFailure}
           stage={season?.current_stage ?? 0}
           dots={dots}
           habitFigurePlacements={habitFigurePlacements}
@@ -228,6 +229,7 @@ export default function ChildTreeDecorateScreen() {
         <TreeStickerDragCanvas
           tone="child"
           treeLoadState={treeLoadState}
+          loadFailure={treeFailure}
           stage={season?.current_stage ?? 0}
           dots={dots}
           stickerPlacements={stickerPlacements}
@@ -247,6 +249,7 @@ export default function ChildTreeDecorateScreen() {
         <TreeDecoratePanel
           tone="child"
           treeLoadState={treeLoadState}
+          loadFailure={treeFailure ?? candidatesFailure}
           stage={season?.current_stage ?? 0}
           dots={dots}
           stickerPlacements={stickerPlacements}

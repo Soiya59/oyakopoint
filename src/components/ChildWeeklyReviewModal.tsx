@@ -36,7 +36,7 @@ export function ChildWeeklyReviewModal({ visible, onClose }: ChildWeeklyReviewMo
   // memberIdのような無効化可能な引数を持たないため、初回マウント時の1回だけ
   // 通信する（モーダルを開くたびに毎回取り直す用途ではないため実害は無い。
   // 前面復帰時の裏更新はuseBackgroundAutoRefreshが引き続き担う）。
-  const { loadState, data, reload } = useWeeklyReview();
+  const { loadState, failure, data, reload } = useWeeklyReview();
   const { catalog } = useHabitFigureCatalog();
 
   return (
@@ -53,6 +53,7 @@ export function ChildWeeklyReviewModal({ visible, onClose }: ChildWeeklyReviewMo
             <WeeklyReviewPanel
               tone="child"
               loadState={loadState}
+              loadFailure={failure}
               data={data}
               chores={state.chores}
               habitFigureCatalog={catalog}

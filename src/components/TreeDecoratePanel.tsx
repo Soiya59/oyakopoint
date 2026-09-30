@@ -26,6 +26,7 @@
  * FamilyTree.tsx `pickTreeRegion`直上のコメント参照）。
  */
 import React, { useState } from "react";
+import type { ApiError } from "@/data/api";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import AppButton from "./AppButton";
 import FailureRefText from "./FailureRefText";
@@ -47,6 +48,8 @@ export interface TreeDecoratePanelProps {
   tone: Tone;
   /** 木のビジュアル（家族の木、現在シーズン）の読み込み状態。 */
   treeLoadState: LoadState;
+  /** 読み込みに失敗したAPIの中身（木・交換相手の一覧のどちらか。目印・書き分けの文用。省略可。実装メモ337章）。 */
+  loadFailure?: ApiError | null;
   stage: number;
   dots: FamilyTreeCompletionDot[];
   /**
@@ -93,6 +96,7 @@ function formatDate(iso: string): string {
 export function TreeDecoratePanel({
   tone,
   treeLoadState,
+  loadFailure,
   stage,
   dots,
   stickerPlacements,
@@ -120,6 +124,7 @@ export function TreeDecoratePanel({
       <ErrorState
         tone={isChild ? "child" : "parent"}
         title={isChild ? "つうしんがおやすみ中みたい" : "読み込みに失敗しました"}
+        failure={loadFailure}
         onRetry={onRetryLoad}
       />
     );

@@ -51,7 +51,7 @@ interface ResultProps {
  * `useWeeklyReview.ts`冒頭コメント参照）。
  */
 function ChildWeeklyReviewResult({ tone, memberId, memberName, chores, habitFigureCatalog }: ResultProps) {
-  const { loadState, data, reload } = useWeeklyReview(memberId);
+  const { loadState, failure, data, reload } = useWeeklyReview(memberId);
   const titleStyle = titleStyleFor(tone);
 
   return (
@@ -61,6 +61,7 @@ function ChildWeeklyReviewResult({ tone, memberId, memberName, chores, habitFigu
         <WeeklyReviewPanel
           tone={tone}
           loadState={loadState}
+          loadFailure={failure}
           data={data}
           chores={chores}
           habitFigureCatalog={habitFigureCatalog}

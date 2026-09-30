@@ -27,13 +27,16 @@ export type DrawingDeleteResult = { ok: true; published: boolean } | { ok: false
 export function useMyDrawings(memberId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<DrawingsLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [drawings, setDrawings] = useState<FamilyDrawing[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchMyDrawings(client, memberId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -91,5 +94,5 @@ export function useMyDrawings(memberId: string) {
     [client, load]
   );
 
-  return { loadState, unpublished, atLimit, reload: load, save, remove, edit };
+  return { loadState, failure, unpublished, atLimit, reload: load, save, remove, edit };
 }

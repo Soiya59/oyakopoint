@@ -36,7 +36,7 @@ export function ChildHabitCardModal({ visible, onClose, members, myMemberId, cho
     if (visible) setSelectedMemberId(myMemberId);
   }, [visible, myMemberId]);
 
-  const { loadState, card, breakdown, totalCount, grants, reload } = useActiveHabitCard(visible ? selectedMemberId : "");
+  const { loadState, failure, card, breakdown, totalCount, grants, reload } = useActiveHabitCard(visible ? selectedMemberId : "");
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -58,6 +58,7 @@ export function ChildHabitCardModal({ visible, onClose, members, myMemberId, cho
               chores={chores}
               catalog={catalog}
               loadState={loadState}
+              loadFailure={failure}
               card={card}
               breakdown={breakdown}
               totalCount={totalCount}

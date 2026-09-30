@@ -42,6 +42,7 @@
  * weekly_digestへフォールバックしない）は変更していない。
  */
 import { useCallback, useEffect, useState } from "react";
+import type { ApiError } from "@/data/api";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
@@ -77,6 +78,7 @@ export type FamilyBoardLoadState = "loading" | "error" | "ready";
 export function useFamilyHomeCard(familyId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [card, setCard] = useState<FamilyHomeCard | null>(null);
 
   const load = useCallback(
@@ -88,13 +90,19 @@ export function useFamilyHomeCard(familyId: string) {
         setLoadState("error");
         return;
       }
-      if (!background) setLoadState("loading");
+      if (!background) {
+        setLoadState("loading");
+        setFailure(null);
+      }
       const res = await fetchFamilyHomeCard(client, familyId);
       if (!res.ok) {
         // background=trueの失敗は無視して直前の表示を保つ（実装メモ.md 172章。
         // 「かぞくのけいじばん」カードが裏での取り直し失敗のたびに控えめな文言へ
         // 切り替わってちらつくのを避けるため）。
-        if (!background) setLoadState("error");
+        if (!background) {
+          setFailure(res.error);
+          setLoadState("error");
+        }
         return;
       }
       setCard(res.data);
@@ -116,7 +124,7 @@ export function useFamilyHomeCard(familyId: string) {
     { enabled: Boolean(familyId) }
   );
 
-  return { loadState, card, reload: load };
+  return { loadState, failure, card, reload: load };
 }
 
 /** 主要画面ワイヤーフレーム.md 22.0節決定7: 直近30件を初期表示し、「もっと見る」で30件ずつ追加する。 */
@@ -153,6 +161,7 @@ export function useFamilyBoardHistory(familyId: string) {
     [blockedMemberIdsSet, hiddenContentKeysSet]
   );
   const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [posts, setPosts] = useState<FamilyBoardPostWithAuthor[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -168,8 +177,10 @@ export function useFamilyBoardHistory(familyId: string) {
       return;
     }
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchFamilyBoardPostsHistory(client, familyId, { from: 0, to: PAGE_SIZE - 1 });
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -372,6 +383,7 @@ export function useFamilyBoardHistory(familyId: string) {
 
   return {
     loadState,
+    failure,
     posts,
     hasMore,
     loadingMore,
@@ -408,11 +420,14 @@ export function useFamilyBoardRemainingToday() {
   const { client } = useSession();
   const [remaining, setRemaining] = useState<number | null>(null);
   const [loadState, setLoadState] = useState<FamilyBoardLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchMyFamilyBoardPostsRemainingToday(client);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -424,5 +439,5 @@ export function useFamilyBoardRemainingToday() {
     void load();
   }, [load]);
 
-  return { remaining, loadState, reload: load };
+  return { remaining, loadState, failure, reload: load };
 }

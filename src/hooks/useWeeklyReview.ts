@@ -28,6 +28,8 @@
  * 家族全体を返しており、実装だけが設計と食い違っていた）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { firstApiFailure } from "@/lib/apiFailure";
+import type { ApiError } from "@/data/api";
 import { useSession } from "@/lib/session";
 import { useAppData } from "@/data/store";
 import { useBackgroundAutoRefresh } from "./useBackgroundAutoRefresh";
@@ -103,13 +105,17 @@ export function useWeeklyReview(targetMemberId?: string) {
   // `activeMemberId`と同じ解決パターン、508行目コメント参照）。
   const myMemberId = targetMemberId ?? (state.activeChildMemberId || state.activeParentMemberId);
   const [loadState, setLoadState] = useState<WeeklyReviewLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [data, setData] = useState<WeeklyReviewData | null>(null);
 
   const load = useCallback(
     async (options?: { background?: boolean }) => {
       if (!familyId || !myMemberId) return;
       const background = options?.background ?? false;
-      if (!background) setLoadState("loading");
+      if (!background) {
+        setLoadState("loading");
+        setFailure(null);
+      }
 
       const lastWeekStart = addDaysToDateString(getCurrentJstWeekStart(), -7);
       // JST週境界（月曜0:00〜翌週月曜0:00の手前）のISO日時（41章・useFamilyTree.tsと同じ変換）。
@@ -126,7 +132,10 @@ export function useWeeklyReview(targetMemberId?: string) {
         fetchMemberCompletedHabitCardsInRange(client, familyId, myMemberId, weekStartIso, weekEndIso),
       ]);
       if (!seasonsRes.ok || !choreRes.ok || !cardsRes.ok) {
-        if (!background) setLoadState("error");
+        if (!background) {
+          setFailure(firstApiFailure(seasonsRes, choreRes, cardsRes));
+          setLoadState("error");
+        }
         return;
       }
 
@@ -138,7 +147,10 @@ export function useWeeklyReview(targetMemberId?: string) {
         if (season.season_end === null) {
           const weeklyRes = await fetchFamilyTreeWeeklyCompletionCounts(client, season.id);
           if (!weeklyRes.ok) {
-            if (!background) setLoadState("error");
+            if (!background) {
+              setFailure(weeklyRes.error);
+              setLoadState("error");
+            }
             return;
           }
           const cumulative = sumCompletionCountsThroughWeek(weeklyRes.data, lastWeekStart);
@@ -158,7 +170,10 @@ export function useWeeklyReview(targetMemberId?: string) {
           completedHabitCards.map((c) => c.id)
         );
         if (!breakdownRes.ok) {
-          if (!background) setLoadState("error");
+          if (!background) {
+            setFailure(breakdownRes.error);
+            setLoadState("error");
+          }
           return;
         }
         completedHabitCardBreakdown = breakdownRes.data;
@@ -188,5 +203,5 @@ export function useWeeklyReview(targetMemberId?: string) {
     { enabled: Boolean(familyId) && Boolean(myMemberId) }
   );
 
-  return { loadState, data, reload: load };
+  return { loadState, failure, data, reload: load };
 }

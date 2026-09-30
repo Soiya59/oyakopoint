@@ -28,8 +28,8 @@ export default function SupporterCollectorShelfScreen() {
   const familyId = state.family.id;
   const myId = state.activeParentMemberId;
   const { openDrawingId, openComment } = useLocalSearchParams<{ openDrawingId?: string; openComment?: string }>();
-  const { loadState: collectedLoadState, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
-  const { loadState: pastSeasonsLoadState, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
+  const { loadState: collectedLoadState, failure: collectedFailure, items: collectedItems, reload: reloadCollected } = useCollectedPrizes(familyId);
+  const { loadState: pastSeasonsLoadState, failure: pastSeasonsFailure, seasons: pastSeasons, reload: reloadPastSeasons } = usePastTreeSeasons(familyId);
   const {
     dotsBySeasonId,
     stickerPlacementsBySeasonId,
@@ -49,24 +49,26 @@ export default function SupporterCollectorShelfScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   const { season } = useFamilyTreeDetail();
-  const { loadState: stickersLoadState, purchases: stickerPurchases, reload: reloadStickers } = useMyStickerPurchases(
+  const { loadState: stickersLoadState, failure: stickersFailure, purchases: stickerPurchases, reload: reloadStickers } = useMyStickerPurchases(
     effectiveMemberId,
     season?.id ?? null
   );
   // [2026-09-08追加・実装メモ158章] 「全員」選択時の「メダル」区分用。
   const {
     loadState: familyStickersLoadState,
+    failure: familyStickersFailure,
     purchases: familyStickerPurchases,
     reload: reloadFamilyStickers,
   } = useFamilyStickerPurchases(familyId, season?.id ?? null);
   // [2026-09-17追加・要件定義書07-28章決定27、開発部/成果物/実装メモ.md 237章]
   // 「フィギュア」区分。シール区分と全く同じ構造。
-  const { loadState: habitFiguresLoadState, grants: habitFigureGrants, reload: reloadHabitFigures } = useMyHabitFigureGrants(
+  const { loadState: habitFiguresLoadState, failure: habitFiguresFailure, grants: habitFigureGrants, reload: reloadHabitFigures } = useMyHabitFigureGrants(
     effectiveMemberId,
     season?.id ?? null
   );
   const {
     loadState: familyHabitFiguresLoadState,
+    failure: familyHabitFiguresFailure,
     grants: familyHabitFigureGrants,
     reload: reloadFamilyHabitFigures,
   } = useFamilyHabitFigureGrants(familyId, season?.id ?? null);
@@ -86,6 +88,14 @@ export default function SupporterCollectorShelfScreen() {
       </Text>
 
       <CollectorShelfPanel
+        loadFailures={{
+          collected: collectedFailure,
+          pastSeasons: pastSeasonsFailure,
+          stickers: stickersFailure,
+          familyStickers: familyStickersFailure,
+          habitFigures: habitFiguresFailure,
+          familyHabitFigures: familyHabitFiguresFailure,
+        }}
         tone="supporter"
         scrollViewRef={scrollRef}
         autoOpenDrawingId={openDrawingId || undefined}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { firstApiFailure } from "@/lib/apiFailure";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import Screen from "@/components/Screen";
@@ -16,6 +17,7 @@ import {
   fetchMyGratitudeGiveableBalance,
   revokeGratitudePoints,
   type GratitudePointWithCounterpart,
+  type ApiError,
 } from "@/data/api";
 
 /**
@@ -45,6 +47,7 @@ export default function SupporterGratitudeHubScreen() {
   const myId = state.activeParentMemberId;
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadFailure, setLoadFailure] = useState<ApiError | null>(null);
   const [balance, setBalance] = useState<number>(0);
   const [sent, setSent] = useState<GratitudePointWithCounterpart[]>([]);
   const [received, setReceived] = useState<GratitudePointWithCounterpart[]>([]);
@@ -59,12 +62,14 @@ export default function SupporterGratitudeHubScreen() {
       return;
     }
     setLoadState("loading");
+    setLoadFailure(null);
     const [balanceRes, sentRes, receivedRes] = await Promise.all([
       fetchMyGratitudeGiveableBalance(client),
       fetchGratitudeSentHistory(client, myId),
       fetchGratitudeReceivedHistory(client, myId),
     ]);
     if (!balanceRes.ok || !sentRes.ok || !receivedRes.ok) {
+      setLoadFailure(firstApiFailure(balanceRes, sentRes, receivedRes));
       setLoadState("error");
       return;
     }
@@ -121,7 +126,7 @@ export default function SupporterGratitudeHubScreen() {
         </View>
       )}
 
-      {loadState === "error" && <ErrorState title="読み込みに失敗しました" onRetry={load} />}
+      {loadState === "error" && <ErrorState title="読み込みに失敗しました" failure={loadFailure} onRetry={load} />}
 
       {loadState === "ready" && (
         <>

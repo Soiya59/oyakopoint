@@ -29,12 +29,15 @@ export type StickerLoadState = "loading" | "error" | "ready";
 export function useStickerCatalog() {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [catalog, setCatalog] = useState<StickerCatalogItem[]>([]);
 
   const load = useCallback(async () => {
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchStickerCatalog(client);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -47,7 +50,7 @@ export function useStickerCatalog() {
     void load();
   }, [load]);
 
-  return { loadState, catalog, reload: load };
+  return { loadState, failure, catalog, reload: load };
 }
 
 export type PurchaseActionResult = { ok: true; data: PurchaseStickerResult } | { ok: false; error: ApiError };
@@ -83,13 +86,16 @@ export function useStickerPurchaseAction() {
 export function useMyStickerPurchases(memberId: string, currentSeasonId: string | null) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [purchases, setPurchases] = useState<StickerPurchaseWithCatalog[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchMyStickerPurchases(client, memberId, currentSeasonId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -102,7 +108,7 @@ export function useMyStickerPurchases(memberId: string, currentSeasonId: string 
     void load();
   }, [load]);
 
-  return { loadState, purchases, reload: load };
+  return { loadState, failure, purchases, reload: load };
 }
 
 /**
@@ -113,13 +119,16 @@ export function useMyStickerPurchases(memberId: string, currentSeasonId: string 
 export function useFamilyStickerPurchases(familyId: string, currentSeasonId: string | null) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [purchases, setPurchases] = useState<StickerPurchaseWithCatalog[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchFamilyStickerPurchases(client, familyId, currentSeasonId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -132,7 +141,7 @@ export function useFamilyStickerPurchases(familyId: string, currentSeasonId: str
     void load();
   }, [load]);
 
-  return { loadState, purchases, reload: load };
+  return { loadState, failure, purchases, reload: load };
 }
 
 export type DecorateStickerActionResult = { ok: true; decorationId: string } | { ok: false; error: ApiError };
@@ -317,13 +326,16 @@ export function computeHighestEverPurchasedRarity(
 export function useFamilyStickerTierResets(familyId: string) {
   const { client } = useSession();
   const [loadState, setLoadState] = useState<StickerLoadState>("loading");
+  const [failure, setFailure] = useState<ApiError | null>(null);
   const [resets, setResets] = useState<StickerTierReset[]>([]);
 
   const load = useCallback(async () => {
     if (!familyId) return;
     setLoadState("loading");
+    setFailure(null);
     const res = await fetchStickerTierResets(client, familyId);
     if (!res.ok) {
+      setFailure(res.error);
       setLoadState("error");
       return;
     }
@@ -335,7 +347,7 @@ export function useFamilyStickerTierResets(familyId: string) {
     void load();
   }, [load]);
 
-  return { loadState, resets, reload: load };
+  return { loadState, failure, resets, reload: load };
 }
 
 /**
