@@ -132,7 +132,12 @@ export function AvatarDrawingPanel({
   // [決定28] 「なおす」の場合、画面を開いた時点で既存の絵をキャンバスへ読み込んだ
   // 状態にする。以後はprops(savedLineData)の変化に追従させない（「色にもどす」は
   // 描画中のキャンバスの内容には触れない、43.6節状態一覧の申し送りどおり）。
-  const [lines, setLines] = useState<FamilyDrawingLine[]>(() => savedLineData?.lines ?? []);
+  // [2026-10-01変更・実装メモ343章、統括「候補が3つないときは…からの状態を映してほしい」]
+  // 開いた時点のキャンバスは空にする。「まえのアバター」に空きがあれば、新しく描いて保存すると
+  // 今の絵はストックへ移るので、今の絵を読み込んでおく必要がない。今の絵を直したいときは
+  // 「今のすがた」の「この絵をなおす」で読み込む。3枚いっぱいのときだけ、一覧を読めた時点で
+  // 今の絵を読み込む（下のuseEffect。いっぱいのときは今の絵を直すことしかできないため）。
+  const [lines, setLines] = useState<FamilyDrawingLine[]>([]);
   const [color, setColor] = useState<string>(theme.avatarDrawingPalette[0].value);
   const [strokeWidth, setStrokeWidth] = useState<number>(theme.defaultDrawingStrokeWidth);
   /**
@@ -174,6 +179,17 @@ export function AvatarDrawingPanel({
   useEffect(() => {
     linesRef.current = lines;
   }, [lines]);
+  // [2026-10-01追加・343章] 3枚いっぱいで今の絵があるときだけ、一覧を読めた最初の1回に
+  // 今の絵をキャンバスへ読み込む（まだ何も描いていないときに限る）。
+  const autoLoadDecidedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadDecidedRef.current || stocksStatus !== "ready") return;
+    autoLoadDecidedRef.current = true;
+    const full = stocks.length >= theme.avatarStock.maxSlots;
+    if (full && savedLineData && savedLineData.lines.length > 0 && linesRef.current.length === 0) {
+      setLines(savedLineData.lines);
+    }
+  }, [stocksStatus, stocks.length, savedLineData]);
 
   const isChildTone = tone === "child";
   const bodyStyle = isChildTone ? theme.typography.childBody : tone === "supporter" ? theme.typography.supporterBody : theme.typography.parentBody;
@@ -207,11 +223,15 @@ export function AvatarDrawingPanel({
   // [43.5節 決定23・26]
   const saveLabel = isChildTone ? "これにする" : "保存する";
   const undoLabel = isChildTone ? "ひとつ もどす" : "ひとつ戻す";
-  const clearLabel = isChildTone ? "ぜんぶ けす" : "ぜんぶけす";
-  const resetLabel = isChildTone ? "いろに もどす" : "色にもどす";
-  // [2026-09-30変更・69.5節 決定16] 「色にもどす」の確認・成功は、絵が消える前提（43.5節
-  // 決定25）から「まえのアバターに残る」前提の文言に変えた（`text.resetConfirm`）。
-  const resetConfirmActionLabel = isChildTone ? "もどす" : "色にもどす";
+  const clearLabel = isChildTone ? "ぜんぶ けす" : "全部消す";
+  // [2026-10-01変更・343章] 「色にもどす」→「絵をはずす」（統括「色に戻すがわかりにくい」）。
+  // 押すと絵が外れ、名前の最初の1文字の色の丸に戻る（今の絵は「まえのアバター」に残る）。
+  const resetLabel = isChildTone ? "えを はずす" : "絵をはずす";
+  // [2026-09-30変更・69.5節 決定16] 確認・成功は「まえのアバターに残る」前提の文言（`text.resetConfirm`）。
+  const resetConfirmActionLabel = isChildTone ? "はずす" : "絵をはずす";
+  const resettingLabel = "はずしています…";
+  // [2026-10-01追加・343章] 今の絵をキャンバスへ読み込む入口（キャンバスを空で始めるようにしたため）。
+  const editCurrentLabel = isChildTone ? "この えを なおす" : "この絵をなおす";
   const resetCancelLabel = "やめる";
 
   const handleStrokeEnd = (line: FamilyDrawingLine) => {
@@ -312,6 +332,18 @@ export function AvatarDrawingPanel({
     }
   };
 
+  /**
+   * [2026-10-01追加・343章]「この絵をなおす」。今の絵をキャンバスへ読み込む。描きかけがあれば
+   * `preMoveLinesRef`に残すので、「ひとつ戻す」で描きかけへ戻れる（✋の「うごかす」と同じ
+   * 1回だけ使える巻き戻し）。描きかけを黙って消さないため。
+   */
+  const loadCurrentToCanvas = () => {
+    if (!savedLineData) return;
+    clearCanvasSelection();
+    preMoveLinesRef.current = lines.length > 0 ? lines : null;
+    setLines(savedLineData.lines);
+  };
+
   const requestReset = () => {
     if (resetBlocked) {
       // 確認ではなく理由を出す（何も変わらない）。
@@ -369,9 +401,19 @@ export function AvatarDrawingPanel({
         {/* [43.5節 決定24] 「色にもどす」はこのカードの中にのみ置き、キャンバス直下の
             操作列（ひとつ戻す・ぜんぶけす・保存する）には置かない。 */}
         {hasSavedAvatar && !isConfirmingReset && (
-          <Pressable onPress={requestReset} disabled={resetting} hitSlop={8}>
-            <Text style={[bodyStyle, styles.resetLinkText, resetBlocked && styles.linkTextDisabled]}>{resetLabel}</Text>
-          </Pressable>
+          <View style={styles.currentActionRow}>
+            {/* [2026-10-01追加・343章] キャンバスが今の絵と同じときは出さない（読み込む意味がない）。 */}
+            {!sameAsSaved && (
+              <Pressable onPress={loadCurrentToCanvas} disabled={saving || resetting} hitSlop={8}>
+                <Text style={[bodyStyle, styles.resetLinkText, (saving || resetting) && styles.linkTextDisabled]}>
+                  {editCurrentLabel}
+                </Text>
+              </Pressable>
+            )}
+            <Pressable onPress={requestReset} disabled={resetting} hitSlop={8}>
+              <Text style={[bodyStyle, styles.resetLinkText, resetBlocked && styles.linkTextDisabled]}>{resetLabel}</Text>
+            </Pressable>
+          </View>
         )}
         {resetBlockedNotice && !isConfirmingReset && <Text style={[bodyStyle, styles.centerText]}>{resetBlockedNotice}</Text>}
 
@@ -383,7 +425,7 @@ export function AvatarDrawingPanel({
             <View style={styles.confirmRow}>
               <Pressable onPress={confirmReset} disabled={resetting} hitSlop={8}>
                 <Text style={[bodyStyle, styles.resetConfirmActionText]}>
-                  {resetting ? "もどしています…" : resetConfirmActionLabel}
+                  {resetting ? resettingLabel : resetConfirmActionLabel}
                 </Text>
               </Pressable>
               <Pressable onPress={cancelReset} disabled={resetting} hitSlop={8}>
@@ -544,6 +586,8 @@ const styles = StyleSheet.create({
   resetConfirmBlock: { alignItems: "center", gap: theme.spacing.s2 },
   resetConfirmActionText: { color: theme.colors.statusBlocking, textDecorationLine: "underline" },
   confirmRow: { flexDirection: "row", gap: theme.spacing.s4 },
+  // [2026-10-01追加・343章]「この絵をなおす」「絵をはずす」を横に並べる（文字が大きい端末では折り返す）。
+  currentActionRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: theme.spacing.s4 },
   // [2026-09-26追加・実装メモ.md 309章] 道具切り替え（ペン／〇／△／□）。
   toolWrap: { marginTop: theme.spacing.s4, alignItems: "center" },
   paletteWrap: { marginTop: theme.spacing.s4, alignItems: "center" },

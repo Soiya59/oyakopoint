@@ -105,7 +105,7 @@ export default function SupporterDrawingScreen() {
           <Text style={theme.typography.supporterBody}>← もどる</Text>
         </Pressable>
         <Text style={theme.typography.supporterBody}>
-          ひみつ {unpublished.length}/{theme.drawingLimits.maxUnpublished}まい
+          自分だけの絵 {unpublished.length}/{theme.drawingLimits.maxUnpublished}枚
         </Text>
       </View>
       <Text style={[theme.typography.supporterTitle, { marginTop: theme.spacing.s3 }]}>お絵かき</Text>
@@ -120,7 +120,7 @@ export default function SupporterDrawingScreen() {
       {loadState === "ready" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
           {showSavedSnackbar && !atLimit && (
-            <Text style={styles.snackbar}>ひみつが できました。だれかが みつけてくれるまで ないしょです</Text>
+            <Text style={styles.snackbar}>保存しました。家族の誰かがガチャで見つけるまで、あなたにしか見えません</Text>
           )}
           <DrawingBoard
             tone="supporter"
@@ -131,8 +131,8 @@ export default function SupporterDrawingScreen() {
             errorMessage={errorMessage}
             errorRef={errorRef}
             deletePublishedNotice={deletePublishedNotice}
-            saveLabel="せーぶする"
-            clearLabel="ぜんぶけす"
+            saveLabel="保存する"
+            clearLabel="全部消す"
             undoLabel="ひとつ戻す"
             editLabel="編集"
             onSave={handleSave}

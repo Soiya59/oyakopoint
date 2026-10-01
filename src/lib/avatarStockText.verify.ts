@@ -64,10 +64,12 @@ assertEqual("子ども: 見出し", child.heading, "まえの アバター");
 assertEqual("保護者: 見出し", parent.heading, "まえのアバター");
 assertEqual("子ども: いっぱいで保存できない理由", child.fullReasonSave, "まえの アバターが いっぱいです。1まい けしてから ほぞんしてね");
 assertEqual("保護者: いっぱいで保存できない理由", parent.fullReasonSave, "まえのアバターがいっぱいです。1枚消してから保存してください");
-assertEqual("保護者: いっぱいで色にもどせない理由", parent.fullReasonReset, "まえのアバターがいっぱいです。1枚消してから色にもどしてください");
+assertEqual("保護者: いっぱいで絵をはずせない理由", parent.fullReasonReset, "まえのアバターがいっぱいです。1枚消してから絵をはずしてください");
 assertEqual("子ども: 戻すボタン", child.restoreLabel, "これに もどす");
 assertEqual("保護者: 戻すボタン", parent.restoreLabel, "これに戻す");
-assertEqual("全ロール共通: 消すボタンは「けす」", [child, parent, supporter, proxyChild].every((t) => t.deleteLabel === "けす"), true);
+// [2026-10-01変更・実装メモ343章] 大人は漢字の「消す」、子どもは「けす」。
+assertEqual("子ども: 消すボタンは「けす」", child.deleteLabel, "けす");
+assertEqual("大人: 消すボタンは「消す」", [parent, supporter, proxyChild].every((t) => t.deleteLabel === "消す"), true);
 assertEqual("みまもりと保護者（本人）は同じ文言（69.5節「同左」）", JSON.stringify(allStrings(supporter)), JSON.stringify(allStrings(parent)));
 assertEqual("子ども: 消す確定は「ほんとうに けす」", child.deleteConfirmActionLabel, "ほんとうに けす");
 assertEqual("大人: 消す確定は「消す」", parent.deleteConfirmActionLabel, "消す");
@@ -90,7 +92,7 @@ assertEqual(
   [proxyAdult.note, proxyAdult.previewText, proxyAdult.restoreSuccess, proxyAdult.deleteConfirm, proxyAdult.resetConfirm].join("|").replaceAll("祖母", "たろう")
 );
 assertEqual("代理: いっぱいで保存できない理由", proxyChild.fullReasonSave, "たろうさんの「まえのアバター」がいっぱいです。1枚消してから保存してください");
-assertEqual("代理: 色にもどす確認", proxyChild.resetConfirm, "たろうさんのアバターを色にもどしますか？今の絵は「まえのアバター」に残ります");
+assertEqual("代理: 絵をはずす確認", proxyChild.resetConfirm, "たろうさんのアバターの絵をはずしますか？名前の最初の1文字の表示に戻ります。今の絵は「まえのアバター」に残ります");
 assertEqual("代理: 保存成功（残った）", proxyChild.saveSuccessStocked, "たろうさんのアバターを保存しました。前の絵は「まえのアバター」に残っています");
 assertEqual("代理: 保存成功（残らなかった）は既存の「{名前}さんのアバターを保存しました」", proxyChild.saveSuccess, "たろうさんのアバターを保存しました");
 assertEqual("代理: 消す確認", proxyChild.deleteConfirm, "たろうさんのこの絵を消しますか？消すと元に戻せません");

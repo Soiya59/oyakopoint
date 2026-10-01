@@ -6,7 +6,7 @@
  * 原則（69.5節）: 機能名「まえのアバター」は全ロール共通の固定名称。子ども向けは名称も
  * ひらがな＋単語の間に空白（`まえの アバター`。既存の「ぜんぶ けす」「いろに もどす」と
  * 同じ書き方）。大人向けは漢字まじり。ボタンの動詞は子ども＝ひらがな、大人＝漢字まじり。
- * 「けす」は既存に合わせて全ロール共通。保護者が**他の人の分**（子ども・他の保護者・
+ * ~~「けす」は既存に合わせて全ロール共通。~~【2026-10-01】大人は「消す」（343章）。保護者が**他の人の分**（子ども・他の保護者・
  * みまもり、誰の分でも同じ扱い）を見るとき（P38代理、`isProxy`）は`{displayName}さん`を
  * 入れる（相手の立場で言い換えない）。「注意」「警告」「制限」の語は使わない。
  */
@@ -81,10 +81,11 @@ export function getAvatarStockText(args: {
       deleting: "けしています…",
       deleteSuccess: "けしたよ",
       fullReasonSave: "まえの アバターが いっぱいです。1まい けしてから ほぞんしてね",
-      fullReasonReset: "まえの アバターが いっぱいです。1まい けしてから いろに もどしてね",
-      resetConfirm: "ほんとうに いろに もどす？ いまの えは まえの アバターに のこるよ",
-      resetSuccess: "いろに もどしたよ。まえの えは「まえの アバター」に のこったよ",
-      resetSuccessPlain: "いろに もどしたよ",
+      // [2026-10-01変更・実装メモ343章]「いろに もどす」→「えを はずす」。
+      fullReasonReset: "まえの アバターが いっぱいです。1まい けしてから えを はずしてね",
+      resetConfirm: "えを はずす？ なまえの さいしょの もじに もどるよ。いまの えは まえの アバターに のこるよ",
+      resetSuccess: "えを はずしたよ。まえの えは「まえの アバター」に のこったよ",
+      resetSuccessPlain: "えを はずしたよ",
       loadFailed: "まえの アバターが よみこめなかったよ",
       retryLabel: "もういちど",
       staleGone: "この えは もう なくなっていたよ。ならびを なおしたよ",
@@ -94,7 +95,8 @@ export function getAvatarStockText(args: {
   }
 
   const common = {
-    deleteLabel: "けす",
+    // [2026-10-01変更・343章] 大人は漢字（統括「大人と見守りは漢字」）。子どもは「けす」のまま。
+    deleteLabel: "消す",
     deleteConfirmActionLabel: "消す",
     deleteCancelLabel: "やめる",
     deleting: "消しています…",
@@ -123,10 +125,10 @@ export function getAvatarStockText(args: {
       saveSuccessStocked: `${n}のアバターを保存しました。前の絵は「まえのアバター」に残っています`,
       deleteConfirm: `${n}のこの絵を消しますか？消すと元に戻せません`,
       fullReasonSave: `${n}の「まえのアバター」がいっぱいです。1枚消してから保存してください`,
-      fullReasonReset: `${n}の「まえのアバター」がいっぱいです。1枚消してから色にもどしてください`,
-      resetConfirm: `${n}のアバターを色にもどしますか？今の絵は「まえのアバター」に残ります`,
-      resetSuccess: `${n}のアバターを色にもどしました。前の絵は「まえのアバター」に残っています`,
-      resetSuccessPlain: `${n}のアバターを色にもどしました`,
+      fullReasonReset: `${n}の「まえのアバター」がいっぱいです。1枚消してから絵をはずしてください`,
+      resetConfirm: `${n}のアバターの絵をはずしますか？名前の最初の1文字の表示に戻ります。今の絵は「まえのアバター」に残ります`,
+      resetSuccess: `${n}のアバターの絵をはずしました。前の絵は「まえのアバター」に残っています`,
+      resetSuccessPlain: `${n}のアバターの絵をはずしました`,
       staleGone: "この絵はすでにありません。一覧を更新しました",
     };
   }
@@ -145,10 +147,10 @@ export function getAvatarStockText(args: {
     saveSuccessStocked: "アバターを保存しました。前の絵は「まえのアバター」に残っています",
     deleteConfirm: "この絵を消しますか？消すと元に戻せません",
     fullReasonSave: "まえのアバターがいっぱいです。1枚消してから保存してください",
-    fullReasonReset: "まえのアバターがいっぱいです。1枚消してから色にもどしてください",
-    resetConfirm: "色にもどしますか？今の絵は「まえのアバター」に残ります",
-    resetSuccess: "色にもどしました。前の絵は「まえのアバター」に残っています",
-    resetSuccessPlain: "色にもどしました",
+    fullReasonReset: "まえのアバターがいっぱいです。1枚消してから絵をはずしてください",
+    resetConfirm: "絵をはずしますか？名前の最初の1文字の表示に戻ります。今の絵は「まえのアバター」に残ります",
+    resetSuccess: "絵をはずしました。前の絵は「まえのアバター」に残っています",
+    resetSuccessPlain: "絵をはずしました",
     staleGone: "この絵はすでにありません。一覧を更新しました",
   };
 }

@@ -555,7 +555,10 @@ export function DrawingBoard({
    */
   const renderMyDrawings = (hint: string) => (
     <>
-      <Text style={[bodyStyle, styles.sectionLabel]}>あなたの ひみつ（じぶんだけ みえるよ）</Text>
+      <Text style={[bodyStyle, styles.sectionLabel]}>
+        {/* [2026-10-01変更・実装メモ343章] 大人は漢字（統括「大人と見守りは漢字」）。 */}
+        {isChildTone ? "あなたの ひみつ（じぶんだけ みえるよ）" : "自分だけに見える絵"}
+      </Text>
       <Text style={[bodyStyle, styles.sectionHint]}>{hint}</Text>
       <View style={styles.thumbRow}>
         {unpublished.map((d) => (
@@ -574,7 +577,13 @@ export function DrawingBoard({
                   hitSlop={8}
                 >
                   <Text style={[bodyStyle, styles.deleteConfirmText]}>
-                    {deletingId === d.id ? "けしています…" : "ほんとうに けす"}
+                    {deletingId === d.id
+                      ? isChildTone
+                        ? "けしています…"
+                        : "消しています…"
+                      : isChildTone
+                        ? "ほんとうに けす"
+                        : "本当に消す"}
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => setConfirmingDeleteId(null)} disabled={deletingId === d.id} hitSlop={8}>
@@ -600,7 +609,7 @@ export function DrawingBoard({
                   style={styles.deleteLink}
                 >
                   <Text style={[bodyStyle, styles.deleteLinkText, (isEditing || saving) && styles.linkTextDisabled]}>
-                    けす
+                    {isChildTone ? "けす" : "消す"}
                   </Text>
                 </Pressable>
               </View>
@@ -627,16 +636,22 @@ export function DrawingBoard({
       {atLimit && !isEditing && (
         <Card tone={tone} style={styles.limitCard}>
           <Text style={bodyStyle}>
-            いま{unpublished.length}まい ひみつを もってるよ。だれかが みつけてくれたら、また あたらしい えが かけるよ
+            {isChildTone
+              ? `いま${unpublished.length}まい ひみつを もってるよ。だれかが みつけてくれたら、また あたらしい えが かけるよ`
+              : `いま${unpublished.length}枚の絵が、見つけてもらうのを待っています。家族の誰かがガチャで見つけると、また新しい絵を描けます`}
           </Text>
         </Card>
       )}
 
       {isEditing && (
         <Card tone={tone} style={styles.editingCard}>
-          <Text style={bodyStyle}>このえを なおしています。せーぶすると もとのえと いれかわるよ</Text>
+          <Text style={bodyStyle}>
+            {isChildTone
+              ? "このえを なおしています。とっておく を おすと もとのえと いれかわるよ"
+              : "この絵を編集しています。保存すると元の絵と入れ替わります"}
+          </Text>
           <Pressable onPress={cancelEdit} disabled={saving} hitSlop={8} style={styles.deleteLink}>
-            <Text style={[bodyStyle, styles.deleteLinkText]}>へんしゅうを やめる</Text>
+            <Text style={[bodyStyle, styles.deleteLinkText]}>{isChildTone ? "へんしゅうを やめる" : "編集をやめる"}</Text>
           </Pressable>
         </Card>
       )}
@@ -858,8 +873,12 @@ export function DrawingBoard({
       {unpublished.length > 0 &&
         renderMyDrawings(
           atLimit
-            ? "かきなおしたいときは、ひとつ けすと あたらしい えが かけるようになるよ"
-            : `あと${theme.drawingLimits.maxUnpublished - unpublished.length}まい かけるよ。きにいらない えは けせるよ`
+            ? isChildTone
+              ? "かきなおしたいときは、ひとつ けすと あたらしい えが かけるようになるよ"
+              : "描き直したいときは、1枚消すと新しい絵を描けます"
+            : isChildTone
+              ? `あと${theme.drawingLimits.maxUnpublished - unpublished.length}まい かけるよ。きにいらない えは けせるよ`
+              : `あと${theme.drawingLimits.maxUnpublished - unpublished.length}枚描けます。気に入らない絵は消せます`
         )}
     </View>
   );
