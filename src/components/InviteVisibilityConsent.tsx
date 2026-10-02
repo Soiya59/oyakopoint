@@ -6,7 +6,7 @@ export type ConsentRole = "parent" | "supporter";
 
 interface InviteVisibilityConsentProps {
   /** P6（保護者の招待受諾）は"parent"、S0（みまもりメンバーの招待受諾）は"supporter"。
-   *  aの表示有無のみを切り替える（要件定義書.md 06章(3)のロール差）。 */
+   *  aの言い方とfの有無を切り替える（要件定義書.md 06章(3)のロール差。2026-10-03改訂）。 */
   role: ConsentRole;
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -40,7 +40,10 @@ interface InviteVisibilityConsentProps {
  */
 // [2026-10-01・版2] S0にITEM_F（みまもりのごほうびも家族に見える）を足した
 // （統括決定・要件定義書06章(1)f行、実装メモ342章）。
-export const JOIN_CONSENT_VERSION = 2;
+// [2026-10-03・版3] S0にもITEM_A_SUPPORTER（感謝メッセージの本文は保護者が読める）を
+// 足した（統括決定・要件定義書06章(1)a行、実装メモ346章）。みまもりも感謝ポイントを
+// 送受信でき、本文は保護者全員が通帳で読めるのに、説明に載っていなかった。
+export const JOIN_CONSENT_VERSION = 3;
 
 // [2026-09-02改訂・統括] 当初は「家族の中に隠しごとを作らない、という考え方で
 // つくられています。」だったが、統括より「言い過ぎかもしれない、本質からずれて
@@ -58,6 +61,9 @@ const INTRO_TEXT =
 
 const ITEM_A =
   "保護者は、家族のだれの通帳でも開いて、届いた感謝メッセージの本文を読めます。あなたが送った・受け取ったメッセージも、他の保護者から同じように読めます。";
+// [2026-10-03追加・版3] aのみまもり向けの言い方（S0だけに出す。P6はITEM_Aのまま）。
+const ITEM_A_SUPPORTER =
+  "感謝メッセージの本文は、保護者が家族のだれの通帳からでも読めます。あなたが送った・受け取った感謝メッセージも、保護者から読めます。";
 const ITEM_B =
   "クエストの完了報告と、積み重なった実施履歴は、保護者・みまもりメンバーを含む家族全員が見られます。あなた自身の完了報告（自分専用のクエストも含む）も、同じように公開されます。";
 const ITEM_C =
@@ -76,8 +82,11 @@ export default function InviteVisibilityConsent({ role, checked, onChange }: Inv
   const isSupporter = role === "supporter";
   const bodyStyle = isSupporter ? theme.typography.supporterBody : theme.typography.parentBody;
   const accentColor = isSupporter ? theme.colors.supporterAccent : theme.colors.brandPrimary;
-  // 26.2節: P6（parent）は導入文＋a・b・c・d、S0（supporter）は導入文＋b・c・d・f（fは2026-10-01追加。記号は要件定義書06章(1)の表に合わせた）。
-  const items = isSupporter ? [ITEM_B, ITEM_C, ITEM_D, ITEM_F] : [ITEM_A, ITEM_B, ITEM_C, ITEM_D];
+  // 26.2節: P6（parent）は導入文＋a・b・c・d、S0（supporter）は導入文＋a・b・c・d・f
+  // （fは2026-10-01、aのみまもり向けは2026-10-03に追加。記号は要件定義書06章(1)の表に合わせた）。
+  const items = isSupporter
+    ? [ITEM_A_SUPPORTER, ITEM_B, ITEM_C, ITEM_D, ITEM_F]
+    : [ITEM_A, ITEM_B, ITEM_C, ITEM_D];
 
   return (
     <View>
