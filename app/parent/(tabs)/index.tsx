@@ -99,10 +99,25 @@ export default function ParentFamilyTabScreen() {
   const hasActiveChild = state.members.some((m) => m.is_active && m.role === "child");
   const hasFamilyChore = state.chores.some((c) => c.scope === "family");
   const hasFamilyReward = state.rewards.some((r) => r.scope === "family");
-  const starterItems: { key: string; emoji: string; label: string; path: string }[] = [
+  // [2026-10-02追加・実装メモ345章、統括「Aお願いします」（初めての家族が、お手伝い→ごほうびの
+  // 一周を最初に体験できるように）] 準備の3つが終わったら、子どもの報告・ごほうびの交換を足す。
+  // 判定は既存のstate.completions（初回は全件取得、実装メモ330章）とstate.redemptionsの実件数だけ。
+  // すでに使っている家族は報告・交換があるので、この欄は出ない。
+  const childIds = new Set(state.members.filter((m) => m.role === "child").map((m) => m.id));
+  const hasChildCompletion = state.completions.some((c) => childIds.has(c.reported_by));
+  const hasChildRedemption = state.redemptions.some((r) => childIds.has(r.member_id));
+  const setupDone = hasActiveChild && hasFamilyChore && hasFamilyReward;
+  const starterItems: { key: string; emoji: string; label: string; path?: string; toChildMode?: boolean }[] = [
     ...(hasActiveChild ? [] : [{ key: "child", emoji: "👦", label: "こどもを1人登録する", path: "/parent/child-profile" }]),
     ...(hasFamilyChore ? [] : [{ key: "chore", emoji: "📝", label: "クエストを1つ作る", path: "/parent/chore-edit" }]),
     ...(hasFamilyReward ? [] : [{ key: "reward", emoji: "🎁", label: "ごほうびを1つ作る", path: "/parent/reward-edit" }]),
+    // 子どもやクエストが無いうちに押されても何もできないので、準備の3つが終わってから出す。
+    ...(setupDone && !hasChildCompletion
+      ? [{ key: "firstReport", emoji: "🧹", label: "子どもに1回、クエストを報告してもらう", toChildMode: true }]
+      : []),
+    ...(setupDone && !hasChildRedemption
+      ? [{ key: "firstRedeem", emoji: "🎁", label: "ためたポイントで、ごほうびと交換してもらう", toChildMode: true }]
+      : []),
   ];
 
   // [旧app/parent/home.tsxからそのまま移設・実装メモ92.2章/108章/167章] 左上の
@@ -143,10 +158,13 @@ export default function ParentFamilyTabScreen() {
           3つ終わった家族ではこの下のレイアウトが変更前と完全に同じになる。 */}
       {starterItems.length > 0 && (
         <Card style={{ marginTop: theme.spacing.s4 }}>
-          <Text style={theme.typography.parentBodyMedium}>🌱 はじめに、この3つをやってみましょう</Text>
+          <Text style={theme.typography.parentBodyMedium}>🌱 はじめに、やってみましょう</Text>
           <View style={{ marginTop: theme.spacing.s3, gap: theme.spacing.s2 }}>
             {starterItems.map((item) => (
-              <Pressable key={item.key} onPress={() => router.push(item.path as never)}>
+              <Pressable
+                key={item.key}
+                onPress={() => (item.toChildMode ? goToChildSwitch() : router.push(item.path as never))}
+              >
                 <Card style={styles.starterRow}>
                   <Text style={theme.typography.parentBody}>
                     {item.emoji} {item.label}
