@@ -113,7 +113,7 @@ export default function ChildGratitudeSendScreen() {
           <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s2 }]}>{sentInfo.points}こ</Text>
         </View>
         <AppButton
-          label="ありがとうポイントへ"
+          label="ありがとうの がめんへ"
           tone="child"
           fullWidth
           style={{ marginTop: theme.spacing.s8 }}

@@ -110,7 +110,8 @@ export default function ChildGratitudeHubScreen() {
 
   return (
     <Screen tone="child">
-      <Text style={theme.typography.childBody}>💌 ありがとうポイント</Text>
+      {/* [2026-10-03変更・実装メモ350章] 子どもの呼び名を「ありがとう」にそろえた（ホームのタイルと同じ。統括「お勧め通りで」）。 */}
+      <Text style={theme.typography.childBody}>💌 ありがとう</Text>
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
