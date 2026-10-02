@@ -152,7 +152,8 @@ export default function ChildHistoryScreen() {
             <View style={{ marginTop: theme.spacing.s2 }}>
               {dailyCompletions.map((c) => {
                 const chore = state.chores.find((ch) => ch.id === c.chore_id);
-                const isRoutine = !!chore?.is_repeatable;
+                // [2026-10-03・実装メモ348章] 🔄と「（つづけてる）」は外した（統括「両方外して」）。
+                // 「くり返す」クエストの印で、続けているかとは関係なく、この画面では役に立たないため。
                 // [2026-08-23追加・本部長] ホーム画面のベルマーク（新着リアクション件数）を
                 // 押すとこの「きろく」画面に来る導線に変更したため、実際にリアクションの
                 // 中身（スタンプ・コメント）をここで確認できるようにした
@@ -163,9 +164,7 @@ export default function ChildHistoryScreen() {
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <Text style={[theme.typography.childBody, { flexShrink: 1 }]}>
-                          {isRoutine ? "🔄 " : ""}
                           {c.chore_emoji} {c.chore_title}
-                          {isRoutine ? "（つづけてる）" : ""}
                         </Text>
                         <Text style={{ flex: 1 }} />
                         {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型の完了報告は

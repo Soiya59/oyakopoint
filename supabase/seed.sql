@@ -845,6 +845,38 @@ VALUES ((SELECT id FROM _seed_ids WHERE key = 'b_request_done_3pt'), (SELECT id 
 
 
 -- ============================================================
+-- 23d. gratitude_reactions（感謝ポイントへのスタンプの返し。2026-10-03追加・要件定義書
+--      07-45章、設計部/成果物/スキーマ設計.sql 83.11章・83.13章、開発部/成果物/
+--      実装メモ.md 347章）
+-- ============================================================
+-- 0件だと、rls_checks.sqlのB-G1〜B-G4・A-G1が「何も見えない」を自明に満たしてしまい、
+-- RLSが緩くても通る（83.13章の前提）。そこで家族Aに、保護者P・子どもC・みまもりSの
+-- 感謝とスタンプを3組入れ、家族Bにも1組入れる:
+--   G1: P→C（スタンプ arigato）／G2: S→C（スタンプ sugoi）／G3: C→P（スタンプ ganbatta）
+--   B : 保護者→子ども（スタンプ arigato。A層用）
+-- 期待値: 子どもCは3件・保護者Pは2件（G1・G3）・みまもりSは1件（G2）。Pにとって当事者でないのはG2の1件。
+-- ・G1・G3・Bは、セクション11で入れた感謝（A-1・A-2・B-1）にスタンプを足す。G2用の
+--   「みまもり→子ども」の感謝だけここで足す（みまもりは感謝を贈れる。20260907030000）。
+-- ・INSERT用のポリシー・権限は無い（本番ではRPCだけが書く）が、本ファイルはpostgres権限で
+--   実行されるため素のINSERTでよい。この表にトリガーは無い。
+-- ・家族を削除する検査（83.11章）はこのスタンプ入りの家族を使う。
+SELECT set_config('request.jwt.claims', '', false);
+
+INSERT INTO gratitude_points (sender_id, recipient_id, points, note) VALUES
+  ((SELECT id FROM _seed_ids WHERE key = 'a_supporter'), (SELECT id FROM _seed_ids WHERE key = 'a_child'), 1, 'テストありがとうA-3(みまもりから)');
+
+INSERT INTO gratitude_reactions (gratitude_id, family_id, stamp_key)
+SELECT gp.id, gp.family_id, v.stamp_key
+FROM (VALUES
+  ('テストありがとうA-1',               'arigato'),
+  ('テストありがとうA-3(みまもりから)', 'sugoi'),
+  ('テストありがとうA-2',               'ganbatta'),
+  ('テストありがとうB-1',               'arigato')
+) AS v(note_text, stamp_key)
+JOIN gratitude_points gp ON gp.note = v.note_text;
+
+
+-- ============================================================
 -- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);
@@ -871,7 +903,8 @@ SELECT
   (SELECT count(*) FROM join_consents jc WHERE jc.family_id = f.id) AS join_consents,
   (SELECT count(*) FROM member_avatar_stocks mas WHERE mas.family_id = f.id) AS member_avatar_stocks,
   (SELECT count(*) FROM chores c WHERE c.family_id = f.id AND c.is_request) AS chore_requests,
-  (SELECT count(*) FROM chore_request_done_notices crdn WHERE crdn.family_id = f.id) AS request_done_notices
+  (SELECT count(*) FROM chore_request_done_notices crdn WHERE crdn.family_id = f.id) AS request_done_notices,
+  (SELECT count(*) FROM gratitude_reactions gr WHERE gr.family_id = f.id) AS gratitude_reactions
 FROM families f
 ORDER BY f.created_at;
 

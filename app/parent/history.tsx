@@ -204,7 +204,7 @@ export default function ParentHistoryScreen() {
               {dailyCompletions.map((c) => {
                 const member = state.members.find((m) => m.id === c.reported_by);
                 const chore = state.chores.find((ch) => ch.id === c.chore_id);
-                const isRoutine = !!chore?.is_repeatable;
+                // [2026-10-03・実装メモ348章] 🔄と「(ルーチン)」は外した（統括「両方外して」）。
                 return (
                   <View key={c.id} style={styles.row}>
                     <MemberAvatar name={member?.display_name ?? "?"} color={member?.avatar_color} size={24} lineData={member ? memberAvatars[member.id] : undefined} expandOnTap />
@@ -212,9 +212,7 @@ export default function ParentHistoryScreen() {
                       {member?.display_name}
                     </Text>
                     <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>
-                      {isRoutine ? "🔄 " : ""}
                       {c.chore_emoji} {c.chore_title}
-                      {isRoutine ? "(ルーチン)" : ""}
                     </Text>
                     {/* [2026-09-17改訂・要件定義書07-28章決定9] 台紙型はpoints=NULLの
                         ため何も添えない。 */}

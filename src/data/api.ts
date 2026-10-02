@@ -65,6 +65,7 @@ import type {
   GachaPresetOrnament,
   GachaPrizeKind,
   GratitudePoint,
+  GratitudeReaction,
   HabitCard,
   HabitCardChoreBreakdownRow,
   HabitFigureCatalogItem,
@@ -98,6 +99,13 @@ import type {
 export interface ApiError {
   code: string;
   message: string;
+  /**
+   * [2026-10-03追加・実装メモ.md 347章] PostgRESTの`hint`（`RAISE EXCEPTION ... USING HINT = '...'`）。
+   * 同じSQLSTATE（`check_violation`）の中で原因を見分けるのに使う（感謝ポイントへのスタンプの
+   * `gratitude_stamp_not_allowed`・`gratitude_sender_left`。API仕様.md 39.3章）。ヒントが無い
+   * 失敗では付かない（既存の呼び出し元の`ApiError`の形は変わらない）。
+   */
+  hint?: string;
   status?: number;
 }
 
@@ -149,9 +157,14 @@ export const PG_ERRCODE = {
  * 参照）。既存の呼び出し元（statusを渡さない大多数）への影響は無い
  * （ApiError.statusはもともと省略可能）。
  */
-function fromPostgrestError(error: { code?: string | null; message?: string } | null, status?: number): ApiError {
+function fromPostgrestError(
+  error: { code?: string | null; message?: string; hint?: string | null } | null,
+  status?: number
+): ApiError {
   if (!error) return { ...GENERIC_ERROR, status };
-  return { code: error.code ?? "unknown_error", message: error.message ?? GENERIC_ERROR.message, status };
+  const base: ApiError = { code: error.code ?? "unknown_error", message: error.message ?? GENERIC_ERROR.message, status };
+  // [2026-10-03追加] hintがあるときだけ付ける（無いときは従来と同じ形のまま）。
+  return error.hint ? { ...base, hint: error.hint } : base;
 }
 
 /**
@@ -2266,6 +2279,47 @@ export async function fetchGratitudeLog(client: SupabaseClient, familyId: string
     .order("created_at", { ascending: false });
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as GratitudePoint[] };
+}
+
+/**
+ * [2026-10-03新設・要件定義書07-45章、スキーマ設計.sql 83.6章、API仕様.md 39.1章、実装メモ.md 347章]
+ * 感謝ポイントへのスタンプの返し。**押せるのは、その感謝を受け取った本人だけ**。同じ種類をもう一度＝取り消し、
+ * 別の種類＝入れ替え（RPC`toggle_gratitude_stamp`が1回で判定する。呼び出し側は押した種類だけを送ればよい）。
+ * スタンプの種類は`theme.stampDefinitions`のkey（DBの許可リスト`gratitude_stamp_keys()`と同じ4つ）。
+ * 直接の`from('gratitude_reactions').insert/update/delete`は権限が無く常に拒否される。
+ *
+ * 起こりうるエラー（API仕様.md 39.3章。振り分けは`src/lib/gratitudeStamp.ts`の`isGratitudeStampRefused`）:
+ * - `no_data_found`（P0002）: 感謝が無い・他家族・自分が受け取った感謝ではない・取り消し済み（区別しない）。
+ * - `check_violation`（23514）＋HINT `gratitude_stamp_not_allowed`: 種類が4種以外（画面は4種しか出さない）。
+ * - `check_violation`（23514）＋HINT `gratitude_sender_left`: 贈った人が家族から抜けている。
+ * - `insufficient_privilege`（42501）: ログインしていない。
+ */
+export async function toggleGratitudeStamp(
+  client: SupabaseClient,
+  gratitudeId: string,
+  stampKey: string
+): Promise<ApiResult<{ removed: boolean; current_stamp_key: string | null }>> {
+  const { data, error, status } = await client
+    .rpc("toggle_gratitude_stamp", { p_gratitude_id: gratitudeId, p_stamp_key: stampKey })
+    .single();
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: data as { removed: boolean; current_stamp_key: string | null } };
+}
+
+/**
+ * [2026-10-03新設・API仕様.md 39.1章・39.4章、スキーマ設計.sql 83.9章] 自分が当事者（贈った人か受け取った人）の
+ * 感謝ポイントに付いたスタンプを1本のSELECTで取る。**絞り込み（`.eq`）は書かない**: RLSが「自分が贈った／
+ * 受け取った感謝」の分だけに絞る（保護者・みまもりでも当事者でなければ返らない。取り消し済みの感謝の分も返らない）。
+ * どちらの立場の行かは、`fetchGratitudeLog`が返す感謝の行と`gratitude_id`で突き合わせて決める
+ * （スタンプの表に表示名・メンバーIDは無い）。**集計（数・順位）を作らない**（07-45章決定10）。
+ */
+export async function fetchGratitudeReactions(client: SupabaseClient): Promise<ApiResult<GratitudeReaction[]>> {
+  const { data, error, status } = await client
+    .from("gratitude_reactions")
+    .select("gratitude_id, stamp_key, created_at")
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: (data ?? []) as GratitudeReaction[] };
 }
 
 /**

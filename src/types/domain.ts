@@ -281,6 +281,19 @@ export interface GratitudePoint {
   revoked_at: string | null; // 非NULL=誤操作取消済み（送信から5分以内・sender本人のみ）
 }
 
+/**
+ * [2026-10-03追加・要件定義書07-45章、スキーマ設計.sql 83章、API仕様.md 39章、開発部/成果物/
+ * 実装メモ.md 347章] 感謝ポイントへのスタンプの返し（gratitude_reactions）の1行。
+ * 1つの感謝に最大1行。**押した人のIDは持たない**（押せるのは受け取った本人だけなので、
+ * 押した人＝その感謝の`recipient_id`）。RLSが「贈った人」と「受け取った人」の2人に絞るため、
+ * 取得した行はすべて自分が当事者の感謝のもの。`stamp_key`はDBが4種（`StampKey`）に絞っている。
+ */
+export interface GratitudeReaction {
+  gratitude_id: string;
+  stamp_key: string;
+  created_at: string;
+}
+
 export interface Reward {
   id: string;
   family_id: string;

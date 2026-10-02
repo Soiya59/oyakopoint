@@ -667,6 +667,23 @@
 -- （自動でそろえる仕組みは無い。変えるときは同じ変更で3つとも直す）。書き込み系の挙動は
 -- 82.19.10章のPT1〜PT28を手動で実行し、実装メモ341章に結果を記録した。
 --
+-- [2026-10-03追加・開発部] 感謝ポイントへのスタンプの返し（要件定義書07-45章、設計部/成果物/
+-- スキーマ設計.sql 83章、開発部/成果物/実装メモ.md 347章、supabase/migrations/
+-- 20261004020000_gratitude_reactions.sql）に伴い、S1（45→46、gratitude_reactions）・
+-- S3（80→81本、`gratitude_reactions_select_sender_or_recipient`1本。ハッシュはローカルDockerで
+-- 実測した新しい形で、他のポリシーのハッシュの引き写しではない）・S4（106→107件、
+-- `toggle_gratitude_stamp`のみ。`gratitude_stamp_keys`・取り消し連動のトリガー関数はREVOKE済みで
+-- 数えない）を更新した。**設計部の見込み（83.0章「S1 +1・S3 +1・S4 +1」）と実測が完全に一致した**
+-- （適用前に全件を流してFAIL 0を確かめ、適用後にS1・S3・S4の3本だけがFAILすることを確かめて
+-- から更新した。手計算していない）。C層にC-G1〜C-G11（列が4つだけ・外部キー・許可リスト・CHECK・
+-- 権限・ポリシー1本・トリガー・参照するView/関数・関数の実行権限・RPC本文・データ整合）、B層に
+-- B-G1〜B-G4（子ども・保護者・みまもりは自分が当事者の分だけが見える／保護者は当事者でない
+-- スタンプが見えない）、A層にA-G1（3ロール。他家族の行が見えない）を追加した。B-G系・A-G1・C-G11は
+-- 0件だと自明に通るため、seed.sqlの23d節でスタンプ入りの感謝を入れ、0件の環境ではSKIPにする。
+-- 書き込み系の挙動（入れ替え・取り消し・受け取った本人だけ・贈った人が抜けた場合・二重タップ・
+-- 取り消し連動のトリガー）はこのファイルでは見ない。83.14章のV1〜V18を手動で実行し、実装メモ347章に
+-- 結果を記録した。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -757,8 +774,10 @@ GRANT INSERT ON _r TO authenticated;
 -- [2026-09-30再更新] 「おねがい」の完了通知の記録（設計部82章）でchore_request_done_notices
 -- を追加。44→45（ローカルDockerで実測。96.5章の遵守。設計部の見込み「S1 +1」と一致。
 -- chores.is_request列の追加は既存テーブルへのADD COLUMNのためS1には数えない）。
+-- [2026-10-03再更新] 感謝ポイントへのスタンプ（設計部83章）でgratitude_reactionsを追加。
+-- 45→46（ローカルDockerで実測。96.5章の遵守。設計部の見込み「S1 +1」と一致）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '45', count(*)::text, count(*) = 45
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '46', count(*)::text, count(*) = 46
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -995,6 +1014,13 @@ WITH expected(t, p, c, h) AS (VALUES
   ('gratitude_points','gratitude_points_insert_self','INSERT','3a333e6d1714c61877e086de96092891'),
   ('gratitude_points','gratitude_points_select_same_family','SELECT','ba5f17c68a4ed3412761e44aff4d2f47'),
   ('gratitude_points','gratitude_points_update_revoke_by_sender','UPDATE','5cc6c5f5c30e0d1ecae492e233a49ac1'),
+  -- [2026-10-03追加] gratitude_reactions（感謝ポイントへのスタンプの返し、要件定義書07-45章、
+  -- 設計部/成果物/スキーマ設計.sql 83.5章、開発部/成果物/実装メモ.md 347章）。SELECTの1本だけ
+  -- （INSERT・UPDATE・DELETEのポリシーは意図的に作らない。書き込みはRPCだけ）。条件式
+  -- `family_id = current_family_id() AND EXISTS(感謝の行を引いて、取り消されておらず、
+  -- sender_idかrecipient_idが自分)`は既存のどのポリシーとも文字通り同一でない新しい形のため、
+  -- ローカルDockerで実測した（他のハッシュを引き写していない。96.5章の遵守）。
+  ('gratitude_reactions','gratitude_reactions_select_sender_or_recipient','SELECT','a19b62bce544e324592c765bcbca2c69'),
   -- [2026-09-17追加] 習慣カード（台紙）とフィギュア（要件定義書07-28章、設計部/
   -- 成果物/スキーマ設計.sql 55章、開発部/成果物/実装メモ.md 237章）。
   -- habit_cards・habit_figure_grantsのSELECT条件式`family_id = current_family_id()`は
@@ -1126,7 +1152,7 @@ diff AS (
   WHERE e.p IS NULL OR a.p IS NULL OR e.c <> a.c OR e.h <> a.h
 )
 INSERT INTO _r
-SELECT 'C層', 'S3 ポリシー80本の定義が承認済みと一致',
+SELECT 'C層', 'S3 ポリシー81本の定義が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM diff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM diff);
@@ -1451,6 +1477,13 @@ WITH expected(f) AS (VALUES
   -- 明示GRANTしている2本。
   ('delete_family_comment'),
   ('toggle_family_drawing_reaction_stamp'),
+  -- [2026-10-03追加] toggle_gratitude_stamp（感謝ポイントへのスタンプの返し、設計部/成果物/
+  -- スキーマ設計.sql 83.6章、開発部/成果物/実装メモ.md 347章）。SECURITY DEFINERで、
+  -- PUBLIC・anonからREVOKEしauthenticatedへ明示GRANTしている。同じ章の
+  -- gratitude_stamp_keys()・gratitude_points_after_revoke_delete_reaction()は
+  -- authenticatedからもREVOKE済みのため、この一覧に数えない（実測で+2以上になったら
+  -- REVOKEの漏れを疑う。FAILを消すためだけに一覧を更新しない）。
+  ('toggle_gratitude_stamp'),
   -- 以下9本はいずれもRETURNS TRIGGERのトリガー関数で、PUBLICからの
   -- EXECUTEを明示REVOKEしていないため（member_goals_before_write等の
   -- 既存トリガー関数と同じ34.5章の既知の挙動）、デフォルトのまま
@@ -1507,7 +1540,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数106件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数107件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -1740,6 +1773,156 @@ SELECT 'C層', 'C-R16 is_request行のpointsが0以上max_request_points()以下
 FROM chores c
 WHERE c.is_request AND (c.points < 0 OR c.points > public.max_request_points());
 
+-- ------------------------------------------------------------
+-- C-G1〜C-G11. [2026-10-03追加・スキーマ設計.sql 83.13章] 感謝ポイントへのスタンプの返し
+-- （gratitude_reactions）。SELECTのみ（書き込みを実行しない方針）。書き込みの挙動は83.14章の
+-- V1〜V18を手動で確認し、実装メモ347章に記録した。
+-- ------------------------------------------------------------
+
+-- C-G1 列は4つだけ（押した人のメンバーIDを持たない。07-45章決定13）
+INSERT INTO _r
+SELECT 'C層', 'C-G1 gratitude_reactionsの列は4つだけ（メンバーIDを持たない）',
+  'created_at,family_id,gratitude_id,stamp_key',
+  coalesce((SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'gratitude_reactions'), '表が無い'),
+  coalesce((SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'gratitude_reactions')
+           = 'created_at,family_id,gratitude_id,stamp_key', false);
+
+-- C-G2 外部キーは2本で、すべてON DELETE CASCADE・family_membersを参照しない（RESTRICTを増やさない）
+INSERT INTO _r
+SELECT 'C層', 'C-G2 外部キーはCASCADEだけでfamily_membersを参照しない（問題のある外部キーの数）', '0',
+  count(*)::text, count(*) = 0
+FROM pg_constraint con
+WHERE con.conrelid = 'public.gratitude_reactions'::regclass AND con.contype = 'f'
+  AND (con.confdeltype <> 'c' OR con.confrelid = 'public.family_members'::regclass);
+INSERT INTO _r
+SELECT 'C層', 'C-G2b gratitude_reactionsの外部キーは2本（感謝・家族）', '2', count(*)::text, count(*) = 2
+FROM pg_constraint con
+WHERE con.conrelid = 'public.gratitude_reactions'::regclass AND con.contype = 'f';
+
+-- C-G3 許可リストが4種で、アプリのtheme.stampDefinitionsと同じ（3か所をそろえる: DB・アプリ・この検査）
+INSERT INTO _r
+SELECT 'C層', 'C-G3 gratitude_stamp_keys()が4種', 'arigato,ganbatta,sugoi,tasukatta',
+  coalesce((SELECT string_agg(k, ',' ORDER BY k) FROM unnest(public.gratitude_stamp_keys()) k), '関数が無い'),
+  coalesce((SELECT string_agg(k, ',' ORDER BY k) FROM unnest(public.gratitude_stamp_keys()) k)
+           = 'arigato,ganbatta,sugoi,tasukatta', false);
+
+-- C-G4 種類のCHECK制約が有効で、許可リストの関数を使っていること（自由な文字列の検査に戻っていない）
+INSERT INTO _r
+SELECT 'C層', 'C-G4 chk_gratitude_reactions_stamp_keyが有効で許可リストの関数を使う', '1', count(*)::text, count(*) = 1
+FROM pg_constraint con
+WHERE con.conrelid = 'public.gratitude_reactions'::regclass AND con.conname = 'chk_gratitude_reactions_stamp_key'
+  AND con.convalidated AND pg_get_constraintdef(con.oid) ILIKE '%gratitude_stamp_keys%';
+
+-- C-G5 権限: authenticatedはSELECTのみ・anonは無し（書き込みはRPCだけ。自動付与のREVOKE漏れを検出）
+INSERT INTO _r
+SELECT 'C層', 'C-G5 gratitude_reactionsの権限（authenticatedはSELECTのみ・anonは無し）', 'SELECTのみ / 無し',
+  CASE WHEN has_table_privilege('authenticated', 'public.gratitude_reactions', 'SELECT')
+        AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'INSERT')
+        AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'UPDATE')
+        AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'DELETE')
+       THEN 'SELECTのみ' ELSE 'authenticatedの権限がずれている' END
+  || ' / ' ||
+  CASE WHEN NOT has_table_privilege('anon', 'public.gratitude_reactions', 'SELECT')
+        AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'INSERT')
+        AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'UPDATE')
+        AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'DELETE')
+       THEN '無し' ELSE 'anonに権限がある' END,
+  has_table_privilege('authenticated', 'public.gratitude_reactions', 'SELECT')
+    AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'INSERT')
+    AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'UPDATE')
+    AND NOT has_table_privilege('authenticated', 'public.gratitude_reactions', 'DELETE')
+    AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'SELECT')
+    AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'INSERT')
+    AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'UPDATE')
+    AND NOT has_table_privilege('anon', 'public.gratitude_reactions', 'DELETE');
+
+-- C-G6 ポリシーはSELECTの1本だけ（INSERT・UPDATE・DELETEのポリシーを足さない）
+INSERT INTO _r
+SELECT 'C層', 'C-G6 gratitude_reactionsのポリシーはSELECT 1本だけ', '1本（SELECTのみ）',
+  count(*)::text || '本' || CASE WHEN bool_and(pol.cmd = 'SELECT') THEN '（SELECTのみ）' ELSE '（SELECT以外あり）' END,
+  count(*) = 1 AND coalesce(bool_and(pol.cmd = 'SELECT'), false)
+FROM pg_policies pol WHERE pol.schemaname = 'public' AND pol.tablename = 'gratitude_reactions';
+
+-- C-G7 この表にトリガーが1本も無いこと（通知トリガーを付けない。決定6）。
+--      感謝の取り消しに連動して消すトリガー（gratitude_points側）は有効であること。
+--      tgtype: ROW=1・BEFORE=2・INSERT=4・DELETE=8・UPDATE=16。AFTER UPDATE ROW = 1+16 = 17。
+INSERT INTO _r
+SELECT 'C層', 'C-G7 gratitude_reactionsにトリガーが無い（通知を付けない）', '0', count(*)::text, count(*) = 0
+FROM pg_trigger t
+WHERE t.tgrelid = 'public.gratitude_reactions'::regclass AND NOT t.tgisinternal;
+INSERT INTO _r
+SELECT 'C層', 'C-G7b 取り消し連動の削除トリガーが有効（AFTER UPDATE ROW）', '17',
+  coalesce((SELECT t.tgtype::int::text FROM pg_trigger t
+             WHERE t.tgrelid = 'public.gratitude_points'::regclass
+               AND t.tgname = 'trg_gratitude_points_after_revoke_delete_reaction' AND t.tgenabled = 'O'),
+           'トリガーが無い（または無効）'),
+  coalesce((SELECT t.tgtype::int = 17 FROM pg_trigger t
+             WHERE t.tgrelid = 'public.gratitude_points'::regclass
+               AND t.tgname = 'trg_gratitude_points_after_revoke_delete_reaction' AND t.tgenabled = 'O'),
+           false);
+
+-- C-G8 この表を集計・参照するView・関数が無いこと（決定10。横断の集計を作らない）。
+--      許可するのは、RPCと取り消し連動のトリガー関数の2つだけ。
+INSERT INTO _r
+SELECT 'C層', 'C-G8 gratitude_reactionsを参照するViewと関数は、RPCと取り消し連動の2つだけ', '0',
+  ((SELECT count(*) FROM pg_views v
+     WHERE v.schemaname = 'public' AND v.definition ILIKE '%gratitude_reactions%')
+   + (SELECT count(*) FROM pg_proc p
+       WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ILIKE '%gratitude_reactions%'
+         AND p.proname NOT IN ('toggle_gratitude_stamp', 'gratitude_points_after_revoke_delete_reaction')))::text,
+  ((SELECT count(*) FROM pg_views v
+     WHERE v.schemaname = 'public' AND v.definition ILIKE '%gratitude_reactions%')
+   + (SELECT count(*) FROM pg_proc p
+       WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ILIKE '%gratitude_reactions%'
+         AND p.proname NOT IN ('toggle_gratitude_stamp', 'gratitude_points_after_revoke_delete_reaction'))) = 0;
+
+-- C-G9 関数の実行権限: RPCはauthenticatedだけが実行でき、許可リスト関数・トリガー関数は誰も実行できない
+INSERT INTO _r
+SELECT 'C層', 'C-G9 関数の実行権限（RPCはauthenticatedのみ。ほか2つは実行不可）', 'RPCのみ実行可',
+  CASE WHEN has_function_privilege('authenticated', 'public.toggle_gratitude_stamp(uuid,text)', 'EXECUTE')
+        AND NOT has_function_privilege('anon', 'public.toggle_gratitude_stamp(uuid,text)', 'EXECUTE')
+        AND NOT has_function_privilege('authenticated', 'public.gratitude_stamp_keys()', 'EXECUTE')
+        AND NOT has_function_privilege('anon', 'public.gratitude_stamp_keys()', 'EXECUTE')
+        AND NOT has_function_privilege('authenticated', 'public.gratitude_points_after_revoke_delete_reaction()', 'EXECUTE')
+        AND NOT has_function_privilege('anon', 'public.gratitude_points_after_revoke_delete_reaction()', 'EXECUTE')
+       THEN 'RPCのみ実行可' ELSE '権限がずれている' END,
+  has_function_privilege('authenticated', 'public.toggle_gratitude_stamp(uuid,text)', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.toggle_gratitude_stamp(uuid,text)', 'EXECUTE')
+    AND NOT has_function_privilege('authenticated', 'public.gratitude_stamp_keys()', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.gratitude_stamp_keys()', 'EXECUTE')
+    AND NOT has_function_privilege('authenticated', 'public.gratitude_points_after_revoke_delete_reaction()', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.gratitude_points_after_revoke_delete_reaction()', 'EXECUTE');
+
+-- C-G10 RPC本文: 主要な検査が残っていること／入れてはいけないものが入っていないこと
+--       （CREATE OR REPLACEの全面書き換えで、検査が無音で消える・あとからトグルのガードや通知が混ざる、を検出）。
+--       **RPCの本文（コメント含む）に下の「入れてはいけない語」を書かないこと**。
+INSERT INTO _r
+SELECT 'C層', 'C-G10 toggle_gratitude_stamp()の本文に主要な検査があり、通知・トグルのガードが無い（ずれた語の数）', '0',
+  count(*)::text, count(*) = 0
+FROM (
+  SELECT m.word, 'must' AS kind FROM (VALUES ('recipient_id'), ('revoked_at'), ('is_active'), ('FOR UPDATE'),
+          ('gratitude_stamp_keys'), ('gratitude_sender_left')) m(word)
+  WHERE position(m.word in pg_get_functiondef('public.toggle_gratitude_stamp(uuid,text)'::regprocedure)) = 0
+  UNION ALL
+  SELECT n.word, 'must_not' AS kind FROM (VALUES ('social_interactions'), ('push'), ('http')) n(word)
+  WHERE position(n.word in pg_get_functiondef('public.toggle_gratitude_stamp(uuid,text)'::regprocedure)) > 0
+) bad;
+
+-- C-G11 データ整合: スタンプの家族が感謝の家族と一致し、取り消し済みの感謝にスタンプが残っていないこと
+--       （RPCとトリガーが働いていれば0件のはずの事故検出）。0行の環境ではPASSにせずSKIP。
+INSERT INTO _r
+SELECT 'C層', 'C-G11 スタンプの家族が感謝と一致し、取り消し済みの感謝に残っていない', '0',
+  CASE WHEN (SELECT count(*) FROM gratitude_reactions) = 0 THEN 'SKIP（gratitude_reactionsが0件）'
+       ELSE count(*)::text END,
+  CASE WHEN (SELECT count(*) FROM gratitude_reactions) = 0 THEN NULL ELSE count(*) = 0 END
+FROM gratitude_reactions gr
+JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+WHERE gp.family_id <> gr.family_id OR gp.revoked_at IS NOT NULL;
+
 
 -- ============================================================
 -- B層: 家族内のロール境界（実際になりすまして読む）
@@ -1815,6 +1998,33 @@ SELECT set_config('t.notice_rows', (SELECT count(*) FROM chore_request_done_noti
 SELECT set_config('t.child_family_request_rows',
   (SELECT count(*) FROM chores c
     WHERE c.is_request AND c.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.child', true), '')::uuid))::text, true);
+
+-- [2026-10-03追加・スキーマ設計.sql 83.13章] 感謝ポイントへのスタンプの「本来見えるべき行数」を、
+-- `SET LOCAL ROLE authenticated`の前（管理者権限）でGUCに保存する（ロール切り替え後はRLSが
+-- かかって数えられないため）。0件だと「何も見えない」が自明に成立してしまうため、0件の環境では
+-- 下のB-G1〜B-G4をSKIPにする（PASSにしない）。seed.sqlの23d節がスタンプ入りの感謝を入れている。
+-- ・t.gr_rows: 表全体の行数
+-- ・t.child_gr_rows・t.parent_gr_rows・t.supporter_gr_rows: そのロールが贈った人か受け取った人で、
+--   取り消されていない感謝へのスタンプの行数（RLSが当事者の2人に絞る。保護者・みまもりも同じ）
+-- ・t.parent_nonparty_gr_rows: 保護者と同じ家族で、保護者が当事者でないスタンプの行数
+--   （B-G4が空振りしないため。seedではみまもり→子どもの感謝のスタンプが該当する）
+SELECT set_config('t.gr_rows', (SELECT count(*) FROM gratitude_reactions)::text, true);
+SELECT set_config('t.child_gr_rows',
+  (SELECT count(*) FROM gratitude_reactions gr JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+    WHERE gp.revoked_at IS NULL
+      AND nullif(current_setting('t.child', true), '')::uuid IN (gp.sender_id, gp.recipient_id))::text, true);
+SELECT set_config('t.parent_gr_rows',
+  (SELECT count(*) FROM gratitude_reactions gr JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+    WHERE gp.revoked_at IS NULL
+      AND nullif(current_setting('t.parent', true), '')::uuid IN (gp.sender_id, gp.recipient_id))::text, true);
+SELECT set_config('t.supporter_gr_rows',
+  (SELECT count(*) FROM gratitude_reactions gr JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+    WHERE gp.revoked_at IS NULL
+      AND nullif(current_setting('t.supporter', true), '')::uuid IN (gp.sender_id, gp.recipient_id))::text, true);
+SELECT set_config('t.parent_nonparty_gr_rows',
+  (SELECT count(*) FROM gratitude_reactions gr JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+    WHERE gr.family_id = (SELECT p.family_id FROM family_members p WHERE p.id = nullif(current_setting('t.parent', true), '')::uuid)
+      AND NOT (nullif(current_setting('t.parent', true), '')::uuid IN (gp.sender_id, gp.recipient_id)))::text, true);
 
 
 -- ---------- 子どもの視点 ----------
@@ -1892,6 +2102,29 @@ INSERT INTO _r SELECT 'B層', 'B-R2 子ども: 家族のおねがいの行が全
        THEN count(*) = nullif(current_setting('t.child_family_request_rows', true), '')::int
        ELSE NULL END
 FROM chores WHERE is_request;
+
+-- B-G1. [2026-10-03追加・スキーマ設計.sql 83.13章] 子ども: 見えるスタンプは「自分が当事者の感謝」の
+--     分だけ。件数が期待値と**一致すること**の1本で、「他人の行が見えない（多すぎ＝漏れ）」と
+--     「自分の行は見える（少なすぎ＝過剰遮断）」を同時に検査する。0件の環境ではSKIP。
+INSERT INTO _r SELECT 'B層', 'B-G1 子ども: 感謝のスタンプは自分が当事者の分だけが見える',
+  coalesce(current_setting('t.child_gr_rows', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにchildが居ない、またはgratitude_reactionsが0件。seed.sqlの23d節に行を足すこと）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.child_gr_rows', true), '')::int
+       ELSE NULL END
+FROM gratitude_reactions;
+
+-- A-G1（子ども）. [2026-10-03追加・スキーマ設計.sql 83.13章] gratitude_reactionsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-G1 子ども: gratitude_reactionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM gratitude_reactions WHERE family_id <> current_family_id();
 
 -- ------------------------------------------------------------
 -- A層（子どもロール分）: family_drawings / chore_completions / family_members は
@@ -2261,6 +2494,41 @@ INSERT INTO _r SELECT 'B層', 'B-R1 保護者: おねがいの完了通知の記
        ELSE NULL END
 FROM chore_request_done_notices;
 
+-- B-G2. [2026-10-03追加・スキーマ設計.sql 83.13章] 保護者: 見えるスタンプは「自分が当事者の感謝」の
+--     分だけ。件数が期待値と**一致すること**の1本で、「他人の行が見えない（多すぎ＝漏れ）」と
+--     「自分の行は見える（少なすぎ＝過剰遮断）」を同時に検査する。0件の環境ではSKIP。
+INSERT INTO _r SELECT 'B層', 'B-G2 保護者: 感謝のスタンプは自分が当事者の分だけが見える',
+  coalesce(current_setting('t.parent_gr_rows', true), ''),
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにparentが居ない、またはgratitude_reactionsが0件。seed.sqlの23d節に行を足すこと）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.parent_gr_rows', true), '')::int
+       ELSE NULL END
+FROM gratitude_reactions;
+
+-- B-G4. [2026-10-03追加・スキーマ設計.sql 83.13章] 保護者: **当事者でないスタンプが1件も見えない**
+--     （決定3。ほかの人の通帳を開ける保護者が、スタンプの有無を見られてはいけない）。
+--     保護者が当事者でないスタンプが0件の環境ではSKIP（空振りでPASSにしない）。
+INSERT INTO _r SELECT 'B層', 'B-G4 保護者: 当事者でない感謝のスタンプが見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND nullif(current_setting('t.parent_nonparty_gr_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（parentが居ない、または保護者が当事者でないスタンプが0件。seed.sqlの23d節のG2が要る）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND nullif(current_setting('t.parent_nonparty_gr_rows', true), '')::int > 0
+       THEN count(*) = 0 ELSE NULL END
+FROM gratitude_reactions gr JOIN gratitude_points gp ON gp.id = gr.gratitude_id
+WHERE NOT (current_family_member_id() IN (gp.sender_id, gp.recipient_id));
+
+-- A-G1（保護者）. [2026-10-03追加・スキーマ設計.sql 83.13章] gratitude_reactionsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-G1 保護者: gratitude_reactionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM gratitude_reactions WHERE family_id <> current_family_id();
+
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
 -- （代表ロールが保護者のため）。二重に記録すると同じ検査が名前だけ変えて
@@ -2304,6 +2572,29 @@ INSERT INTO _r SELECT 'B層', 'B-S2 みまもり: まえのアバターは自分
        THEN count(*) = nullif(current_setting('t.supporter_stock_rows', true), '')::int
        ELSE NULL END
 FROM member_avatar_stocks;
+
+-- B-G3. [2026-10-03追加・スキーマ設計.sql 83.13章] みまもり: 見えるスタンプは「自分が当事者の感謝」の
+--     分だけ。件数が期待値と**一致すること**の1本で、「他人の行が見えない（多すぎ＝漏れ）」と
+--     「自分の行は見える（少なすぎ＝過剰遮断）」を同時に検査する。0件の環境ではSKIP。
+INSERT INTO _r SELECT 'B層', 'B-G3 みまもり: 感謝のスタンプは自分が当事者の分だけが見える',
+  coalesce(current_setting('t.supporter_gr_rows', true), ''),
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（ローカルにsupporterが居ない、またはgratitude_reactionsが0件。seed.sqlの23d節に行を足すこと）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.gr_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.supporter_gr_rows', true), '')::int
+       ELSE NULL END
+FROM gratitude_reactions;
+
+-- A-G1（みまもり）. [2026-10-03追加・スキーマ設計.sql 83.13章] gratitude_reactionsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-G1 みまもり: gratitude_reactionsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM gratitude_reactions WHERE family_id <> current_family_id();
 
 -- ------------------------------------------------------------
 -- A層（みまもりロール分）: 「特に重要な3テーブル」を重ねて検査する

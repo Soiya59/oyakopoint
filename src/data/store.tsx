@@ -23,6 +23,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { buildRequestChoreIdSet, shouldShowCompletionPoints } from "@/lib/requestChore";
+import { isGratitudeStampRefused } from "@/lib/gratitudeStamp";
 import type {
   Chore,
   ChoreCompletion,
@@ -35,6 +36,7 @@ import type {
   FamilyDrawingReaction,
   FamilyMember,
   GratitudePoint,
+  GratitudeReaction,
   HiddenContent,
   LedgerEntry,
   MemberBlock,
@@ -90,6 +92,17 @@ export interface State {
    * 各画面がapi.fetchMyGratitudeGiveableBalance()を個別に呼ぶ）。
    */
   gratitude: GratitudePoint[];
+  /**
+   * [2026-10-03追加・要件定義書07-45章、スキーマ設計.sql 83章、API仕様.md 39章、開発部/成果物/
+   * 実装メモ.md 347章] 感謝ポイントへのスタンプの返し（gratitude_reactions）のうち、**自分が当事者
+   * （贈った人か受け取った人）の分**（RLSが2人に絞る。保護者・みまもりでも当事者でなければ入らない）。
+   * どちらの立場の行かは`gratitude`の行と`gratitude_id`で突き合わせて決める（`src/lib/gratitudeStamp.ts`）。
+   * **`null`＝まだ取得できていない／取得に失敗した**。このときはベルのスタンプの入口（4つの絵文字の行）を
+   * 出さない（押した状態が分からないまま並べると、押した1つが押していないように見え、押すと取り消しになる。
+   * 71.2節）。起動時の`load()`で取る。取得に失敗してもアプリ全体の読み込みは失敗にしない（スタンプの
+   * 行が出ないだけ。71.4節）。背景更新（15秒）で失敗したときは前の値を残す。
+   */
+  gratitudeReactions: GratitudeReaction[] | null;
   /**
    * [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのスタンプリアクション
    * （family_board_reactions、要件定義書07-14章）の家族全体ログ（対象投稿の本文・
@@ -201,6 +214,13 @@ export type Action =
    * 誰の操作かを判別するのに必要（ADD_REACTIONと同じ形）。
    */
   | { type: "TOGGLE_REACTION_STAMP"; completionId: string; reactedBy: string; stampKey: StampKey }
+  /**
+   * [2026-10-03追加・要件定義書07-45章、API仕様.md 39章、実装メモ.md 347章] 感謝ポイントへのスタンプの返し
+   * （押す・もう一度で取り消し・別のもので入れ替え）。押せるのは、その感謝を受け取った本人だけ。
+   * reactedByは実接続時はRPC側が呼び出し本人（current_family_member_id()）を使うため無視されるが、
+   * モック実装は本物のRLSを持たないため誰の操作かを判別するのに必要（TOGGLE_REACTION_STAMPと同じ）。
+   */
+  | { type: "TOGGLE_GRATITUDE_STAMP"; gratitudeId: string; reactedBy: string; stampKey: StampKey }
   | {
       type: "REDEEM_REWARD";
       rewardId: string;
@@ -592,6 +612,7 @@ const EMPTY_STATE: State = {
   rewards: [],
   redemptions: [],
   gratitude: [],
+  gratitudeReactions: null,
   familyBoardReactions: [],
   familyBoardComments: [],
   familyDrawingReactions: [],
@@ -767,6 +788,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       familyDrawingReactionsRes,
       familyDrawingCommentsRes,
       publishedDrawingsRes,
+      gratitudeReactionsRes,
       dailySummaryRes,
       dailyFlagsRes,
       memberBlocksRes,
@@ -793,6 +815,11 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       api.fetchFamilyDrawingReactionsLog(client, familyId),
       api.fetchFamilyDrawingCommentsLog(client, familyId),
       api.fetchFamilyPublishedDrawings(client, familyId),
+      // [2026-10-03追加・要件定義書07-45章、API仕様.md 39.1章・39.4章、実装メモ.md 347章]
+      // 感謝ポイントへのスタンプ（自分が当事者の分。絞り込みは書かない。RLSが2人に絞る）。
+      // **この1本だけは、失敗してもアプリ全体の読み込みを失敗にしない**（下の`gratitudeReactionsRes`の
+      // 扱い参照。71.4節「取得に失敗（スタンプのデータだけ）」）。
+      api.fetchGratitudeReactions(client),
       api.fetchDailySummary(client, familyId, windowStart, today),
       api.fetchMyDailyFlaggedChoreIds(client, activeMemberId),
       // [2026-09-20追加・要件定義書07-32章 決定11〜14「ブロック」] 自分が
@@ -901,7 +928,12 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
     const filteredReactions = excludeHiddenChoreReactionComments(blockFilteredReactions, hiddenKeys);
     const filteredGratitude = blankHiddenNoteById(blockFilteredGratitude, "gratitude_note", hiddenKeys);
 
-    setState({
+    // [2026-10-03追加・実装メモ.md 347章] スタンプの取得だけは、失敗しても全体を失敗にしない。
+    // 感謝カードの他の部分は正しく出せているため、スタンプの行（入口）だけを出さない（null）。
+    // 背景更新で失敗したときは、画面に出ている行が15秒ごとに消えたり出たりしないよう前の値を残す。
+    // この件だけの失敗の文は出さない（71.4節）。
+    const gratitudeReactionsNext = gratitudeReactionsRes.ok ? gratitudeReactionsRes.data : undefined;
+    setState((prev) => ({
       family: bundleRes.data.family,
       members: bundleRes.data.members,
       categories: bundleRes.data.categories,
@@ -911,6 +943,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       rewards: bundleRes.data.rewards,
       redemptions: redemptionsRes.data,
       gratitude: filteredGratitude,
+      gratitudeReactions: gratitudeReactionsNext ?? (background ? prev.gratitudeReactions : null),
       familyBoardReactions: familyBoardReactionsRes.data,
       familyBoardComments: familyBoardCommentsRes.data,
       familyDrawingReactions: familyDrawingReactionsRes.data,
@@ -922,7 +955,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       memberBlocks: memberBlocksRes.data,
       hiddenContents: hiddenContentsRes.data,
       scheduledAnnouncements: scheduledAnnouncementsRes.data,
-    });
+    }));
     setMemberPoints(memberPointsRes.data);
     setDailySummaryRows(dailySummaryRes.data);
     if (!background) setLoading(false);
@@ -1075,6 +1108,25 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
       return { ...prev, reactions: excludeHiddenChoreReactionComments(blockFiltered, hiddenKeys) };
     });
   }, [familyId, session.client, load]);
+
+  /**
+   * [2026-10-03追加・要件定義書07-45章、主要画面ワイヤーフレーム.md 71.10節、実装メモ.md 347章]
+   * 感謝ポイントへのスタンプ（TOGGLE_GRATITUDE_STAMP）の成功後、実際に変わる`gratitude_reactions`
+   * だけを取り直す（`refreshReactionsOnly`と同じ考え方）。RPC`toggle_gratitude_stamp`が書くのは
+   * `gratitude_reactions`の1行だけで、他の表（`gratitude_points`・残高・通知）には何も波及しない
+   * （この表にトリガーは無く、スタンプで通知は鳴らさない。決定6）。楽観更新はしない:
+   * RPCが成功してから取り直し、取り直しで見た目が変わる（完了報告のスタンプと同じ）。
+   * 取り直しに失敗したときだけ`load()`に落とす。**取り直しに失敗しても、押すこと自体は成功している
+   * ので、失敗の一文は出さない**（呼び出し元には成功を返す）。
+   */
+  const refreshGratitudeReactionsOnly = useCallback(async () => {
+    const res = await api.fetchGratitudeReactions(session.client);
+    if (!res.ok) {
+      await load();
+      return;
+    }
+    setState((prev) => ({ ...prev, gratitudeReactions: res.data }));
+  }, [session.client, load]);
 
   /**
    * [2026-09-16追加・実装メモ.md 228章、やること.md 4-28] 完了報告の取消
@@ -1355,6 +1407,23 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
         }
 
+        // [2026-10-03追加・要件定義書07-45章、API仕様.md 39章、実装メモ.md 347章] 感謝ポイントへの
+        // スタンプ（押す・もう一度で取り消し・別のもので入れ替え）。RPCが1回で判定するため、
+        // 事前のガードは要らない。
+        case "TOGGLE_GRATITUDE_STAMP": {
+          const res = await api.toggleGratitudeStamp(client, action.gratitudeId, action.stampKey);
+          if (!res.ok) {
+            // 「断られた」系（感謝が取り消された・贈った人が抜けた・受け取った本人でない・種類が4種でない）は、
+            // 画面には通信の失敗と同じ一文を出し、**全体を取り直す**（取り消された感謝はカードごと消え、
+            // 贈った人が抜けていれば入口の行が消える。主要画面ワイヤーフレーム.md 71.4節）。
+            // 通信・ログイン切れ・権限の失敗では取り直さない（そのまま押し直せる）。
+            if (isGratitudeStampRefused(res.error)) await load();
+            return { ok: false, error: res.error };
+          }
+          await refreshGratitudeReactionsOnly();
+          return { ok: true };
+        }
+
         case "REDEEM_REWARD": {
           const res = await api.redeemReward(client, { reward_id: action.rewardId, member_id: action.memberId });
           if (!res.ok) return { ok: false, error: res.error };
@@ -1397,7 +1466,7 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
           return { ok: true };
       }
     },
-    [session.client, load, refreshReactionsOnly, refreshAfterCancel, refreshAfterReport, refreshAfterRedeem, familyId]
+    [session.client, load, refreshReactionsOnly, refreshGratitudeReactionsOnly, refreshAfterCancel, refreshAfterReport, refreshAfterRedeem, familyId]
   );
 
   const findChoreByTag = useCallback(
@@ -1692,6 +1761,8 @@ const initialState: State = {
   // ありません」の空状態から始まる。7a章APIはRPC/PostgREST直呼びのためモック実装
   // 〔dispatch経由〕には組み込んでいない。実装メモ.md参照）。
   gratitude: [],
+  // [2026-10-03追加・実装メモ.md 347章] モック実装ではスタンプも空から始まる（取得済みの扱い＝空配列）。
+  gratitudeReactions: [],
   // [2026-09-01追加・実装メモ.md 104章] gratitudeと同じ理由でモック実装では空配列。
   familyBoardReactions: [],
   familyBoardComments: [],
@@ -1809,6 +1880,28 @@ function reducer(state: State, action: Action): State {
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...withoutMine, reaction] };
+    }
+
+    // [2026-10-03追加・実装メモ.md 347章] 感謝ポイントへのスタンプ。モック実装（Supabase未接続時）でも
+    // RPC`toggle_gratitude_stamp`と同じ判定を再現する: 受け取った本人（reactedBy）が、取り消されていない
+    // 感謝にだけ押せる。同じ種類→取り消し、別の種類→入れ替え（時刻は押した時刻に更新）。
+    // 贈った人が在籍中かの確認は、DBが断るのと同じ判定をここでも行う。
+    case "TOGGLE_GRATITUDE_STAMP": {
+      const target = state.gratitude.find((g) => g.id === action.gratitudeId);
+      if (!target || target.recipient_id !== action.reactedBy || target.revoked_at !== null) return state;
+      const senderActive = state.members.some((m) => m.id === target.sender_id && m.is_active);
+      if (!senderActive) return state;
+      const current = state.gratitudeReactions ?? [];
+      const hadSame = current.some((r) => r.gratitude_id === action.gratitudeId && r.stamp_key === action.stampKey);
+      const withoutThis = current.filter((r) => r.gratitude_id !== action.gratitudeId);
+      if (hadSame) return { ...state, gratitudeReactions: withoutThis };
+      return {
+        ...state,
+        gratitudeReactions: [
+          { gratitude_id: action.gratitudeId, stamp_key: action.stampKey, created_at: new Date().toISOString() },
+          ...withoutThis,
+        ],
+      };
     }
 
     case "REDEEM_REWARD": {

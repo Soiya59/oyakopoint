@@ -46,15 +46,37 @@
  *  - 依頼者の保護者（`created_by`の1人だけ）: 「{やってくれた子}から　✅ おねがいを やってくれました　
  *    💌 {題名}」。他の保護者・みまもりには出ない。1分以内の取消（完了報告の削除）で消える。
  * ベルの件数（`countRecentInbox`）にも数える。ベルの項目をタップして対象を開く導線は次フェーズ。
+ *
+ * [2026-10-03追加・要件定義書07-45章 決定1〜13、主要画面ワイヤーフレーム.md 71章、設計部/成果物/
+ * API仕様.md 39章、開発部/成果物/実装メモ.md 347章] 感謝ポイントへのスタンプの返しを2か所に足した。
+ *  - **受け取った人**: 感謝カードの下（カードの横幅いっぱい）に、4種のスタンプの行（`GratitudeStampRow`）を
+ *    常時出す。出す条件は`canShowGratitudeStampRow`（贈った人が在籍中・スタンプのデータが取得済み・
+ *    取り消されていない・自分が受け取った）。「家族のやりとりを使う」がオフでも出す。
+ *  - **贈った人**: 自分が贈った感謝にスタンプが押されたら、新しい種類の項目
+ *    「{受け取った人}から　{絵文字} {スタンプ名}　💌 {ひとこと先頭20字／贈った日・◯pt}」を並べる
+ *    （id＝`gratitude_stamp:${感謝のid}`。入れ替えても項目は1つのまま。時刻はスタンプを押した時刻）。
+ *    ベルの件数（`countRecentInbox`）にも、直近に押された分を数える（受け取った人が自分で押した分は数えない）。
+ * 押していない状態・未返信の件数・赤い点はどこにも出さない（71.5節）。通帳・贈る画面・ホームには足さない（71.6節）。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Card from "./Card";
 import MemberAvatar from "./MemberAvatar";
+import GratitudeStampRow from "./GratitudeStampRow";
 import { EmptyState } from "./StatusViews";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { formatDateTimeShort } from "@/lib/calendarDates";
+import { formatDateTimeShort, toJstDateString } from "@/lib/calendarDates";
+import {
+  canShowGratitudeStampRow,
+  countGratitudeStampArrivals,
+  gratitudeStampArrivals,
+  gratitudeStampSubject,
+  stampKeyOf,
+  type GratitudeLike,
+  type GratitudeReactionLike,
+} from "@/lib/gratitudeStamp";
+import type { StampKey } from "@/types/domain";
 import {
   requestArrivedForChild,
   requestDoneForRequester,
@@ -76,6 +98,11 @@ interface InboxItem {
   body: string | null;
   /** リアクションのとき、どのクエストへのものか。感謝ではnull。 */
   choreLabel: string | null;
+  /**
+   * [2026-10-03追加] 受け取った人の感謝カードだけが持つ。あれば、カードの下にスタンプの行を出す
+   * （出す条件を満たしたカードだけに付ける）。`selectedKey`は今付いているスタンプ（なければnull）。
+   */
+  stampRow?: { gratitudeId: string; selectedKey: string | null };
 }
 
 export interface InboxPanelProps {
@@ -102,7 +129,11 @@ export function countRecentInbox(
     // [2026-09-30追加・D9] おねがいのベル（子ども＝届いた／依頼者＝やってくれた）の数え上げに使う。
     chores: RequestInboxChore[];
     reactions: { completion_id: string; created_at: string }[];
-    gratitude: { recipient_id: string; revoked_at: string | null; created_at: string }[];
+    // [2026-10-03変更・要件定義書07-45章] 贈った人のベルに届くスタンプを数えるため、感謝の行の
+    // 贈った人・id・ひとこと・ポイントも要る（`gratitudeStampArrivals`が使う）。
+    gratitude: GratitudeLike[];
+    // [2026-10-03追加] 自分が当事者の感謝へのスタンプ。nullは未取得・取得失敗（数えない）。
+    gratitudeReactions: GratitudeReactionLike[] | null;
     familyBoardReactions: {
       created_at: string;
       family_board_posts: { author_member_id: string } | null;
@@ -145,6 +176,15 @@ export function countRecentInbox(
   const drawingComments = state.familyDrawingComments.filter(
     (c) => c.family_drawings?.artist_member_id === memberId && new Date(c.created_at).getTime() >= sinceMs
   ).length;
+  // [2026-10-03追加・要件定義書07-45章 決定4] 自分が贈った感謝に、直近に押されたスタンプ。
+  // 受け取った人が自分で押したスタンプは数えない（届いたものではない）。累計・順位は作らない。
+  const gratitudeStamps = countGratitudeStampArrivals(
+    state.gratitude,
+    state.gratitudeReactions,
+    memberId,
+    sinceMs,
+    theme.stampDefinitions.map((s) => s.key)
+  );
   const published = state.publishedDrawings.filter(
     (d) => d.artist_member_id === memberId && !!d.published_at && new Date(d.published_at).getTime() >= sinceMs
   ).length;
@@ -157,7 +197,16 @@ export function countRecentInbox(
     (x) => new Date(x.at).getTime() >= sinceMs
   ).length;
   return (
-    reactions + gratitude + boardReactions + boardComments + drawingReactions + drawingComments + published + requestArrived + requestDone
+    reactions +
+    gratitude +
+    gratitudeStamps +
+    boardReactions +
+    boardComments +
+    drawingReactions +
+    drawingComments +
+    published +
+    requestArrived +
+    requestDone
   );
 }
 
@@ -171,8 +220,16 @@ function boardPostExcerpt(body: string, max = 20): string {
 }
 
 export function InboxPanel({ tone, memberId }: InboxPanelProps) {
-  const { state, memberAvatars } = useAppData();
+  const { state, memberAvatars, dispatch } = useAppData();
   const isChild = tone === "child";
+
+  // [2026-10-03追加] 感謝カードのスタンプの行から呼ぶ。`dispatch`の結果（成功・失敗）をそのまま返し、
+  // 失敗の一文と目印は行の部品がカードごとに出す。見た目は取り直しの結果に従う（楽観更新はしない）。
+  const toggleGratitudeStamp = React.useCallback(
+    (gratitudeId: string, stampKey: StampKey) =>
+      dispatch({ type: "TOGGLE_GRATITUDE_STAMP", gratitudeId, reactedBy: memberId, stampKey }),
+    [dispatch, memberId]
+  );
 
   const bodyStyle =
     tone === "child"
@@ -205,6 +262,10 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         };
       });
 
+    // [2026-10-03変更・要件定義書07-45章] スタンプの行（入口）を出す条件を満たす感謝カードには、
+    // `stampRow`を付ける（出す条件は`canShowGratitudeStampRow`。贈った人が在籍中・取得済みなど）。
+    // 昔の感謝のカードも同じ見た目（新旧で変えない。71.2節）。
+    const reactionsLoaded = state.gratitudeReactions !== null;
     const fromGratitude: InboxItem[] = state.gratitude
       .filter((g) => g.recipient_id === memberId && g.revoked_at === null)
       .map((g) => ({
@@ -214,7 +275,43 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
         headline: `💌 ありがとう +${g.points}pt`,
         body: g.note,
         choreLabel: null,
+        stampRow: canShowGratitudeStampRow({
+          gratitude: g,
+          memberId,
+          senderIsActive: state.members.some((m) => m.id === g.sender_id && m.is_active),
+          reactionsLoaded,
+        })
+          ? { gratitudeId: g.id, selectedKey: stampKeyOf(state.gratitudeReactions, g.id) }
+          : undefined,
       }));
+
+    // [2026-10-03追加・要件定義書07-45章 決定4、主要画面ワイヤーフレーム.md 71.3節] 贈った人のベルの
+    // 新しい項目。自分が贈った感謝にスタンプが押されたら並べる。「{受け取った人}から」＋
+    // 「{絵文字} {スタンプ名}」＋どの感謝への一言（ひとこと先頭20字／無ければ贈った日・◯pt）＋押した時刻。
+    // ひとこと欄（body）は出さない。押せない（返事への返事はできない）。
+    const todayJst = toJstDateString(new Date());
+    const fromGratitudeStamps: InboxItem[] = gratitudeStampArrivals(
+      state.gratitude,
+      state.gratitudeReactions,
+      memberId,
+      theme.stampDefinitions.map((s) => s.key)
+    ).map((a) => {
+      const stamp = theme.stampDefinitions.find((s) => s.key === a.stampKey);
+      return {
+        id: `gratitude_stamp:${a.gratitudeId}`,
+        fromMemberId: a.recipientId,
+        at: a.at,
+        headline: stamp ? `${stamp.emoji} ${stamp.label}` : "",
+        body: null,
+        choreLabel: gratitudeStampSubject({
+          note: a.note,
+          points: a.points,
+          sentJstDate: toJstDateString(a.sentAt),
+          todayJstDate: todayJst,
+          child: isChild,
+        }),
+      };
+    });
 
     // [2026-09-01追加・実装メモ.md 104章] 家族の書き込みボードへのリアクション
     // （主要画面ワイヤーフレーム.md 22.2.2節）。対象投稿が自分の投稿である行だけを
@@ -327,6 +424,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
       ...fromRequestDone,
       ...fromReactions,
       ...fromGratitude,
+      ...fromGratitudeStamps,
       ...fromBoardReactions,
       ...fromBoardComments,
       ...fromDrawingReactions,
@@ -340,6 +438,8 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
     state.chores,
     state.reactions,
     state.gratitude,
+    state.gratitudeReactions,
+    state.members,
     state.familyBoardReactions,
     state.familyBoardComments,
     state.familyDrawingReactions,
@@ -399,6 +499,17 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
                 <Text style={styles.meta}>{formatWhen(it.at)}</Text>
               </View>
             </View>
+            {/* [2026-10-03追加] 受け取った人のカードの下に、4種のスタンプの行。アバターの右の本文の幅では
+                なく、カードの横幅いっぱい（左端から）に置く（子どもの56dp×4が本文の幅に入らない端末があるため。
+                主要画面ワイヤーフレーム.md 71.2節）。 */}
+            {it.stampRow && (
+              <GratitudeStampRow
+                tone={tone}
+                gratitudeId={it.stampRow.gratitudeId}
+                selectedKey={it.stampRow.selectedKey}
+                onToggle={toggleGratitudeStamp}
+              />
+            )}
           </Card>
         );
       })}
