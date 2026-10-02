@@ -532,22 +532,28 @@ export const badgeDefinitions: readonly {
   emoji: string;
   nameParent: string;
   nameChild: string;
+  /**
+   * [2026-10-02追加・実装メモ344章] 「これまでの回数」に出す名前（数字なし）。
+   * 統括「次の段階はいらない、総回数」。`nameParent`/`nameChild`の「50回」「10まい」は
+   * 段階（10・30・50・100…）の名前で実際の回数ではないため、表示には使わない。
+   */
+  countName: string;
   /** 進捗文言の単位。[0]=保護者・みまもり向け、[1]=子ども向け（ひらがな） */
   unit: readonly [string, string];
 }[] = [
   // [2026-09-21削除・主要画面ワイヤーフレーム.md 58.3節決定2] lifetime_points_earned
   // （🌟 はじめの100pt）は廃止した。ポイントの絶対値はメダルの値段を家庭が編集
   // できる以上、家庭ごとに重さが最大50倍違ってしまい意味を持たない（統括判断）。
-  { key: "lifetime_completions", emoji: "🧹", nameParent: "クエスト50回", nameChild: "クエスト50かい", unit: ["回", "かい"] },
-  { key: "lifetime_drawings", emoji: "🎨", nameParent: "えかき10まい", nameChild: "えかき10まい", unit: ["まい", "まい"] },
+  { key: "lifetime_completions", emoji: "🧹", nameParent: "クエスト50回", nameChild: "クエスト50かい", countName: "クエスト", unit: ["回", "かい"] },
+  { key: "lifetime_drawings", emoji: "🎨", nameParent: "えかき10まい", nameChild: "えかき10まい", countName: "えかき", unit: ["まい", "まい"] },
   // ガチャだけは保護者向けの名前も「10かい」とひらがなのため、単位も「かい」で揃える
   // （「ガチャ10かい（つぎの段階10回まで…）」と1行の中で食い違うのを避ける）。
   // [2026-09-21改訂・主要画面ワイヤーフレーム.md 58.4節] 「ひみつはっけん」はアプリの
   // どの画面にも出てこない語だったため、画面上の実際の呼び名「ガチャ」（🎰）に揃えた。
-  { key: "lifetime_gacha_draws", emoji: "🎰", nameParent: "ガチャ10かい", nameChild: "ガチャ10かい", unit: ["かい", "かい"] },
+  { key: "lifetime_gacha_draws", emoji: "🎰", nameParent: "ガチャ10かい", nameChild: "ガチャ10かい", countName: "ガチャ", unit: ["かい", "かい"] },
   // [2026-09-21改訂・要件定義書07-34章「メダルとフィギュアの入れ替え」] 表示名を
   // 「フィギュア」に入れ替えた。🪙は据え置き（62.4節4、本部長へ確認中）。
-  { key: "lifetime_sticker_purchases", emoji: "🧸", nameParent: "フィギュア5こ", nameChild: "フィギュア5こ", unit: ["こ", "こ"] },
+  { key: "lifetime_sticker_purchases", emoji: "🧸", nameParent: "フィギュア5こ", nameChild: "フィギュア5こ", countName: "フィギュア", unit: ["こ", "こ"] },
 ] as const;
 
 /**

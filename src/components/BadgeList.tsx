@@ -48,24 +48,13 @@ export function BadgeList({ isChild, loadState, rows, headingStyle, rowStyle }: 
       </Text>
       <View style={{ gap: theme.spacing.s1 }}>
         {rows.map((row) => {
-          const achieved = row.achievedTier !== null;
-          const label = isChild ? row.nameChild : row.nameParent;
-          const achievedLabel = isChild ? "たっせい！" : "達成";
-          // [2026-09-08改訂・本部長／軽微変更ルート] 従来は「ポイント以外は一律で
-          // 回／かい」と書いていたため、「えかき10まい（つぎの段階10回まで あと3回）」
-          // のように名前と単位が食い違っていた（統括の実機確認）。単位は
-          // theme.badgeDefinitions の unit を使う。
+          // [2026-10-02変更・実装メモ344章、統括「次の段階はいらない、総回数」]
+          // 「（達成）（つぎの段階…まで あと◯）」をやめ、これまでの総回数だけを出す。
           const unit = row.unit[isChild ? 1 : 0];
-          const progressLabel = row.remaining !== null ? `あと${row.remaining}${unit}` : null;
           return (
             <Text key={row.key} style={[theme.typography.parentBody, rowStyle]}>
-              {row.emoji} {label}
-              {achieved ? `${isChild ? " " : "（"}${achievedLabel}${isChild ? "" : "）"}` : ""}
-              {progressLabel && row.nextTier !== null
-                ? `（つぎの${isChild ? "" : "段階"}${row.nextTier}${unit}まで ${progressLabel}）`
-                : progressLabel
-                ? `（${progressLabel}）`
-                : ""}
+              {row.emoji} {row.countName} {row.currentValue}
+              {unit}
             </Text>
           );
         })}
