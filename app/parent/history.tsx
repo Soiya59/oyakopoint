@@ -10,6 +10,8 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
+import BadgeList from "@/components/BadgeList";
+import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
 import type { DailySummaryEntry } from "@/types/domain";
 
@@ -107,6 +109,9 @@ export default function ParentHistoryScreen() {
   );
 
   const isWeekEmpty = weekRows.length === 0;
+  // [2026-10-03追加・実装メモ352章] 「これまでの回数」は人ごとの数字なので、メンバーを選んだときだけ出す
+  // （「＋家族全体」では出さない。人と人の数字を並べない）。
+  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(selectedMemberId ?? "");
 
   return (
     <Screen tone="parent">
@@ -192,6 +197,12 @@ export default function ParentHistoryScreen() {
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
             />
+          )}
+
+          {selectedMemberId && (
+            <View style={{ marginTop: theme.spacing.s6 }}>
+              <BadgeList isChild={false} loadState={badgeLoadState} rows={badgeRows} />
+            </View>
           )}
 
           <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>

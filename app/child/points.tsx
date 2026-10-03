@@ -3,10 +3,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Screen from "@/components/Screen";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
-import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { formatDateShort, toJstDateString } from "@/lib/calendarDates";
 
 /**
@@ -42,7 +40,6 @@ export default function ChildPointsScreen() {
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
   const balance = memberPoints.find((m) => m.member_id === me.id)?.current_points ?? 0;
   const ledger = fullLedger(me.id);
-  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(me.id);
 
   return (
     <Screen tone="child">
@@ -64,9 +61,7 @@ export default function ChildPointsScreen() {
         <Text style={theme.typography.childHeadline}>いま {balance}pt</Text>
       </View>
 
-      <View style={{ marginTop: theme.spacing.s6 }}>
-        <BadgeList isChild rowStyle={theme.typography.childBody} loadState={badgeLoadState} rows={badgeRows} />
-      </View>
+      {/* [2026-10-03変更・実装メモ352章] 「ここまでの かず」は「きろく」（C7）へ移した。 */}
 
       <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>さいきんの きろく</Text>
 

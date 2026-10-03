@@ -6,10 +6,8 @@ import Card from "@/components/Card";
 import AppButton from "@/components/AppButton";
 import { EmptyState, ErrorState, SkeletonList } from "@/components/StatusViews";
 import ScreenBackLink from "@/components/ScreenBackLink";
-import BadgeList from "@/components/BadgeList";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
-import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { formatDateTimeShort } from "@/lib/calendarDates";
 
 /**
@@ -43,7 +41,6 @@ export default function ParentPointsScreen() {
   const activeMemberId = selectedMemberId ?? members[0]?.id ?? null;
   const activeBalance = memberPoints.find((m) => m.member_id === activeMemberId)?.current_points ?? 0;
   const ledger = activeMemberId ? fullLedger(activeMemberId) : [];
-  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(activeMemberId ?? "");
 
   return (
     <Screen tone="parent">
@@ -97,10 +94,8 @@ export default function ParentPointsScreen() {
             </Text>
           </Card>
 
-          <View style={{ marginTop: theme.spacing.s4 }}>
-            <BadgeList isChild={false} loadState={badgeLoadState} rows={badgeRows} />
-          </View>
-
+          {/* [2026-10-03変更・実装メモ352章、統括「通帳はポイント、記録は回数」] 「これまでの回数」は
+              「きろく」（P15）へ移した。通帳はポイントの残高と履歴だけにする。 */}
           {ledger.length === 0 ? (
             <EmptyState emoji="📔" title="まだ履歴がありません" />
           ) : (

@@ -7,6 +7,8 @@ import { WeekBar, MonthCalendar } from "@/components/HistoryCalendar";
 import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
+import BadgeList from "@/components/BadgeList";
+import { useMemberBadgeRows } from "@/hooks/useBadges";
 import {
   getJstToday,
   getPastWeekDates,
@@ -55,6 +57,7 @@ export default function ChildHistoryScreen() {
   }, []);
 
   const me = state.members.find((m) => m.id === state.activeChildMemberId)!;
+  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(me.id);
 
   const weekDates = useMemo(() => getPastWeekDates(today), [today]);
   const weekByDate = useMemo(() => {
@@ -142,6 +145,12 @@ export default function ChildHistoryScreen() {
               onSelectDate={setSelectedDate}
             />
           )}
+
+          {/* [2026-10-03追加・実装メモ352章、統括「通帳はポイント、記録は回数」] 「ここまでの かず」を
+              通帳（C8）からここへ移した。 */}
+          <View style={{ marginTop: theme.spacing.s6 }}>
+            <BadgeList isChild rowStyle={theme.typography.childBody} loadState={badgeLoadState} rows={badgeRows} />
+          </View>
 
           <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>
             {formatDateChildJp(selectedDate)}の きろく
