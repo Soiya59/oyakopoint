@@ -124,7 +124,7 @@ export default function ChildReportScreen() {
             <Text style={theme.typography.childBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.childBody}>
-            {chore.title} {chore.emoji}
+            {chore.title} {chore.emoji || "📝"}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -149,7 +149,7 @@ export default function ChildReportScreen() {
             <Text style={theme.typography.childBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.childBody}>
-            {chore.title} {chore.emoji}
+            {chore.title} {chore.emoji || "📝"}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -169,7 +169,7 @@ export default function ChildReportScreen() {
           <Text style={theme.typography.childBody}>← もどる</Text>
         </Pressable>
         <Text style={theme.typography.childBody}>
-          {chore.title} {chore.emoji}
+          {chore.title} {chore.emoji || "📝"}
         </Text>
       </View>
 

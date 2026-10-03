@@ -81,7 +81,7 @@ export default function RewardsListScreen() {
           }}
         >
           <Text>
-            {r.emoji} {r.name}
+            {r.emoji || "🎁"} {r.name}
             {resolveRegistrantSuffix(r)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary }}>
@@ -110,7 +110,7 @@ export default function RewardsListScreen() {
           <Pressable onPress={() => toggleGroup(groupKey)}>
             <Card style={{ marginTop: theme.spacing.s3, flexDirection: "row", justifyContent: "space-between" }}>
               <Text>
-                {isOpen ? "▾" : "▸"} {head.emoji} {head.name}
+                {isOpen ? "▾" : "▸"} {head.emoji || "🎁"} {head.name}
               </Text>
               <Text style={{ color: theme.colors.neutralTextSecondary }}>
                 {head.cost}pt（{g.items.length}）

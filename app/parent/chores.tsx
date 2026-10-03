@@ -180,7 +180,7 @@ export default function ChoresListScreen() {
               flexShrink:1は保険（通常は発火しない。行の折り返し判定自体が
               「収まるかどうか」を先に決めるため）。 */}
           <Text style={{ flexShrink: 1 }} numberOfLines={1} ellipsizeMode="tail">
-            {c.emoji} {c.title}
+            {c.emoji || "📝"} {c.title}
             {resolveRegistrantSuffix(c)}
           </Text>
           <Text style={{ color: theme.colors.neutralTextSecondary, flexShrink: 0 }}>
@@ -236,7 +236,7 @@ export default function ChoresListScreen() {
               }}
             >
               <Text>
-                {isOpen ? "▾" : "▸"} {head.emoji} {head.title}
+                {isOpen ? "▾" : "▸"} {head.emoji || "📝"} {head.title}
               </Text>
               <Text style={{ color: theme.colors.neutralTextSecondary }}>
                 {head.points}pt{groupCompletionTotalSuffix}（{g.items.length}）

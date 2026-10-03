@@ -88,7 +88,7 @@ export default function ChildRewardsScreen() {
             const cardContent = (
               <>
                 <View style={styles.cardMain}>
-                  <Text style={styles.cardEmoji}>{r.emoji}</Text>
+                  <Text style={styles.cardEmoji}>{r.emoji || "🎁"}</Text>
                   <Text
                     style={[theme.typography.childBody, styles.cardTitle]}
                     numberOfLines={2}

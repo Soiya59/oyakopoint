@@ -86,7 +86,7 @@ export default function ParentManageTabScreen() {
         {rows.map((r) => (
           <Pressable key={r.path} onPress={() => router.push(r.path as never)}>
             <Card style={styles.row}>
-              <Text style={{ fontSize: 22 }}>{r.emoji}</Text>
+              <Text style={{ fontSize: 22 }}>{r.emoji || "🎁"}</Text>
               <Text style={[theme.typography.parentBodyMedium, styles.rowLabel]}>{r.label}</Text>
               <Text style={theme.typography.parentBodyMedium}>›</Text>
             </Card>

@@ -62,7 +62,7 @@ export default function RewardConfirmScreen() {
       pathname: "/child/reward-complete",
       params: {
         rewardName: reward.name,
-        rewardEmoji: reward.emoji,
+        rewardEmoji: reward.emoji ?? "🎁",
         remaining: String(balance - reward.cost),
         // [2026-09-25追加・要件定義書07-39章「ごほうびの交換の直後の取消」]
         // 交換記録のID。取消（cancel_reward_redemption）の対象を特定するために使う。
@@ -98,7 +98,7 @@ export default function RewardConfirmScreen() {
         <Text style={theme.typography.childBody}>← もどる</Text>
       </Pressable>
       <Text style={[theme.typography.childHeadline, { textAlign: "center", marginTop: theme.spacing.s6 }]}>
-        {reward.emoji} {reward.name} を こうかんする？
+        {reward.emoji || "🎁"} {reward.name} を こうかんする？
       </Text>
 
       <View style={styles.summaryBox}>

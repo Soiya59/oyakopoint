@@ -124,7 +124,7 @@ function MemberGoalEditModal({
                 <Pressable key={c.id} onPress={() => setLinkedChoreId(c.id)} style={styles.choiceRow}>
                   <Text style={theme.typography.parentBody}>
                     {linkedChoreId === c.id ? "✓ " : "　"}
-                    {c.emoji} {c.title}
+                    {c.emoji || "📝"} {c.title}
                   </Text>
                 </Pressable>
               ))}
@@ -188,7 +188,7 @@ export function MemberGoalsCard() {
                     {goal ? (
                       <>
                         {goal.goal_text}
-                        {chore && count !== null ? `（${chore.emoji} ${chore.title} ${count}回）` : ""}
+                        {chore && count !== null ? `（${chore.emoji || "📝"} ${chore.title} ${count}回）` : ""}
                       </>
                     ) : (
                       "まだ目標がありません [決める →]"

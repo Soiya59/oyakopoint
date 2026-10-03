@@ -133,7 +133,7 @@ export default function ParentMyChoreReportScreen() {
             <Text style={theme.typography.parentBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.parentBody}>
-            {chore.emoji} {chore.title}
+            {chore.emoji || "📝"} {chore.title}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -152,7 +152,7 @@ export default function ParentMyChoreReportScreen() {
             <Text style={theme.typography.parentBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.parentBody}>
-            {chore.emoji} {chore.title}
+            {chore.emoji || "📝"} {chore.title}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -179,7 +179,7 @@ export default function ParentMyChoreReportScreen() {
       <Screen tone="parent">
         <View style={styles.backRow}>
           <Text style={theme.typography.parentBody}>
-            {chore.title} {chore.emoji}
+            {chore.title} {chore.emoji || "📝"}
           </Text>
         </View>
         <Text style={[theme.typography.parentBodyMedium, { marginTop: theme.spacing.s6 }]}>記録しました</Text>
@@ -209,7 +209,7 @@ export default function ParentMyChoreReportScreen() {
           <Text style={theme.typography.parentBody}>← もどる</Text>
         </Pressable>
         <Text style={theme.typography.parentBody}>
-          {chore.title} {chore.emoji}
+          {chore.title} {chore.emoji || "📝"}
         </Text>
       </View>
 

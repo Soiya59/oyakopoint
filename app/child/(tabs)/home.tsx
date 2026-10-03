@@ -439,7 +439,7 @@ export default function ChildHomeScreen() {
                   onPress={() => router.push({ pathname: "/child/report", params: { choreId: chore.id } })}
                   style={styles.cardMain}
                 >
-                  <Text style={styles.cardEmoji}>{chore.emoji}</Text>
+                  <Text style={styles.cardEmoji}>{chore.emoji || "📝"}</Text>
                   {/* [D6] おねがいの題名は行数を制限しない（20字までなので高さは有限）。 */}
                   <Text
                     style={[theme.typography.childBody, styles.cardTitle]}

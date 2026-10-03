@@ -237,7 +237,7 @@ export default function SupporterMyChoresScreen() {
                   onPress={() => router.push({ pathname: "/supporter/chore-report", params: { choreId: c.id } })}
                   style={styles.rowMain}
                 >
-                  <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
+                  <Text style={{ fontSize: 20 }}>{c.emoji || "📝"}</Text>
                   <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>{c.title}</Text>
                   {/* [2026-09-22改訂・要件定義書07-31章「2026-09-22改訂」決定6、主要画面
                       ワイヤーフレーム.md 53.11.11節決定13・53.11.9節2] S5は決定6により
@@ -310,7 +310,7 @@ export default function SupporterMyChoresScreen() {
                             onPress={() => router.push({ pathname: "/supporter/chore-report", params: { choreId: c.id } })}
                             style={styles.refItem}
                           >
-                            <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                            <Text style={{ fontSize: 16 }}>{c.emoji || "📝"}</Text>
                             <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
                             {done ? (
                               <Text style={theme.typography.supporterCaption}>きろくずみ</Text>
@@ -322,7 +322,7 @@ export default function SupporterMyChoresScreen() {
                       }
                       return (
                         <View key={c.id} style={styles.refItem}>
-                          <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                          <Text style={{ fontSize: 16 }}>{c.emoji || "📝"}</Text>
                           <Text style={[theme.typography.supporterBody, { flex: 1, marginLeft: theme.spacing.s2 }]}>{c.title}</Text>
                           {/* [2026-09-17改訂・要件定義書07-28章] 台紙型（他のみまもりメンバーの
                               自分専用クエスト）はポイントを持たないため、ここでは何も添えない。

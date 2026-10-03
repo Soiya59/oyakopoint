@@ -126,7 +126,7 @@ export default function SupporterChoreReportScreen() {
             <Text style={theme.typography.supporterBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.supporterBody}>
-            {chore.emoji} {chore.title}
+            {chore.emoji || "📝"} {chore.title}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -145,7 +145,7 @@ export default function SupporterChoreReportScreen() {
             <Text style={theme.typography.supporterBody}>← もどる</Text>
           </Pressable>
           <Text style={theme.typography.supporterBody}>
-            {chore.emoji} {chore.title}
+            {chore.emoji || "📝"} {chore.title}
           </Text>
         </View>
         <View style={styles.centerBlock}>
@@ -172,7 +172,7 @@ export default function SupporterChoreReportScreen() {
       <Screen tone="supporter">
         <View style={styles.backRow}>
           <Text style={theme.typography.supporterBody}>
-            {chore.title} {chore.emoji}
+            {chore.title} {chore.emoji || "📝"}
           </Text>
         </View>
         <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>きろくしました</Text>
@@ -202,7 +202,7 @@ export default function SupporterChoreReportScreen() {
           <Text style={theme.typography.supporterBody}>← もどる</Text>
         </Pressable>
         <Text style={theme.typography.supporterBody}>
-          {chore.title} {chore.emoji}
+          {chore.title} {chore.emoji || "📝"}
         </Text>
       </View>
 

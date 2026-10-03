@@ -247,7 +247,7 @@ export default function ParentMyChoresScreen() {
           return (
             <Card key={c.id} style={{ ...styles.row, ...(highlighted ? styles.rowHighlighted : null) }}>
               <Pressable disabled={done || !me} onPress={goToReport} style={styles.rowMain}>
-                <Text style={{ fontSize: 20 }}>{c.emoji}</Text>
+                <Text style={{ fontSize: 20 }}>{c.emoji || "📝"}</Text>
                 <Text style={[theme.typography.parentBody, { flex: 1, marginLeft: theme.spacing.s3 }]}>
                   {c.title}
                 </Text>
