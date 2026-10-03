@@ -877,6 +877,131 @@ JOIN gratitude_points gp ON gp.note = v.note_text;
 
 
 -- ============================================================
+-- 23e. member_chore_name_counts（「きろく」のクエストごとの回数。2026-10-03追加・要件定義書
+--      07-46章、設計部/成果物/スキーマ設計.sql 84.10章、開発部/成果物/実装メモ.md 353章）
+-- ============================================================
+-- 0件だと、rls_checks.sqlのB-Q1〜B-Q5が「何も見えない」を自明に満たしてしまい、条件が緩くても
+-- 通る（84.10章の前提）。そこで家族Aの子どもCに、名前のまとめ方の全パターンを入れる。
+-- **chore_completionsのBEFORE INSERTトリガーがchore_title・chore_emojiをchoresから上書きする**ので、
+-- 「クエストを作る→完了報告を入れる→改名または削除する」の順で作る（トリガーは無効化しない）。
+-- reported_atは「いまから◯分前」にずらして、最近やった順の並びが毎回同じになるようにする
+-- （1日の上限〔daily_limit〕は50にする。NULLにすると、トリガーが上限1回にしてしまう。数時間以内に収め、月をまたがない）。
+--   a. 今ある「はみがき」: 4件
+--   b. 消したクエストの記録名「おしっこ1人でできた」: 3件（クエストを消す。絵文字🚽）
+--   c. 今ある別のクエスト「おしっこ1人でできた」（作り直し。絵文字は🚾に変える）: 1件 → bと1行にまとまる（4）
+--   d. 改名: 記録名「くつ」2件→題名を「くつをそろえる」に変更→1件 → 今の名前の1行（3）
+--   e. 改名してから削除: 記録名「ごはん」2件→「ごはんをたべる」に改名→1件→削除 → 2行に分かれる（2と1）
+--   f. 前後に全角スペース付きの記録名「かたづけ　」1件（消す）＋今ある「かたづけ」1件 → 1行（2）
+--   g. 全角「ＡＢＣ」1件・半角「ABC」1件 → 2行（同じとみなさない）
+--   h. おねがいの完了: セクション23cのa_request_doneがすでに子どもCにある（1件）。ここでは足さない
+-- 子どもCの期待値: 上のa〜gで8行（はみがき4・おしっこ1人でできた4・くつをそろえる3・ごはん2・
+--   ごはんをたべる1・かたづけ2・ＡＢＣ1・ABC1。回数の合計18）＋セクション6のクエスト2行
+--   （おさらあらい2・にわそうじ1。合計3）＝**10行・合計21**。おねがい1件は除く
+--   （基礎の表のCの件数は22）。保護者P・みまもりSは各1行（セクション6）。保護者Pが見える家族Aの全員ぶんは12行・3人。
+-- 家族Bの子どもにも、消したクエストを含めて少し入れる（A層用。家族Bの子どもは「はみがき」2件と、
+--   消した「おしっこ1人でできた」1件）。
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', (SELECT id::text FROM _seed_ids WHERE key = 'a_parent'))::text, false);
+
+DO $seed23e$
+DECLARE
+  v_fam UUID := (SELECT id FROM _seed_ids WHERE key = 'fam_a');
+  v_child UUID := (SELECT id FROM _seed_ids WHERE key = 'a_child');
+  v_chore UUID;
+  v_mins INT;
+BEGIN
+  -- a. 今ある「はみがき」4件
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'はみがき', '🪥', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  FOREACH v_mins IN ARRAY ARRAY[50, 40, 30, 20] LOOP
+    INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+    VALUES (v_chore, v_child, now() - make_interval(mins => v_mins), 'テスト完了23e-a');
+  END LOOP;
+
+  -- b. 消したクエストの記録名「おしっこ1人でできた」3件（絵文字🚽）→ クエストを消す
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'おしっこ1人でできた', '🚽', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  FOREACH v_mins IN ARRAY ARRAY[55, 45, 35] LOOP
+    INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+    VALUES (v_chore, v_child, now() - make_interval(mins => v_mins), 'テスト完了23e-b');
+  END LOOP;
+  DELETE FROM chores WHERE id = v_chore;
+
+  -- c. 今ある別のクエスト「おしっこ1人でできた」（作り直し。絵文字は🚾）1件。bと1行にまとまる（4）
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'おしっこ1人でできた', '🚾', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 10), 'テスト完了23e-c');
+
+  -- d. 改名: 「くつ」2件→「くつをそろえる」に改名→1件。今の名前の1行（3）
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'くつ', '👟', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  FOREACH v_mins IN ARRAY ARRAY[58, 48] LOOP
+    INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+    VALUES (v_chore, v_child, now() - make_interval(mins => v_mins), 'テスト完了23e-d');
+  END LOOP;
+  UPDATE chores SET title = 'くつをそろえる' WHERE id = v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 15), 'テスト完了23e-d(改名後)');
+
+  -- e. 改名してから削除: 「ごはん」2件→「ごはんをたべる」に改名→1件→削除。2行に分かれる（2と1）
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'ごはん', '🍚', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  FOREACH v_mins IN ARRAY ARRAY[57, 47] LOOP
+    INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+    VALUES (v_chore, v_child, now() - make_interval(mins => v_mins), 'テスト完了23e-e');
+  END LOOP;
+  UPDATE chores SET title = 'ごはんをたべる' WHERE id = v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 25), 'テスト完了23e-e(改名後)');
+  DELETE FROM chores WHERE id = v_chore;
+
+  -- f. 前後に全角スペース付きの記録名「かたづけ　」1件（クエストを消す）＋今ある「かたづけ」1件 → 1行（2）
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'かたづけ　', '🧺', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 52), 'テスト完了23e-f');
+  DELETE FROM chores WHERE id = v_chore;
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'かたづけ', '🧺', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 12), 'テスト完了23e-f(今ある)');
+
+  -- g. 全角「ＡＢＣ」1件・半角「ABC」1件 → 2行（同じとみなさない）
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'ＡＢＣ', '🔤', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 5), 'テスト完了23e-g(全角)');
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'ABC', '🔡', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 4), 'テスト完了23e-g(半角)');
+END
+$seed23e$;
+
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', (SELECT id::text FROM _seed_ids WHERE key = 'b_parent'))::text, false);
+
+DO $seed23e_b$
+DECLARE
+  v_fam UUID := (SELECT id FROM _seed_ids WHERE key = 'fam_b');
+  v_child UUID := (SELECT id FROM _seed_ids WHERE key = 'b_child');
+  v_chore UUID;
+BEGIN
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'はみがき', '🪥', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 30), 'テスト完了23e-B1'),
+         (v_chore, v_child, now() - make_interval(mins => 20), 'テスト完了23e-B2');
+
+  INSERT INTO chores (family_id, title, emoji, points, is_repeatable, daily_limit, scope)
+  VALUES (v_fam, 'おしっこ1人でできた', '🚽', 10, true, 50, 'family') RETURNING id INTO v_chore;
+  INSERT INTO chore_completions (chore_id, reported_by, reported_at, note)
+  VALUES (v_chore, v_child, now() - make_interval(mins => 10), 'テスト完了23e-B3');
+  DELETE FROM chores WHERE id = v_chore;
+END
+$seed23e_b$;
+
+
+-- ============================================================
 -- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);

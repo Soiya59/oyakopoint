@@ -948,6 +948,24 @@ export interface ChoreCompletionTotalEntry {
   total_count: number;
 }
 
+/**
+ * [2026-10-03新設・実装メモ353章] View `member_chore_name_counts` の1行
+ * （要件定義書07-46章、スキーマ設計.sql 84章、API仕様.md 40.2章）。
+ * 「きろく」の「クエストごとの回数」。1人のメンバー×クエスト名（前後の空白を除いた完全一致で
+ * 1つにまとめた名前）ごとの、これまでの完了報告の回数。おねがいは含まない。
+ * 合計・順位・割合・「削除済み」の印は返らない（決定3・7）。
+ */
+export interface MemberChoreNameCount {
+  /** 表示する名前。前後の空白は除かれている。空文字列でも行を出す。 */
+  chore_name: string;
+  /** 最後にやった行の絵文字（いまもあるクエストなら今の絵文字、消したクエストなら記録時の絵文字）。NULLなら画面が「📝」で補う。 */
+  chore_emoji: string | null;
+  /** これまでの回数（1以上）。 */
+  completion_count: number;
+  /** 最後にやった時刻（ISO）。並びの材料で、画面には出さない。 */
+  last_completed_at: string;
+}
+
 /** habit_figure_grants テーブルの1行（段階到達ごとの自動付与記録。選択の余地は無い）。 */
 export interface HabitFigureGrant {
   id: string;

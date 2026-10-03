@@ -133,7 +133,9 @@ export default function SupporterSelfScreen() {
         </Pressable>
       )}
 
-      <MyPointsCard tone="supporter" points={myPoints} memberId={state.activeParentMemberId} />
+      {/* [2026-10-03変更・実装メモ353章] 「実績を見る」と`memberId`を外した（「これまでの回数」は「きろく」
+          〔S12〕の自分のタブへ移した）。ポイントだけの表示専用。 */}
+      <MyPointsCard tone="supporter" points={myPoints} />
 
       {weeklyReviewCardVisible && (
         <WeeklyReviewSlimCard

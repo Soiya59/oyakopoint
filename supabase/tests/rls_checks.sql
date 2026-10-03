@@ -684,6 +684,22 @@
 -- 取り消し連動のトリガー）はこのファイルでは見ない。83.14章のV1〜V18を手動で実行し、実装メモ347章に
 -- 結果を記録した。
 --
+-- [2026-10-03追加・開発部] 「きろく」のクエストごとの回数（要件定義書07-46章、設計部/成果物/
+-- スキーマ設計.sql 84章、開発部/成果物/実装メモ.md 353章、supabase/migrations/
+-- 20261004030000_member_chore_name_counts.sql）に伴い、View `member_chore_name_counts`を見張る
+-- 検査を足した。**S1・S3・S4・S5は±0**（Viewは表でも関数でもポリシーでもない。適用前後に流して
+-- 100件→100件、FAIL 0のまま変わらないことを実測した）。C層にC-Q1〜C-Q5（Viewでsecurity_invoker・
+-- 列が6つだけ・権限・定義に主要な条件があり順位の関数が無い・参照元が無い）、B層にB-Q1〜B-Q5
+-- （子ども: 自分の名前の種類数だけ見える・他人の行が見えない・回数の合計がおねがいを除いた件数と一致／
+-- みまもり: 自分の行だけ／保護者: 同じ家族の全員の行が見える）、A層にA-Q1〜A-Q3（3ロール。他家族の
+-- 行が見えない）を追加した。**Viewは管理者（ロールが特定できない）に0行を返す**ので、B-Q系の
+-- 期待値は`SET LOCAL ROLE authenticated`の前に、基礎の表からViewと同じ数え方で数えてGUCに保存する
+-- （t.child_q_rows等）。0件だと自明に通るため、seed.sqlの23e節で入れ、0件の環境ではSKIPにする。
+-- 検査が本当に効くかも確かめた（Viewをいったん書き換えて流すと、本人だけの条件を外せばB-Q1・B-Q2・
+-- B-Q3・B-Q4・C-Q4、LEFT JOINをINNER JOINにすればB-Q1・B-Q3・B-Q5・C-Q4、おねがいの除外を外せば
+-- B-Q1・B-Q3・B-Q5・C-Q4がFAILした。元に戻して113件PASSを確認）。名前のまとめ方の細部・絵文字・
+-- 並び・取消・性能は、設計部84.11章のQ1〜Q21を手動で実行し、実装メモ353章に結果を記録した。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -1923,6 +1939,86 @@ FROM gratitude_reactions gr
 JOIN gratitude_points gp ON gp.id = gr.gratitude_id
 WHERE gp.family_id <> gr.family_id OR gp.revoked_at IS NOT NULL;
 
+-- C-Q1〜C-Q5. [2026-10-03追加・スキーマ設計.sql 84.10章] 「きろく」のクエストごとの回数
+-- （View member_chore_name_counts。supabase/migrations/20261004030000_member_chore_name_counts.sql）。
+-- Viewなので、S1（表）・S3（ポリシー）・S4（関数）・S5（pg_tablesだけを見る）には数えられない。
+-- そのぶん、ここで「Viewである・security_invoker・列・権限・定義・参照元」を見張る。
+
+-- C-Q1 Viewであり、security_invoker=trueであること（外れると家族の壁が消える）
+INSERT INTO _r
+SELECT 'C層', 'C-Q1 member_chore_name_countsはViewでsecurity_invoker=true', 'View / true',
+  coalesce((SELECT CASE WHEN c.relkind = 'v'
+                         AND coalesce(array_to_string(c.reloptions, ','), '') ~ 'security_invoker=(true|on)'
+                        THEN 'View / true' ELSE 'ずれている（relkind=' || c.relkind::text || '）' END
+            FROM pg_class c WHERE c.oid = to_regclass('public.member_chore_name_counts')), 'Viewが無い'),
+  coalesce((SELECT c.relkind = 'v'
+                   AND coalesce(array_to_string(c.reloptions, ','), '') ~ 'security_invoker=(true|on)'
+            FROM pg_class c WHERE c.oid = to_regclass('public.member_chore_name_counts')), false);
+
+-- C-Q2 列は6つだけ（合計・順位・割合・表示名・メモ・ポイントの列を足さない。決定7・個人情報の最小化）
+INSERT INTO _r
+SELECT 'C層', 'C-Q2 member_chore_name_countsの列は6つだけ（合計・順位の列が無い）',
+  'chore_emoji,chore_name,completion_count,family_id,last_completed_at,member_id',
+  coalesce((SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'member_chore_name_counts'), 'Viewが無い'),
+  coalesce((SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+            FROM information_schema.columns col
+            WHERE col.table_schema = 'public' AND col.table_name = 'member_chore_name_counts')
+           = 'chore_emoji,chore_name,completion_count,family_id,last_completed_at,member_id', false);
+
+-- C-Q3 権限: authenticatedはSELECTのみ・anonは無し（自動付与のREVOKE漏れ・GRANT漏れを検出）
+INSERT INTO _r
+SELECT 'C層', 'C-Q3 member_chore_name_countsの権限（authenticatedはSELECTのみ・anonは無し）', 'SELECTのみ / 無し',
+  CASE WHEN has_table_privilege('authenticated', 'public.member_chore_name_counts', 'SELECT')
+        AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'INSERT')
+        AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'UPDATE')
+        AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'DELETE')
+       THEN 'SELECTのみ' ELSE 'authenticatedの権限がずれている' END
+  || ' / ' ||
+  CASE WHEN NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'SELECT')
+        AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'INSERT')
+        AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'UPDATE')
+        AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'DELETE')
+       THEN '無し' ELSE 'anonに権限がある' END,
+  has_table_privilege('authenticated', 'public.member_chore_name_counts', 'SELECT')
+    AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'INSERT')
+    AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'UPDATE')
+    AND NOT has_table_privilege('authenticated', 'public.member_chore_name_counts', 'DELETE')
+    AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'SELECT')
+    AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'INSERT')
+    AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'UPDATE')
+    AND NOT has_table_privilege('anon', 'public.member_chore_name_counts', 'DELETE');
+
+-- C-Q4 Viewの定義: 主要な条件が残っていること／入れてはいけないものが無いこと
+--      （CREATE OR REPLACEの全面書き換えで、LEFT JOINがINNER JOINに変わって消したクエストが全部落ちる・
+--       おねがいの除外が消える・本人だけの条件が消える・順位の関数が混ざる、を検出）。
+INSERT INTO _r
+SELECT 'C層', 'C-Q4 member_chore_name_countsの定義に主要な条件があり、順位・割合の関数が無い（ずれた語の数）', '0',
+  count(*)::text, count(*) = 0
+FROM (
+  SELECT m.word FROM (VALUES ('left join'), ('is_request'), ('current_family_member_id'),
+          ('current_family_role'), ('chore_title'), ('btrim'), ('family_id')) m(word)
+  WHERE position(m.word in lower(pg_get_viewdef('public.member_chore_name_counts'::regclass))) = 0
+  UNION ALL
+  SELECT n.word FROM (VALUES ('rank'), ('row_number'), ('ntile'), ('percent'), ('cume_dist')) n(word)
+  WHERE position(n.word in lower(pg_get_viewdef('public.member_chore_name_counts'::regclass))) > 0
+) bad;
+
+-- C-Q5 このViewを参照する別のView・関数が無いこと（決定7。メンバーをまたぐ集計・合計をこの上に作らない）
+INSERT INTO _r
+SELECT 'C層', 'C-Q5 member_chore_name_countsを参照するViewと関数は無い', '0',
+  ((SELECT count(*) FROM pg_views v
+     WHERE v.schemaname = 'public' AND v.viewname <> 'member_chore_name_counts'
+       AND v.definition ILIKE '%member_chore_name_counts%')
+   + (SELECT count(*) FROM pg_proc p
+       WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ILIKE '%member_chore_name_counts%'))::text,
+  ((SELECT count(*) FROM pg_views v
+     WHERE v.schemaname = 'public' AND v.viewname <> 'member_chore_name_counts'
+       AND v.definition ILIKE '%member_chore_name_counts%')
+   + (SELECT count(*) FROM pg_proc p
+       WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ILIKE '%member_chore_name_counts%')) = 0;
+
 
 -- ============================================================
 -- B層: 家族内のロール境界（実際になりすまして読む）
@@ -2027,6 +2123,72 @@ SELECT set_config('t.parent_nonparty_gr_rows',
       AND NOT (nullif(current_setting('t.parent', true), '')::uuid IN (gp.sender_id, gp.recipient_id)))::text, true);
 
 
+-- [2026-10-03追加・スキーマ設計.sql 84.10章] 「きろく」のクエストごとの回数（View
+-- member_chore_name_counts）の「本来見えるべき行数」を、`SET LOCAL ROLE authenticated`の前
+-- （管理者権限）でGUCに保存する。**Viewは管理者（ロールが特定できない）に0行を返す**（判断F(5)）ので、
+-- Viewを使わず、基礎の表（chore_completions・chores）から**Viewと同じ数え方で**数える
+-- （この数え直しがViewの定義と食い違えばB-Qが落ちる＝Viewの書き換えを検出する）。
+-- 0件だと「何も見えない」が自明に成立してしまうため、0件の環境ではB-Q系をSKIPにする（PASSにしない）。
+-- seed.sqlの23e節が入れている。
+-- ・t.child_q_rows: 子どもCの期待行数（自分のクエスト名の種類数。おねがいを除く）
+-- ・t.child_q_total: 子どもCの期待の回数の合計（おねがいを除く）
+-- ・t.child_q_req: 子どもCがやったおねがいの完了報告の件数（B-Q3が空振りしないため）
+-- ・t.child_q_others: 子どもと同じ家族の他メンバーの（おねがいを除く）完了報告の件数（B-Q2が空振りしないため）
+-- ・t.supporter_q_rows・t.supporter_q_others: みまもりSの同じ値
+-- ・t.parent_q_family_rows・t.parent_q_family_members: 保護者Pと同じ家族の全員の期待行数（メンバー×名前の種類数）と、
+--   行を持つメンバー数
+SELECT set_config('t.child_q_rows', (
+  SELECT count(*) FROM (
+    SELECT 1 FROM chore_completions cc
+    LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+    WHERE cc.reported_by = nullif(current_setting('t.child', true), '')::uuid
+      AND COALESCE(ch.is_request, false) = false
+    GROUP BY btrim(COALESCE(ch.title, cc.chore_title), E' \t\r\n' || chr(12288) || chr(160))
+  ) g)::text, true);
+SELECT set_config('t.child_q_total', (
+  SELECT count(*) FROM chore_completions cc
+  LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+  WHERE cc.reported_by = nullif(current_setting('t.child', true), '')::uuid
+    AND COALESCE(ch.is_request, false) = false)::text, true);
+SELECT set_config('t.child_q_req', (
+  SELECT count(*) FROM chore_completions cc
+  JOIN chores ch ON ch.id = cc.chore_id
+  WHERE cc.reported_by = nullif(current_setting('t.child', true), '')::uuid AND ch.is_request)::text, true);
+SELECT set_config('t.child_q_others', (
+  SELECT count(*) FROM chore_completions cc
+  LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+  WHERE cc.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.child', true), '')::uuid)
+    AND cc.reported_by <> nullif(current_setting('t.child', true), '')::uuid
+    AND COALESCE(ch.is_request, false) = false)::text, true);
+SELECT set_config('t.supporter_q_rows', (
+  SELECT count(*) FROM (
+    SELECT 1 FROM chore_completions cc
+    LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+    WHERE cc.reported_by = nullif(current_setting('t.supporter', true), '')::uuid
+      AND COALESCE(ch.is_request, false) = false
+    GROUP BY btrim(COALESCE(ch.title, cc.chore_title), E' \t\r\n' || chr(12288) || chr(160))
+  ) g)::text, true);
+SELECT set_config('t.supporter_q_others', (
+  SELECT count(*) FROM chore_completions cc
+  LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+  WHERE cc.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.supporter', true), '')::uuid)
+    AND cc.reported_by <> nullif(current_setting('t.supporter', true), '')::uuid
+    AND COALESCE(ch.is_request, false) = false)::text, true);
+SELECT set_config('t.parent_q_family_rows', (
+  SELECT count(*) FROM (
+    SELECT 1 FROM chore_completions cc
+    LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+    WHERE cc.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.parent', true), '')::uuid)
+      AND COALESCE(ch.is_request, false) = false
+    GROUP BY cc.reported_by, btrim(COALESCE(ch.title, cc.chore_title), E' \t\r\n' || chr(12288) || chr(160))
+  ) g)::text, true);
+SELECT set_config('t.parent_q_family_members', (
+  SELECT count(DISTINCT cc.reported_by) FROM chore_completions cc
+  LEFT JOIN chores ch ON ch.id = cc.chore_id AND ch.family_id = cc.family_id
+  WHERE cc.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.parent', true), '')::uuid)
+    AND COALESCE(ch.is_request, false) = false)::text, true);
+
+
 -- ---------- 子どもの視点 ----------
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.child', true))::text, true);
@@ -2125,6 +2287,47 @@ INSERT INTO _r SELECT 'A層', 'A-G1 子ども: gratitude_reactionsに他家族�
   CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
        THEN count(*) = 0 ELSE NULL END
 FROM gratitude_reactions WHERE family_id <> current_family_id();
+
+-- B-Q1. [2026-10-03追加・スキーマ設計.sql 84.10章] 子ども: クエストごとの回数の行数は「自分のクエスト名の
+--     種類数」と**一致すること**（多すぎ＝他人の漏れ、少なすぎ＝消したクエストが落ちている等）。
+--     0件の環境ではSKIP（PASSにしない）。
+INSERT INTO _r SELECT 'B層', 'B-Q1 子ども: クエストごとの回数は自分の名前の種類数だけ見える',
+  coalesce(current_setting('t.child_q_rows', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_rows', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（childが居ない、またはchildの完了報告が0件。seed.sqlの23e節を足すこと）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_rows', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.child_q_rows', true), '')::int ELSE NULL END
+FROM member_chore_name_counts;
+
+-- B-Q2. [2026-10-03追加・84.10章] 子ども: 他のメンバーの行が1件も見えない（判断F。子どもがきょうだい・
+--     保護者の履歴を一覧で読めない）。他メンバーの完了報告が0件の環境ではSKIP。
+INSERT INTO _r SELECT 'B層', 'B-Q2 子ども: 他のメンバーの行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_others', true), '')::int > 0
+       THEN count(*)::text
+       ELSE 'SKIP（childが居ない、または同じ家族の他メンバーの完了報告が0件。seed.sqlの23e節が要る）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_others', true), '')::int > 0
+       THEN count(*) = 0 ELSE NULL END
+FROM member_chore_name_counts WHERE member_id <> current_family_member_id();
+
+-- B-Q3. [2026-10-03追加・84.10章] 子ども: 回数の合計がおねがいを除いた件数と一致する（おねがいの除外・
+--     消したクエストを数える・名前でまとめる、の3つを同時に見張る）。おねがいの完了が0件の環境ではSKIP。
+INSERT INTO _r SELECT 'B層', 'B-Q3 子ども: 回数の合計がおねがいを除いた件数と一致する',
+  coalesce(current_setting('t.child_q_total', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_req', true), '')::int > 0
+       THEN coalesce(sum(completion_count), 0)::text
+       ELSE 'SKIP（childが居ない、またはchildのおねがいの完了が0件。seed.sqlの23e節のhが要る）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND nullif(current_setting('t.child_q_req', true), '')::int > 0
+       THEN coalesce(sum(completion_count), 0) = nullif(current_setting('t.child_q_total', true), '')::int ELSE NULL END
+FROM member_chore_name_counts;
+
+-- A-Q2（子ども）. [2026-10-03追加・84.10章] member_chore_name_countsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-Q2 子ども: member_chore_name_countsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM member_chore_name_counts WHERE family_id <> current_family_id();
 
 -- ------------------------------------------------------------
 -- A層（子どもロール分）: family_drawings / chore_completions / family_members は
@@ -2529,6 +2732,28 @@ INSERT INTO _r SELECT 'A層', 'A-G1 保護者: gratitude_reactionsに他家族�
        THEN count(*) = 0 ELSE NULL END
 FROM gratitude_reactions WHERE family_id <> current_family_id();
 
+-- B-Q5. [2026-10-03追加・スキーマ設計.sql 84.10章] 保護者: 同じ家族の全員のクエストごとの回数が見える
+--     （過剰遮断でない。P18がメンバーを切り替えて1人ずつ見るため）。メンバーが2人以上、行を持っている
+--     ときだけ判定する（0件・1人だけの環境ではSKIP）。
+INSERT INTO _r SELECT 'B層', 'B-Q5 保護者: 同じ家族の全員のクエストごとの回数が見える（過剰遮断でない）',
+  coalesce(current_setting('t.parent_q_family_rows', true), ''),
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND nullif(current_setting('t.parent_q_family_members', true), '')::int >= 2
+       THEN count(*)::text
+       ELSE 'SKIP（parentが居ない、または完了報告を持つメンバーが2人未満。seed.sqlの23e節が要る）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND nullif(current_setting('t.parent_q_family_members', true), '')::int >= 2
+       THEN count(*) = nullif(current_setting('t.parent_q_family_rows', true), '')::int
+            AND count(DISTINCT member_id) = nullif(current_setting('t.parent_q_family_members', true), '')::int
+       ELSE NULL END
+FROM member_chore_name_counts;
+
+-- A-Q1（保護者）. [2026-10-03追加・84.10章] member_chore_name_countsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-Q1 保護者: member_chore_name_countsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.parent', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM member_chore_name_counts WHERE family_id <> current_family_id();
+
 -- [注記] 「特に重要な3テーブル」（family_drawings/chore_completions/
 -- family_members）の保護者ロール分は、上のA09・A02・A12がそのまま該当する
 -- （代表ロールが保護者のため）。二重に記録すると同じ検査が名前だけ変えて
@@ -2595,6 +2820,32 @@ INSERT INTO _r SELECT 'A層', 'A-G1 みまもり: gratitude_reactionsに他家�
   CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
        THEN count(*) = 0 ELSE NULL END
 FROM gratitude_reactions WHERE family_id <> current_family_id();
+
+-- B-Q4. [2026-10-03追加・スキーマ設計.sql 84.10章] みまもり: クエストごとの回数は自分の行だけが、期待どおりの
+--     数だけ見える（他人の行は0行）。自分の行・他メンバーの完了報告のどちらかが0件の環境ではSKIP。
+--     期待値・実際の欄は「N行 / 他人0行」の形（SKIPの文言のときだけ違う）。
+INSERT INTO _r SELECT 'B層', 'B-Q4 みまもり: クエストごとの回数は自分の行だけが見える',
+  coalesce(current_setting('t.supporter_q_rows', true), '') || '行 / 他人0行',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.supporter_q_rows', true), '')::int > 0
+            AND nullif(current_setting('t.supporter_q_others', true), '')::int > 0
+       THEN count(*)::text || '行 / 他人' || (count(*) FILTER (WHERE member_id <> current_family_member_id()))::text || '行'
+       ELSE 'SKIP（supporterが居ない、または自分・他メンバーの完了報告が0件。seed.sqlの23e節が要る）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.supporter_q_rows', true), '')::int > 0
+            AND nullif(current_setting('t.supporter_q_others', true), '')::int > 0
+       THEN count(*) = nullif(current_setting('t.supporter_q_rows', true), '')::int
+            AND count(*) FILTER (WHERE member_id <> current_family_member_id()) = 0
+       ELSE NULL END
+FROM member_chore_name_counts;
+
+-- A-Q3（みまもり）. [2026-10-03追加・84.10章] member_chore_name_countsに他家族の行が見えない。
+INSERT INTO _r SELECT 'A層', 'A-Q3 みまもり: member_chore_name_countsに他家族の行が見えない', '0',
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*)::text ELSE 'SKIP（家族が1つのみ。本番はこのSKIPが正常）' END,
+  CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
+       THEN count(*) = 0 ELSE NULL END
+FROM member_chore_name_counts WHERE family_id <> current_family_id();
 
 -- ------------------------------------------------------------
 -- A層（みまもりロール分）: 「特に重要な3テーブル」を重ねて検査する

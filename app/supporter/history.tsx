@@ -10,6 +10,10 @@ import ScreenBackLink from "@/components/ScreenBackLink";
 import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
+import BadgeList from "@/components/BadgeList";
+import QuestCountList from "@/components/QuestCountList";
+import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { isOwnTab, lifetimeCompletionsOf, shouldShowQuestCountSection } from "@/lib/questCount";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
 import type { DailySummaryEntry } from "@/types/domain";
 
@@ -29,6 +33,11 @@ import type { DailySummaryEntry } from "@/types/domain";
  * 公開される方針へ反転したため、家族全体ビュー・他メンバー（他のみまもりメンバー
  * 含む）の履歴にも表示されるようになった。もはや非公開ではないため🔒表示は
  * 復活させない（🤝／🎯バッジも復活させない。可視性・リアクションの変更にとどめる）。
+ *
+ * [2026-10-03追加・実装メモ353章、主要画面ワイヤーフレーム.md 72章] **自分のタブを選んだときだけ**、
+ * 「これまでの回数」（`BadgeList`）と「クエストごとの回数」（`QuestCountList`）を「◯日の実績」の前に出す
+ * （07-46章 決定8。他の人のタブ・「＋家族全体」では出さない）。S1のホームのカード（`MyPointsCard`）の
+ * 「実績を見る」から、閲覧の経路をここへ移した。
  */
 type LoadState = "loading" | "error" | "ready";
 
@@ -106,6 +115,14 @@ export default function SupporterHistoryScreen() {
   );
 
   const isWeekEmpty = weekRows.length === 0;
+
+  // [2026-10-03追加・実装メモ353章、主要画面ワイヤーフレーム.md 72章F9・72.10節3] 「これまでの回数」と
+  // 「クエストごとの回数」は、**自分のタブを選んだときだけ**出す（07-46章 決定8。他の人のタブ・「＋家族全体」では
+  // 出さない。みまもりが、子どもや保護者の通算の回数を新しく見られるようにしない）。ホーム（S1）の
+  // `MyPointsCard`の「実績を見る」から移した（統括確認事項1）。自分のタブ以外では空文字列を渡して何も読まない
+  // （`useMemberBadgeRows`の既存の動き）。
+  const isMine = isOwnTab(selectedMemberId, state.activeParentMemberId);
+  const { loadState: badgeLoadState, rows: badgeRows } = useMemberBadgeRows(isMine && selectedMemberId ? selectedMemberId : "");
 
   return (
     <Screen tone="supporter">
@@ -189,6 +206,15 @@ export default function SupporterHistoryScreen() {
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
             />
+          )}
+
+          {isMine && selectedMemberId && (
+            <View style={{ marginTop: theme.spacing.s6 }}>
+              <BadgeList isChild={false} loadState={badgeLoadState} rows={badgeRows} rowStyle={theme.typography.supporterBody} />
+              {shouldShowQuestCountSection(badgeLoadState, lifetimeCompletionsOf(badgeRows)) && (
+                <QuestCountList key={selectedMemberId} tone="supporter" memberId={selectedMemberId} />
+              )}
+            </View>
           )}
 
           <Text style={[theme.typography.supporterBodyMedium, { marginTop: theme.spacing.s6 }]}>

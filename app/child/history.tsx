@@ -8,7 +8,9 @@ import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import BadgeList from "@/components/BadgeList";
+import QuestCountList from "@/components/QuestCountList";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { lifetimeCompletionsOf, shouldShowQuestCountSection } from "@/lib/questCount";
 import {
   getJstToday,
   getPastWeekDates,
@@ -150,6 +152,12 @@ export default function ChildHistoryScreen() {
               通帳（C8）からここへ移した。 */}
           <View style={{ marginTop: theme.spacing.s6 }}>
             <BadgeList isChild rowStyle={theme.typography.childBody} loadState={badgeLoadState} rows={badgeRows} />
+            {/* [2026-10-03追加・実装メモ353章、主要画面ワイヤーフレーム.md 72章F1] 「ここまでの かず」の下に、閉じた
+                「クエストごとの かず」の枠を1つ置く。自分のIDだけを渡す（他人のIDでは0行になる）。クエストの回数が
+                1以上のときだけ（0回なら枠ごと出さない）。 */}
+            {shouldShowQuestCountSection(badgeLoadState, lifetimeCompletionsOf(badgeRows)) && (
+              <QuestCountList key={me.id} tone="child" memberId={me.id} />
+            )}
           </View>
 
           <Text style={[theme.typography.childBody, { marginTop: theme.spacing.s6 }]}>

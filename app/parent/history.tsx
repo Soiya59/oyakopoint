@@ -11,7 +11,9 @@ import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import BadgeList from "@/components/BadgeList";
+import QuestCountList from "@/components/QuestCountList";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
+import { lifetimeCompletionsOf, shouldShowQuestCountSection } from "@/lib/questCount";
 import { getJstToday, getPastWeekDates, shiftMonth, toJstDateString, formatDateJp } from "@/lib/calendarDates";
 import type { DailySummaryEntry } from "@/types/domain";
 
@@ -202,6 +204,13 @@ export default function ParentHistoryScreen() {
           {selectedMemberId && (
             <View style={{ marginTop: theme.spacing.s6 }}>
               <BadgeList isChild={false} loadState={badgeLoadState} rows={badgeRows} />
+              {/* [2026-10-03追加・実装メモ353章、主要画面ワイヤーフレーム.md 72章F1] 「これまでの回数」の下に、閉じた
+                  「クエストごとの回数」の枠を1つ置く。「これまでの回数」が読み込めて、クエストの回数が1以上のときだけ
+                  （0回なら枠ごと出さない。決定6）。`key`でメンバーを切り替えたとき閉じた状態に戻し、前の人の結果を捨てる
+                  （F10）。「＋家族全体」では`selectedMemberId`がnullなのでこのブロックごと出ない。 */}
+              {shouldShowQuestCountSection(badgeLoadState, lifetimeCompletionsOf(badgeRows)) && (
+                <QuestCountList key={selectedMemberId} tone="parent" memberId={selectedMemberId} />
+              )}
             </View>
           )}
 

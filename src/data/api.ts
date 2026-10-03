@@ -78,6 +78,7 @@ import type {
   MemberBadge,
   MemberBadgeProgress,
   MemberBlock,
+  MemberChoreNameCount,
   MemberGoal,
   MemberPoints,
   OrnamentStickerPurchase,
@@ -4080,6 +4081,34 @@ export async function fetchChoreCompletionTotals(
     .eq("family_id", familyId);
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
   return { ok: true, data: (data ?? []) as ChoreCompletionTotalEntry[] };
+}
+
+/**
+ * API仕様.md 40章「きろくのクエストごとの回数」（要件定義書07-46章、スキーマ設計.sql 84章、
+ * 実装メモ.md 353章）。View `member_chore_name_counts` を**1人ぶん**だけ読む。
+ *
+ * **このViewを読む箇所は、アプリ全体でこの関数だけ**（40.7章）。ほかの場所で
+ * `from("member_chore_name_counts")`と書かない。`memberId`は必須の引数で、省略できない型にしてある
+ * （省くと保護者には家族全員の行が返る。人と人の数字を並べない＝07-46章 決定1・7）。
+ * 並びは**ここで決める**（画面は取得した順のまま描き、並べ直さない）: 最後にやった時刻の新しい順
+ * → 同じ時刻のときは名前の順（Viewは順序を持たない。84.2 判断D）。回数の多い順にはしない。
+ * 子ども・みまもりが他人の`memberId`を渡すと0行（エラーにならない）。画面は自分のID以外で呼ばない。
+ * `store.tsx`の`load()`には載せない（開いたときだけ1人ぶんを読む。決定11）。
+ */
+export async function fetchMemberChoreNameCounts(
+  client: SupabaseClient,
+  familyId: string,
+  memberId: string
+): Promise<ApiResult<MemberChoreNameCount[]>> {
+  const { data, error, status } = await client
+    .from("member_chore_name_counts")
+    .select("chore_name, chore_emoji, completion_count, last_completed_at")
+    .eq("family_id", familyId)
+    .eq("member_id", memberId)
+    .order("last_completed_at", { ascending: false })
+    .order("chore_name", { ascending: true });
+  if (error) return { ok: false, error: fromPostgrestError(error, status) };
+  return { ok: true, data: (data ?? []) as MemberChoreNameCount[] };
 }
 
 /**
