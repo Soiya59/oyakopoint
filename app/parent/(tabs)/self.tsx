@@ -140,7 +140,7 @@ export default function ParentSelfTabScreen() {
       {myMember && (
         <Pressable onPress={() => router.push({ pathname: "/parent/member-avatar", params: { memberId: myMember.id, displayName: myMember.display_name } })}>
           <Text style={[theme.typography.parentBody, styles.avatarLinkRow]}>
-            🎨 {memberAvatars[myMember.id] ? "じぶんの えを なおす →" : "じぶんの えを かく →"}
+            🎨 {memberAvatars[myMember.id] ? "アイコンの絵をなおす →" : "アイコンの絵をかく →"}
           </Text>
         </Pressable>
       )}
