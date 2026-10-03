@@ -128,7 +128,7 @@ export default function SupporterSelfScreen() {
       {myMember && (
         <Pressable onPress={() => router.push("/supporter/my-avatar")}>
           <Text style={[theme.typography.supporterBody, styles.avatarLinkRow]}>
-            🎨 {memberAvatars[myMember.id] ? "アイコンの絵をなおす →" : "アイコンの絵をかく →"}
+            🎨 {memberAvatars[myMember.id] ? "アバターの絵をなおす →" : "アバターの絵をかく →"}
           </Text>
         </Pressable>
       )}
