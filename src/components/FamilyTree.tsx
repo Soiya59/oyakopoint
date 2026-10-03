@@ -366,6 +366,15 @@ export const CANVAS_HEIGHT = 520;
 
 /** 双葉の開き角（左右対称）。 */
 const SPROUT_LEAF_ANGLE_DEG = 26;
+/**
+ * [2026-10-03追加・実装メモ351章、統括「二葉が枝にくっついていない」] 双葉の左右の葉を、
+ * 茎の側へ内側に寄せる量（pt）。傾けた葉の内側の端は丸く、茎（幅6）から数pt離れて
+ * 浮いて見えていた。寄せたぶん、茎の上端も葉の中まで届かせる（`SPROUT_STEM_RISE`）。
+ * タップ拡大の当たり判定（下のsprout分岐）も同じ量だけずらす。
+ */
+const SPROUT_LEAF_INSET = 5;
+/** 茎の上端を葉の側へ伸ばす量（pt）。葉の付け根と重なって、つながって見える。 */
+const SPROUT_STEM_RISE = 10;
 
 /**
  * 色丸の色を決める。
@@ -635,6 +644,37 @@ const DOT_STROKE_WIDTH = 1;
  * `color`には報告者の`avatar_color`ではなく`theme.treeColors.foliageBase`
  * （木の共有部分・樹冠の背景と同じ固定色）を渡すこと。個人の色は使わない。
  */
+/**
+ * [2026-10-03追加・実装メモ351章、統括「太陽をもう少し太陽っぽく。周りは三角でもよい、☀の絵文字みたいに」]
+ * 家族の木の空の太陽。黄色の丸のまわりに、三角の光線を12本、等間隔に並べる。
+ * 位置は従来の丸（直径56・右26・上24）と同じ中心に合わせた。個人色には染めない固定色
+ * （`theme.treeColors.sun`）。先を丸めた三角（太めの同色の縁取り）にして、このアプリの
+ * やさしい絵柄に合わせる。
+ */
+function SunShape() {
+  const size = 92;
+  const c = size / 2;
+  const rays = Array.from({ length: 12 }, (_, i) => i * 30);
+  return (
+    <View style={styles.sunWrap} pointerEvents="none">
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <SvgCircle cx={c} cy={c} r={28} fill={theme.treeColors.sun} />
+        {rays.map((deg) => (
+          <SvgPath
+            key={deg}
+            d={`M ${c - 5} ${c - 33} L ${c} ${c - 44} L ${c + 5} ${c - 33} Z`}
+            fill={theme.treeColors.sun}
+            stroke={theme.treeColors.sun}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            transform={`rotate(${deg} ${c} ${c})`}
+          />
+        ))}
+      </Svg>
+    </View>
+  );
+}
+
 export function StageDot({ color, size, stage }: { color: string; size: number; stage: number }) {
   if (stage <= 0) {
     // 種: 対称なレンズ形（粒）。
@@ -1582,14 +1622,14 @@ export function TreeStageVisual({
       // 左の葉（left:0、SPROUT_LEAF_ANGLE_DEGだけ時計回りに回転、下のJSX参照）。
       pushPrizeDots(
         byRegion.lobeLeft.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) })),
-        wrapperLeft,
+        wrapperLeft + SPROUT_LEAF_INSET,
         wrapperTop,
         { deg: SPROUT_LEAF_ANGLE_DEG, ...leafCenter }
       );
       // 右の葉（right:0＝wrapperLeft+leafWidthから開始、-SPROUT_LEAF_ANGLE_DEGだけ回転）。
       pushPrizeDots(
         byRegion.lobeRight.map((dot) => ({ dot, bounds: bounds(leafWidth / 2, leafHeight / 2, rx, ry) })),
-        wrapperLeft + leafWidth,
+        wrapperLeft + leafWidth - SPROUT_LEAF_INSET,
         wrapperTop,
         { deg: -SPROUT_LEAF_ANGLE_DEG, ...leafCenter }
       );
@@ -1676,7 +1716,7 @@ export function TreeStageVisual({
       {/* 背景（晴れた空）。太陽と雲は固定色で、個人色には染めない。
           いちばん背面に置き、木や色丸より目立たないよう彩度を抑える。 */}
       <View style={styles.skyBackground} pointerEvents="none">
-        <View style={styles.sun} />
+        <SunShape />
         <View style={[styles.cloudPuff, { width: 58, height: 58, borderRadius: 29, left: 18, top: 96 }]} />
         <View style={[styles.cloudPuff, { width: 42, height: 42, borderRadius: 21, left: 56, top: 108 }]} />
         <View style={[styles.cloudPuff, { width: 36, height: 36, borderRadius: 18, left: 0, top: 112 }]} />
@@ -1844,7 +1884,7 @@ export function TreeStageVisual({
                 width: leafWidth,
                 height: leafHeight,
                 borderRadius: leafWidth / 2,
-                [side]: 0,
+                [side]: SPROUT_LEAF_INSET,
                 top: 0,
                 transform: [{ rotate: `${side === "left" ? SPROUT_LEAF_ANGLE_DEG : -SPROUT_LEAF_ANGLE_DEG}deg` }],
               },
@@ -1860,7 +1900,12 @@ export function TreeStageVisual({
           <View style={{ width: leafWidth * 2, height: leafHeight + stemHeight, alignItems: "center" }}>
             {renderLeaf(leftDots, "left")}
             {renderLeaf(rightDots, "right")}
-            <View style={[styles.sproutStem, { height: stemHeight + 8, top: leafHeight - 8 }]} />
+            <View
+              style={[
+                styles.sproutStem,
+                { height: stemHeight + 8 + SPROUT_STEM_RISE, top: leafHeight - 8 - SPROUT_STEM_RISE },
+              ]}
+            />
           </View>
         );
       })()}
@@ -2135,14 +2180,14 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.childXl,
     overflow: "hidden",
   },
-  sun: {
+  // [2026-10-03変更・351章] 丸だけだった太陽を、三角の光線つきの`SunShape`に。
+  // 丸の中心は従来（右26＋半径28、上24＋半径28）と同じ位置に合わせた（SVGは一辺92）。
+  sunWrap: {
     position: "absolute",
-    right: 26,
-    top: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.treeColors.sun,
+    right: 8,
+    top: 6,
+    width: 92,
+    height: 92,
   },
   cloudPuff: {
     position: "absolute",
