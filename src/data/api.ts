@@ -4090,8 +4090,10 @@ export async function fetchChoreCompletionTotals(
  * **このViewを読む箇所は、アプリ全体でこの関数だけ**（40.7章）。ほかの場所で
  * `from("member_chore_name_counts")`と書かない。`memberId`は必須の引数で、省略できない型にしてある
  * （省くと保護者には家族全員の行が返る。人と人の数字を並べない＝07-46章 決定1・7）。
- * 並びは**ここで決める**（画面は取得した順のまま描き、並べ直さない）: 最後にやった時刻の新しい順
- * → 同じ時刻のときは名前の順（Viewは順序を持たない。84.2 判断D）。回数の多い順にはしない。
+ * 並びは**ここで決める**（画面は取得した順のまま描き、並べ直さない）: 回数の多い順
+ * → 同じ回数のときは最後にやった時刻の新しい順 → 名前の順（Viewは順序を持たない。84.2 判断D）。
+ * [2026-10-03変更・実装メモ355章、統括「回数が多い方が上のほうがよいかも」] 当初は最近やった順
+ * だった。1人の中でクエストを並べるのは人と人の比較ではなく、積み重ねが見える。
  * 子ども・みまもりが他人の`memberId`を渡すと0行（エラーにならない）。画面は自分のID以外で呼ばない。
  * `store.tsx`の`load()`には載せない（開いたときだけ1人ぶんを読む。決定11）。
  */
@@ -4105,6 +4107,7 @@ export async function fetchMemberChoreNameCounts(
     .select("chore_name, chore_emoji, completion_count, last_completed_at")
     .eq("family_id", familyId)
     .eq("member_id", memberId)
+    .order("completion_count", { ascending: false })
     .order("last_completed_at", { ascending: false })
     .order("chore_name", { ascending: true });
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
