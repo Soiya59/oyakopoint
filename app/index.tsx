@@ -134,6 +134,16 @@ export default function WelcomeScreen() {
             onPress={() => router.push("/onboarding/email?intent=join")}
           />
         )}
+        {/* [2026-10-05追加・やること4-96・実装メモ360章] みまもりの招待リンク（oyakopoint://…）は
+            タップできない・アプリが入っていない相手には使えないため、リンクまたはコードを
+            貼って参加できる入口を足した（保護者の「招待コードをもってきた」と並べる）。 */}
+        {status !== "parentNoFamily" && (
+          <AppButton
+            label="みまもりの招待コードをもってきた"
+            variant="secondary"
+            onPress={() => router.push("/onboarding/supporter-code")}
+          />
+        )}
         <AppButton
           label="こどもモードで使う"
           variant="secondary"

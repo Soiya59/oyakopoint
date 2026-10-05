@@ -45,6 +45,22 @@ export default function InviteSupporterSentScreen() {
         </Card>
       </View>
 
+      {/* [2026-10-05追加・やること4-96・実装メモ360章] リンクをタップできない相手・アプリが
+          まだ入っていない相手のため、コードだけも出す。相手は、アプリを入れて最初の画面の
+          「みまもりの招待コードをもってきた」に貼ると参加できる。 */}
+      {token ? (
+        <View style={{ marginTop: theme.spacing.s4 }}>
+          <Text style={theme.typography.parentBody}>
+            リンクが開けない相手には、このコードだけを伝えても大丈夫です。相手はアプリを入れて、最初の画面の「みまもりの招待コードをもってきた」に貼ってください。
+          </Text>
+          <Card style={{ marginTop: theme.spacing.s2 }}>
+            <Text selectable style={[theme.typography.parentBody, { color: theme.colors.brandPrimaryStrong }]}>
+              {token}
+            </Text>
+          </Card>
+        </View>
+      ) : null}
+
       <AppButton
         label="もう一度招待する"
         variant="secondary"
