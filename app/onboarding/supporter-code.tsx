@@ -5,6 +5,7 @@ import Screen from "@/components/Screen";
 import AppButton from "@/components/AppButton";
 import theme from "@/theme/theme";
 import { extractSupporterInviteToken } from "@/lib/supporterInviteToken";
+import { setPendingSupporterInvite } from "@/lib/pendingSupporterInvite";
 
 /**
  * みまもりの招待コード入力（やること4-96・実装メモ.md 360章・軽微変更ルート）
@@ -25,6 +26,8 @@ export default function SupporterCodeScreen() {
       return;
     }
     setErrorMessage(null);
+    // ログイン成功で画面が作り直されても、最初の画面から参加の続きへ戻れるよう覚えておく（実装メモ361章）。
+    setPendingSupporterInvite(token);
     router.push({ pathname: "/onboarding/join-supporter", params: { token } });
   };
 

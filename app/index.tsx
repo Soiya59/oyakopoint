@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { usePendingNfcLink } from "@/lib/pendingNfcLink";
 import { NFC_SCAN_PATH, NFC_TAG_VALUE_PARAM } from "@/lib/nfc.shared";
+import { clearPendingSupporterInvite, getPendingSupporterInvite } from "@/lib/pendingSupporterInvite";
 
 /**
  * P1 ようこそ / はじめかた選択
@@ -49,6 +50,19 @@ export default function WelcomeScreen() {
     if (pendingNfcTagValue) {
       router.replace({ pathname: NFC_SCAN_PATH, params: { [NFC_TAG_VALUE_PARAM]: pendingNfcTagValue } });
       return;
+    }
+
+    // [2026-10-05追加・やること4-96・実装メモ361章] みまもりの招待コードを貼ったあと、
+    // ログイン成功で画面が作り直されてここ（P1）に戻ってきた場合は、覚えているコードで
+    // 参加の画面（S0）へ自動で進む（ネイティブにはURLが無く、作り直しで最初の画面から始まるため）。
+    if (status === "parentNoFamily") {
+      const pendingInviteToken = getPendingSupporterInvite();
+      if (pendingInviteToken) {
+        router.replace({ pathname: "/onboarding/join-supporter", params: { token: pendingInviteToken } });
+        return;
+      }
+    } else if (status === "parent" || status === "supporter" || status === "child") {
+      clearPendingSupporterInvite();
     }
 
     if (status === "parent") {
@@ -187,6 +201,14 @@ export default function WelcomeScreen() {
               onPress={() => router.push("/onboarding/join-family")}
             />
           </View>
+          {/* [2026-10-05追加・やること4-96・実装メモ361章] みまもりとして招待されたが、ログイン後に
+              この画面へ戻ってきた人（覚えているコードが無いとき）が、コードを貼り直して
+              参加の続きへ進める入口。 */}
+          <Pressable onPress={() => router.push("/onboarding/supporter-code")} style={{ marginTop: theme.spacing.s3 }}>
+            <Text style={[theme.typography.parentBody, { textDecorationLine: "underline" }]}>
+              みまもりの招待コードで参加
+            </Text>
+          </Pressable>
           {/* [2026-09-21追加・要件定義書07-33章 決定10、主要画面ワイヤーフレーム.md
               59.6節決定15] 家族を削除された側・家族から抜けた側が、自分の
               アカウントを永久に消せなくなることを防ぐ。控えめな下線つきテキスト

@@ -9,6 +9,7 @@ import InviteVisibilityConsent, { JOIN_CONSENT_VERSION } from "@/components/Invi
 import theme from "@/theme/theme";
 import { acceptFamilyInvite, familyInviteLookup, signInWithEmail, PG_ERRCODE } from "@/data/api";
 import { buildAuthRedirectUrl } from "@/lib/authRedirect";
+import { clearPendingSupporterInvite, setPendingSupporterInvite } from "@/lib/pendingSupporterInvite";
 import { useSession } from "@/lib/session";
 import { formatPgFailureRef } from "@/lib/pgFailureRef";
 import { formatAuthFailureRef } from "@/lib/authFailureRef";
@@ -96,6 +97,12 @@ export default function JoinSupporterScreen() {
   // [2026-09-27新設・ワイヤーフレーム67章決定7順位3] 原因追跡用の識別子
   // （個人情報を含まない）。
   const [submitErrorRef, setSubmitErrorRef] = useState<string | null>(null);
+
+  // [2026-10-05追加・実装メモ361章] 参加の途中でログイン成功により画面が作り直されても、
+  // 最初の画面（P1）から この画面へ戻れるよう、コードを覚えておく。
+  useEffect(() => {
+    if (token) setPendingSupporterInvite(token);
+  }, [token]);
 
   useEffect(() => {
     let mounted = true;
@@ -212,6 +219,13 @@ export default function JoinSupporterScreen() {
       setSubmitErrorRef(formatPgFailureRef(e));
       return;
     }
+    clearPendingSupporterInvite();
+    // [2026-10-05追加・やること4-96・実装メモ361章] 保護者の参加（join-preview.tsx）・家族の作成
+    // （create-family.tsx）と同じく、参加の確定のあとにセッションの状態を読み直す。これが無いと
+    // statusが"parentNoFamily"のままで、みまもりの画面（supporter/_layout.tsx）が最初の画面（P1）へ
+    // 押し戻す（手元の再現で、DBには参加済みなのに最初の画面に戻ることを確認）。読み直しで
+    // statusが"supporter"になり、P1の転送かこのreplaceのどちらでもかぞくタブに着く。
+    await refreshParentMember();
     router.replace("/supporter/family");
   };
 
