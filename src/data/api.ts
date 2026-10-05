@@ -547,26 +547,15 @@ export async function requestFamilyDeletionCode(): Promise<ApiResult<{ ok: true 
  * （RLS: family_invites_insert_by_parentにより保護者のみ実行可）。
  */
 export async function createFamilyInvite(client: SupabaseClient, invitedEmail: string): Promise<ApiResult<FamilyInvite>> {
-  // [2026-09-01修正・本部長] 以前は crypto.randomUUID が使えない環境で
-  // `${Date.now()}-${Math.random()...}` にフォールバックしていた。招待トークンは
-  // 「知っていればみまもりメンバーとして家族に参加できる秘密情報」であり、
-  // Math.random() は暗号論的に安全ではなく推測されうる。認証・データ管理設計書
-  // 8.2章が「暗号論的に安全なランダムトークン」と定めている前提を満たさない
-  // 経路だったため、フォールバックを廃止して安全でない値を作れないようにした。
-  // 生成できない環境ではトークンを発行せずエラーを返す（実装メモ106章）。
-  const token = globalThis.crypto?.randomUUID?.();
-  if (!token) {
-    return {
-      ok: false,
-      error: {
-        code: "crypto_unavailable",
-        message: "この端末では安全な招待コードを作れませんでした。アプリを最新にするか、別の端末からお試しください",
-      },
-    };
-  }
+  // [2026-10-05修正・やること4-96] 招待コード（token）は、端末では作らず、DBが作る
+  // （DBトリガー family_invites_before_insert が gen_random_uuid() で必ず上書きする。
+  // マイグレーション 20261005010000）。以前は端末で crypto.randomUUID を使い、
+  // ネイティブアプリ（Hermes）には無いため、招待が一度も作れなかった。9/1に
+  // Math.random() のフォールバックを廃止した判断（実装メモ106章）は変えない。
+  // 戻り値（.select("*")）にはトリガー適用後の行が入るので、token はそこから読む。
   const { data, error, status } = await client
     .from("family_invites")
-    .insert({ invited_email: invitedEmail.trim().toLowerCase(), token })
+    .insert({ invited_email: invitedEmail.trim().toLowerCase() })
     .select("*")
     .single();
   if (error) return { ok: false, error: fromPostgrestError(error, status) };
