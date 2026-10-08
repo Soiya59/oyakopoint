@@ -17,10 +17,12 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FunctionsHttpError } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { GENERIC_ERROR_MESSAGE } from "@/lib/errorMessages";
 import { isValidRequestPoints } from "@/lib/requestChore";
 import { requestLimit } from "@/theme/theme";
+import { requestAppUpdatePolicy } from "@/lib/appUpdatePolicyFetch";
+import type { AppUpdatePolicy, UpdatePlatform } from "@/lib/appUpdatePolicy";
 import {
   COMPLETIONS_MAX_PAGES,
   COMPLETIONS_PAGE_SIZE,
@@ -596,6 +598,31 @@ export async function familyInviteLookup(token: string): Promise<ApiResult<Famil
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: { code: "no_data_found", message: "招待が見つかりません" } };
   return { ok: true, data: row as FamilyInviteLookupResult };
+}
+
+/**
+ * 古いビルドへの「アップデートしてください」の最低ビルド番号を取得する
+ * （API仕様.md 41章、スキーマ設計.sql 85章、要件定義書07-47章、開発部/成果物/実装メモ.md 362章）。
+ *
+ * **戻り値は `AppUpdatePolicy | null`。失敗は全部 null（＝通す。閉じ込めない）。例外は投げない。**
+ * 通信エラー・機内モード・3秒を超える遅延・HTTPエラー（401/403/404/5xx）・JSONでない本文・
+ * 想定外の形の返り値、のどれも null。再試行しない。
+ *
+ * [41.4の「認証ヘッダー」の懸念への答え・2026-10-08] `supabase.rpc(...)`（共有クライアント）
+ * は呼ぶたびにログイン中のセッションのアクセストークンを Authorization に付ける。期限切れ・
+ * 壊れたトークンが付くとPostgRESTが 401 PGRST301 を返し、**古いビルドを止めたい肝心な端末
+ * （ログインしたまま長く開いていない端末）で判定が働かない**。ローカルのDockerで、壊れた
+ * JWTを付けると実際に 401 が返ることを実測した。また共有クライアントは`getSession()`で
+ * トークンの更新を待つため、その待ちが3秒の枠を食う。そこで **共有クライアントを使わず、
+ * このRPCだけ`fetch`で直接呼び、`apikey`と`Authorization: Bearer <anonキー>`だけを付ける**
+ * （保護者のセッションにも子どものカスタムJWTにも一切触れない。supabase-jsが未ログイン時に
+ * 付けるものと同じ形）。第二のSupabaseクライアントを作らないのは、GoTrueClientが2つになる
+ * 警告・storage競合を避けるため。anonキーは公開してよい鍵で、service_roleは使わない。
+ * 呼び出しの本体（タイムアウト・失敗時にnull）は src/lib/appUpdatePolicyFetch.ts。
+ */
+export async function fetchAppUpdatePolicy(platform: UpdatePlatform): Promise<AppUpdatePolicy | null> {
+  if (!isSupabaseConfigured()) return null;
+  return requestAppUpdatePolicy({ baseUrl: supabaseUrl, anonKey: supabaseAnonKey, platform });
 }
 
 /**

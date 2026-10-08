@@ -40,6 +40,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as Notifications from "expo-notifications";
 import AppButton from "@/components/AppButton";
+import { useAppUpdateGate } from "@/components/AppUpdateGate";
 import Card from "@/components/Card";
 import theme from "@/theme/theme";
 import { useSession } from "@/lib/session";
@@ -148,6 +149,12 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
 
+  // [2026-10-08追加・要件定義書07-47章、主要画面ワイヤーフレーム.md 73.2節 V3・73.12節4、実装メモ362章]
+  // 重ならない順は A1（必須）＞ A2（おすすめ）＞ このソフトアスク。更新のおしらせの判定中（最大3秒）・
+  // A1表示中・A2表示中は出さない（iOSで`Modal`が2つ重なると出遅れるため）。A1が出た時点で開いて
+  // いた`Modal`は隠す（`visible`の状態は変えず、描画だけ止める）。それ以外のロジック（63章）は変えない。
+  const { softAskAllowed } = useAppUpdateGate();
+
   const eligible = isEligibleRole(status);
   // [2026-09-23追加・要件定義書07-37章4章、UIUXデザイン部/成果物/主要画面
   // ワイヤーフレーム.md 64.8節「決定4」、開発部/成果物/実装メモ.md 292章]
@@ -168,6 +175,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
   // [63.4.0節の1条件] 対象ロール・家族トグルON・端末が未回答・「あとで」印が
   // 無い、の4つを満たすときだけ表示する。
   const checkAndMaybeShow = useCallback(async () => {
+    if (!softAskAllowed) return;
     if (!eligible || !familyToggleOn) return;
     const deferred = await isSoftAskDeferred();
     if (deferred) return;
@@ -175,7 +183,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
     if (osStatus !== "undetermined") return;
     setPhase("ask");
     setVisible(true);
-  }, [eligible, familyToggleOn]);
+  }, [softAskAllowed, eligible, familyToggleOn]);
 
   // 起動時・対象ロールや家族トグルが変わったときに1回確認する。
   useEffect(() => {
@@ -323,7 +331,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
   return (
     <PushSoftAskContext.Provider value={{ openManually }}>
       {children}
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+      <Modal visible={visible && softAskAllowed} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
         <View style={styles.backdrop}>
           <Card style={styles.card}>
             {phase === "ask" && (

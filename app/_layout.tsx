@@ -8,6 +8,7 @@ import { AppDataProvider } from "@/data/store";
 import { SessionProvider } from "@/lib/session";
 import { PendingNfcLinkProvider } from "@/lib/pendingNfcLink";
 import { PushSoftAskProvider } from "@/components/NotificationSoftAsk";
+import { AppUpdateGateProvider } from "@/components/AppUpdateGate";
 import { completeEmailSignIn } from "@/data/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import theme from "@/theme/theme";
@@ -82,6 +83,11 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      {/* [2026-10-08追加・要件定義書07-47章、主要画面ワイヤーフレーム.md 73.2節、実装メモ362章]
+          古いビルドへの「アップデートしてください」（A1必須・A2おすすめ）。SessionProviderの**外**に
+          置く（セッション復元が詰まったときでも出せるように。ログイン状態・ロールに依存しない）。
+          判定は裏で行い、結果が来てから上に重ねる（起動を遅らせない）。失敗は全部「通す」。 */}
+      <AppUpdateGateProvider>
       {/* [2026-09-13追加・実装メモ.md 213章] PendingNfcLinkProviderは
           SessionProvider（延いてはsrc/data/store.tsxのAppDataProviderが持つ
           `session.status === "loading"`中は{children}を描画しないゲート）より
@@ -108,6 +114,7 @@ export default function RootLayout() {
           </AppDataProvider>
         </SessionProvider>
       </PendingNfcLinkProvider>
+      </AppUpdateGateProvider>
     </SafeAreaProvider>
   );
 }

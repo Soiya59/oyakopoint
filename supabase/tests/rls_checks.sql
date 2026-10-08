@@ -700,6 +700,16 @@
 -- B-Q1・B-Q3・B-Q5・C-Q4がFAILした。元に戻して113件PASSを確認）。名前のまとめ方の細部・絵文字・
 -- 並び・取消・性能は、設計部84.11章のQ1〜Q21を手動で実行し、実装メモ353章に結果を記録した。
 --
+-- [2026-10-08追加・開発部] 古いビルドの人に「アップデートしてください」を出す仕組み（要件定義書
+-- 07-47章、設計部/成果物/スキーマ設計.sql 85章、開発部/成果物/実装メモ.md 362章、supabase/
+-- migrations/20261008010000_app_update_policies.sql）に伴い、S1（46→47、app_update_policies）・
+-- S4（107→108件、`get_app_update_policy`のみ。`set_updated_at`は既存で数え済み）を更新し、S2d
+-- （ポリシー0本のdefault-deny）とC-U1〜C-U4を新設した。S3・S5は±0（ポリシーを作らない・表に
+-- authenticatedのSELECTを付けた）。設計部の見込み（85.8章「全体113→118件」）は、適用前に113件
+-- PASS、適用後に118件PASSを実測して照合した（結果は実装メモ362章）。**anonが実行できる関数の
+-- 一覧を見る検査は無い**（85.15の未決）ため、この関数のanon権限だけはC-U2が名指しで見張る。
+-- 値そのもの（番号・URL）は本番とローカルで違う（運用で上げる）ので、C-U3・C-U4は値を見ない。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -792,8 +802,10 @@ GRANT INSERT ON _r TO authenticated;
 -- chores.is_request列の追加は既存テーブルへのADD COLUMNのためS1には数えない）。
 -- [2026-10-03再更新] 感謝ポイントへのスタンプ（設計部83章）でgratitude_reactionsを追加。
 -- 45→46（ローカルDockerで実測。96.5章の遵守。設計部の見込み「S1 +1」と一致）。
+-- [2026-10-08再更新] 古いビルドへのアップデートのお願い（設計部85章）でapp_update_policiesを追加。
+-- 46→47（ローカルDockerで実測。96.5章の遵守。設計部の見込み「S1 +1」と一致）。
 INSERT INTO _r
-SELECT 'C層', 'S1 RLSが有効なテーブル数', '46', count(*)::text, count(*) = 46
+SELECT 'C層', 'S1 RLSが有効なテーブル数', '47', count(*)::text, count(*) = 47
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
 
@@ -819,6 +831,15 @@ FROM pg_policies WHERE schemaname = 'public' AND tablename = 'family_deletion_co
 INSERT INTO _r
 SELECT 'C層', 'S2c おねがいの完了通知の記録表のポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'chore_request_done_notices';
+
+-- S2d. [2026-10-08追加・スキーマ設計.sql 85.8章] app_update_policies（古いビルドへのアップデート
+--     のお願いの最低ビルド番号）も、S2・S2b・S2cと同じdefault-denyパターン（RLSは有効・ポリシーは
+--     0本）。アプリは表を直接読まず、SECURITY DEFINERのRPC（get_app_update_policy）だけを使う。
+--     将来うっかりポリシーを1本足すと、アプリ（保護者・子ども・未ログイン）が最低値を書き換えられる
+--     状態に変わる。無症状で（全員が止まる）。
+INSERT INTO _r
+SELECT 'C層', 'S2d アップデートのお願いの表のポリシー数（0が正しい）', '0', count(*)::text, count(*) = 0
+FROM pg_policies WHERE schemaname = 'public' AND tablename = 'app_update_policies';
 
 -- S3. ポリシー52本の一覧と中身の照合（2026-09-01更新、family_board_reactions追加分含む。
 --     2026-09-01再更新、family_board_reactionsのSELECTをLINE風個数表示対応で改名・
@@ -1543,7 +1564,12 @@ WITH expected(f) AS (VALUES
   -- 上限（値3）の定数関数。LANGUAGE SQL・IMMUTABLEでmax_open_requests_per_child()と同じ扱い。
   -- chores_request_guard()（authenticatedのINSERTで動く）の本文から呼ばれるため、REVOKEしない。
   -- 設計部の見込み（S4 +1）と実測が一致した。
-  ('max_request_points')
+  ('max_request_points'),
+  -- [2026-10-08追加・設計部85.4章、実装メモ362章] get_app_update_policy: 古いビルドへの
+  -- 「アップデートしてください」の最低ビルド番号を返す読み取り専用RPC（要件定義書07-47章）。
+  -- SECURITY DEFINERであり、PUBLICからREVOKEしたうえでanon・authenticated・service_roleへ
+  -- 明示的にGRANTしている（未ログインの起動直後に呼ぶ）。設計部の見込み（S4 +1）と実測が一致した。
+  ('get_app_update_policy')
 ),
 actual_f AS (
   SELECT DISTINCT p.proname f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1556,7 +1582,7 @@ fdiff AS (
   WHERE e.f IS NULL OR a.f IS NULL
 )
 INSERT INTO _r
-SELECT 'C層', 'S4 authenticatedが実行できる関数107件が承認済みと一致',
+SELECT 'C層', 'S4 authenticatedが実行できる関数108件が承認済みと一致',
        'ずれ0件',
        coalesce((SELECT string_agg(msg, ' / ') FROM fdiff), 'ずれ0件'),
        NOT EXISTS (SELECT 1 FROM fdiff);
@@ -2019,6 +2045,124 @@ SELECT 'C層', 'C-Q5 member_chore_name_countsを参照するViewと関数は無�
    + (SELECT count(*) FROM pg_proc p
        WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ILIKE '%member_chore_name_counts%')) = 0;
 
+
+-- C-U1〜C-U4. [2026-10-08追加・スキーマ設計.sql 85.8章] 古いビルドへの「アップデートしてください」
+-- （表 app_update_policies と RPC get_app_update_policy。supabase/migrations/
+-- 20261008010000_app_update_policies.sql）。値（番号・URL）は本番とローカルで違うので見ない。
+
+-- C-U1 表の権限: authenticatedはSELECTのみ・anonとPUBLICは無し（自動付与のREVOKE漏れを検出）
+INSERT INTO _r
+SELECT 'C層', 'C-U1 app_update_policiesの権限（authenticatedはSELECTのみ・anonは無し）', 'SELECTのみ / 無し',
+  CASE WHEN has_table_privilege('authenticated', 'public.app_update_policies', 'SELECT')
+        AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'INSERT')
+        AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'UPDATE')
+        AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'DELETE')
+       THEN 'SELECTのみ' ELSE 'authenticatedの権限がずれている' END
+  || ' / ' ||
+  CASE WHEN NOT has_table_privilege('anon', 'public.app_update_policies', 'SELECT')
+        AND NOT has_table_privilege('anon', 'public.app_update_policies', 'INSERT')
+        AND NOT has_table_privilege('anon', 'public.app_update_policies', 'UPDATE')
+        AND NOT has_table_privilege('anon', 'public.app_update_policies', 'DELETE')
+        AND NOT EXISTS (SELECT 1 FROM pg_class c, aclexplode(c.relacl) a
+                         WHERE c.oid = 'public.app_update_policies'::regclass AND a.grantee = 0)
+       THEN '無し' ELSE 'anonまたはPUBLICに権限がある' END,
+  has_table_privilege('authenticated', 'public.app_update_policies', 'SELECT')
+    AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'INSERT')
+    AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'UPDATE')
+    AND NOT has_table_privilege('authenticated', 'public.app_update_policies', 'DELETE')
+    AND NOT has_table_privilege('anon', 'public.app_update_policies', 'SELECT')
+    AND NOT has_table_privilege('anon', 'public.app_update_policies', 'INSERT')
+    AND NOT has_table_privilege('anon', 'public.app_update_policies', 'UPDATE')
+    AND NOT has_table_privilege('anon', 'public.app_update_policies', 'DELETE')
+    AND NOT EXISTS (SELECT 1 FROM pg_class c, aclexplode(c.relacl) a
+                     WHERE c.oid = 'public.app_update_policies'::regclass AND a.grantee = 0);
+
+-- C-U2 関数の権限と作り: anon・authenticatedが実行でき、PUBLICには無い。SECURITY DEFINER・
+--      search_path固定・STABLE（anonが呼ぶ関数なので、この関数だけは名指しで見張る）
+INSERT INTO _r
+SELECT 'C層', 'C-U2 get_app_update_policyの権限と作り（anon・authenticated実行可・SECURITY DEFINER・search_path固定・STABLE）',
+  '正しい',
+  CASE WHEN has_function_privilege('anon', 'public.get_app_update_policy(text)', 'EXECUTE')
+        AND has_function_privilege('authenticated', 'public.get_app_update_policy(text)', 'EXECUTE')
+        AND NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
+                         WHERE p.oid = 'public.get_app_update_policy(text)'::regprocedure AND a.grantee = 0)
+        AND (SELECT p.prosecdef AND p.provolatile = 's'
+                    AND coalesce(array_to_string(p.proconfig, ','), '') ~ 'search_path=public'
+             FROM pg_proc p WHERE p.oid = 'public.get_app_update_policy(text)'::regprocedure)
+       THEN '正しい' ELSE 'ずれている' END,
+  has_function_privilege('anon', 'public.get_app_update_policy(text)', 'EXECUTE')
+    AND has_function_privilege('authenticated', 'public.get_app_update_policy(text)', 'EXECUTE')
+    AND NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
+                     WHERE p.oid = 'public.get_app_update_policy(text)'::regprocedure AND a.grantee = 0)
+    AND (SELECT p.prosecdef AND p.provolatile = 's'
+                AND coalesce(array_to_string(p.proconfig, ','), '') ~ 'search_path=public'
+         FROM pg_proc p WHERE p.oid = 'public.get_app_update_policy(text)'::regprocedure);
+
+-- C-U3 表の形: 主キー=platform・CHECK 4本が有効・RLS有効・列は5つだけ（人・端末を指す列が無い）・
+--      行はios/androidのみ・各行の値が範囲内
+INSERT INTO _r
+SELECT 'C層', 'C-U3 app_update_policiesの形（主キー・CHECK4本が有効・RLS・列5つ・行と値が範囲内）', '正しい',
+  CASE WHEN (SELECT count(*) FROM pg_constraint con
+              WHERE con.conrelid = 'public.app_update_policies'::regclass AND con.contype = 'p'
+                AND pg_get_constraintdef(con.oid) = 'PRIMARY KEY (platform)') = 1
+        AND (SELECT count(*) FROM pg_constraint con
+              WHERE con.conrelid = 'public.app_update_policies'::regclass AND con.contype = 'c' AND con.convalidated
+                AND con.conname IN ('chk_app_update_policies_platform', 'chk_app_update_policies_required',
+                                    'chk_app_update_policies_recommended', 'chk_app_update_policies_store_url')) = 4
+        AND (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = 'public.app_update_policies'::regclass)
+        AND (SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+               FROM information_schema.columns col
+              WHERE col.table_schema = 'public' AND col.table_name = 'app_update_policies')
+            = 'platform,recommended_min_build,required_min_build,store_url,updated_at'
+        AND (SELECT count(*) FROM app_update_policies) <= 2
+        AND NOT EXISTS (SELECT 1 FROM app_update_policies u
+                         WHERE u.platform NOT IN ('ios', 'android')
+                            OR u.required_min_build NOT BETWEEN 0 AND 100000
+                            OR u.recommended_min_build NOT BETWEEN 0 AND 100000)
+       THEN '正しい' ELSE 'ずれている' END,
+  (SELECT count(*) FROM pg_constraint con
+    WHERE con.conrelid = 'public.app_update_policies'::regclass AND con.contype = 'p'
+      AND pg_get_constraintdef(con.oid) = 'PRIMARY KEY (platform)') = 1
+    AND (SELECT count(*) FROM pg_constraint con
+          WHERE con.conrelid = 'public.app_update_policies'::regclass AND con.contype = 'c' AND con.convalidated
+            AND con.conname IN ('chk_app_update_policies_platform', 'chk_app_update_policies_required',
+                                'chk_app_update_policies_recommended', 'chk_app_update_policies_store_url')) = 4
+    AND (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = 'public.app_update_policies'::regclass)
+    AND (SELECT string_agg(col.column_name, ',' ORDER BY col.column_name)
+           FROM information_schema.columns col
+          WHERE col.table_schema = 'public' AND col.table_name = 'app_update_policies')
+        = 'platform,recommended_min_build,required_min_build,store_url,updated_at'
+    AND (SELECT count(*) FROM app_update_policies) <= 2
+    AND NOT EXISTS (SELECT 1 FROM app_update_policies u
+                     WHERE u.platform NOT IN ('ios', 'android')
+                        OR u.required_min_build NOT BETWEEN 0 AND 100000
+                        OR u.recommended_min_build NOT BETWEEN 0 AND 100000);
+
+-- C-U4 関数の振る舞い（管理者で呼ぶ）: 'ios'・'android'で1行・3列・非NULL、
+--      不正なOS・NULL・空文字は(0,0,'')でエラーにならない。値そのものは見ない。
+INSERT INTO _r
+SELECT 'C層', 'C-U4 get_app_update_policyの振る舞い（ios/androidで1行、不正・NULL・空は0,0,空）', '正しい',
+  CASE WHEN (SELECT count(*) FROM public.get_app_update_policy('ios') g
+              WHERE g.required_min_build IS NOT NULL AND g.recommended_min_build IS NOT NULL AND g.store_url IS NOT NULL) = 1
+        AND (SELECT count(*) FROM public.get_app_update_policy('android') g
+              WHERE g.required_min_build IS NOT NULL AND g.recommended_min_build IS NOT NULL AND g.store_url IS NOT NULL) = 1
+        AND (SELECT count(*) FROM public.get_app_update_policy('x') g
+              WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1
+        AND (SELECT count(*) FROM public.get_app_update_policy(NULL) g
+              WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1
+        AND (SELECT count(*) FROM public.get_app_update_policy('') g
+              WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1
+       THEN '正しい' ELSE 'ずれている' END,
+  (SELECT count(*) FROM public.get_app_update_policy('ios') g
+    WHERE g.required_min_build IS NOT NULL AND g.recommended_min_build IS NOT NULL AND g.store_url IS NOT NULL) = 1
+    AND (SELECT count(*) FROM public.get_app_update_policy('android') g
+          WHERE g.required_min_build IS NOT NULL AND g.recommended_min_build IS NOT NULL AND g.store_url IS NOT NULL) = 1
+    AND (SELECT count(*) FROM public.get_app_update_policy('x') g
+          WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1
+    AND (SELECT count(*) FROM public.get_app_update_policy(NULL) g
+          WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1
+    AND (SELECT count(*) FROM public.get_app_update_policy('') g
+          WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1;
 
 -- ============================================================
 -- B層: 家族内のロール境界（実際になりすまして読む）
