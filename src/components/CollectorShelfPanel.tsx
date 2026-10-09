@@ -1245,8 +1245,8 @@ export function CollectorShelfPanel({
               <Text style={styles.emptyEmoji}>🌳</Text>
               <Text style={[bodyStyle, styles.emptyText]}>
                 {isChild
-                  ? "きろくは まだ ないよ。今月の木が おわると、ここに のこるよ"
-                  : "記録はまだありません。今月の木が終わると、ここに残ります"}
+                  ? "きろくは まだ ないよ。今月の木が おわると、ここに でるよ"
+                  : "記録はまだありません。今月の木が終わると、ここに出ます"}
               </Text>
             </View>
           )}
