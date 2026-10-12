@@ -126,6 +126,12 @@ export default function WelcomeScreen() {
         <Text style={[theme.typography.parentBody, styles.subtitle]}>
           クエストをがんばって、ポイントをためよう
         </Text>
+        {/* [2026-10-13追加・やること2-77・実装メモ365章] クローズドテストのフィードバック
+            「アプリの説明がないまま、いきなりメールアドレスを入力するのはハードルが高い」。
+            何のアプリかを、最初の画面に1〜2行で書く（文言のみ。記録が残る約束はしない＝5-18）。 */}
+        <Text style={[theme.typography.parentCaption, styles.subtitle, { marginTop: theme.spacing.s2 }]}>
+          家族みんなで、お手伝いや毎日の習慣を「クエスト」にして、ポイントをためるアプリです。
+        </Text>
       </View>
 
       <View style={{ gap: theme.spacing.s3, marginTop: theme.spacing.s8 }}>

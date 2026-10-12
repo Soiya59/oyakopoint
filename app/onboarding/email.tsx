@@ -124,6 +124,12 @@ export default function EmailInputScreen() {
       <Text style={{ marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }}>
         パスワードは不要です。届いたメールに書かれた{theme.emailOtpLength}桁の数字を、次の画面で入力してログインします。
       </Text>
+      {/* [2026-10-13追加・やること2-77・実装メモ365章] メールアドレスの使い道を明記する
+          （子ども向けアプリなので、保護者はメールの使い道に敏感。プライバシーポリシーの
+          「ログイン用の確認コードを送るため」と矛盾しない言い方）。 */}
+      <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s2, color: theme.colors.neutralTextSecondary }]}>
+        メールアドレスは、ログイン用の数字をお送りするためだけに使います。宣伝のメールを送ったり、ほかの人に渡したりはしません。
+      </Text>
 
       <View style={{ marginTop: theme.spacing.s6 }}>
         <TextInput
