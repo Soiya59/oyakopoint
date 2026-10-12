@@ -97,9 +97,11 @@ export default function ParentDrawingScreen() {
     <Screen
       tone="parent"
       // [2026-09-17追加・実装メモ243章] 描いている間だけスクロールを止める
-      // （決定的な手）。canCancelContentTouches=falseはiOSの保険（二重の守り）。
+      // （決定的な手）。（2026-10-12：iOSの保険は外した。下のコメント参照）
       scrollEnabled={!canvasGestureActive}
-      canCancelContentTouches={false}
+      // [2026-10-12・実装メモ363章] iOSの保険`canCancelContentTouches={false}`を外した。画面全体に効き、
+      // キャンバスの外を指で動かしてもスクロールが始まらず、右端のスクロールのつまみでしか動かなかったため
+      // （統括のiPhone 8での報告）。描いている間は上の`scrollEnabled`でスクロールを止める。
     >
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
