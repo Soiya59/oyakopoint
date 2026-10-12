@@ -1002,6 +1002,30 @@ $seed23e_b$;
 
 
 -- ============================================================
+-- 23f. chore_reactions の返信（完了報告のコメントへの返信。2026-10-13追加・要件定義書07-48章、
+--      設計部/成果物/スキーマ設計.sql 86.10章（B-RP1）、開発部/成果物/実装メモ.md 364章）
+-- ============================================================
+-- 0件だと、rls_checks.sqlのB-RP1が「何も見えない」を自明に満たしてしまうため、家族Aに
+-- 「保護者Pがコメント → 完了報告の報告者（子どもC）が返信」を1組入れる。
+-- ・返信は BEFORE INSERT トリガー chore_reactions_reply_guard が current_family_id() で家族の一致を
+--   確かめる（SECURITY DEFINERでもJWTクレームを読む）ため、INSERTの直前に報告者（a_child）に
+--   なりすます。トリガーの無効化はしていない。
+-- ・親（コメント）の本文は固定の一意な文言にして、返信の reply_to_reaction_id を本文で引く。
+SELECT set_config('request.jwt.claims', '', false);
+
+INSERT INTO chore_reactions (completion_id, reacted_by, kind, comment_body) VALUES
+  ((SELECT id FROM _seed_ids WHERE key = 'a_comp1'), (SELECT id FROM _seed_ids WHERE key = 'a_parent'), 'comment', 'テスト返信元コメントA-1');
+
+SELECT set_config('request.jwt.claims', json_build_object('family_member_id', (SELECT id::text FROM _seed_ids WHERE key = 'a_child'))::text, false);
+
+INSERT INTO chore_reactions (completion_id, reacted_by, kind, comment_body, reply_to_reaction_id) VALUES
+  ((SELECT id FROM _seed_ids WHERE key = 'a_comp1'), (SELECT id FROM _seed_ids WHERE key = 'a_child'), 'comment', 'テスト返信A-1',
+   (SELECT cr.id FROM chore_reactions cr WHERE cr.comment_body = 'テスト返信元コメントA-1'));
+
+SELECT set_config('request.jwt.claims', '', false);
+
+
+-- ============================================================
 -- 24. 後片付け: なりすましJWTクレームを解除する
 -- ============================================================
 SELECT set_config('request.jwt.claims', '', false);

@@ -432,6 +432,7 @@ export default function SupporterActivityScreen() {
                       reactions={reactions}
                       memberOf={memberOf}
                       myMemberId={myId}
+                      reportedBy={detailTarget.reported_by}
                       emptyText="まだ誰も反応していないよ"
                       bodyStyle={theme.typography.supporterBody}
                       captionStyle={theme.typography.supporterCaption}

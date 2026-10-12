@@ -8,6 +8,7 @@ import theme from "@/theme/theme";
 import { isRequestChore, shouldShowPointsValue } from "@/lib/requestChore";
 import { useAppData } from "@/data/store";
 import BadgeList from "@/components/BadgeList";
+import ChoreReactionsList from "@/components/ChoreReactionsList";
 import QuestCountList from "@/components/QuestCountList";
 import { useMemberBadgeRows } from "@/hooks/useBadges";
 import { lifetimeCompletionsOf, shouldShowQuestCountSection } from "@/lib/questCount";
@@ -193,20 +194,23 @@ export default function ChildHistoryScreen() {
                           </Text>
                         )}
                       </View>
-                      {reactions.length > 0 && (
-                        <View style={{ marginTop: theme.spacing.s1, gap: 2 }}>
-                          {reactions.map((r) => {
-                            const reactor = state.members.find((m) => m.id === r.reacted_by);
-                            const stampDef = theme.stampDefinitions.find((s) => s.key === r.stamp_key);
-                            return (
-                              <Text key={r.id} style={theme.typography.parentCaption}>
-                                {r.kind === "stamp" ? stampDef?.emoji : "💬"} {reactor?.display_name}より
-                                {r.kind === "stamp" ? `「${stampDef?.label}」` : `「${r.comment_body}」`}
-                              </Text>
-                            );
-                          })}
-                        </View>
-                      )}
+                      {/* [2026-10-13変更・要件定義書07-48章 決定、主要画面ワイヤーフレーム.md 74.8節 R11、実装メモ364章]
+                          手書きの`Text`の並び（読むだけ）をやめ、`ChoreReactionsList`（tone="child"）に差し替えた。
+                          入口（「＋へんじ」）・返信の字下げ・返信の取消を一度に得るため。見た目は今のまま
+                          （`bodyStyle`・`captionStyle`は`parentCaption`）。0件のときは何も描かない
+                          （`hideWhenEmpty`。今の`reactions.length > 0`の条件と同じ）。自分の報告なので
+                          スタンプ・コメント送信欄は出ず、他人のコメントの下に「＋へんじ」だけが出る。 */}
+                      <ChoreReactionsList
+                        tone="child"
+                        reactions={reactions}
+                        memberOf={(id) => state.members.find((m) => m.id === id)}
+                        myMemberId={me.id}
+                        reportedBy={c.reported_by}
+                        emptyText=""
+                        hideWhenEmpty
+                        bodyStyle={theme.typography.parentCaption}
+                        captionStyle={theme.typography.parentCaption}
+                      />
                     </View>
                   </View>
                 );

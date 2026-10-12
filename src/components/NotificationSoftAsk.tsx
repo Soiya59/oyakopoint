@@ -74,7 +74,8 @@ type CommentPushData = { type?: string; kind?: string; comment_id?: string };
 type DrawingPublishedPushData = { type?: string; drawing_id?: string };
 
 type FamilyBoardRoute = "/parent/family-board" | "/supporter/family-board" | "/child/family-board";
-type ChoreActivityRoute = "/parent/approvals" | "/supporter/activity" | "/child/family";
+type ChoreActivityRoute = "/parent/approvals" | "/supporter/activity" | "/child/inbox";
+type ChoreReplyRoute = "/parent/inbox" | "/supporter/inbox" | "/child/inbox";
 type CollectorShelfRoute = "/parent/collector-shelf" | "/supporter/collector-shelf" | "/child/collector-shelf";
 
 /** ログイン中のロールから、家族の掲示板の遷移先ルートを決める。
@@ -97,7 +98,25 @@ function familyBoardRouteForStatus(status: SessionStatus): FamilyBoardRoute | nu
 function choreActivityRouteForStatus(status: SessionStatus): ChoreActivityRoute | null {
   if (status === "parent") return "/parent/approvals";
   if (status === "supporter") return "/supporter/activity";
-  if (status === "child") return "/child/family";
+  // [2026-10-13変更・要件定義書07-48章 6節#5、主要画面ワイヤーフレーム.md 74.6節 R8、実装メモ364章]
+  // 子どもは`/child/family`（かぞくタブ）から`/child/inbox`（ベル「とどいたよ」）へ。かぞくタブは
+  // 自分の報告を一覧から外すので、これまでは通知を押しても自分の報告のコメントが見えなかった
+  // （コメントが付くのは自分の報告）。ベルのコメントの行からそのまま「＋へんじ」で返せる。
+  // 保護者・みまもりの行き先は変えない。
+  if (status === "child") return "/child/inbox";
+  return null;
+}
+
+/**
+ * [2026-10-13追加・要件定義書07-48章、主要画面ワイヤーフレーム.md 74.6節 R8、API仕様.md 42.6章]
+ * 完了報告のコメントへの返信の通知（`data.kind==="chore_reaction_reply"`）のタップ先。
+ * 3ロールとも各自のベル（とどいたもの／とどいたよ）を開く。対象の行の強調（ハイライト）はしない
+ * （新しい順で先頭に出る。点滅・色づけは「返さなければ」の圧力になる。74.6節）。
+ */
+function choreReplyRouteForStatus(status: SessionStatus): ChoreReplyRoute | null {
+  if (status === "parent") return "/parent/inbox";
+  if (status === "supporter") return "/supporter/inbox";
+  if (status === "child") return "/child/inbox";
   return null;
 }
 
@@ -223,6 +242,7 @@ export function PushSoftAskProvider({ children }: { children: React.ReactNode })
       if (data?.type === "comment") {
         if (data.kind === "family_board_comment") return familyBoardRouteForStatus;
         if (data.kind === "chore_reaction_comment") return choreActivityRouteForStatus;
+        if (data.kind === "chore_reaction_reply") return choreReplyRouteForStatus;
         if (data.kind === "family_drawing_comment") return collectorShelfRouteForStatus;
       }
       // [2026-09-30追加・要件定義書07-43章決定12・07-5章、主要画面ワイヤーフレーム.md 70.5節D10、

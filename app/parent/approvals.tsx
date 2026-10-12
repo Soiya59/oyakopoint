@@ -617,6 +617,7 @@ export default function ApprovalsScreen() {
                       reactions={reactions}
                       memberOf={memberOf}
                       myMemberId={myParentId}
+                      reportedBy={detailTarget.reported_by}
                       emptyText="まだ誰も反応していないよ"
                       bodyStyle={theme.typography.parentBody}
                       captionStyle={theme.typography.parentCaption}

@@ -68,18 +68,33 @@ interface ExpoTicket {
   details?: { error?: string };
 }
 
-type CommentKind = "family_board_comment" | "chore_reaction_comment" | "family_drawing_comment";
+/**
+ * [2026-10-13変更・API仕様.md 42.6章、スキーマ設計.sql 86.7章、要件定義書07-48章] 4つ目の
+ * `chore_reaction_reply`（完了報告のコメントへの返信。宛先＝返信先のコメントを書いた人）を足した。
+ * 他の3種の動きは変えない。
+ */
+type CommentKind =
+  | "family_board_comment"
+  | "chore_reaction_comment"
+  | "chore_reaction_reply"
+  | "family_drawing_comment";
 
 /** [API仕様.md 33.6.1章] kindに応じたタイトル。遷移先の画面名をそのまま使う
  * （通知タップ後に開く画面と一致させる、63.2.1節と同じ考え方）。 */
 const TITLE_BY_KIND: Record<CommentKind, string> = {
   family_board_comment: "家族の掲示板",
   chore_reaction_comment: "完了報告",
+  chore_reaction_reply: "完了報告",
   family_drawing_comment: "コレクション",
 };
 
 function isCommentKind(v: unknown): v is CommentKind {
-  return v === "family_board_comment" || v === "chore_reaction_comment" || v === "family_drawing_comment";
+  return (
+    v === "family_board_comment" ||
+    v === "chore_reaction_comment" ||
+    v === "chore_reaction_reply" ||
+    v === "family_drawing_comment"
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -127,7 +142,11 @@ Deno.serve(async (req: Request) => {
   const title = TITLE_BY_KIND[kind];
   // [統括決定] コメントの中身は一切出さない。「◯◯さんがコメントしました」
   // の定型文のみ。役割による文言分岐は行わない（63.2.1節と同じ理由）。
-  const messageBody = `${commenterDisplayName}さんがコメントしました`;
+  // [2026-10-13変更] 返信（chore_reaction_reply）だけ「…さんが返信しました」。返信の中身も出さない。
+  const messageBody =
+    kind === "chore_reaction_reply"
+      ? `${commenterDisplayName}さんが返信しました`
+      : `${commenterDisplayName}さんがコメントしました`;
   // [タップした先の導線] data.kind/comment_idを含める。どの画面を開くかは
   // クライアント側（UIUXデザイン部の画面設計）の判断に委ねる。
   const data = { type: "comment", kind, comment_id: commentId };

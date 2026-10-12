@@ -61,6 +61,36 @@ assertEqual("hiddenContentKey: kind:idの形にする", hiddenContentKey("family
   );
 }
 
+// ---- [2026-10-13追加・要件定義書07-48章] 元のコメントが非表示なら、その返信も隠す ----
+{
+  const reactions = [
+    { id: "1", kind: "comment", reply_to_reaction_id: null },
+    { id: "r1", kind: "comment", reply_to_reaction_id: "1" }, // 1への返信
+    { id: "3", kind: "comment", reply_to_reaction_id: null },
+    { id: "r3", kind: "comment", reply_to_reaction_id: "3" }, // 3への返信
+  ];
+  const onlyParentHidden = new Set([hiddenContentKey("chore_reaction_comment", "1")]);
+  assertEqual(
+    "excludeHiddenChoreReactionComments: 元のコメントが非表示なら、その返信も除く（別のコメントの返信は残す）",
+    excludeHiddenChoreReactionComments(reactions, onlyParentHidden).map((r) => r.id),
+    ["3", "r3"]
+  );
+  const onlyReplyHidden = new Set([hiddenContentKey("chore_reaction_comment", "r3")]);
+  assertEqual(
+    "excludeHiddenChoreReactionComments: 返信だけ非表示なら、返信だけが消える（元のコメントは残る）",
+    excludeHiddenChoreReactionComments(reactions, onlyReplyHidden).map((r) => r.id),
+    ["1", "r1", "3"]
+  );
+  assertEqual(
+    "excludeHiddenChoreReactionComments: reply_to_reaction_idの無い行（古い形）は従来どおり",
+    excludeHiddenChoreReactionComments(
+      [{ id: "a", kind: "comment" }],
+      new Set([hiddenContentKey("chore_reaction_comment", "b")])
+    ).map((r) => r.id),
+    ["a"]
+  );
+}
+
 // ---- blankHiddenNoteById（完了報告のひとこと・感謝のひとこと。noteだけ空にする） ----
 {
   const completions = [

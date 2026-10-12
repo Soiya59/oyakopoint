@@ -328,6 +328,7 @@ export const seedReactions: ChoreReaction[] = [
     comment_body: null,
     deleted_at: null,
     deleted_by_member_id: null,
+    reply_to_reaction_id: null,
     created_at: "2026-08-15T08:10:00+09:00",
   },
   {
@@ -340,6 +341,7 @@ export const seedReactions: ChoreReaction[] = [
     comment_body: null,
     deleted_at: null,
     deleted_by_member_id: null,
+    reply_to_reaction_id: null,
     created_at: "2026-08-15T08:30:00+09:00",
   },
   {
@@ -352,6 +354,7 @@ export const seedReactions: ChoreReaction[] = [
     comment_body: null,
     deleted_at: null,
     deleted_by_member_id: null,
+    reply_to_reaction_id: null,
     created_at: "2026-08-15T08:20:00+09:00",
   },
   {
@@ -364,6 +367,7 @@ export const seedReactions: ChoreReaction[] = [
     comment_body: null,
     deleted_at: null,
     deleted_by_member_id: null,
+    reply_to_reaction_id: null,
     created_at: "2026-08-14T07:45:00+09:00",
   },
   {
@@ -376,6 +380,7 @@ export const seedReactions: ChoreReaction[] = [
     comment_body: "がんばったね！",
     deleted_at: null,
     deleted_by_member_id: null,
+    reply_to_reaction_id: null,
     created_at: "2026-08-14T07:46:00+09:00",
   },
 ];

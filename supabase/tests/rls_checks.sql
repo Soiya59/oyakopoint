@@ -710,6 +710,17 @@
 -- 一覧を見る検査は無い**（85.15の未決）ため、この関数のanon権限だけはC-U2が名指しで見張る。
 -- 値そのもの（番号・URL）は本番とローカルで違う（運用で上げる）ので、C-U3・C-U4は値を見ない。
 --
+-- [2026-10-13追加・開発部] 完了報告のコメントへの「返信」（要件定義書07-48章、設計部/成果物/
+-- スキーマ設計.sql 86章、開発部/成果物/実装メモ.md 364章、supabase/migrations/
+-- 20261013010000_chore_reaction_replies.sql）に伴い、S3の`chore_reactions_insert_scoped`の1行だけ
+-- ハッシュを差し替え（意図した変更。適用後に実測。下記S3の注記）、C-RP1〜C-RP6とB-RP1を新設した。
+-- S1（47）・S4（108。新しいトリガー関数2本はREVOKE ALL済みで数えない）・S5は±0。適用前に118件PASS、
+-- 適用後にS3の1件だけFAIL（意図した変更）、ハッシュ差し替えと新設7件で125件PASSを実測して、設計部の
+-- 見込み（86.10章「118→125件」）と照合した（結果は実装メモ364章）。B-RP1はseed.sqlの23f節
+-- （保護者のコメントに子どもが返信）が要り、0件の環境ではSKIPにする。書き込みの挙動
+-- （返信の検査トリガーの各エラー・連動削除・非表示・通知）は読み取り専用のこのファイルでは見ない
+-- ため、実装メモ364章に手動の確認（BEGIN…ROLLBACK）の結果を残した。
+--
 -- ■ 実行方法（本番に対して読み取りのみ。最後にROLLBACKする）
 --   cd oyakopoint-app
 --   npx supabase db query --linked -f supabase/tests/rls_checks.sql
@@ -944,7 +955,14 @@ WITH expected(t, p, c, h) AS (VALUES
   -- `family_id`・`reacted_by`・`kind = 'comment'`の3条件は無変更。
   -- `20260916010000`時点の定義と1文字ずつ突き合わせ、差分がこの1箇所のみである
   -- ことを確認したうえでローカルDockerで実測した値。
-  ('chore_reactions','chore_reactions_insert_scoped','INSERT','b7e8b9ad7f8cd74a9f752434770251f4'),
+  -- [2026-10-13改訂・要件定義書07-48章、スキーマ設計.sql 86.4章、実装メモ364章] 完了報告のコメントへの
+  -- 「返信」を足すため、条件式を2つに分岐した（`20261013010000_chore_reaction_replies.sql`）。
+  --   返信でない（reply_to_reaction_id IS NULL）: 今までどおり。自分の報告には書けない（NOT EXISTS）。
+  --   返信（reply_to_reaction_id IS NOT NULL）: 書き手がその完了報告の報告者本人のときだけ（EXISTS）。
+  -- `family_id`・`reacted_by`・`kind = 'comment'`の3条件は無変更。SELECT・DELETEのポリシーは変えていない
+  -- （本数は81のまま）。意図した変更。定義が書いたとおりであることをpg_policiesで確かめたうえで
+  -- ローカルDockerで実測した値（C-RP4が、分岐の形が意図どおりであることを別に見張る）。
+  ('chore_reactions','chore_reactions_insert_scoped','INSERT','62c25f59c655a6ff898a62ee1abb8844'),
   -- [2026-09-23改訂・やること.md 5-13、実装メモ.md 293章] 完了報告への
   -- コメントを消せるようにする対応で、SELECT条件式に`AND deleted_at IS
   -- NULL`を追加した（削除済みコメントを除外する。kind='stamp'の行は
@@ -2164,6 +2182,121 @@ SELECT 'C層', 'C-U4 get_app_update_policyの振る舞い（ios/androidで1行�
     AND (SELECT count(*) FROM public.get_app_update_policy('') g
           WHERE g.required_min_build = 0 AND g.recommended_min_build = 0 AND g.store_url = '') = 1;
 
+-- C-RP1〜C-RP6. [2026-10-13追加・スキーマ設計.sql 86.10章] 完了報告のコメントへの「返信」
+-- （chore_reactions.reply_to_reaction_id。supabase/migrations/20261013010000_chore_reaction_replies.sql）。
+
+-- C-RP1 列・制約・索引の形: 列はUUID・NULL可・既定なし。複合外部キー（検証済み・ON DELETE CASCADE）・
+--       CHECK2本（有効）・部分一意索引（述語に deleted_at IS NULL）・一意索引(completion_id, id)
+INSERT INTO _r
+SELECT 'C層', 'C-RP1 chore_reactions.reply_to_reaction_idの形（列・複合外部キー・CHECK2本・部分一意索引）', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT col.data_type = 'uuid' AND col.is_nullable = 'YES' AND col.column_default IS NULL
+     FROM information_schema.columns col
+    WHERE col.table_schema = 'public' AND col.table_name = 'chore_reactions' AND col.column_name = 'reply_to_reaction_id') IS TRUE
+  AND (SELECT count(*) FROM pg_constraint con
+        WHERE con.conrelid = 'public.chore_reactions'::regclass AND con.conname = 'fk_chore_reactions_reply_to'
+          AND con.contype = 'f' AND con.convalidated AND con.confdeltype = 'c'
+          AND pg_get_constraintdef(con.oid) = 'FOREIGN KEY (completion_id, reply_to_reaction_id) REFERENCES chore_reactions(completion_id, id) ON DELETE CASCADE') = 1
+  AND (SELECT count(*) FROM pg_constraint con
+        WHERE con.conrelid = 'public.chore_reactions'::regclass AND con.contype = 'c' AND con.convalidated
+          AND con.conname IN ('chk_chore_reactions_reply_only_comment', 'chk_chore_reactions_reply_not_self')) = 2
+  AND (SELECT count(*) FROM pg_indexes ix
+        WHERE ix.schemaname = 'public' AND ix.tablename = 'chore_reactions'
+          AND ix.indexname = 'uq_chore_reactions_one_live_reply'
+          AND ix.indexdef LIKE 'CREATE UNIQUE INDEX%(reply_to_reaction_id)%WHERE%reply_to_reaction_id IS NOT NULL%deleted_at IS NULL%') = 1
+  AND (SELECT count(*) FROM pg_indexes ix
+        WHERE ix.schemaname = 'public' AND ix.tablename = 'chore_reactions'
+          AND ix.indexname = 'uq_chore_reactions_completion_id_id'
+          AND ix.indexdef LIKE 'CREATE UNIQUE INDEX%(completion_id, id)%') = 1
+  AS ok) q;
+
+-- C-RP2 トリガー: 返信の検査（BEFORE INSERT・行ごと・有効）と連動削除（AFTER UPDATE OF deleted_at・WHEN付き・有効）が
+--       あり、BEFORE INSERTの動く順（名前順）が before_insert → reply_guard → social_toggle_guard
+INSERT INTO _r
+SELECT 'C層', 'C-RP2 chore_reactionsの返信トリガー2本と、BEFORE INSERTの順序', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT count(*) FROM pg_trigger t
+    WHERE t.tgrelid = 'public.chore_reactions'::regclass AND NOT t.tgisinternal AND t.tgenabled = 'O'
+      AND t.tgname = 'trg_chore_reactions_reply_guard' AND (t.tgtype & 1) = 1 AND (t.tgtype & 2) = 2 AND (t.tgtype & 4) = 4) = 1
+  AND (SELECT count(*) FROM pg_trigger t
+        WHERE t.tgrelid = 'public.chore_reactions'::regclass AND NOT t.tgisinternal AND t.tgenabled = 'O'
+          AND t.tgname = 'trg_chore_reactions_cascade_delete_replies' AND (t.tgtype & 1) = 1 AND (t.tgtype & 2) = 0
+          AND (t.tgtype & 16) = 16 AND t.tgqual IS NOT NULL
+          AND pg_get_triggerdef(t.oid) LIKE '%UPDATE OF deleted_at%') = 1
+  AND (SELECT string_agg(t.tgname, ',' ORDER BY t.tgname) FROM pg_trigger t
+        WHERE t.tgrelid = 'public.chore_reactions'::regclass AND NOT t.tgisinternal AND (t.tgtype & 2) = 2 AND (t.tgtype & 4) = 4)
+      = 'trg_chore_reactions_before_insert,trg_chore_reactions_reply_guard,trg_chore_reactions_social_toggle_guard'
+  AS ok) q;
+
+-- C-RP3 関数の権限と作り: 新しいトリガー関数2本は authenticated・anon・PUBLIC が実行できず、SECURITY DEFINER・
+--       search_path固定・戻り値trigger。通知の組み立て関数 comment_notification_payload も authenticated が実行できないまま
+INSERT INTO _r
+SELECT 'C層', 'C-RP3 返信のトリガー関数2本の権限と作り（実行不可・SECURITY DEFINER・search_path固定）と通知関数の権限', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT count(*) FROM pg_proc p
+    WHERE p.oid IN ('public.chore_reactions_reply_guard()'::regprocedure, 'public.chore_reactions_cascade_delete_replies()'::regprocedure)
+      AND p.prosecdef AND p.prorettype = 'trigger'::regtype
+      AND coalesce(array_to_string(p.proconfig, ','), '') ~ 'search_path=public'
+      AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+      AND NOT EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0)) = 2
+  AND NOT has_function_privilege('authenticated', 'public.comment_notification_payload(text, uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.comment_notification_payload(text, uuid)', 'EXECUTE')
+  AS ok) q;
+
+-- C-RP4 INSERTポリシーの本文: 返信でない側は NOT EXISTS（自分の報告には書けない）、返信側は EXISTS（報告者本人だけ）。
+--       ハッシュ（S3）だけでは「意図した形か」が分からないため、分岐の形を別に見る
+INSERT INTO _r
+SELECT 'C層', 'C-RP4 chore_reactions_insert_scopedの分岐（返信でない＝NOT EXISTS／返信＝EXISTS。family_id・reacted_by・kind=commentは残る）', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT regexp_replace(pol.with_check, '\s+', ' ', 'g') ~ 'reply_to_reaction_id IS NULL\) AND \(NOT \(EXISTS \( SELECT 1 FROM chore_completions cc WHERE .*reported_by = chore_reactions\.reacted_by'
+          AND regexp_replace(pol.with_check, '\s+', ' ', 'g') ~ 'reply_to_reaction_id IS NOT NULL\) AND \(EXISTS \( SELECT 1 FROM chore_completions cc WHERE .*reported_by = chore_reactions\.reacted_by'
+          AND pol.with_check LIKE '%family_id = current_family_id()%'
+          AND pol.with_check LIKE '%reacted_by = current_family_member_id()%'
+          AND pol.with_check LIKE '%kind = ''comment''%'
+     FROM pg_policies pol
+    WHERE pol.schemaname = 'public' AND pol.tablename = 'chore_reactions' AND pol.policyname = 'chore_reactions_insert_scoped') IS TRUE
+  AS ok) q;
+
+-- C-RP5 通知の宛先関数: 本文に chore_reaction_reply の枝があり、chore_reaction_comment 側が返信の行を除き、
+--       jsonb_build_object に本文（comment_body）を入れない。振る舞いも見る（seedの返信が1件でもあれば）:
+--       返信のidを 'chore_reaction_reply' で渡すとキーが4つ（kind・comment_id・commenter_display_name・recipient_tokens）、
+--       'chore_reaction_comment' で渡すとNULL（返信を誤ってコメントの種別で渡しても通知が出ない）
+INSERT INTO _r
+SELECT 'C層', 'C-RP5 comment_notification_payloadの返信の枝（宛先は親の書き手・本文を含めない・コメント側は返信を除く）', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT p.prosrc LIKE '%WHEN ''chore_reaction_reply'' THEN%'
+          AND p.prosrc LIKE '%JOIN chore_reactions pr ON pr.id = r.reply_to_reaction_id%'
+          AND p.prosrc LIKE '%AND r.reply_to_reaction_id IS NULL%'
+          AND substring(regexp_replace(p.prosrc, '--[^' || chr(10) || ']*', '', 'g') from 'jsonb_build_object\([^;]*') NOT LIKE '%body%'
+     FROM pg_proc p WHERE p.oid = 'public.comment_notification_payload(text, uuid)'::regprocedure) IS TRUE
+  AND coalesce((SELECT jsonb_typeof(x.pl) = 'object' AND (SELECT count(*) FROM jsonb_object_keys(x.pl)) = 4
+                       AND x.pl ->> 'kind' = 'chore_reaction_reply'
+                       AND x.pl ? 'recipient_tokens' AND x.pl ? 'commenter_display_name' AND x.pl ? 'comment_id'
+                       AND public.comment_notification_payload('chore_reaction_comment', rp.id) IS NULL
+                  FROM (SELECT r.id FROM chore_reactions r
+                         WHERE r.reply_to_reaction_id IS NOT NULL AND r.deleted_at IS NULL ORDER BY r.created_at LIMIT 1) rp,
+                       LATERAL (SELECT public.comment_notification_payload('chore_reaction_reply', rp.id) AS pl) x),
+               true)
+  AS ok) q;
+
+-- C-RP6 運営の非表示の連動: hide_content・unhide_content の本文が、返信ぶん（reply_to_reaction_id）にも及ぶ
+INSERT INTO _r
+SELECT 'C層', 'C-RP6 hide_content・unhide_contentが返信ぶんにも及ぶ', '正しい',
+  CASE WHEN q.ok THEN '正しい' ELSE 'ずれている' END, q.ok
+FROM (SELECT
+  (SELECT count(*) FROM pg_proc p
+    WHERE p.oid IN ('public.hide_content(text, uuid)'::regprocedure, 'public.unhide_content(text, uuid)'::regprocedure)
+      AND p.prosrc LIKE '%reply_to_reaction_id%'
+      AND p.prosrc LIKE '%p_content_kind = ''chore_reaction_comment''%') = 2
+  AS ok) q;
+
+
 -- ============================================================
 -- B層: 家族内のロール境界（実際になりすまして読む）
 --
@@ -2333,9 +2466,29 @@ SELECT set_config('t.parent_q_family_members', (
     AND COALESCE(ch.is_request, false) = false)::text, true);
 
 
+-- [2026-10-13追加・スキーマ設計.sql 86.10章 B-RP1] 返信の「本来見えるべき行数」を、`SET LOCAL ROLE authenticated`の
+-- 前（管理者権限）で、3ロールそれぞれの家族ごとに数えてGUCに保存する（削除されていない返信だけ）。
+-- 3ロールがロール切り替え後に実際に見えた数（t.rp_seen_*）を各視点のブロックで保存し、最後のみまもりの
+-- ブロックでB-RP1が突き合わせる。
+SELECT set_config('t.rp_exp_child', (
+  SELECT count(*) FROM chore_reactions r
+  WHERE r.reply_to_reaction_id IS NOT NULL AND r.deleted_at IS NULL
+    AND r.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.child', true), '')::uuid))::text, true);
+SELECT set_config('t.rp_exp_parent', (
+  SELECT count(*) FROM chore_reactions r
+  WHERE r.reply_to_reaction_id IS NOT NULL AND r.deleted_at IS NULL
+    AND r.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.parent', true), '')::uuid))::text, true);
+SELECT set_config('t.rp_exp_supporter', (
+  SELECT count(*) FROM chore_reactions r
+  WHERE r.reply_to_reaction_id IS NOT NULL AND r.deleted_at IS NULL
+    AND r.family_id = (SELECT m.family_id FROM family_members m WHERE m.id = nullif(current_setting('t.supporter', true), '')::uuid))::text, true);
+
+
 -- ---------- 子どもの視点 ----------
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.child', true))::text, true);
+-- [B-RP1] 自分の家族の返信が、このロールにいくつ見えるか（結果の突き合わせはみまもりのブロックのB-RP1）。
+SELECT set_config('t.rp_seen_child', (SELECT count(*) FROM chore_reactions WHERE reply_to_reaction_id IS NOT NULL)::text, true);
 
 -- B1. 他人の未公開のお絵かきが見えないこと。
 --     このアプリで最も機微な秘匿。「ガチャで当たるまで本人以外に見えない」が
@@ -2505,6 +2658,8 @@ RESET ROLE;
 -- ---------- 保護者の視点 ----------
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.parent', true))::text, true);
+-- [B-RP1] 自分の家族の返信が、このロールにいくつ見えるか（結果の突き合わせはみまもりのブロックのB-RP1）。
+SELECT set_config('t.rp_seen_parent', (SELECT count(*) FROM chore_reactions WHERE reply_to_reaction_id IS NOT NULL)::text, true);
 
 -- B5. 保護者であっても、他人の未公開の絵は見えてはいけない。
 --     「保護者だから何でも見える」は、この機能に限っては誤り。
@@ -2909,6 +3064,8 @@ RESET ROLE;
 -- ---------- みまもりメンバーの視点 ----------
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', json_build_object('family_member_id', current_setting('t.supporter', true))::text, true);
+-- [B-RP1] 自分の家族の返信が、このロールにいくつ見えるか（結果の突き合わせはみまもりのブロックのB-RP1）。
+SELECT set_config('t.rp_seen_supporter', (SELECT count(*) FROM chore_reactions WHERE reply_to_reaction_id IS NOT NULL)::text, true);
 
 -- B8. みまもりも他人の未公開の絵は見えない。
 INSERT INTO _r SELECT 'B層', 'B8 みまもり: 他人の未公開の絵が見えない', '0',
@@ -3015,6 +3172,30 @@ INSERT INTO _r SELECT 'A層', 'A-supporter family_members: 他家族の行が見
   CASE WHEN current_setting('t.supporter', true) IS NOT NULL AND current_setting('t.multi_family', true) = 'true'
        THEN count(*) = 0 ELSE NULL END
 FROM family_members WHERE family_id <> current_family_id();
+
+-- B-RP1. [2026-10-13追加・スキーマ設計.sql 86.10章] 3ロール（子ども・保護者・みまもり）が、同じ家族の返信
+--     （削除されていない）をすべて読めること。見えた数が、管理者権限で数えた期待値と一致する。
+--     0件だと自明に通るので、3ロールのどれかが居ない、または期待値が0の環境ではSKIP（seed.sqlの23f節が要る）。
+INSERT INTO _r SELECT 'B層', 'B-RP1 3ロールで同じ家族の返信が読める',
+  coalesce(current_setting('t.rp_exp_child', true), '') || ' / ' || coalesce(current_setting('t.rp_exp_parent', true), '')
+    || ' / ' || coalesce(current_setting('t.rp_exp_supporter', true), ''),
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.parent', true) IS NOT NULL
+            AND current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.rp_exp_child', true), '')::int > 0
+            AND nullif(current_setting('t.rp_exp_parent', true), '')::int > 0
+            AND nullif(current_setting('t.rp_exp_supporter', true), '')::int > 0
+       THEN current_setting('t.rp_seen_child', true) || ' / ' || current_setting('t.rp_seen_parent', true)
+            || ' / ' || current_setting('t.rp_seen_supporter', true)
+       ELSE 'SKIP（3ロールのどれかが居ない、または返信が0件。seed.sqlの23f節が要る）' END,
+  CASE WHEN current_setting('t.child', true) IS NOT NULL AND current_setting('t.parent', true) IS NOT NULL
+            AND current_setting('t.supporter', true) IS NOT NULL
+            AND nullif(current_setting('t.rp_exp_child', true), '')::int > 0
+            AND nullif(current_setting('t.rp_exp_parent', true), '')::int > 0
+            AND nullif(current_setting('t.rp_exp_supporter', true), '')::int > 0
+       THEN current_setting('t.rp_seen_child', true) = current_setting('t.rp_exp_child', true)
+            AND current_setting('t.rp_seen_parent', true) = current_setting('t.rp_exp_parent', true)
+            AND current_setting('t.rp_seen_supporter', true) = current_setting('t.rp_exp_supporter', true)
+       ELSE NULL END;
 
 RESET ROLE;
 

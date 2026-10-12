@@ -57,6 +57,19 @@
  *    （id＝`gratitude_stamp:${感謝のid}`。入れ替えても項目は1つのまま。時刻はスタンプを押した時刻）。
  *    ベルの件数（`countRecentInbox`）にも、直近に押された分を数える（受け取った人が自分で押した分は数えない）。
  * 押していない状態・未返信の件数・赤い点はどこにも出さない（71.5節）。通帳・贈る画面・ホームには足さない（71.6節）。
+ *
+ * [2026-10-13追加・要件定義書07-48章 決定1〜10、主要画面ワイヤーフレーム.md 74.2・74.5節、設計部/成果物/
+ * API仕様.md 42.5節、開発部/成果物/実装メモ.md 364章] 完了報告のコメントへの「返信」を足した。
+ *  - **自分の報告に付いた反応**（`fromReactions`）から、**自分が書いた行（自分の返信）と返信の行を除く**
+ *    （独立した行にしない・件数に数えない。除かないと自分の返信が「自分から」として自分のベルに載る）。
+ *  - コメントの行に、**返信の入口**（「＋返信」／子ども「＋へんじ」）を足す。条件は`canShowReplyEntry`
+ *    （まだ返信が無い／元の書き手が在籍中／「家族のやりとりを使う」がオン／読み込み済み）。押すと
+ *    カードの中に入力欄が開く（モーダルにしない）。返信ずみのカードの中には、自分の返信を1行だけ添える
+ *    （返信した直後の取消のため。独立した行ではない）。
+ *  - **新しい種類の項目「返信が来た」**（id＝`reply:${返信のid}`）：自分のコメントに報告者が返信したとき、
+ *    「{報告者}から　💬 返信（子ども＝へんじ）」＋どのコメントへの返信か＋返信の本文。入口は付けない。
+ *    元のコメントや返信が消えれば消える。ホームのベルの件数（`countRecentInbox`）にも直近の分を数える。
+ *  - 未返信の印・数・点・催促はどこにも出さない（74.9節）。ベルの行を強調（ハイライト）もしない。
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -76,13 +89,23 @@ import {
   type GratitudeLike,
   type GratitudeReactionLike,
 } from "@/lib/gratitudeStamp";
-import type { StampKey } from "@/types/domain";
+import type { ChoreReaction, StampKey } from "@/types/domain";
 import {
   requestArrivedForChild,
   requestDoneForRequester,
   type RequestInboxChore,
 } from "@/lib/requestChore";
 import { BELL_HEADLINE_REQUEST_ARRIVED, BELL_HEADLINE_REQUEST_DONE } from "@/lib/requestChoreText";
+import CommentReplyComposer, { OwnReplyLine } from "./CommentReplyComposer";
+import {
+  canShowReplyEntry,
+  groupRepliesByParent,
+  isReactionForMyReportBell,
+  replyArrivalsFor,
+  replyExcerpt,
+  type ReplyReactionLike,
+} from "@/lib/commentReply";
+import { BELL_HEADLINE_REPLY, bellReplySubject } from "@/lib/commentReplyText";
 
 type Tone = "parent" | "child" | "supporter";
 
@@ -103,6 +126,16 @@ interface InboxItem {
    * （出す条件を満たしたカードだけに付ける）。`selectedKey`は今付いているスタンプ（なければnull）。
    */
   stampRow?: { gratitudeId: string; selectedKey: string | null };
+  /**
+   * [2026-10-13追加・要件定義書07-48章] 自分の報告に付いた他人のコメントの行だけが持つ。あれば、カードの中に
+   * 返信の入口（「＋返信」「＋へんじ」）を出す（出す条件を満たした行だけに付ける）。
+   */
+  replyEntry?: { completionId: string; parentId: string; commenterName: string };
+  /**
+   * [2026-10-13追加] 自分がすでに返信しているコメントの行だけが持つ。あれば、カードの中に自分の返信を
+   * 1行だけ添える（返信した直後の取消のため。独立した行ではない）。
+   */
+  ownReply?: ChoreReaction;
 }
 
 export interface InboxPanelProps {
@@ -128,7 +161,9 @@ export function countRecentInbox(
     completions: { id: string; reported_by: string; chore_id: string | null; reported_at: string }[];
     // [2026-09-30追加・D9] おねがいのベル（子ども＝届いた／依頼者＝やってくれた）の数え上げに使う。
     chores: RequestInboxChore[];
-    reactions: { completion_id: string; created_at: string }[];
+    // [2026-10-13変更・要件定義書07-48章] 自分の返信を除き、自分のコメントへの返信を数えるため、
+    // 返信の判定に要る列（書いた人・返信先・種類）も要る（`ReplyReactionLike`）。
+    reactions: ReplyReactionLike[];
     // [2026-10-03変更・要件定義書07-45章] 贈った人のベルに届くスタンプを数えるため、感謝の行の
     // 贈った人・id・ひとこと・ポイントも要る（`gratitudeStampArrivals`が使う）。
     gratitude: GratitudeLike[];
@@ -157,8 +192,13 @@ export function countRecentInbox(
 ): number {
   if (!memberId) return 0;
   const mine = new Set(state.completions.filter((c) => c.reported_by === memberId).map((c) => c.id));
+  // [2026-10-13変更・要件定義書07-48章] **自分が書いた行（自分の返信）は数えない**（受け取ったものではない）。
   const reactions = state.reactions.filter(
-    (r) => mine.has(r.completion_id) && new Date(r.created_at).getTime() >= sinceMs
+    (r) => mine.has(r.completion_id) && isReactionForMyReportBell(r, memberId) && new Date(r.created_at).getTime() >= sinceMs
+  ).length;
+  // [2026-10-13追加・要件定義書07-48章] 自分のコメントに付いた返信（直近）。累計・順位は作らない。
+  const replyArrivals = replyArrivalsFor(state.reactions, memberId).filter(
+    (a) => new Date(a.reply.created_at).getTime() >= sinceMs
   ).length;
   const gratitude = state.gratitude.filter(
     (g) => g.recipient_id === memberId && g.revoked_at === null && new Date(g.created_at).getTime() >= sinceMs
@@ -198,6 +238,7 @@ export function countRecentInbox(
   ).length;
   return (
     reactions +
+    replyArrivals +
     gratitude +
     gratitudeStamps +
     boardReactions +
@@ -220,8 +261,10 @@ function boardPostExcerpt(body: string, max = 20): string {
 }
 
 export function InboxPanel({ tone, memberId }: InboxPanelProps) {
-  const { state, memberAvatars, dispatch } = useAppData();
+  const { state, memberAvatars, dispatch, loading } = useAppData();
   const isChild = tone === "child";
+  // 送る前に元のコメントが削除されていたとき、一度だけ出す一文（次にこの画面を開き直すと消える。74.7節）。
+  const [goneNotice, setGoneNotice] = React.useState<string | null>(null);
 
   // [2026-10-03追加] 感謝カードのスタンプの行から呼ぶ。`dispatch`の結果（成功・失敗）をそのまま返し、
   // 失敗の一文と目印は行の部品がカードごとに出す。見た目は取り直しの結果に従う（楽観更新はしない）。
@@ -247,11 +290,28 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
       state.completions.filter((c) => c.reported_by === memberId).map((c) => [c.id, c])
     );
 
+    // [2026-10-13変更・要件定義書07-48章] 自分の返信（書いた人＝自分）と返信の行は、この種類に載せない
+    // （`isReactionForMyReportBell`）。コメントの行には返信の入口と、自分の返信の1行を付ける。
+    const repliesEnabled = state.family.social_interactions_enabled;
+    const { repliesOf } = groupRepliesByParent(state.reactions);
     const fromReactions: InboxItem[] = state.reactions
-      .filter((r) => myCompletions.has(r.completion_id))
+      .filter((r) => myCompletions.has(r.completion_id) && isReactionForMyReportBell(r, memberId))
       .map((r) => {
         const c = myCompletions.get(r.completion_id)!;
         const stamp = r.stamp_key ? theme.stampDefinitions.find((s) => s.key === r.stamp_key) : undefined;
+        const commenter = state.members.find((m) => m.id === r.reacted_by);
+        const replies = r.kind === "comment" ? repliesOf.get(r.id) ?? [] : [];
+        const showEntry =
+          r.kind === "comment" &&
+          canShowReplyEntry({
+            reportedBy: c.reported_by,
+            myMemberId: memberId,
+            parent: r,
+            hasReply: replies.length > 0,
+            authorIsActive: commenter?.is_active ?? false,
+            repliesEnabled,
+            loaded: !loading,
+          });
         return {
           id: `reaction:${r.id}`,
           fromMemberId: r.reacted_by,
@@ -259,8 +319,32 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
           headline: stamp ? `${stamp.emoji} ${stamp.label}` : "💬 コメント",
           body: r.comment_body,
           choreLabel: `${c.chore_emoji ?? "📝"} ${c.chore_title}`,
+          replyEntry: showEntry
+            ? { completionId: r.completion_id, parentId: r.id, commenterName: commenter?.display_name ?? "" }
+            : undefined,
+          ownReply: replies.find((x) => x.reacted_by === memberId),
         };
       });
+
+    // [2026-10-13追加・要件定義書07-48章 決定4・6、主要画面ワイヤーフレーム.md 74.5節] 新しい項目「返信が来た」。
+    // 自分のコメントに、その完了報告の報告者が返信したとき。「{報告者}から」＋見出し（💬 返信／💬 へんじ）
+    // ＋どのコメントへの返信か（元のコメントの先頭20字）＋返信の本文。入口は付けない（返信への返信はできない）。
+    // 元のコメントや返信が消えれば（削除・非表示）一覧に出てこないので、この項目も消える。
+    const fromReplies: InboxItem[] = replyArrivalsFor(state.reactions, memberId).map(({ reply, parent }) => {
+      const c = state.completions.find((x) => x.id === reply.completion_id);
+      return {
+        id: `reply:${reply.id}`,
+        fromMemberId: reply.reacted_by,
+        at: reply.created_at,
+        headline: BELL_HEADLINE_REPLY[tone],
+        body: reply.comment_body,
+        choreLabel: bellReplySubject(
+          tone,
+          `${c?.chore_emoji ?? "📝"} ${c?.chore_title ?? ""}`,
+          replyExcerpt(parent.comment_body ?? "")
+        ),
+      };
+    });
 
     // [2026-10-03変更・要件定義書07-45章] スタンプの行（入口）を出す条件を満たす感謝カードには、
     // `stampRow`を付ける（出す条件は`canShowGratitudeStampRow`。贈った人が在籍中・取得済みなど）。
@@ -423,6 +507,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
       ...fromRequestArrived,
       ...fromRequestDone,
       ...fromReactions,
+      ...fromReplies,
       ...fromGratitude,
       ...fromGratitudeStamps,
       ...fromBoardReactions,
@@ -434,6 +519,9 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
   }, [
     memberId,
     isChild,
+    tone,
+    loading,
+    state.family.social_interactions_enabled,
     state.completions,
     state.chores,
     state.reactions,
@@ -453,9 +541,12 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
   // 表示結果は変わらない（開発部/成果物/実装メモ.md 165章で検証）。
   const formatWhen = formatDateTimeShort;
 
+  const goneNoticeEl = goneNotice ? <Text style={styles.meta}>{goneNotice}</Text> : null;
+
   if (items.length === 0) {
     return (
       <View style={{ marginTop: theme.spacing.s6 }}>
+        {goneNoticeEl}
         <EmptyState
           tone={isChild ? "child" : undefined}
           emoji="📭"
@@ -471,6 +562,7 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
 
   return (
     <View style={styles.list}>
+      {goneNoticeEl}
       {items.map((it) => {
         // [2026-09-23追加] fromMemberId===nullはお絵かきの公開通知
         // （システム由来。発見者の名前を出さない設計、07-38章4-4節）。
@@ -497,6 +589,19 @@ export function InboxPanel({ tone, memberId }: InboxPanelProps) {
                 {it.choreLabel && <Text style={styles.meta}>{it.choreLabel}</Text>}
                 {it.body && <Text style={bodyStyle}>「{it.body}」</Text>}
                 <Text style={styles.meta}>{formatWhen(it.at)}</Text>
+                {/* [2026-10-13追加・要件定義書07-48章] 返信ずみなら自分の返信を1行だけ添える（入口は出ない）。
+                    まだなら入口（条件を満たした行だけ）。どちらも無ければ何も描かない。 */}
+                {it.ownReply && <OwnReplyLine tone={tone} reply={it.ownReply} />}
+                {it.replyEntry && (
+                  <CommentReplyComposer
+                    tone={tone}
+                    completionId={it.replyEntry.completionId}
+                    parentId={it.replyEntry.parentId}
+                    commenterName={it.replyEntry.commenterName}
+                    myMemberId={memberId}
+                    onParentGone={setGoneNotice}
+                  />
+                )}
               </View>
             </View>
             {/* [2026-10-03追加] 受け取った人のカードの下に、4種のスタンプの行。アバターの右の本文の幅では

@@ -124,6 +124,7 @@ export function ChildCompletionDetailModal({
                     reactions={reactions}
                     memberOf={memberOf}
                     myMemberId={myChildId}
+                    reportedBy={target.reported_by}
                     emptyText="まだだれもリアクションしてないよ"
                     bodyStyle={theme.typography.childBody}
                     captionStyle={theme.typography.childBody}

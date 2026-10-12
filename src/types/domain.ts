@@ -256,6 +256,13 @@ export interface ChoreReaction {
    */
   deleted_at: string | null;
   deleted_by_member_id: string | null;
+  /**
+   * [2026-10-13追加・要件定義書07-48章、設計部/成果物/スキーマ設計.sql 86.3章、API仕様.md 42章]
+   * この行が「返信」のとき、返信先のコメント（同じ表の別の行）のid。返信でない行はnull。
+   * 返信はkind='comment'の行だけで、書けるのはその完了報告の報告者本人だけ。1つのコメントに、
+   * 削除されていない返信は1つまで。返信への返信は無い。
+   */
+  reply_to_reaction_id: string | null;
 }
 
 // [新設] gratitude_points（スキーマ設計.sql 13章）。感謝ポイント（要件定義書.md v0.6

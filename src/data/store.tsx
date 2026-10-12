@@ -205,6 +205,11 @@ export type Action =
       kind: ReactionKind;
       stampKey?: StampKey;
       commentBody?: string;
+      /**
+       * [2026-10-13追加・要件定義書07-48章、API仕様.md 42章] コメントへの「返信」のとき、返信先の
+       * コメントのid。書けるのはその完了報告の報告者本人だけ（DBが検査する）。
+       */
+      replyToReactionId?: string;
     }
   /**
    * [2026-09-10追加・実装メモ.md 157章] 完了報告へのスタンプ（絵文字）リアクションの
@@ -1378,7 +1383,24 @@ function RealDataProviderImpl({ children }: { children: React.ReactNode }) {
             kind: action.kind,
             stamp_key: action.stampKey,
             comment_body: action.commentBody,
+            reply_to_reaction_id: action.replyToReactionId,
           });
+          if (!res.ok && action.replyToReactionId) {
+            // [2026-10-13追加・要件定義書07-48章、主要画面ワイヤーフレーム.md 74.7節] 返信の失敗。
+            // 元のコメントが消えていた（P0002）・別の端末で先に返信されていた（23505）・「家族のやりとりを
+            // 使う」がオフになった／書いた人が抜けた（23514）ときは、画面の食い違いを直すため取り直す
+            // （入口が消え、本当の状態が見える）。23505を成功扱いにしない（下の既存の丸めは、スタンプの
+            // 連打用）。通信・権限・ログイン切れの失敗は取り直さない（そのまま押し直せる）。
+            const code = res.error.code;
+            if (
+              code === api.PG_ERRCODE.noDataFound ||
+              code === api.PG_ERRCODE.uniqueViolation ||
+              code === api.PG_ERRCODE.checkViolation
+            ) {
+              await refreshReactionsOnly();
+            }
+            return { ok: false, error: res.error };
+          }
           if (!res.ok) {
             // uq_chore_reactions_stamp_dedup（同一スタンプの連打）はunique_violationとして
             // 返るが、UI側はボタン無効化で未然に防いでいるため、UIに例外扱いさせず
@@ -1844,6 +1866,7 @@ function reducer(state: State, action: Action): State {
         comment_body: action.kind === "comment" ? action.commentBody ?? null : null,
         deleted_at: null,
         deleted_by_member_id: null,
+        reply_to_reaction_id: action.kind === "comment" ? action.replyToReactionId ?? null : null,
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...state.reactions, reaction] };
@@ -1877,6 +1900,7 @@ function reducer(state: State, action: Action): State {
         comment_body: null,
         deleted_at: null,
         deleted_by_member_id: null,
+        reply_to_reaction_id: null,
         created_at: new Date().toISOString(),
       };
       return { ...state, reactions: [...withoutMine, reaction] };

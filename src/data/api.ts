@@ -1480,10 +1480,23 @@ export async function cancelChoreCompletion(
  * 追加・切替・取消は下記`toggleReactionStamp`（RPC）に一本化したため、本関数は
  * 実質的にコメント（kind='comment'）専用になった。呼び出し側のシグネチャは
  * 後方互換のため変更していない。
+ *
+ * [2026-10-13追加・要件定義書07-48章、API仕様.md 42章、スキーマ設計.sql 86章] 省略可能の
+ * `reply_to_reaction_id`を足した。コメントに返信するとき、元のコメントのidを渡す（書けるのは
+ * その完了報告の報告者本人だけ。検査はDBのポリシー・トリガー・制約）。渡さなければ今までどおりの
+ * 普通のコメント。`family_id`・`created_at`は送らない（サーバーが補完）。後から書き換えない
+ * （UPDATEポリシーは無い）。エラーの種類はAPI仕様.md 42.3章。
  */
 export async function addReaction(
   client: SupabaseClient,
-  input: { completion_id: string; reacted_by: string; kind: ReactionKind; stamp_key?: StampKey; comment_body?: string }
+  input: {
+    completion_id: string;
+    reacted_by: string;
+    kind: ReactionKind;
+    stamp_key?: StampKey;
+    comment_body?: string;
+    reply_to_reaction_id?: string;
+  }
 ): Promise<ApiResult<ChoreReaction>> {
   const { data, error, status } = await client
     .from("chore_reactions")
@@ -1493,6 +1506,10 @@ export async function addReaction(
       kind: input.kind,
       stamp_key: input.kind === "stamp" ? input.stamp_key ?? null : null,
       comment_body: input.kind === "comment" ? input.comment_body ?? null : null,
+      // 返信でなければキーごと送らない（古い形のINSERTと同じ。reply_to_reaction_idはNULLのまま）
+      ...(input.kind === "comment" && input.reply_to_reaction_id
+        ? { reply_to_reaction_id: input.reply_to_reaction_id }
+        : {}),
     })
     .select("*")
     .single();

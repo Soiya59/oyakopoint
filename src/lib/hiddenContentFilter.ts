@@ -37,14 +37,23 @@ export function excludeHiddenById<T extends { id: string }>(
   return items.filter((item) => !hiddenKeys.has(hiddenContentKey(kind, item.id)));
 }
 
-/** 完了報告へのコメント（chore_reactions）用。kind='comment'の行のみ対象、スタンプは常に残す。 */
-export function excludeHiddenChoreReactionComments<T extends { id: string; kind: string }>(
-  reactions: readonly T[],
-  hiddenKeys: ReadonlySet<string>
-): T[] {
+/**
+ * 完了報告へのコメント（chore_reactions）用。kind='comment'の行のみ対象、スタンプは常に残す。
+ *
+ * [2026-10-13変更・要件定義書07-48章、設計部/成果物/スキーマ設計.sql 86.6章] 元のコメントが
+ * 非表示なら、その返信（`reply_to_reaction_id`が指す行）も隠す。DB側の`hide_content`も返信ぶんを
+ * `hidden_contents`に入れるが、取り直しの途中や古いデータでも返信の文字が残らないよう、
+ * クライアントでも二重に隠す。`reply_to_reaction_id`の無い行（古い形・モック）は従来どおり。
+ */
+export function excludeHiddenChoreReactionComments<
+  T extends { id: string; kind: string; reply_to_reaction_id?: string | null }
+>(reactions: readonly T[], hiddenKeys: ReadonlySet<string>): T[] {
   if (hiddenKeys.size === 0) return [...reactions];
+  const isHidden = (id: string) => hiddenKeys.has(hiddenContentKey("chore_reaction_comment", id));
   return reactions.filter(
-    (r) => r.kind !== "comment" || !hiddenKeys.has(hiddenContentKey("chore_reaction_comment", r.id))
+    (r) =>
+      r.kind !== "comment" ||
+      (!isHidden(r.id) && !(r.reply_to_reaction_id != null && isHidden(r.reply_to_reaction_id)))
   );
 }
 
