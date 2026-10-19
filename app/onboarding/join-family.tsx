@@ -38,7 +38,7 @@ export default function JoinFamilyScreen() {
     setChecking(true);
     setErrorMessage(null);
     setErrorRef(null);
-    const res = await inviteLookup(code.trim());
+    const res = await inviteLookup(code.trim().toUpperCase());
     setChecking(false);
     if (!res.ok) {
       const e = res.error;
@@ -73,9 +73,13 @@ export default function JoinFamilyScreen() {
       <View style={{ marginTop: theme.spacing.s6 }}>
         <TextInput
           value={code}
-          onChangeText={(t) => setCode(t.toUpperCase())}
+          // Androidは入力中に大文字へ書き換えるとキーボードの予測変換とぶつかり、文字が重なったり消えたりする（実装メモ366章）。大文字化は送るときだけ
+          onChangeText={setCode}
           placeholder="AB3CD9EF"
           autoCapitalize="characters"
+          autoCorrect={false}
+          autoComplete="off"
+          spellCheck={false}
           maxLength={8}
           style={{
             borderWidth: 1,
