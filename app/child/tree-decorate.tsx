@@ -53,9 +53,11 @@ const SUCCESS_DISPLAY_MS = 600;
  *   `Href`文字列（既存コードで使っているものと同じ文字列）だけで実現できる
  *   公式APIのため、こちらを優先した。
  */
-function goToTreeWithCleanHistory() {
+function goToTreeWithCleanHistory(justDecorated?: Record<string, string>) {
   router.dismissTo("/child/home");
-  router.push("/child/family-tree");
+  // [2026-10-21・実装メモ367章] ガチャの絵を飾ったときだけ、その絵の情報を木の画面へ渡し、
+  // 木の画面でそのままスタンプ・コメントできるようにする。
+  router.push(justDecorated ? { pathname: "/child/family-tree", params: justDecorated } : "/child/family-tree");
 }
 
 /**
@@ -75,6 +77,10 @@ function goToTreeWithCleanHistory() {
 export default function ChildTreeDecorateScreen() {
   const {
     drawId,
+    justDecoratedDrawingId,
+    justDecoratedArtistId,
+    justDecoratedArtistName,
+    justDecoratedTitle,
     purchaseId,
     moveDecorationId,
     shape,
@@ -87,6 +93,10 @@ export default function ChildTreeDecorateScreen() {
     moveHabitFigureDecorationId,
   } = useLocalSearchParams<{
     drawId?: string;
+    justDecoratedDrawingId?: string;
+    justDecoratedArtistId?: string;
+    justDecoratedArtistName?: string;
+    justDecoratedTitle?: string;
     purchaseId?: string;
     moveDecorationId?: string;
     shape?: StickerShape;
@@ -143,7 +153,15 @@ export default function ChildTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
+    const justDecorated = justDecoratedDrawingId
+      ? {
+          justDecoratedDrawingId,
+          justDecoratedArtistId: justDecoratedArtistId ?? "",
+          justDecoratedArtistName: justDecoratedArtistName ?? "",
+          justDecoratedTitle: justDecoratedTitle ?? "",
+        }
+      : undefined;
+    setTimeout(() => goToTreeWithCleanHistory(justDecorated), SUCCESS_DISPLAY_MS);
   };
 
   const handleConfirmSticker = async (nx: number, ny: number) => {

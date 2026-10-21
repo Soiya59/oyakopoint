@@ -20,8 +20,8 @@ import type { GachaPrizeKind } from "@/types/domain";
  * app/parent/gacha-result.tsx（P28）・app/child/gacha-result.tsx（C22）と
  * 同じタイミング・同じ二重発火防止（useRef）で鳴らす。
  *
- * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
- * 家族の絵の「＋コメント」を押した先の遷移をここで担う。P28・C22と同じ考え方。
+ * [2026-09-28追加・実装メモ320章／2026-10-21移設・367章] 家族の絵の「＋コメント」導線は、
+ * 飾った直後の木の画面へ移した。ここでは絵の情報を`justDecorated*`として飾る画面へ引き継ぐ。
  */
 export default function SupporterGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -60,11 +60,20 @@ export default function SupporterGachaResultScreen() {
         <GachaResultView
           tone="supporter"
           result={detail}
-          onDecorate={() => router.push({ pathname: "/supporter/tree-decorate", params: { drawId: drawId ?? "" } })}
-          onGoToShelf={() => router.replace("/supporter/collector-shelf")}
-          onCommentDrawing={(drawingId) =>
-            router.push({ pathname: "/supporter/collector-shelf", params: { openDrawingId: drawingId, openComment: "1" } })
+          onDecorate={() =>
+            router.push({
+              pathname: "/supporter/tree-decorate",
+              params: {
+                drawId: drawId ?? "",
+                // [2026-10-21・実装メモ367章] 飾った直後の木の画面で、この絵にスタンプ・コメントできるように引き継ぐ。
+                justDecoratedDrawingId: detail.drawing?.id ?? "",
+                justDecoratedArtistId: detail.drawing?.artist_member_id ?? "",
+                justDecoratedArtistName: detail.drawing?.family_members?.display_name ?? "",
+                justDecoratedTitle: detail.drawing?.title ?? "",
+              },
+            })
           }
+          onGoToShelf={() => router.replace("/supporter/collector-shelf")}
         />
       )}
     </Screen>

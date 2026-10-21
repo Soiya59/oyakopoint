@@ -28,9 +28,11 @@ const SUCCESS_DISPLAY_MS = 600;
  * うえで`family-tree`を積み直すことで、木の画面からの「戻る」を必ずホームへ
  * 着地させる。
  */
-function goToTreeWithCleanHistory() {
+function goToTreeWithCleanHistory(justDecorated?: Record<string, string>) {
   router.dismissTo("/supporter/family");
-  router.push("/supporter/family-tree");
+  // [2026-10-21・実装メモ367章] ガチャの絵を飾ったときだけ、その絵の情報を木の画面へ渡し、
+  // 木の画面でそのままスタンプ・コメントできるようにする。
+  router.push(justDecorated ? { pathname: "/supporter/family-tree", params: justDecorated } : "/supporter/family-tree");
 }
 
 /**
@@ -48,6 +50,10 @@ function goToTreeWithCleanHistory() {
 export default function SupporterTreeDecorateScreen() {
   const {
     drawId,
+    justDecoratedDrawingId,
+    justDecoratedArtistId,
+    justDecoratedArtistName,
+    justDecoratedTitle,
     purchaseId,
     moveDecorationId,
     shape,
@@ -60,6 +66,10 @@ export default function SupporterTreeDecorateScreen() {
     moveHabitFigureDecorationId,
   } = useLocalSearchParams<{
     drawId?: string;
+    justDecoratedDrawingId?: string;
+    justDecoratedArtistId?: string;
+    justDecoratedArtistName?: string;
+    justDecoratedTitle?: string;
     purchaseId?: string;
     moveDecorationId?: string;
     shape?: StickerShape;
@@ -109,7 +119,15 @@ export default function SupporterTreeDecorateScreen() {
       return;
     }
     setSuccess(true);
-    setTimeout(() => goToTreeWithCleanHistory(), SUCCESS_DISPLAY_MS);
+    const justDecorated = justDecoratedDrawingId
+      ? {
+          justDecoratedDrawingId,
+          justDecoratedArtistId: justDecoratedArtistId ?? "",
+          justDecoratedArtistName: justDecoratedArtistName ?? "",
+          justDecoratedTitle: justDecoratedTitle ?? "",
+        }
+      : undefined;
+    setTimeout(() => goToTreeWithCleanHistory(justDecorated), SUCCESS_DISPLAY_MS);
   };
 
   const handleConfirmSticker = async (nx: number, ny: number) => {

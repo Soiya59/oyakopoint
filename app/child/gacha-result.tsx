@@ -23,11 +23,8 @@ import type { GachaPrizeKind } from "@/types/domain";
  * 家族の絵の2段階開示演出（上記）が始まる前の、結果が確定した瞬間に鳴らす
  * （開示演出自体には手を加えない）。
  *
- * [2026-09-28追加・統括依頼（本部長経由）、開発部/成果物/実装メモ.md 320章]
- * 家族の絵の「＋ひとこと」を押した先の遷移をここで担う。C26（コレクションだな）へ
- * `openDrawingId`（絵のid）・`openComment=1`を付けて`push`する（`replace`ではない。
- * 戻るとこの結果画面に戻れる）。C26側がこのパラメータを拾い、該当の絵を自動で開いて
- * コメント欄も開いた状態にする。
+ * [2026-09-28追加・実装メモ320章／2026-10-21移設・367章] 家族の絵の「＋コメント」導線は、
+ * 飾った直後の木の画面へ移した。ここでは絵の情報を`justDecorated*`として飾る画面へ引き継ぐ。
  */
 export default function ChildGachaResultScreen() {
   const { drawId, prizeKind, presetOrnamentId, prizeDrawingId } = useLocalSearchParams<{
@@ -66,11 +63,20 @@ export default function ChildGachaResultScreen() {
         <GachaResultView
           tone="child"
           result={detail}
-          onDecorate={() => router.push({ pathname: "/child/tree-decorate", params: { drawId: drawId ?? "" } })}
-          onGoToShelf={() => router.replace("/child/collector-shelf")}
-          onCommentDrawing={(drawingId) =>
-            router.push({ pathname: "/child/collector-shelf", params: { openDrawingId: drawingId, openComment: "1" } })
+          onDecorate={() =>
+            router.push({
+              pathname: "/child/tree-decorate",
+              params: {
+                drawId: drawId ?? "",
+                // [2026-10-21・実装メモ367章] 飾った直後の木の画面で、この絵にスタンプ・コメントできるように引き継ぐ。
+                justDecoratedDrawingId: detail.drawing?.id ?? "",
+                justDecoratedArtistId: detail.drawing?.artist_member_id ?? "",
+                justDecoratedArtistName: detail.drawing?.family_members?.display_name ?? "",
+                justDecoratedTitle: detail.drawing?.title ?? "",
+              },
+            })
           }
+          onGoToShelf={() => router.replace("/child/collector-shelf")}
         />
       )}
     </Screen>

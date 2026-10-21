@@ -7,6 +7,7 @@ import AppButton from "@/components/AppButton";
 import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import TabIntroBubble from "@/components/TabIntroBubble";
+import { JustDecoratedDrawingCard } from "@/components/DrawingReactionRow";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
@@ -52,6 +53,9 @@ export default function ChildFamilyTreeScreen() {
         memberId={state.activeChildMemberId}
         text="👋 かざりを タップすると おおきく なるよ。"
       />
+
+      {/* [2026-10-21・実装メモ367章] ガチャの絵を飾った直後だけ、その絵へのスタンプ＋コメントを出す。 */}
+      <JustDecoratedDrawingCard tone="child" />
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>

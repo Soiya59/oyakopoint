@@ -8,6 +8,7 @@ import { ErrorState, SkeletonList } from "@/components/StatusViews";
 import { TreeStageVisual, FamilyTreeBreakdownList, FamilyTreeWeeklyList, buildFamilyTreeWeeklyItems } from "@/components/FamilyTree";
 import ScreenBackLink from "@/components/ScreenBackLink";
 import TabIntroBubble from "@/components/TabIntroBubble";
+import { JustDecoratedDrawingCard } from "@/components/DrawingReactionRow";
 import theme from "@/theme/theme";
 import { useAppData } from "@/data/store";
 import { useFamilyTreeDetail } from "@/hooks/useFamilyTree";
@@ -71,6 +72,9 @@ export default function ParentFamilyTreeScreen() {
       <Text style={[theme.typography.parentCaption, { marginTop: theme.spacing.s1, color: theme.colors.neutralTextSecondary }]}>
         クエストの完了報告が積み重なるたびに、少しずつ育っていく、家族みんなの木です。
       </Text>
+
+      {/* [2026-10-21・実装メモ367章] ガチャの絵を飾った直後だけ、その絵へのスタンプ＋コメントを出す。 */}
+      <JustDecoratedDrawingCard tone="parent" />
 
       {loadState === "loading" && (
         <View style={{ marginTop: theme.spacing.s4 }}>
