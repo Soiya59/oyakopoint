@@ -31,7 +31,7 @@
  * （こちらはコメント一覧・入力欄を持たず、押すとこの画面へ遷移させるだけの
  * ため。理由: 293章の当たり判定の作り込みが重く、崩さないため触れなかった）。
  */
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppButton from "./AppButton";
 import NgWordWarningText from "./NgWordWarningText";
@@ -132,7 +132,13 @@ export function DrawingEngagementSection({
   // [2026-09-23追加・要件定義書07-32章 決定7の段階3・決定11〜14、実装メモ.md
   // 293章] ブロック・運営の非表示を取得後にclient側で除く（既存の掲示板
   // コメントと同じパターン。33.9章）。
-  const { blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
+  const { state, blockedMemberIdsSet, hiddenContentKeysSet } = useAppData();
+  // [2026-10-24・統括の実機報告、実装メモ368章] 送った直後の1件は名前が空（null）で、
+  // 「?より」と出ていた。手元の家族の一覧から自分の名前を入れておく（読み直せば同じ値になる）。
+  const myAuthor = useMemo(() => {
+    const me = state.members.find((m) => m.id === myMemberId);
+    return me ? { display_name: me.display_name, avatar_color: me.avatar_color ?? null } : null;
+  }, [state.members, myMemberId]);
   const isParent = tone === "parent";
   const isOwnDrawing = !!myMemberId && myMemberId === artistMemberId;
   const bodyStyle = bodyStyleFor(tone);
@@ -193,12 +199,12 @@ export function DrawingEngagementSection({
         setReactions((prev) => prev.filter((r) => !(r.reactor_member_id === myMemberId && r.stamp_key === stampKey)));
       } else {
         setReactions((prev) => [
-          { id: res.data.reaction_id ?? `local-${Date.now()}`, stamp_key: stampKey, reactor_member_id: myMemberId, created_at: new Date().toISOString(), family_members: null },
+          { id: res.data.reaction_id ?? `local-${Date.now()}`, stamp_key: stampKey, reactor_member_id: myMemberId, created_at: new Date().toISOString(), family_members: myAuthor },
           ...prev,
         ]);
       }
     },
-    [client, drawingId, myMemberId, setReactionError, showReactionFailure]
+    [client, drawingId, myMemberId, myAuthor, setReactionError, showReactionFailure]
   );
 
   // --- コメント ---
@@ -224,12 +230,12 @@ export function DrawingEngagementSection({
       return;
     }
     setComments((prev) => [
-      { ...res.data, family_members: null },
+      { ...res.data, family_members: myAuthor },
       ...prev,
     ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
     setDraft("");
     setComposing(false);
-  }, [client, drawingId, myMemberId, draft, ngGuard, tone, showSendFailure, setSendError]);
+  }, [client, drawingId, myMemberId, myAuthor, draft, ngGuard, tone, showSendFailure, setSendError]);
 
   const runDelete = useCallback(
     async (commentId: string) => {
